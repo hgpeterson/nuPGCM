@@ -111,73 +111,41 @@ function profilePlot(datafiles, ix)
     colors = pl.cm.viridis(range(1, 0, length=5))
 
     # zoomed z
-    #= for a in ax =#
-    #=     a.set_ylim([z[ix, 1], z[ix, 1] + 2000]) =#
-    #= end =#
     ax[2, 1].set_ylim([z[ix, 1], z[ix, 1] + 200])
 
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(datafiles[i])
+        c = loadCheckpointRot(datafiles[i])
 
         # convert to physical coordinates 
-        u, w = rotate(û)
+        u, w = rotate(c.û)
 
         # gradient
-        forcing = -ẑDerivative(b).*sinθ
+        forcing = -ẑDerivative(c.b).*sinθ
 
         # stratification
-        Bz = N^2*cosθ + ẑDerivative(b)
+        Bz = c.N^2*cosθ + ẑDerivative(c.b)
 
         # colors and labels
-        label = string("Day ", Int64(round(t/86400)))
-        c = colors[i, :]
+        label = string("Day ", Int64(round(c.t/86400)))
+        color = colors[i, :]
 
         # plot
-        ax[1, 1].plot(Bz[ix, :],  z[ix, :], c=c)
-        ax[1, 2].plot(chi[ix, :], z[ix, :], c=c)
-        ax[1, 2].axvline(U[ix], c=c, lw=1.0, ls="--")
-        ax[1, 3].plot(forcing[ix, :],  z[ix, :], c=c)
-        ax[2, 1].plot(u[ix, :],   z[ix, :], c=c)
-        ax[2, 2].plot(v[ix, :],   z[ix, :], c=c)
-        ax[2, 3].plot(w[ix, :],   z[ix, :], c=c, label=label)
-        axins21.plot(u[ix, :],    z[ix, :], c=c)
+        ax[1, 1].plot(Bz[ix, :],       z[ix, :], c=color)
+        ax[1, 2].plot(c.chi[ix, :],    z[ix, :], c=color)
+        ax[1, 2].axvline(c.U[ix],                c=color, lw=1.0, ls="--")
+        ax[1, 3].plot(forcing[ix, :],  z[ix, :], c=color)
+        ax[2, 1].plot(u[ix, :],        z[ix, :], c=color)
+        ax[2, 2].plot(c.v[ix, :],      z[ix, :], c=color)
+        ax[2, 3].plot(w[ix, :],        z[ix, :], c=color, label=label)
+        axins21.plot(u[ix, :],         z[ix, :], c=color)
     end
 
     ax[2, 3].legend()
 
     savefig("profiles.png")
-end
-
-"""
-    advectionPlot(datafiles, iξ)
-
-Plot advection terms from HDF5 snapshot files of buoyancy in the `datafiles` list
-at for ξ = ξ[iξ].
-"""
-function advectionProfilePlot(datafiles, iξ)
-    fig, ax = subplots(1, 3, figsize=(3.404*3, 3.404/1.62), sharey=true)
-    colors = pl.cm.viridis(range(1, 0, length=5))
-    for i=1:size(datafiles, 1)
-        # load
-        b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(datafiles[i])
-    
-        adv = -N^2*û.*sinθ
-        diff = ẑDerivative(κ.*(N^2*cosθ .+ ẑDerivative(b)))
-        sum = adv + diff
-    
-        ax[1].plot(adv[iξ, :],  ẑ[iξ, :], c=colors[i, :], label=string("Day ", Int64(t/86400)))
-        ax[2].plot(diff[iξ, :], ẑ[iξ, :], c=colors[i, :])
-        ax[3].plot(sum[iξ, :],  ẑ[iξ, :], c=colors[i, :])
-        ax[1].set_xlabel(L"-\hat{u} N^2 \sin\theta")
-        ax[2].set_xlabel(L"[\kappa(N^2\cos\theta + b_\hat{z})]_\hat{z}")
-        ax[3].set_xlabel(L"b_t")
-    end
-    ax[1].set_ylabel(L"\hat{z}")
-    ax[1].legend()
-    tight_layout()
-    savefig("evolProfiles.png")
+    println("profiles.png")
 end
 
 """

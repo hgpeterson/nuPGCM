@@ -138,8 +138,6 @@ function evolve(tFinalDays)
         # solve
         bVec = evolutionLHS\evolutionRHS
 
-        # log
-        println(@sprintf("t = %.2f days (i = %d)", tDays, i))
 
         # reshape
         b = reshape(bVec, nx, nz)
@@ -152,6 +150,8 @@ function evolve(tFinalDays)
         if i % nStepsPlot == 0
             iImg += 1
             plotCurrentState(t, chi, û, v, b, iImg)
+            # log
+            println(@sprintf("t = %.2f days (i = %d)", tDays, i))
         end
         if i % nStepsSave == 0
             saveCheckpointRot(b, chi, û, v, U, t)

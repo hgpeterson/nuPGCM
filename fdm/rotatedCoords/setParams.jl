@@ -1,27 +1,30 @@
 # parameters (as in RC20)
-Pr = 1e0
+Pr = 2e2
 f = -5.5e-5
 N = 1e-3
 
 # set U = 0 or compute U at each time step?
-#= symmetry = false =#
-symmetry = true
+symmetry = false
+#= symmetry = true =#
 
 # topography
-L = 4e6
-H0 = 4e3
+L = 2e6
+H0 = 2e3
 amp =  0.4*H0
-H(x) = H0 - amp*sin(2*pi*x/L) 
-Hx(x) = -2*pi/L*amp*cos(2*pi*x/L)
+H(x) = H0 - amp*sin(2*pi*x/L - π/2) 
+Hx(x) = -2*pi/L*amp*cos(2*pi*x/L - π/2)
 
-# number of grid points
-#= nx = 2^8 + 1 =# 
+# gridpoints 
 nx = 1
+#= nx = 2^8 + 1 =# 
 nz = 2^8
 
-# domain in physical (x, z) space
-dx = L/nx
-x = repeat(0:dx:(L - dx), 1, nz)
+# x grid
+x = repeat([L/4], 1, nz)
+#= dx = L/nx =#
+#= x = repeat(0:dx:(L - dx), 1, nz) =#
+
+# z grid
 σ = @. -(cos(pi*(0:nz-1)/(nz-1)) + 1)/2 # chebyshev 
 z = repeat(σ', nx, 1).*repeat(H.(x[:, 1]), 1, nz)
 
@@ -37,8 +40,8 @@ ẑ = @. z/cosθ
 κ0 = 6e-5
 κ1 = 2e-3
 h = 200
-#= bottomIntense = true =#
-bottomIntense = false
+bottomIntense = true
+#= bottomIntense = false =#
 if bottomIntense
     κ = @. κ0 + κ1*exp(-(ẑ + H(x))/h)
 else

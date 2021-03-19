@@ -33,7 +33,6 @@ b = evolve(5000)
 ################################################################################
 
 profilePlot(["checkpoint1000.h5", "checkpoint2000.h5", "checkpoint3000.h5", "checkpoint4000.h5", "checkpoint5000.h5"], 1)
-#= advectionProfilePlot(["checkpoint1000.h5", "checkpoint2000.h5", "checkpoint3000.h5", "checkpoint4000.h5", "checkpoint5000.h5"], 1) =#
 
 #= include("talkPlots.jl") =#
 #= vAnimation("images/constKappa/") =#

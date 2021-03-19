@@ -235,37 +235,29 @@ function chiForSketch(folder)
     savefig("chiForSketch.svg", transparent=true)
 end
 
-function ridge(folder)
+function chi_v_ridge(folder)
     # load
-    b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, symmetry, ξVariation, κ = loadCheckpointTF(string(folder, "full2D/Pr1/checkpoint1000.h5"))
-    u, v, w = transformFromTF(uξ, uη, uσ)
-    #= chiEkman = getChiEkman(b) =#
+    c = loadCheckpointTF(string(folder, "2dpg/Pr1/checkpoint1000.h5"))
+    u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
 
-    #= # plot =#
-    #= fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true) =#
-
-    #= ridgePlot(chi, b, "", L"$\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1]) =#
-    #= ridgePlot(v, b, "", L"$v$ (m s$^{-1}$)"; ax=ax[2]) =#
-    #= ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction") =#
-    #= ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction") =#
-    #= ax[2].set_ylabel("") =#
-    #= savefig("fig1.pdf") =#
-    #= close() =#
-
-    ridgePlot(chi, b, "streamfunction", L"$\chi$ (m$^2$ s$^{-1}$)")
-    savefig("chi1000.pdf")
-    close()
-    ridgePlot(v, b, "along-ridge velocity", L"$v$ (m s$^{-1}$)")
-    savefig("v1000.pdf")
+    # plot
+    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+    ridgePlot(c.chi, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
+    ridgePlot(v, c.b, "", L"along-ridge flow, $v$ (m s$^{-1}$)"; ax=ax[2])
+    ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].set_ylabel("")
+    savefig("chi_v_ridge.pdf")
+    println("chi_v_ridge.pdf")
     close()
 end
 
 function profiles2Dvs1D(folder)
-    ix = 1
+    ix = argmin(abs.(ξ .- L/4))
     tDays = 1000:1000:5000
     #= σ = 1 # prandtl number =#
     σ = 200 
-
+    
     # init plot
     fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
 
@@ -274,7 +266,7 @@ function profiles2Dvs1D(folder)
     ax[1, 1].set_title("canonical 1D")
 
     ax[1, 2].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
-    ax[1, 2].set_title("full 2D")
+    ax[1, 2].set_title(L"2D $\nu$PGCM")
 
     ax[2, 1].set_xlabel(L"along-ridge flow, $v$ (m s$^{-1}$)")
     ax[2, 1].set_ylabel(L"$z$ (m)")
@@ -297,35 +289,33 @@ function profiles2Dvs1D(folder)
     for i=1:size(tDays, 1)
         tDay = tDays[i]
 
-        # canonical 2D solution
-        b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(string(folder, "canonical1D/Pr", σ, "/checkpoint", tDay, ".h5"))
-        u, w = rotate(û)
-        Bz = N^2*cosθ[ix, :] .+ differentiate(b[ix, :], z[ix, :].*cosθ[ix, :])
-        ax[1, 1].plot(chi[ix, :], z[ix, :], c=colors[i, :], ls="-", label=string("Day ", Int64(tDay)))
-        ax[2, 1].plot(v[ix, :],   z[ix, :], c=colors[i, :], ls="-")
-        ax[3, 1].plot(Bz,         z[ix, :], c=colors[i, :], ls="-")
+        # canonical 1D solution
+        c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint", tDay, ".h5"))
+        Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
+        ax[1, 1].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :], label=string("Day ", Int64(tDay)))
+        ax[2, 1].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :])
+        ax[3, 1].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :])
         
-        # full 2D solution
-        b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, symmetry, ξVariation, κ = loadCheckpointTF(string(folder, "full2D/Pr", σ, "/checkpoint", tDay, ".h5"))
-        u, v, w = transformFromTF(uξ, uη, uσ)
-        Bz = N^2 .+ zDerivativeTF(b)
-        ax[1, 2].plot(chi[ix, :], z[ix, :], c=colors[i, :], ls="-")
-        ax[2, 2].plot(v[ix, :],   z[ix, :], c=colors[i, :], ls="-")
-        ax[3, 2].plot(Bz[ix, :],  z[ix, :], c=colors[i, :], ls="-")
+        # 2D PG solution
+        c = loadCheckpointTF(string(folder, "2dpg/Pr", σ, "/checkpoint", tDay, ".h5"))
+        u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
+        Bz = c.N^2 .+ zDerivativeTF(c.b)
+        ax[1, 2].plot(c.chi[ix, :], z[ix, :], c=colors[i, :])
+        ax[2, 2].plot(v[ix, :],     z[ix, :], c=colors[i, :])
+        ax[3, 2].plot(Bz[ix, :],    z[ix, :], c=colors[i, :])
 
-        # fixed 1D solution
-        b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(string(folder, "fixed1D/Pr", σ, "/checkpoint", tDay, ".h5"))
-        u, w = rotate(û)
-        Bz = N^2*cosθ[ix, :] .+ differentiate(b[ix, :], z[ix, :].*cosθ[ix, :])
-        ax[1, 2].plot(chi[ix, :], z[ix, :], c="k", ls=":")
-        ax[2, 2].plot(v[ix, :],   z[ix, :], c="k", ls=":")
-        ax[3, 2].plot(Bz,         z[ix, :], c="k", ls=":")
+        # transport-constrained 1D solution
+        c = loadCheckpointRot(string(folder, "1dtc/Pr", σ, "/checkpoint", tDay, ".h5"))
+        Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
+        ax[1, 2].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
+        ax[2, 2].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
+        ax[3, 2].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
     end
 
     ax[1, 1].legend(loc="center left")
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
     custom_labels = ["transport-constrained 1D"]
-    ax[1, 2].legend(custom_handles, custom_labels, loc="center right")
+    ax[1, 2].legend(custom_handles, custom_labels, loc=(0.3, 0.4))
 
     ax[1, 1].annotate("(a)", (0.06, 0.92), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (0.06, 0.92), xycoords="axes fraction")
@@ -334,8 +324,11 @@ function profiles2Dvs1D(folder)
     ax[3, 1].annotate("(e)", (0.06, 0.92), xycoords="axes fraction")
     ax[3, 2].annotate("(f)", (0.06, 0.92), xycoords="axes fraction")
 
+    ax[1, 2].annotate(string("Pr = ", σ), (0.8, 0.8), xycoords="axes fraction")
+
     tight_layout()
     savefig(string("profiles2Dvs1D_Pr", σ, ".pdf"))
+    println(string("profiles2Dvs1D_Pr", σ, ".pdf"))
     close()
 end
 

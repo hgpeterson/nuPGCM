@@ -229,7 +229,7 @@ function invert(b)
 
     # compute U such that "island rule" is satisfied
     U = computeU(solʰ, solᵖ)
-    println("U = ", U, " m2 s-1")
+    println(@sprintf("U = %1.1e m2 s-1", U))
 
     # linearity: solution = solʰ + U*solᵖ
     χ, uξ, uη, uσ, U = postProcess(solʰ + U*solᵖ)

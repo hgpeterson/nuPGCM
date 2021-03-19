@@ -52,12 +52,14 @@ function saveCheckpointRot(b, chi, û, v, U, t)
     write(file, "N", N)
     write(file, "symmetry", symmetry)
     write(file, "κ", κ)
+    write(file, "ẑ", ẑ)
+    write(file, "θ", θ)
     close(file)
     println(savefile)
 end
 
 """
-    b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(filename)
+    checkpoint = loadCheckpointRot(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
@@ -76,6 +78,22 @@ function loadCheckpointRot(filename)
     N = read(file, "N")
     symmetry = read(file, "symmetry")
     κ = read(file, "κ")
+    ẑ = read(file, "ẑ")
+    θ = read(file, "θ")
     close(file)
-    return b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ
+    return (b=b, 
+            chi=chi, 
+            û=û, 
+            v=v, 
+            U=U, 
+            t=t, 
+            L=L, 
+            H0=H0, 
+            Pr=Pr, 
+            f=f, 
+            N=N, 
+            symmetry=symmetry, 
+            κ=κ,
+            ẑ=ẑ,
+            θ=θ)
 end

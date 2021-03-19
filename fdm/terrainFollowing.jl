@@ -64,7 +64,6 @@ Note: dz() = dσ()/H
 function zDerivativeTF(field)
     # dσ(field)/H
     fz = σDerivativeTF(field)./H.(x)
-
     return fz
 end
 
@@ -75,11 +74,8 @@ Transform from terrain-following coordinates to cartesian coordinates.
 """
 function transformFromTF(uξ, uη, uσ)
     u = uξ
-
     v = uη
-
     w = uσ.*H.(x) + σσ.*Hx.(x).*u
-
     return u, v, w
 end
 
@@ -90,11 +86,8 @@ Transform from cartesian coordinates to terrain-following coordinates.
 """
 function transformToTF(u, v, w)
     uξ = u
-
     uη = v
-
     uσ = (w - σσ.*Hx.(x).*u)./H.(x)
-
     return uξ, uη, uσ
 end
 
@@ -126,7 +119,7 @@ function saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
 end
 
 """
-    b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, ξVariation, κ = loadCheckpointTF(filename)
+    checkpoint = loadCheckpointTF(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
@@ -147,5 +140,18 @@ function loadCheckpointTF(filename)
     ξVariation, = read(file, "ξVariation")
     κ = read(file, "κ")
     close(file)
-    return b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, ξVariation, κ
+    return (b=b, 
+            chi=chi, 
+            uξ=uξ, 
+            uη=uη, 
+            uσ=uσ, 
+            U=U, 
+            t=t, 
+            L=L, 
+            H0=H0, 
+            Pr=Pr, 
+            f=f, 
+            N=N, 
+            ξVariation=ξVariation, 
+            κ=κ)
 end
