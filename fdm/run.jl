@@ -36,17 +36,9 @@ include("evolution.jl")
 #= profilePlot(dfiles, argmin(abs.(ξ .- L/4))) =#
 
 include("talkPlots.jl")
-folder = "/home/hpeter/ResearchCallies/sims/sim021/" 
-#= uvAnimation(folder) =#
-#= chivAnimation(folder) =#
-#= idealRidge() =#
-#= uBalance(folder) =#
-#= chiBalance(folder) =#
-#= chiForSketch(folder) =#
-#= chi_v_ridge(folder) =#
-#= uvPrScaling(folder) =#
-#= BzChiPrScaling(folder) =#
-#= pressureRidgePlots(string(folder, "full2D/Pr1/checkpoint1000.h5")) =#
-profiles2Dvs1D(folder)
-#= BzChi2DvsFixed(folder) =#
-#= uv2DvsFixed(folder) =#
+path = "/home/hpeter/ResearchCallies/sims/" 
+#= chi_v_ridge(string(path, "sim021")) =#
+#= profiles2Dvs1D(string(path, "sim021/")) =#
+spindownGrid(string(path, "sim022/"))
+#= spindownProfiles(string(path, "sim022/tauA1e2_tauS5e3/")) =#
+#= spindownProfiles(string(path, "sim022/tauA1e2_tauS1e2/")) =#

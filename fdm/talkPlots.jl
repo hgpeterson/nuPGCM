@@ -1,5 +1,6 @@
 # for loading rotated data
 include("rotatedCoords/rotated.jl")
+include("spinDown/rotated.jl")
 pl = pyimport("matplotlib.pylab")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
@@ -554,5 +555,115 @@ function pressureRidgePlots(dfile)
     close()
     ridgePlot(px, b, "pressure gradient", L"$p_x$ (m s$^{-2}$)")
     savefig("px1000.pdf")
+    close()
+end
+
+function spindownGrid(folder)
+    # read data
+    file = h5open(string(folder, "vs.h5"), "r")
+    vs = read(file, "vs")
+    v0 = read(file, "v0")
+    τ_Ss = read(file, "τ_Ss")
+    τ_As = read(file, "τ_As")
+    close(file)
+
+    # plot grid
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"spindown time, $\tilde{\tau}_S$")
+    ax.set_ylabel(L"arrest time, $\tilde{\tau}_A$")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    img = ax.pcolormesh(τ_Ss, τ_As, vs'/v0, rasterized=true, shading="auto", vmin=0, vmax=1)
+    cb = colorbar(img, ax=ax, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
+    ax.loglog([0, 1], [0, 1], transform=ax.transAxes, "w--", lw=0.5)
+    ax.annotate(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = 1$", xy=(0.09, 0.2), xycoords="axes fraction", rotation=36, c="w")
+    ax.plot(5e3, 1e2, "wo")
+    ax.plot(1e2, 1e2, "wo")
+    ax.annotate("Fig. 6", xy=(3e3, 0.45e2), xycoords="data", c="w")
+    ax.annotate("Fig. 7", xy=(1.2e2, 0.7e2), xycoords="data", c="w")
+    tight_layout()
+    savefig("spindownGrid.pdf")
+    println("spindownGrid.pdf")
+end
+
+function spindownProfiles(folder)
+    # init plot
+    fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
+
+    ax[1, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
+    ax[1, 1].set_ylabel(L"$\tilde{z}$")
+    ax[1, 1].set_title("canonical")
+
+    ax[1, 2].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
+    ax[1, 2].set_title("transport-constrained")
+
+    ax[2, 1].set_xlabel(L"along-ridge flow, $\tilde{v}$")
+    ax[2, 1].set_ylabel(L"$\tilde{z}$")
+
+    ax[2, 2].set_xlabel(L"along-ridge flow, $\tilde{v}$")
+
+    ax[3, 1].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$")
+    ax[3, 1].set_ylabel(L"$\tilde{z}$")
+
+    ax[3, 2].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$")
+
+    for a in ax
+        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
+    end
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=5))
+
+    # zoomed z
+    ax[1, 1].set_ylim([0, 10])
+    ax[2, 1].set_ylim([0, 10])
+    ax[3, 1].set_ylim([0, 10])
+
+    # plot data from folder
+    cases = ["can", "tc"]
+    for j=1:2
+        case = cases[j]
+        for i=0:5
+            # load
+            c = loadCheckpointSpinDown(string(folder, "/", case, "/checkpoint", i, ".h5"))
+            τ_A = 1/c.S
+
+            # stratification
+            Bẑ = 1 .+ differentiate(c.b, c.ẑ)
+
+            # colors and labels
+            if i == 0
+                color = "k"
+                label = L"$\tilde{t} = 0$"
+            else
+                color = colors[i, :]
+                label = string(L"$\tilde{t}/\tilde{\tau}_A$ = ", Int64(round(c.t/τ_A)))
+            end
+
+            # plot
+            ax[1, j].plot(c.û,  c.ẑ, c=color, label=label)
+            ax[2, j].plot(c.v,  c.ẑ, c=color, label=label)
+            ax[3, j].plot(Bẑ,   c.ẑ, c=color, label=label)
+            ax[2, j].axvline(c.Px, lw=1.0, c=color, ls="--")
+        end
+    end
+
+    ax[1, 1].legend()
+
+    ax[1, 1].annotate("(a)", (0.06, 0.92), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", (0.06, 0.92), xycoords="axes fraction")
+    ax[2, 1].annotate("(c)", (0.06, 0.92), xycoords="axes fraction")
+    ax[2, 2].annotate("(d)", (0.06, 0.92), xycoords="axes fraction")
+    ax[3, 1].annotate("(e)", (0.06, 0.92), xycoords="axes fraction")
+    ax[3, 2].annotate("(f)", (0.06, 0.92), xycoords="axes fraction")
+
+    c = loadCheckpointSpinDown(string(folder, "/tc/checkpoint1.h5"))
+    ax[1, 2].annotate(string(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = $", @sprintf("%1.2f", 1/c.H/c.S)),  (0.6, 0.6), xycoords="axes fraction", size=10)
+    #= ax[2, 2].annotate(L"$P_x$", xy=(0.05, 0.1), xytext=(0.2, 0.1), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->")) =#
+    ax[2, 2].annotate(L"$P_x$", xy=(0.45, 0.1), xytext=(0.2, 0.1), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+
+    tight_layout()
+    savefig("spindownProfiles.pdf")
+    println("spindownProfiles.pdf")
     close()
 end

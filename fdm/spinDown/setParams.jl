@@ -1,11 +1,11 @@
 # parameters
 
 # canonical or transport-constrained case?
-#= canonical = true =#
-canonical = false
+canonical = true
+#= canonical = false =#
 
 τ_A = 1e2 # arrest time
-τ_S = 1e3 # spindown time
+τ_S = 5e3 # spindown time
 Ek = 1/τ_S^2
 S = 1/τ_A
 H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
@@ -53,7 +53,7 @@ log(ofile, "\nSpin Down with Parameters\n")
 
 log(ofile, @sprintf("nẑ = %1.5e", nẑ))
 log(ofile, @sprintf("τ_A = %1.5e", τ_A))
-log(ofile, @sprintf("τ_S = %1.5e", τ_A))
+log(ofile, @sprintf("τ_S = %1.5e", τ_S))
 log(ofile, @sprintf("H  = %1.5e", H))
 log(ofile, @sprintf("Pr = %1.5e", Pr))
 log(ofile, @sprintf("S  = %1.5e", S))
