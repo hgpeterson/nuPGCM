@@ -1,44 +1,29 @@
 # parameters
 
 # canonical or transport-constrained case?
-canonical = true
-#= canonical = false =#
+#= canonical = true =#
+canonical = false
 
-#= # RC20 =#
-#= H0 = 4e3 =#
-#= Pr = 1e0 =#
-#= f = -5.5e-5 =#
-#= N = 1e-3 =#
-#= θ = 2.5e-3 =#
-#= κ0 = 1e-4 =#
-#= κ1 = 1e-4 =#
-#= h = 100 =#
-#= v0 = 0.01 =#
+τ_A = 1e2 # arrest time
+τ_S = 1e3 # spindown time
+Ek = 1/τ_S^2
+S = 1/τ_A
+H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
+Pr = 1e3
+κ0 = 1
+κ1 = 1e-3
+h = 10
+v0 = -1
 
-# RC20 - larger slope and v0
-H0 = 4e3
-Pr = 1e0
-f = -5.5e-5
-N = 1e-3
-θ = 1e-2
-κ0 = 1e-4
-κ1 = 1e-4
-h = 100
-v0 = 0.1
-
-# slope burger
-S = N^2*tan(θ)^2/f^2
-
-# canonical spin down timescale
-τ = 1/abs(S*f*cos(θ))
-Δt = τ/100
-tSave = τ
+# timestep
+Δt = minimum([τ_S/100, τ_A/100])
+tSave = τ_A
 
 # number of grid points
-nẑ = 2^11
+nẑ = 2^11 # good for anything at or below τ_S = 1e4
 
-# grid
-ẑ = @. H0*(1 - cos(pi*(0:nẑ-1)/(nẑ-1)))/2 # chebyshev (ẑ = 0 is bottom)
+# grid (chebyshev, ẑ = 0 is bottom)
+ẑ = @. H*(1 - cos(pi*(0:nẑ-1)/(nẑ-1)))/2
 
 #= bottomIntense = true =#
 bottomIntense = false
@@ -51,9 +36,6 @@ end
 # timestepping
 adaptiveTimestep = false
 α = 0.5
-
-# Ekman layer
-δ = sqrt(2*Pr*κ1/abs(f))
 
 """
     log(ofile, text)
@@ -70,25 +52,23 @@ ofile = open("out.txt", "w")
 log(ofile, "\nSpin Down with Parameters\n")
 
 log(ofile, @sprintf("nẑ = %1.5e", nẑ))
-log(ofile, @sprintf("H0 = %1.5e m", H0))
+log(ofile, @sprintf("τ_A = %1.5e", τ_A))
+log(ofile, @sprintf("τ_S = %1.5e", τ_A))
+log(ofile, @sprintf("H  = %1.5e", H))
 log(ofile, @sprintf("Pr = %1.5e", Pr))
-log(ofile, @sprintf("f  = %1.5e s-1", f))
-log(ofile, @sprintf("N  = %1.5e s-1", N))
-log(ofile, @sprintf("θ  = %1.5e rad", θ))
-log(ofile, @sprintf("κ0 = %1.5e m2 s-1", κ0))
-log(ofile, @sprintf("κ1 = %1.5e m2 s-1", κ1))
-log(ofile, @sprintf("h  = %1.5e m", h))
-log(ofile, @sprintf("v0 = %1.5e m s-1", v0))
-log(ofile, @sprintf("Δt = %1.5e s = %1.5e days", Δt, Δt/86400))
-log(ofile, @sprintf("α  = %1.5e", α))
 log(ofile, @sprintf("S  = %1.5e", S))
+log(ofile, @sprintf("κ0 = %1.5e", κ0))
+log(ofile, @sprintf("κ1 = %1.5e", κ1))
+log(ofile, @sprintf("h  = %1.5e", h))
+log(ofile, @sprintf("v0 = %1.5e", v0))
+log(ofile, @sprintf("Δt = %1.5e", Δt))
+log(ofile, @sprintf("α  = %1.5e", α))
 
-log(ofile, string("Canonical:              ", canonical))
+log(ofile, string("\nCanonical:              ", canonical))
 log(ofile, string("Bottom intensification: ", bottomIntense))
 log(ofile, string("Adaptive timestep:      ", adaptiveTimestep))
+log(ofile, string("Adaptive timestep:      ", adaptiveTimestep))
 
-log(ofile, @sprintf("\nEkman layer thickness ~ %1.5e m", δ))
-log(ofile, @sprintf("          ẑ[2] - ẑ[1] ~ %1.5e m", ẑ[2] - ẑ[1]))
+log(ofile, @sprintf("\nτ_A/τ_S  = %1.5e", τ_A/τ_S))
 
-log(ofile, @sprintf("\nSpin-down ~ %1.5e s ~ %1.5e days\n", τ, τ/86400))
 close(ofile)

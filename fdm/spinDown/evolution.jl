@@ -21,37 +21,37 @@ function getMatrices()
         # dẑẑ stencil
         fd_ẑẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 2)
 
-        # 1st eqtn: u_t = f*v*cos(θ) - P_x*cos(θ) + b*sin(θ) + (nu*u_ẑ)_ẑ
+        # 1st eqtn: u_t = v - P_x + S*b + Pr*(κ*u_ẑ)_ẑ
         row = umap[1, j]
         # first term
-        push!(A, (row, umap[2, j], f*cos(θ)))
+        push!(A, (row, umap[2, j], 1.0))
         # second term
-        push!(A, (row, nPts, -cos(θ)))
+        push!(A, (row, nPts, -1.0))
         # third term
-        push!(A, (row, umap[3, j], sin(θ)))
+        push!(A, (row, umap[3, j], S))
         # fourth term: dẑ(Pr*κ*dẑ(u))) = Pr*dẑ(κ)*dẑ(u) + Pr*κ*dẑẑ(u)
         push!(A, (row, umap[1, j-1], Pr*(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
         push!(A, (row, umap[1, j],   Pr*(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
         push!(A, (row, umap[1, j+1], Pr*(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
 
-        # 2nd eqtn: v_t = -f*u*cos(θ) + (nu*v_ẑ)_ẑ
+        # 2nd eqtn: v_t = -u + Pr*(κ*v_ẑ)_ẑ
         row = umap[2, j]
         # first term:
-        push!(A, (row, umap[1, j], -f*cos(θ)))
+        push!(A, (row, umap[1, j], -1.0))
         # second term: dẑ(Pr*κ*dẑ(v))) = Pr*dẑ(κ)*dẑ(v) + Pr*κ*dẑẑ(v)
         push!(A, (row, umap[2, j-1], Pr*(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
         push!(A, (row, umap[2, j],   Pr*(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
         push!(A, (row, umap[2, j+1], Pr*(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
 
-        # 3rd eqtn: b_t = -u*N^2*sin(θ) + [κ*(N^2*cos(θ) + b_ẑ)]_ẑ
+        # 3rd eqtn: b_t = -u + [κ*(1 + b_ẑ)]_ẑ
         row = umap[3, j]
         # first term
-        push!(A, (row, umap[1, j], -N^2*sin(θ)))
-        # second term: dẑ(κ(N^2*cos(θ) + dẑ(b))) = N^2*cos(θ)*dẑ(κ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
+        push!(A, (row, umap[1, j], -1.0))
+        # second term: dẑ(κ(1 + dẑ(b))) = dẑ(κ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
         push!(A, (row, umap[3, j-1], (κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
         push!(A, (row, umap[3, j],   (κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
         push!(A, (row, umap[3, j+1], (κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
-        diffVec[row] = N^2*cos(θ)*κ_ẑ
+        diffVec[row] = κ_ẑ
     end
 
     # Boundary Conditions: Bottom
@@ -61,7 +61,7 @@ function getMatrices()
     # v = 0
     row = umap[2, 1] 
     push!(A, (row, row, 1.0))
-    # b_ẑ = -N^2*cos(θ)
+    # b_ẑ = -1
     row = umap[3, 1] 
     fd_ẑ = mkfdstencil(ẑ[1:3], ẑ[1], 1)
     push!(A, (row, umap[3, 1], fd_ẑ[1]))
@@ -80,7 +80,7 @@ function getMatrices()
     push!(A, (row, umap[2, nẑ-2], fd_ẑ[1]))
     push!(A, (row, umap[2, nẑ-1], fd_ẑ[2]))
     push!(A, (row, umap[2, nẑ],   fd_ẑ[3]))
-    # dẑ(b) = -N^2*cos(θ)
+    # dẑ(b) = 0
     row = umap[3, nẑ]
     push!(A, (row, umap[3, nẑ-2], fd_ẑ[1]))
     push!(A, (row, umap[3, nẑ-1], fd_ẑ[2]))
@@ -142,8 +142,8 @@ function evolve(tFinal)
     nPts = nVars*nẑ + 1
 
     # timestep
-    nSteps = Int64(round(tFinal/Δt))
-    nStepsSave = Int64(round(tSave/Δt))
+    nSteps = Int64(ceil(tFinal/Δt))
+    nStepsSave = Int64(floor(tSave/Δt))
 
     # for flattening for matrix mult
     umap = reshape(1:(nPts-1), nVars, nẑ)    
@@ -162,7 +162,7 @@ function evolve(tFinal)
     sol = zeros(nPts)
     # start with far-field geostrophic flow
     sol[umap[2, :]] .= v0
-    sol[nPts] = f*v0
+    sol[nPts] = v0
     # save initial condition
     û = sol[umap[1, :]]
     v = sol[umap[2, :]]
@@ -184,11 +184,10 @@ function evolve(tFinal)
         RHSVec[umap[1, nẑ]] = 0           # u decay top
         RHSVec[umap[2, 1]]  = 0           # v = 0 bot
         RHSVec[umap[2, nẑ]] = 0           # v decay top
-        RHSVec[umap[3, 1]]  = -N^2*cos(θ) # b flux bot
-        #= RHSVec[umap[3, nẑ]] = -N^2*cos(θ) # b flux top =#
+        RHSVec[umap[3, 1]]  = -1          # b flux bot
         RHSVec[umap[3, nẑ]] = 0           # b flux top
         if canonical
-            RHSVec[nPts] = f*v0           # f*v0 = P_x
+            RHSVec[nPts] = v0           # v0 = P_x
         else
             RHSVec[nPts] = 0              # integral constraint
         end
@@ -198,7 +197,7 @@ function evolve(tFinal)
 
         # log
         if i % nStepsSave == 0
-            println(@sprintf("t = %.1e s = %.1e days (i = %d)", t, t/86400, i))
+            #= println(@sprintf("t = %.1e (i = %d)", t, i)) =#
 
             # gather solution
             û = sol[umap[1, :]]
@@ -212,67 +211,9 @@ function evolve(tFinal)
         end
     end
 
-    return sol
+    û = sol[umap[1, :]]
+    v = sol[umap[2, :]]
+    b = sol[umap[3, :]]
+    Px = sol[nPts]
+    return û, v, b, Px
 end
-
-#= """ =#
-#=     sol = steadyState1D() =#
-
-#= Solve the 1D equations at a point. =#
-#= """ =#
-#= function steadyState1D() =#
-#=     # point on ridge =#
-#=     iξ = 1 =#
-#=     Hcolumn = H(ξ[iξ]) =#
-#=     κcolumn = κ[iξ, :] =#
-#=     θcolumn = acos(cosθ[iξ, 1]) =#
-
-#=     # grid points =#
-#=     nVars = 3 =#
-#=     nPts = nVars*nẑ =#
-
-#=     # for flattening for matrix mult =#
-#=     umap = reshape(1:nPts, nVars, nẑ) =#    
-#=     bottomBdy = umap[:, 1] =#
-#=     topBdy = umap[:, nẑ] =#
-
-#=     # get matrices and vectors =#
-#=     diffMat, diffVec, bdyMat, explicitMat = getMatrices(κcolumn, Hcolumn, θcolumn) =#
-
-#=     # LHS =#
-#=     LHS = explicitMat + diffMat =#
-#=     # boundaries =#
-#=     LHS[bottomBdy, :] = bdyMat[bottomBdy, :] =#
-#=     LHS[topBdy, :] = bdyMat[topBdy, :] =#
-
-#=     # RHS =#
-#=     RHS = -diffVec =#
-#=     # boundaries =#
-#=     RHS[umap[1, 1]]  = 0 # u = 0 bot =#
-#=     RHS[umap[1, nẑ]] = 0 # u decay top =#
-#=     RHS[umap[2, 1]]  = 0 # v = 0 bot =#
-#=     RHS[umap[2, nẑ]] = 0 # v decay top =#
-#=     RHS[umap[3, 1]]  = -N^2*cos(θcolumn) # b flux bot =#
-#=     RHS[umap[3, nẑ]] = 0    # b flux top =#
-
-#=     # solve =#
-#=     solVec = LHS\RHS =#
-
-#=     # gather solution and rotate =#
-#=     sol = reshape(solVec, 3, nẑ) =#
-#=     û = sol[1, :] =#
-#=     v̂ = sol[2, :] =#
-#=     b̂ = sol[3, :] =#
-#=     u, v, w, b = rotate(û, v̂, b̂, θcolumn) =#
-
-#=     # save =#
-#=     file = h5open("solSteady.h5", "w") =#
-#=     write(file, "u", u) =#
-#=     write(file, "v", v) =#
-#=     write(file, "w", w) =#
-#=     write(file, "b", b) =#
-#=     write(file, "t", Inf) =#
-#=     close(file) =#
-
-#=     return sol =#
-#= end =#
