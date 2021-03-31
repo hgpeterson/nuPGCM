@@ -15,6 +15,10 @@ handle `ax`.
 Optional: set the vmin/vmax manually with vext.
 """
 function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, cmap="RdBu_r")
+    # km
+    xx = x/1000
+    zz = z/1000
+
     # full buoyancy for isopycnals
     B = N^2*z + b 
 
@@ -41,24 +45,24 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     end
 
     # 2D plot
-    img = ax.pcolormesh(x/1000, z, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
+    img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
     cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend)
-    cb.ax.ticklabel_format(style="sci", scilimits=(-3, 3))
+    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0))
 
     # isopycnal contours
     nLevels = 20
     lowerLevel = N^2*minimum(z)
     upperLevel = 0
     levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
-    ax.contour(x/1000, z, B, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.contour(xx, zz, B, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
 
     # ridge shading
-    ax.fill_between(x[:, 1]/1000, z[:, 1], minimum(z), color="k", alpha=0.3, lw=0.0)
+    ax.fill_between(xx[:, 1], zz[:, 1], minimum(zz), color="k", alpha=0.3, lw=0.0)
 
     # labels
     ax.set_title(titleString)
     ax.set_xlabel(L"$x$ (km)")
-    ax.set_ylabel(L"$z$ (m)")
+    ax.set_ylabel(L"$z$ (km)")
     ax.set_xticks([0, 500, 1000, 1500, 2000])
 
     # no spines

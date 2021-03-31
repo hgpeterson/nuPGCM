@@ -41,9 +41,9 @@ x = repeat(ξ, 1, nσ)
 z = repeat(σ', nξ, 1).*repeat(H.(ξ), 1, nσ)
 
 # arrays of sin(θ) and cos(θ) for 1D solutions
-#= sinθ = @. -Hx(ξξ)/sqrt(1 + Hx(ξξ)^2) =#
-#= cosθ = @. 1/sqrt(1 + Hx(ξξ)^2) =# 
-#= θ = asin.(sinθ[:, 1]) =#
+sinθ = @. -Hx(ξξ)/sqrt(1 + Hx(ξξ)^2)
+cosθ = @. 1/sqrt(1 + Hx(ξξ)^2) 
+θ = asin.(sinθ[:, 1])
 
 # diffusivity
 κ0 = 6e-5

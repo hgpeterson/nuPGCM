@@ -2,6 +2,7 @@
 include("rotatedCoords/rotated.jl")
 include("spinDown/rotated.jl")
 pl = pyimport("matplotlib.pylab")
+pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 
@@ -256,26 +257,26 @@ end
 function profiles2Dvs1D(folder)
     ix = argmin(abs.(ξ .- L/4))
     tDays = 1000:1000:5000
-    #= σ = 1 # prandtl number =#
-    σ = 200 
+    σ = 1 # prandtl number
+    #= σ = 200 =# 
     
     # init plot
     fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
 
     ax[1, 1].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
-    ax[1, 1].set_ylabel(L"$z$ (m)")
+    ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[1, 1].set_title("canonical 1D")
 
     ax[1, 2].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
     ax[1, 2].set_title(L"2D $\nu$PGCM")
 
     ax[2, 1].set_xlabel(L"along-ridge flow, $v$ (m s$^{-1}$)")
-    ax[2, 1].set_ylabel(L"$z$ (m)")
+    ax[2, 1].set_ylabel(L"$z$ (km)")
 
     ax[2, 2].set_xlabel(L"along-ridge flow, $v$ (m s$^{-1}$)")
 
     ax[3, 1].set_xlabel(L"stratification, $B_z$ (s$^{-2}$)")
-    ax[3, 1].set_ylabel(L"$z$ (m)")
+    ax[3, 1].set_ylabel(L"$z$ (km)")
 
     ax[3, 2].set_xlabel(L"stratification, $B_z$ (s$^{-2}$)")
 
@@ -293,24 +294,24 @@ function profiles2Dvs1D(folder)
         # canonical 1D solution
         c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint", tDay, ".h5"))
         Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
-        ax[1, 1].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :], label=string("Day ", Int64(tDay)))
-        ax[2, 1].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :])
-        ax[3, 1].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1]), c=colors[i, :])
+        ax[1, 1].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :], label=string("Day ", Int64(tDay)))
+        ax[2, 1].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :])
+        ax[3, 1].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :])
         
         # 2D PG solution
         c = loadCheckpointTF(string(folder, "2dpg/Pr", σ, "/checkpoint", tDay, ".h5"))
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
         Bz = c.N^2 .+ zDerivativeTF(c.b)
-        ax[1, 2].plot(c.chi[ix, :], z[ix, :], c=colors[i, :])
-        ax[2, 2].plot(v[ix, :],     z[ix, :], c=colors[i, :])
-        ax[3, 2].plot(Bz[ix, :],    z[ix, :], c=colors[i, :])
+        ax[1, 2].plot(c.chi[ix, :], z[ix, :]/1e3, c=colors[i, :])
+        ax[2, 2].plot(v[ix, :],     z[ix, :]/1e3, c=colors[i, :])
+        ax[3, 2].plot(Bz[ix, :],    z[ix, :]/1e3, c=colors[i, :])
 
         # transport-constrained 1D solution
         c = loadCheckpointRot(string(folder, "1dtc/Pr", σ, "/checkpoint", tDay, ".h5"))
         Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
-        ax[1, 2].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
-        ax[2, 2].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
-        ax[3, 2].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1]), c="k", ls=":")
+        ax[1, 2].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
+        ax[2, 2].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
+        ax[3, 2].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
     end
 
     ax[1, 1].legend(loc="center left")
@@ -558,34 +559,6 @@ function pressureRidgePlots(dfile)
     close()
 end
 
-function spindownGrid(folder)
-    # read data
-    file = h5open(string(folder, "vs.h5"), "r")
-    vs = read(file, "vs")
-    v0 = read(file, "v0")
-    τ_Ss = read(file, "τ_Ss")
-    τ_As = read(file, "τ_As")
-    close(file)
-
-    # plot grid
-    fig, ax = subplots(1)
-    ax.set_xlabel(L"spindown time, $\tilde{\tau}_S$")
-    ax.set_ylabel(L"arrest time, $\tilde{\tau}_A$")
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    img = ax.pcolormesh(τ_Ss, τ_As, vs'/v0, rasterized=true, shading="auto", vmin=0, vmax=1)
-    cb = colorbar(img, ax=ax, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
-    ax.loglog([0, 1], [0, 1], transform=ax.transAxes, "w--", lw=0.5)
-    ax.annotate(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = 1$", xy=(0.09, 0.2), xycoords="axes fraction", rotation=36, c="w")
-    ax.plot(5e3, 1e2, "wo")
-    ax.plot(1e2, 1e2, "wo")
-    ax.annotate("Fig. 6", xy=(3e3, 0.45e2), xycoords="data", c="w")
-    ax.annotate("Fig. 7", xy=(1.2e2, 0.7e2), xycoords="data", c="w")
-    tight_layout()
-    savefig("spindownGrid.pdf")
-    println("spindownGrid.pdf")
-end
-
 function spindownProfiles(folder)
     # init plot
     fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
@@ -666,4 +639,37 @@ function spindownProfiles(folder)
     savefig("spindownProfiles.pdf")
     println("spindownProfiles.pdf")
     close()
+end
+
+function spindownGrid(folder)
+    # read data
+    file = h5open(string(folder, "vs.h5"), "r")
+    vs = read(file, "vs")
+    v0 = read(file, "v0")
+    τ_Ss = read(file, "τ_Ss")
+    τ_As = read(file, "τ_As")
+    close(file)
+
+    # text outline
+    outline = [pe.withStroke(linewidth=0.6, foreground="k")]
+
+    # plot grid
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"spindown time, $\tilde{\tau}_S$")
+    ax.set_ylabel(L"arrest time, $\tilde{\tau}_A$")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    img = ax.pcolormesh(τ_Ss, τ_As, vs'/v0, rasterized=true, shading="auto", vmin=0, vmax=1)
+    cb = colorbar(img, ax=ax, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
+    ax.loglog([0, 1], [0, 1], transform=ax.transAxes, "w--", lw=0.5)
+    ax.annotate(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = 1$", xy=(0.7, 0.9), xycoords="axes fraction", c="w", path_effects=outline)
+    ax.scatter(1e2, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+    ax.scatter(5e3, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+    ax.annotate("Fig. 6", xy=(0.3, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
+    ax.annotate("Fig. 7", xy=(0.8, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
+
+    ax.set_box_aspect(1)
+    #= tight_layout() =#
+    savefig("spindownGrid.pdf")
+    println("spindownGrid.pdf")
 end

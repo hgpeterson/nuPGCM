@@ -37,8 +37,8 @@ include("evolution.jl")
 
 include("talkPlots.jl")
 path = "/home/hpeter/ResearchCallies/sims/" 
-#= chi_v_ridge(string(path, "sim021")) =#
+#= chi_v_ridge(string(path, "sim021/")) =#
 #= profiles2Dvs1D(string(path, "sim021/")) =#
+#= spindownProfiles(string(path, "sim022/tauA1e2_tauS5e3/")) # ratio small =#
+#= spindownProfiles(string(path, "sim022/tauA1e2_tauS1e2/")) # ratio big =#
 spindownGrid(string(path, "sim022/"))
-#= spindownProfiles(string(path, "sim022/tauA1e2_tauS5e3/")) =#
-#= spindownProfiles(string(path, "sim022/tauA1e2_tauS1e2/")) =#
