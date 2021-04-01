@@ -4,8 +4,8 @@
 canonical = true
 #= canonical = false =#
 
-τ_A = 1e2 # arrest time
-τ_S = 5e3 # spindown time
+τ_A = 1e2 # nondim arrest time
+τ_S = 1e2 # nondim spindown time
 Ek = 1/τ_S^2
 S = 1/τ_A
 H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
@@ -13,24 +13,24 @@ Pr = 1e3
 κ0 = 1
 κ1 = 1e-3
 h = 10
-v0 = -1
+ṽ_0 = -1
 
 # timestep
-Δt = minimum([τ_S/100, τ_A/100])
+Δt̃ = minimum([τ_S/100, τ_A/100])
 tSave = τ_A
 
 # number of grid points
-nẑ = 2^11 # good for anything at or below τ_S = 1e4
+nz̃ = 2^11 # good for anything at or below τ_S = 1e4
 
-# grid (chebyshev, ẑ = 0 is bottom)
-ẑ = @. H*(1 - cos(pi*(0:nẑ-1)/(nẑ-1)))/2
+# grid (chebyshev, z̃ = 0 is bottom)
+z̃ = @. H*(1 - cos(pi*(0:nz̃-1)/(nz̃-1)))/2
 
 #= bottomIntense = true =#
 bottomIntense = false
 if bottomIntense
-    κ = @. κ0 + κ1*exp(-ẑ/h)
+    κ = @. κ0 + κ1*exp(-z̃/h)
 else
-    κ = κ1*ones(nẑ)
+    κ = κ1*ones(nz̃)
 end
 
 # timestepping
@@ -51,7 +51,7 @@ end
 ofile = open("out.txt", "w")
 log(ofile, "\nSpin Down with Parameters\n")
 
-log(ofile, @sprintf("nẑ = %1.5e", nẑ))
+log(ofile, @sprintf("nz̃ = %1.5e", nz̃))
 log(ofile, @sprintf("τ_A = %1.5e", τ_A))
 log(ofile, @sprintf("τ_S = %1.5e", τ_S))
 log(ofile, @sprintf("H  = %1.5e", H))
@@ -60,8 +60,8 @@ log(ofile, @sprintf("S  = %1.5e", S))
 log(ofile, @sprintf("κ0 = %1.5e", κ0))
 log(ofile, @sprintf("κ1 = %1.5e", κ1))
 log(ofile, @sprintf("h  = %1.5e", h))
-log(ofile, @sprintf("v0 = %1.5e", v0))
-log(ofile, @sprintf("Δt = %1.5e", Δt))
+log(ofile, @sprintf("v0 = %1.5e", ṽ_0))
+log(ofile, @sprintf("Δt = %1.5e", Δt̃))
 log(ofile, @sprintf("α  = %1.5e", α))
 
 log(ofile, string("\nCanonical:              ", canonical))

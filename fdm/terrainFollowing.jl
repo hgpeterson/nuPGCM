@@ -100,6 +100,8 @@ function saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
     tDays = t/86400
     savefile = @sprintf("checkpoint%d.h5", tDays)
     file = h5open(savefile, "w")
+    write(file, "x", x)
+    write(file, "z", z)
     write(file, "b", b)
     write(file, "chi", chi)
     write(file, "uξ", uξ)
@@ -125,6 +127,8 @@ Load .h5 checkpoint file given by `filename`.
 """
 function loadCheckpointTF(filename)
     file = h5open(filename, "r")
+    x = read(file, "x")
+    z = read(file, "z")
     b = read(file, "b")
     chi = read(file, "chi")
     uξ = read(file, "uξ")
@@ -140,7 +144,9 @@ function loadCheckpointTF(filename)
     ξVariation, = read(file, "ξVariation")
     κ = read(file, "κ")
     close(file)
-    return (b=b, 
+    return (x=x,
+            z=z,
+            b=b, 
             chi=chi, 
             uξ=uξ, 
             uη=uη, 

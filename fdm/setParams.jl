@@ -10,8 +10,6 @@ N = 1e-3
 L = 2e6
 H0 = 2e3
 amp =  0.4*H0
-#= H(x) = H0 - amp*sin(2*π*x/L) =#
-#= Hx(x) = -2*π/L*amp*cos(2*π*x/L) =#
 H(x) = H0 - amp*sin(2*π*x/L - π/2)
 Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
 #= ϕ(s) = exp(-s^2/2) =#

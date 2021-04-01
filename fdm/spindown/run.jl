@@ -8,13 +8,13 @@ include("../../myJuliaLib.jl")
 include("setParams.jl")
 include("evolution.jl")
 include("plottingLib.jl")
-include("rotated.jl")
+include("nondim.jl")
 
 ################################################################################
 # run single integration
 ################################################################################
 
-û, v, b, Px = evolve(5*τ_A)
+ũ, ṽ, b̃, Px = evolve(5*τ_A)
 
 ################################################################################
 # plots

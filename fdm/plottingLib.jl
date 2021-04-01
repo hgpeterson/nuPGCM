@@ -14,7 +14,7 @@ handle `ax`.
 
 Optional: set the vmin/vmax manually with vext.
 """
-function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, cmap="RdBu_r")
+function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, cmap="RdBu_r", x=x, z=z)
     # km
     xx = x/1000
     zz = z/1000

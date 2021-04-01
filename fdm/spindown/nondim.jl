@@ -1,31 +1,20 @@
 ################################################################################
-# Utility functions for rotated coordinates
+# Utility functions for nondimensional spindown
 ################################################################################
 
 """
-    u, w = rotate(û)
-
-Rotate `û` into physical coordinate components `u` and `w`.
-"""
-function rotate(û)
-    u = û*cos(θ)
-    w = û*sin(θ)
-    return u, w
-end
-
-"""
-    saveCheckpointSpinDown(û, v, b, Px, t, i)
+    saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, i)
 
 Save .h5 checkpoint file for state.
 """
-function saveCheckpointSpinDown(û, v, b, Px, t, i)
+function saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, i)
     savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
-    write(file, "û", û)
-    write(file, "v", v)
-    write(file, "b", b)
+    write(file, "ũ", ũ)
+    write(file, "ṽ", ṽ)
+    write(file, "b̃", b̃)
     write(file, "Px", Px)
-    write(file, "t", t)
+    write(file, "t̃", t̃)
     write(file, "H", H)
     write(file, "Pr", Pr)
     write(file, "S", S)
@@ -36,7 +25,7 @@ function saveCheckpointSpinDown(û, v, b, Px, t, i)
     write(file, "κ1", κ1)
     write(file, "h", h)
     write(file, "α", α)
-    write(file, "ẑ", ẑ)
+    write(file, "z̃", z̃)
     close(file)
     println(savefile)
 end
@@ -48,11 +37,11 @@ Load .h5 checkpoint file given by `filename`.
 """
 function loadCheckpointSpinDown(filename)
     file = h5open(filename, "r")
-    û = read(file, "û")
-    v = read(file, "v")
-    b = read(file, "b")
+    ũ = read(file, "ũ")
+    ṽ = read(file, "ṽ")
+    b̃ = read(file, "b̃")
     Px = read(file, "Px")
-    t = read(file, "t")
+    t̃ = read(file, "t̃")
     H = read(file, "H")
     Pr = read(file, "Pr")
     S = read(file, "S")
@@ -63,13 +52,13 @@ function loadCheckpointSpinDown(filename)
     κ1 = read(file, "κ1")
     h = read(file, "h")
     α = read(file, "α")
-    ẑ = read(file, "ẑ")
+    z̃ = read(file, "z̃")
     close(file)
-    return (û=û, 
-            v=v, 
-            b=b, 
+    return (ũ=ũ, 
+            ṽ=ṽ, 
+            b̃=b̃, 
             Px=Px, 
-            t=t, 
+            t̃=t̃, 
             H=H, 
             Pr=Pr, 
             S=S, 
@@ -80,5 +69,5 @@ function loadCheckpointSpinDown(filename)
             κ1=κ1, 
             h=h, 
             α=α,
-            ẑ=ẑ)
+            z̃=z̃)
 end

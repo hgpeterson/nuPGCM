@@ -1,6 +1,6 @@
 # for loading rotated data
-include("rotatedCoords/rotated.jl")
-include("spinDown/rotated.jl")
+include("rotated/rotated.jl")
+include("spindown/nondim.jl")
 pl = pyimport("matplotlib.pylab")
 pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
@@ -565,10 +565,10 @@ function spindownProfiles(folder)
 
     ax[1, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
     ax[1, 1].set_ylabel(L"$\tilde{z}$")
-    ax[1, 1].set_title("canonical")
+    ax[1, 1].set_title("canonical 1D")
 
     ax[1, 2].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
-    ax[1, 2].set_title("transport-constrained")
+    ax[1, 2].set_title("transport-constrained 1D")
 
     ax[2, 1].set_xlabel(L"along-ridge flow, $\tilde{v}$")
     ax[2, 1].set_ylabel(L"$\tilde{z}$")
@@ -602,7 +602,7 @@ function spindownProfiles(folder)
             τ_A = 1/c.S
 
             # stratification
-            Bẑ = 1 .+ differentiate(c.b, c.ẑ)
+            Bz̃ = 1 .+ differentiate(c.b̃, c.z̃)
 
             # colors and labels
             if i == 0
@@ -610,13 +610,13 @@ function spindownProfiles(folder)
                 label = L"$\tilde{t} = 0$"
             else
                 color = colors[i, :]
-                label = string(L"$\tilde{t}/\tilde{\tau}_A$ = ", Int64(round(c.t/τ_A)))
+                label = string(L"$\tilde{t}/\tilde{\tau}_A$ = ", Int64(round(c.t̃/τ_A)))
             end
 
             # plot
-            ax[1, j].plot(c.û,  c.ẑ, c=color, label=label)
-            ax[2, j].plot(c.v,  c.ẑ, c=color, label=label)
-            ax[3, j].plot(Bẑ,   c.ẑ, c=color, label=label)
+            ax[1, j].plot(c.ũ,  c.z̃, c=color, label=label)
+            ax[2, j].plot(c.ṽ,  c.z̃, c=color, label=label)
+            ax[3, j].plot(Bz̃,   c.z̃, c=color, label=label)
             ax[2, j].axvline(c.Px, lw=1.0, c=color, ls="--")
         end
     end
@@ -654,22 +654,36 @@ function spindownGrid(folder)
     outline = [pe.withStroke(linewidth=0.6, foreground="k")]
 
     # plot grid
-    fig, ax = subplots(1)
+    fig, ax = subplots(1, figsize=(3.404, 3.404))
+    ax.set_box_aspect(1)
     ax.set_xlabel(L"spindown time, $\tilde{\tau}_S$")
     ax.set_ylabel(L"arrest time, $\tilde{\tau}_A$")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     img = ax.pcolormesh(τ_Ss, τ_As, vs'/v0, rasterized=true, shading="auto", vmin=0, vmax=1)
-    cb = colorbar(img, ax=ax, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
+    cb = colorbar(img, ax=ax, shrink=0.63, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
     ax.loglog([0, 1], [0, 1], transform=ax.transAxes, "w--", lw=0.5)
-    ax.annotate(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = 1$", xy=(0.7, 0.9), xycoords="axes fraction", c="w", path_effects=outline)
+    ax.annotate(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = 1$", xy=(0.9, 0.9), xytext=(0.5, 0.9), 
+                xycoords="axes fraction", c="w", path_effects=outline, arrowprops=Dict("arrowstyle" => "->", "color" => "w"))
     ax.scatter(1e2, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
     ax.scatter(5e3, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
     ax.annotate("Fig. 6", xy=(0.3, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
     ax.annotate("Fig. 7", xy=(0.8, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
 
-    ax.set_box_aspect(1)
-    #= tight_layout() =#
+    tight_layout()
+    #= subplots_adjust(bottom=0.2, top=0.9, left=0.0, right=0.9, wspace=0.0, hspace=0.0) =#
     savefig("spindownGrid.pdf")
     println("spindownGrid.pdf")
+end
+
+function asymmetricRidge(folder)
+    # load
+    c = loadCheckpointTF(string(folder, "checkpoint1000.h5"))
+    u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
+
+    # plot
+    ax = ridgePlot(c.chi, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z)
+    savefig("asym_ridge.pdf")
+    println("asym_ridge.pdf")
+    close()
 end

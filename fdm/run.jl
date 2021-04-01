@@ -41,4 +41,5 @@ path = "/home/hpeter/ResearchCallies/sims/"
 #= profiles2Dvs1D(string(path, "sim021/")) =#
 #= spindownProfiles(string(path, "sim022/tauA1e2_tauS5e3/")) # ratio small =#
 #= spindownProfiles(string(path, "sim022/tauA1e2_tauS1e2/")) # ratio big =#
-spindownGrid(string(path, "sim022/"))
+#= spindownGrid(string(path, "sim022/")) =#
+asymmetricRidge(string(path, "sim020/"))
