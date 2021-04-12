@@ -216,25 +216,21 @@ function chiBalance(folder)
 end
 
 function chiForSketch(folder)
-    iξ = 1
-
-    fig, ax = subplots(1)
-
-    # full 2D
-    b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, symmetry, ξVariation, κ = loadCheckpointTF(string(folder, "full2D/checkpoint1000.h5"))
-    ax.plot(chi[iξ, :]/maximum(chi[iξ, :]), z[iξ, :], "k", label="full 2D")
-
-    b, chi, û, v, U, t, L, H0, Pr, f, N, symmetry, κ = loadCheckpointRot(string(folder, "canonical1D/checkpoint1000.h5"))
-    ax.plot(chi[iξ, :]/maximum(chi[iξ, :]), z[iξ, :], "k", label="canonical 1D")
+    iξ = argmin(abs.(ξ .- L/4))
+    fig, ax = subplots(1, figsize=(3.404/1.62, 3.404))
+    c = loadCheckpointRot(string(folder, "1dcan/checkpoint1000.h5"))
+    ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
+    c = loadCheckpointRot(string(folder, "1dtc/checkpoint1000.h5"))
+    ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
 
     ax.set_xticks([])
     ax.set_yticks([])
     ax.spines["left"].set_visible(false)
     ax.axvline(0, ls="-", lw=0.5, c="k")
-    ax.set_ylim([-H0, 0])
 
     tight_layout()
     savefig("chiForSketch.svg", transparent=true)
+    println("chiForSketch.svg")
 end
 
 function chi_v_ridge(folder)
@@ -249,8 +245,8 @@ function chi_v_ridge(folder)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
-    savefig("chi_v_ridge.pdf")
-    println("chi_v_ridge.pdf")
+    savefig("spinupRidge.pdf")
+    println("spinupRidge.pdf")
     close()
 end
 
@@ -329,8 +325,8 @@ function profiles2Dvs1D(folder)
     ax[1, 2].annotate(string("Pr = ", σ), (0.8, 0.8), xycoords="axes fraction")
 
     tight_layout()
-    savefig(string("profiles2Dvs1D_Pr", σ, ".pdf"))
-    println(string("profiles2Dvs1D_Pr", σ, ".pdf"))
+    savefig(string("spinupProfilesPr", σ, ".pdf"))
+    println(string("spinupProfilesPr", σ, ".pdf"))
     close()
 end
 
@@ -683,7 +679,36 @@ function asymmetricRidge(folder)
 
     # plot
     ax = ridgePlot(c.chi, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z)
-    savefig("asym_ridge.pdf")
-    println("asym_ridge.pdf")
+    savefig("spinupRidgeAsym.pdf")
+    println("spinupRidgeAsym.pdf")
     close()
+end
+
+function sketchRidge()
+    fig, ax = subplots(1)
+    ax.fill_between(x[:, 1]/1000, z[:, 1]/1000, minimum(z)/1000, color="k", alpha=0.3, lw=0.0)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_ylim([minimum(z)/1000, 0])
+    ax.set_xticks([])
+    ax.set_yticks([])
+    tight_layout()
+    savefig("sketchRidge.svg")
+    println("sketchRidge.svg")
+end
+
+function sketchSlope()
+    x = 0:0.001:1
+    z = 0:0.001:1
+    Px = repeat(x, 1, size(z, 1))
+    println(size(Px))
+    fig, ax = subplots(1)
+    ax.pcolormesh(x, z, Px', cmap="viridis", shading="auto", rasterized=true)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    tight_layout()
+    savefig("sketchSlope.svg")
+    println("sketchSlope.svg")
 end

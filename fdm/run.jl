@@ -42,4 +42,7 @@ path = "/home/hpeter/ResearchCallies/sims/"
 #= spindownProfiles(string(path, "sim022/tauA1e2_tauS5e3/")) # ratio small =#
 #= spindownProfiles(string(path, "sim022/tauA1e2_tauS1e2/")) # ratio big =#
 #= spindownGrid(string(path, "sim022/")) =#
-asymmetricRidge(string(path, "sim020/"))
+#= asymmetricRidge(string(path, "sim020/")) =#
+chiForSketch(string(path, "sim023/"))
+#= sketchRidge() =#
+#= sketchSlope() =#

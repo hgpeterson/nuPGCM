@@ -1,11 +1,11 @@
 # parameters (as in RC20)
-Pr = 2e2
+Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 
 # set U = 0 or compute U at each time step?
-symmetry = false
-#= symmetry = true =#
+#= symmetry = false =#
+symmetry = true
 
 # topography
 L = 2e6
@@ -40,11 +40,12 @@ ẑ = @. z/cosθ
 κ0 = 6e-5
 κ1 = 2e-3
 h = 200
-bottomIntense = true
-#= bottomIntense = false =#
+#= bottomIntense = true =#
+bottomIntense = false
 if bottomIntense
     κ = @. κ0 + κ1*exp(-(ẑ + H(x))/h)
 else
+    κ1 = 1e-4
     κ = κ1*ones(nx, nz)
 end
 

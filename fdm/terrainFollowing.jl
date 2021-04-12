@@ -127,8 +127,10 @@ Load .h5 checkpoint file given by `filename`.
 """
 function loadCheckpointTF(filename)
     file = h5open(filename, "r")
-    x = read(file, "x")
-    z = read(file, "z")
+    #= x = read(file, "x") =#
+    x = 1
+    #= z = read(file, "z") =#
+    z = 1
     b = read(file, "b")
     chi = read(file, "chi")
     uξ = read(file, "uξ")
