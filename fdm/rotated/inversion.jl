@@ -3,34 +3,34 @@
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(κ, ẑ, θ)
-    iU = nz + 1
+function getInversionLHS()
+    iU = nẑ + 1
     A = Tuple{Int64,Int64,Float64}[]  
 
     # for finite difference on the top and bottom boundary
     fd_bot_ẑ =  mkfdstencil(ẑ[1:3], ẑ[1],  1)
-    fd_top_ẑẑ = mkfdstencil(ẑ[nz-3:nz], ẑ[nz], 2)
+    fd_top_ẑẑ = mkfdstencil(ẑ[nẑ-3:nẑ], ẑ[nẑ], 2)
 
     # Lower boundary conditions 
-    # b.c. 1: dẑ(chi) = 0
+    # b.c. 1: dẑ(χ) = 0
     push!(A, (1, 1, fd_bot_ẑ[1]))
     push!(A, (1, 2, fd_bot_ẑ[2]))
     push!(A, (1, 3, fd_bot_ẑ[3]))
-    # b.c. 2: chi = 0 
+    # b.c. 2: χ = 0 
     push!(A, (2, 1, 1.0))
 
     # Upper boundary conditions
-    # b.c. 1: dẑẑ(chi) = 0 
-    push!(A, (nz, nz-3, fd_top_ẑẑ[1]))
-    push!(A, (nz, nz-2, fd_top_ẑẑ[2]))
-    push!(A, (nz, nz-1, fd_top_ẑẑ[3]))
-    push!(A, (nz, nz,   fd_top_ẑẑ[4]))
-    # b.c. 2: chi - U = 0
-    push!(A, (nz-1, nz,  1.0))
-    push!(A, (nz-1, iU, -1.0))
+    # b.c. 1: dẑẑ(χ) = 0 
+    push!(A, (nẑ, nẑ-3, fd_top_ẑẑ[1]))
+    push!(A, (nẑ, nẑ-2, fd_top_ẑẑ[2]))
+    push!(A, (nẑ, nẑ-1, fd_top_ẑẑ[3]))
+    push!(A, (nẑ, nẑ,   fd_top_ẑẑ[4]))
+    # b.c. 2: χ - U = 0
+    push!(A, (nẑ-1, nẑ,  1.0))
+    push!(A, (nẑ-1, iU, -1.0))
 
     # Interior nodes
-    for j=3:nz-2
+    for j=3:nẑ-2
         row = j 
 
         # dẑ stencil
@@ -47,7 +47,7 @@ function getInversionLHS(κ, ẑ, θ)
         # dẑẑẑẑ stencil
         fd_ẑẑẑẑ = mkfdstencil(ẑ[j-2:j+2], ẑ[j], 4)
         
-        # eqtn: dẑẑ(nu*dẑẑ(chi)) + f^2*cos^2(θ)(chi - U)/nu = -dẑ(b)*sin(θ)
+        # eqtn: dẑẑ(nu*dẑẑ(χ)) + f^2*cos^2(θ)(χ - U)/nu = -dẑ(b)*sin(θ)
         # term 1 (product rule)
         push!(A, (row, j-1, Pr*κ_ẑẑ*fd_ẑẑ[1]))
         push!(A, (row, j,   Pr*κ_ẑẑ*fd_ẑẑ[2]))
@@ -70,12 +70,12 @@ function getInversionLHS(κ, ẑ, θ)
     end
 
     # if dx(p) ~ 0 then 
-    #   (1) U = 0
-    #       for fixed 1D solution
-    #   (2) dẑ(nu*dẑẑ(chi)) = Hx*b at bottom
+    #   (1) U = U₀
+    #       for transport-constrained 1D solution
+    #   (2) dẑ(nu*dẑẑ(χ)) = Hx*b at bottom
     #       for canonical 1D solution
     row = iU
-    if symmetry
+    if transportConstraint
         push!(A, (row, row, 1.0))
     else
         # dẑ stencil
@@ -102,7 +102,7 @@ function getInversionLHS(κ, ẑ, θ)
     end
     
     # Create CSC sparse matrix from matrix elements
-    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nz+1, nz+1)
+    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nẑ+1, nẑ+1)
 
     return A
 end
@@ -114,58 +114,55 @@ Setup right hand side of linear system for problem.
 """
 function getInversionRHS(b)
     # last row is for U
-    rhs = zeros(nx, nz+1)
-    iU = nz + 1
+    rhs = zeros(nẑ+1)
+    iU = nẑ + 1
 
-    # eqtn: dẑẑ(nu*dẑẑ(chi)) + f^2*cos^2(θ)(chi - U)/nu = -dẑ(b)*sin(θ)
-    rhs[:, 1:nz] = -ẑDerivative(b).*sinθ
+    # eqtn: dẑẑ(nu*dẑẑ(χ)) + f^2*cos^2(θ)(χ - U)/nu = -dẑ(b)*sin(θ)
+    rhs[1:nẑ] = -differentiate(b, ẑ).*sin(θ)
 
     # boundary conditions require zeros on RHS
-    rhs[:, [1, 2, nz-1, nz]] .= 0
+    rhs[[1, 2, nẑ-1, nẑ]] .= 0
 
     # if dx(p) ~ 0 then 
-    #   (1) U = 0
-    #       for fixed 1D solution
-    #   (2) dẑ(nu*dẑẑ(chi)) = Hx*b at bottom
+    #   (1) U = U₀
+    #       for transport-constrained 1D solution
+    #   (2) dẑ(nu*dẑẑ(χ)) = Hx*b at bottom
     #       for canonical 1D solution
-    if symmetry
-        #= rhs[:, iU] .= 0 =#
+    if transportConstraint
+        rhs[iU] = U₀
     else
-        rhs[:, iU] = Hx.(x[:, 1]).*b[:, 1]
+        rhs[iU] = -b[1]*tan(θ)
     end
     
     return rhs
 end
 
 """
-    chi, û, v, U = postProcess(sol)
+    χ, û, v, U = postProcess(sol)
 
-Take solution `sol` and extract reshaped `chi`. Compute `û`, `v`
-from definition of chi.
+Take solution `sol` and extract reshaped `χ`. Compute `û`, `v`
+from definition of χ.
 """
 function postProcess(sol)
-    iU = nz + 1
+    iU = nẑ + 1
 
-    # chi at top is vertical integral of û
-    U = sol[:, iU] 
+    # χ at top is vertical integral of û
+    U = sol[iU] 
 
-    # rest of solution is chi
-    chi = sol[:, 1:nz]
+    # rest of solution is χ
+    χ = sol[1:nẑ]
 
-    # compute û = dẑ(chi)
-    û = ẑDerivative(chi)
+    # compute û = dẑ(χ)
+    û = differentiate(χ, ẑ)
 
-    # compute v = int_-H^0 f*cos(θ)*(chi - U)/nu dẑ
-    v = zeros(nx, nz)
-    for i=1:nx
-        v[i, :] = cumtrapz(f*cosθ[i, 1]*(chi[i, :] .- U[i])./(Pr*κ[i, :]), ẑ[i, :])
-    end
+    # compute v̂ = int_-H^0 f*cos(θ)*(χ - U)/nu dẑ
+    v̂ = cumtrapz(f*cos(θ)*(χ .- U)./(Pr*κ), ẑ)
 
-    return chi, û, v, U
+    return χ, û, v̂, U
 end
 
 """
-    chi, û, v, U = invert(b)
+    χ, û, v̂, U = invert(b)
 
 Wrapper function that inverts for flow given buoyancy perturbation `b`.
 """
@@ -174,14 +171,11 @@ function invert(b)
     inversionRHS = getInversionRHS(b)
 
     # solve
-    sol = zeros(nx, nz+1)
     inversionRHS = getInversionRHS(b)
-    for i=1:nx
-        sol[i, :] = inversionLHSs[i]\inversionRHS[i, :]
-    end
+    sol = inversionLHS\inversionRHS
 
     # compute flow from sol
-    chi, û, v, U = postProcess(sol)
+    χ, û, v̂, U = postProcess(sol)
 
-    return chi, û, v, U
+    return χ, û, v̂, U
 end

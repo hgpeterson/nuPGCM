@@ -4,161 +4,170 @@
 Compute the matrices needed for evolution equation integration.
 """
 function getEvolutionMatrices()
-    nPts = nx*nz
-
-    umap = reshape(1:nPts, nx, nz)    
     diffMat = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
-    diffVec = zeros(nPts)                          # diffusion operator vector 
+    diffVec = zeros(nẑ)                            # diffusion operator vector 
     bdyFluxMat = Tuple{Int64,Int64,Float64}[]      # flux at boundary matrix
 
-    # Main loop, insert stencil in matrices for each node point
-    for i=1:nx
-        # interior nodes only for operators
-        for j=2:nz-1
-            row = umap[i, j] 
-
-            # dẑ stencil
-            fd_ẑ = mkfdstencil(ẑ[i, j-1:j+1], ẑ[i, j], 1)
-            κ_ẑ = sum(fd_ẑ.*κ[i, j-1:j+1])
-
-            # dẑẑ stencil
-            fd_ẑẑ = mkfdstencil(ẑ[i, j-1:j+1], ẑ[i, j], 2)
-
-            # diffusion term: dẑ(κ(N^2*cos(θ) + dẑ(b))) = dẑ(κ)*N^2*cos(θ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
-            push!(diffMat, (row, umap[i, j-1], (κ_ẑ*fd_ẑ[1] + κ[i, j]*fd_ẑẑ[1])))
-            push!(diffMat, (row, umap[i, j],   (κ_ẑ*fd_ẑ[2] + κ[i, j]*fd_ẑẑ[2])))
-            push!(diffMat, (row, umap[i, j+1], (κ_ẑ*fd_ẑ[3] + κ[i, j]*fd_ẑẑ[3])))
-            diffVec[row] = κ_ẑ*N^2*cosθ[i, j]
-        end
-
-        # flux at boundaries: bottom
-        row = umap[i, 1] 
+    # interior nodes only for operators
+    for j=2:nẑ-1
         # dẑ stencil
-        fd_ẑ = mkfdstencil(ẑ[i, 1:3], ẑ[i, 1], 1)
-        # flux term: dẑ(b) = -N^2*cos(θ)
-        push!(bdyFluxMat, (row, umap[i, 1], fd_ẑ[1]))
-        push!(bdyFluxMat, (row, umap[i, 2], fd_ẑ[2]))
-        push!(bdyFluxMat, (row, umap[i, 3], fd_ẑ[3]))
+        fd_ẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 1)
+        κ_ẑ = sum(fd_ẑ.*κ[j-1:j+1])
 
-        # flux at boundaries: top
-        row = umap[i, nz] 
-        # dẑ stencil
-        fd_ẑ = mkfdstencil(ẑ[i, nz-2:nz], ẑ[i, nz], 1)
-        # flux term: dẑ(b) = 0
-        push!(bdyFluxMat, (row, umap[i, nz-2], fd_ẑ[1]))
-        push!(bdyFluxMat, (row, umap[i, nz-1], fd_ẑ[2]))
-        push!(bdyFluxMat, (row, umap[i, nz],   fd_ẑ[3]))
+        # dẑẑ stencil
+        fd_ẑẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 2)
+
+        # diffusion term: dẑ(κ(N^2*cos(θ) + dẑ(b))) = dẑ(κ)*N^2*cos(θ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
+        push!(diffMat, (j, j-1, (κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
+        push!(diffMat, (j, j,   (κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
+        push!(diffMat, (j, j+1, (κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
+        diffVec[j] = κ_ẑ*N^2*cos(θ)
     end
 
+    # flux at boundaries: bottom
+    # dẑ stencil
+    fd_ẑ = mkfdstencil(ẑ[1:3], ẑ[1], 1)
+    # flux term: dẑ(b) = -N^2*cos(θ)
+    push!(bdyFluxMat, (1, 1, fd_ẑ[1]))
+    push!(bdyFluxMat, (1, 2, fd_ẑ[2]))
+    push!(bdyFluxMat, (1, 3, fd_ẑ[3]))
+
+    # flux at boundaries: top
+    # dẑ stencil
+    fd_ẑ = mkfdstencil(ẑ[nẑ-2:nẑ], ẑ[nẑ], 1)
+    # flux term: dẑ(b) = 0
+    push!(bdyFluxMat, (nẑ, nẑ-2, fd_ẑ[1]))
+    push!(bdyFluxMat, (nẑ, nẑ-1, fd_ẑ[2]))
+    push!(bdyFluxMat, (nẑ, nẑ,   fd_ẑ[3]))
+
     # Create CSC sparse matrix from matrix elements
-    diffMat = sparse((x->x[1]).(diffMat), (x->x[2]).(diffMat), (x->x[3]).(diffMat), nPts, nPts)
-    bdyFluxMat = sparse((x->x[1]).(bdyFluxMat), (x->x[2]).(bdyFluxMat), (x->x[3]).(bdyFluxMat), nPts, nPts)
+    diffMat = sparse((x->x[1]).(diffMat), (x->x[2]).(diffMat), (x->x[3]).(diffMat), nẑ, nẑ)
+    bdyFluxMat = sparse((x->x[1]).(bdyFluxMat), (x->x[2]).(bdyFluxMat), (x->x[3]).(bdyFluxMat), nẑ, nẑ)
 
     return diffMat, diffVec, bdyFluxMat
 end
 
 """
-    evolutionLHS = getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)
+    evolutionLHS = getEvolutionLHS(Δt, diffMat, bdyFluxMat)
 
 Generate the left-hand side matrix for the evolution problem of the form `I - diffmat*Δt`
 and the not flux boundary condition applied to the boundaries
 """
-function getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)
+function getEvolutionLHS(Δt, diffMat, bdyFluxMat)
     # implicit euler
     evolutionLHS = I - diffMat*Δt 
 
     # no flux boundaries
-    evolutionLHS[bottomBdy, :] = bdyFluxMat[bottomBdy, :]
-    evolutionLHS[topBdy, :] = bdyFluxMat[topBdy, :]
+    evolutionLHS[1, :] = bdyFluxMat[1, :]
+    evolutionLHS[nẑ, :] = bdyFluxMat[nẑ, :]
 
     return evolutionLHS
 end
 
 """
-    b = evolve(tFinalDays)
+    b = evolve(tFinal)
 
-Solve equation for `b` for `nSteps` time steps.
+Solve equation for `b` for `tFinal` seconds.
 """
-function evolve(tFinalDays)
-    # grid points
-    nPts = nx*nz
-
+function evolve(tFinal)
     # timestep
-    nSteps = Int64(tFinalDays*86400/Δt)
-    nStepsInvert = 1
-    nDaysPlot = 10000
-    nDaysSave = 1000
-    nStepsPlot = Int64(nDaysPlot*86400/Δt)
-    nStepsSave = Int64(nDaysSave*86400/Δt)
-
-    # for flattening for matrix mult
-    umap = reshape(1:nPts, nx, nz)    
-    bottomBdy = umap[:, 1]
-    topBdy = umap[:, nz]
+    nSteps = Int64(tFinal/Δt)
+    nStepsSave = Int64(floor(tSave/Δt))
 
     # get matrices and vectors
     diffMat, diffVec, bdyFluxMat = getEvolutionMatrices()
 
     # left-hand side for evolution equation (save LU decomposition for speed)
-    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
+    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat))
 
     # initial condition
     t = 0
-    b = zeros(nx, nz)
-    chi, û, v, U = invert(b)
-    saveCheckpointRot(b, chi, û, v, U, t)
-
-    # flatten for matrix mult
-    bVec = reshape(b, nPts, 1)
-    ûVec = reshape(û, nPts, 1)
-    sinθVec = reshape(sinθ, nPts, 1)
-    
-    # plot initial state of all zeros and no flow
-    iImg = 0
-    #= plotCurrentState(t, chi, û, v, b, iImg) =#
+    b = zeros(nẑ)
+    χ, û, v̂, U = invert(b)
+    iSave = 0
+    saveCheckpointRot(b, χ, û, v̂, U, t, iSave)
+    iSave += 1
 
     # main loop
     for i=1:nSteps
         t += Δt
-        tDays = t/86400
+        tDays = t/secsInDay
 
         # implicit euler diffusion
-        diffRHS = bVec + diffVec*Δt
+        diffRHS = b + diffVec*Δt
 
         # compute advection RHS
-        advRHS = @. -Δt*ûVec*N^2*sinθVec
+        advRHS = @. -Δt*û*N^2*sin(θ)
 
         # sum the two
         evolutionRHS = diffRHS + advRHS
 
         # boundary fluxes
-        evolutionRHS[bottomBdy] .= -N^2*cosθ[:, 1] 
-        evolutionRHS[topBdy] .= 0
+        evolutionRHS[1] = -N^2*cos(θ) 
+        evolutionRHS[nẑ] = 0
 
         # solve
-        bVec = evolutionLHS\evolutionRHS
-
-
-        # reshape
-        b = reshape(bVec, nx, nz)
+        b = evolutionLHS\evolutionRHS
 
         # invert buoyancy for flow
-        chi, û, v, U = invert(b)
-        ûVec = reshape(û, nPts, 1)
+        χ, û, v̂, U = invert(b)
 
-        # plot and/or save
-        if i % nStepsPlot == 0
-            iImg += 1
-            plotCurrentState(t, chi, û, v, b, iImg)
+        if i % nStepsSave == 0
             # log
             println(@sprintf("t = %.2f days (i = %d)", tDays, i))
-        end
-        if i % nStepsSave == 0
-            saveCheckpointRot(b, chi, û, v, U, t)
+            saveCheckpointRot(b, χ, û, v̂, U, t, iSave)
+            iSave += 1
         end
     end
 
-    b = reshape(bVec, nx, nz)
-
     return b
 end
+
+#= function steadyState() =#
+#=     # grid points =#
+#=     nVars = 3 =#
+#=     nPts = nVars*nẑ =#
+
+#=     # for flattening for matrix mult =#
+#=     umap = reshape(1:nPts, nVars, nẑ) =#
+#=     bottomBdy = umap[:, 1][:] =#
+#=     topBdy = umap[:, nẑ][:] =#
+
+#=     # get matrices and vectors =#
+#=     diffMat, diffVec, bdyMat, explicitMat = getMatrices() =#
+
+#=     # LHS =#
+#=     LHS = explicitMat + diffMat =#
+
+#=     # boundaries =#
+#=     LHS[bottomBdy, :] = bdyMat[bottomBdy, :] =#
+#=     LHS[topBdy, :] = bdyMat[topBdy, :] =#
+
+#=     # RHS =#
+#=     RHS = -diffVec =#
+#=     # boundaries =#
+#=     RHS[umap[1, 1]]  .= 0 # u = 0 bot =#
+#=     RHS[umap[1, nẑ]] .= 0 # u decay top =#
+#=     RHS[umap[2, 1]]  .= 0 # v = 0 bot =#
+#=     RHS[umap[2, nẑ]] .= 0 # v decay top =#
+#=     RHS[umap[3, 1]]  .= -N^2*cos(θ) # b flux bot =#
+#=     RHS[umap[3, nẑ]] .= 0    # b flux top =#
+
+#=     # solve =#
+#=     solVec = LHS\RHS =#
+
+#=     # gather solution and rotate =#
+#=     sol = reshape(solVec, 3, nẑ) =#
+#=     û = sol[1, :] =#
+#=     v̂ = sol[2, :] =#
+#=     b = sol[3, :] =#
+
+#=     # compute χ and U =#
+#=     χ = cumptrapz(û, ẑ) =#
+#=     U = trapz(û, ẑ) =#
+
+#=     # save data =#
+#=     saveCheckpointRot(b, χ, û, v̂, U, Inf, 0) =#
+
+#=     return b =#
+#= end =#

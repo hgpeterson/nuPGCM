@@ -3,54 +3,37 @@
 ################################################################################
 
 """
-    fẑ = ẑDerivative(field)
-
-Compute dẑ(field) over 2D domain.
-"""
-function ẑDerivative(field)
-    # allocate
-    fẑ = zeros(size(field))
-
-    # dẑ(field)
-    for i=1:size(field, 1)
-        fẑ[i, :] .+= differentiate(field[i, :], ẑ[i, :])
-    end
-
-    return fẑ
-end
-
-"""
     u, w = rotate(û)
 
 Rotate `û` into physical coordinate components `u` and `w`.
 """
 function rotate(û)
-    u = @. û*cosθ
-    w = @. û*sinθ
+    u = û*cos(θ)
+    w = û*sin(θ)
     return u, w
 end
 
 """
-    saveCheckpointRot(b, chi, û, v, U, t)
+    saveCheckpointRot(b, χ, û, v̂, U, t, i)
 
 Save .h5 checkpoint file for state `b` at time `t`.
 """
-function saveCheckpointRot(b, chi, û, v, U, t)
-    tDays = t/86400
-    savefile = @sprintf("checkpoint%d.h5", tDays)
+function saveCheckpointRot(b, χ, û, v̂, U, t, i)
+    tDays = t/secsInDay
+    savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
     write(file, "b", b)
-    write(file, "chi", chi)
+    write(file, "χ", χ)
     write(file, "û", û)
-    write(file, "v", v)
+    write(file, "v̂", v̂)
     write(file, "U", U)
+    write(file, "U₀", U₀)
     write(file, "t", t)
-    write(file, "L", L)
-    write(file, "H0", H0)
+    write(file, "H", H)
     write(file, "Pr", Pr)
     write(file, "f", f)
     write(file, "N", N)
-    write(file, "symmetry", symmetry)
+    write(file, "transportConstraint", transportConstraint)
     write(file, "κ", κ)
     write(file, "ẑ", ẑ)
     write(file, "θ", θ)
@@ -66,33 +49,33 @@ Load .h5 checkpoint file given by `filename`.
 function loadCheckpointRot(filename)
     file = h5open(filename, "r")
     b = read(file, "b")
-    chi = read(file, "chi")
+    χ = read(file, "χ")
     û = read(file, "û")
-    v = read(file, "v")
+    v̂ = read(file, "v̂")
     U = read(file, "U")
+    U₀ = read(file, "U₀")
     t = read(file, "t")
-    L = read(file, "L")
-    H0 = read(file, "H0")
+    H = read(file, "H")
     Pr = read(file, "Pr")
     f = read(file, "f")
     N = read(file, "N")
-    symmetry = read(file, "symmetry")
+    transportConstraint = read(file, "transportConstraint")
     κ = read(file, "κ")
     ẑ = read(file, "ẑ")
     θ = read(file, "θ")
     close(file)
     return (b=b, 
-            chi=chi, 
+            χ=χ, 
             û=û, 
-            v=v, 
+            v̂=v̂, 
             U=U, 
+            U₀=U₀, 
             t=t, 
-            L=L, 
-            H0=H0, 
+            H=H, 
             Pr=Pr, 
             f=f, 
             N=N, 
-            symmetry=symmetry, 
+            transportConstraint=transportConstraint, 
             κ=κ,
             ẑ=ẑ,
             θ=θ)

@@ -15,24 +15,23 @@ include("evolution.jl")
 # Setup matrices 
 ################################################################################
 
-print("Computing inversion matrices: ")
-inversionLHSs = Array{Any}(undef, nx)
-for i=1:nx
-    inversionLHSs[i] = lu(getInversionLHS(κ[i, :], ẑ[i, :], θ[i]))
-end 
+print("Computing inversion matrix: ")
+inversionLHS = lu(getInversionLHS())
 println("Done.")
 
 ################################################################################
 # run evolution integrations
 ################################################################################
 
-b = evolve(5000)
+b = evolve(5*tSave)
+
+#= b = steadyState() =#
 
 ################################################################################
 # plots
 ################################################################################
 
-profilePlot(["checkpoint1000.h5", "checkpoint2000.h5", "checkpoint3000.h5", "checkpoint4000.h5", "checkpoint5000.h5"], 1)
+profilePlot(string.("checkpoint", 0:5, ".h5"))
 
 #= include("talkPlots.jl") =#
 #= vAnimation("images/constKappa/") =#
