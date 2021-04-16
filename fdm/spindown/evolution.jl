@@ -16,6 +16,7 @@ function getMatrices()
     for j=2:nz̃-1
         # dz̃ stencil
         fd_z̃ = mkfdstencil(z̃[j-1:j+1], z̃[j], 1)
+        ν_z̃ = sum(fd_z̃.*ν[j-1:j+1])
         κ_z̃ = sum(fd_z̃.*κ[j-1:j+1])
 
         # dz̃z̃ stencil
@@ -29,19 +30,19 @@ function getMatrices()
         push!(A, (row, nPts, -1.0))
         # third term
         push!(A, (row, umap[3, j], S))
-        # fourth term: dz̃(Pr*κ*dz̃(ũ))) = Pr*dz̃(κ)*dz̃(ũ) + Pr*κ*dz̃z̃(ũ)
-        push!(A, (row, umap[1, j-1], Pr*(κ_z̃*fd_z̃[1] + κ[j]*fd_z̃z̃[1])))
-        push!(A, (row, umap[1, j],   Pr*(κ_z̃*fd_z̃[2] + κ[j]*fd_z̃z̃[2])))
-        push!(A, (row, umap[1, j+1], Pr*(κ_z̃*fd_z̃[3] + κ[j]*fd_z̃z̃[3])))
+        # fourth term: dz̃(ν*dz̃(ũ))) = dz̃(ν)*dz̃(ũ) + ν*dz̃z̃(ũ)
+        push!(A, (row, umap[1, j-1], ν_z̃*fd_z̃[1] + ν[j]*fd_z̃z̃[1]))
+        push!(A, (row, umap[1, j],   ν_z̃*fd_z̃[2] + ν[j]*fd_z̃z̃[2]))
+        push!(A, (row, umap[1, j+1], ν_z̃*fd_z̃[3] + ν[j]*fd_z̃z̃[3]))
 
-        # 2nd eqtn: ṽ_t̃ = -ũ + Pr*(κ*ṽ_z̃)_z̃
+        # 2nd eqtn: ṽ_t̃ = -ũ + (ν*ṽ_z̃)_z̃
         row = umap[2, j]
         # first term:
         push!(A, (row, umap[1, j], -1.0))
-        # second term: dz̃(Pr*κ*dz̃(ṽ))) = Pr*dz̃(κ)*dz̃(ṽ) + Pr*κ*dz̃z̃(ṽ)
-        push!(A, (row, umap[2, j-1], Pr*(κ_z̃*fd_z̃[1] + κ[j]*fd_z̃z̃[1])))
-        push!(A, (row, umap[2, j],   Pr*(κ_z̃*fd_z̃[2] + κ[j]*fd_z̃z̃[2])))
-        push!(A, (row, umap[2, j+1], Pr*(κ_z̃*fd_z̃[3] + κ[j]*fd_z̃z̃[3])))
+        # second term: dz̃(ν*dz̃(ṽ))) = dz̃(ν)*dz̃(ṽ) + ν*dz̃z̃(ṽ)
+        push!(A, (row, umap[2, j-1], ν_z̃*fd_z̃[1] + ν[j]*fd_z̃z̃[1]))
+        push!(A, (row, umap[2, j],   ν_z̃*fd_z̃[2] + ν[j]*fd_z̃z̃[2]))
+        push!(A, (row, umap[2, j+1], ν_z̃*fd_z̃[3] + ν[j]*fd_z̃z̃[3]))
 
         # 3rd eqtn: b̃_t̃ = -ũ + [κ*(1 + b̃_z̃)]_z̃
         row = umap[3, j]

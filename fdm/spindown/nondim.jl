@@ -16,10 +16,11 @@ function saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, i)
     write(file, "Px", Px)
     write(file, "t̃", t̃)
     write(file, "H", H)
-    write(file, "Pr", Pr)
     write(file, "S", S)
     write(file, "canonical", canonical)
-    write(file, "bottomIntense", bottomIntense)
+    write(file, "ν", ν)
+    write(file, "ν0", ν0)
+    write(file, "ν1", ν1)
     write(file, "κ", κ)
     write(file, "κ0", κ0)
     write(file, "κ1", κ1)
@@ -43,10 +44,11 @@ function loadCheckpointSpinDown(filename)
     Px = read(file, "Px")
     t̃ = read(file, "t̃")
     H = read(file, "H")
-    Pr = read(file, "Pr")
     S = read(file, "S")
     canonical = read(file, "canonical")
-    bottomIntense = read(file, "bottomIntense")
+    ν = read(file, "ν")
+    ν0 = read(file, "ν0")
+    ν1 = read(file, "ν1")
     κ = read(file, "κ")
     κ0 = read(file, "κ0")
     κ1 = read(file, "κ1")
@@ -60,10 +62,11 @@ function loadCheckpointSpinDown(filename)
             Px=Px, 
             t̃=t̃, 
             H=H, 
-            Pr=Pr, 
             S=S, 
             canonical=canonical, 
-            bottomIntense=bottomIntense, 
+            ν=ν, 
+            ν0=ν0, 
+            ν1=ν1, 
             κ=κ, 
             κ0=κ0, 
             κ1=κ1, 

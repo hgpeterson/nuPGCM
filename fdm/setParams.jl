@@ -44,20 +44,21 @@ cosθ = @. 1/sqrt(1 + Hx(ξξ)^2)
 θ = asin.(sinθ[:, 1])
 
 # diffusivity
+# bottom enhanced:
 κ0 = 6e-5
 κ1 = 2e-3
 h = 200
-bottomIntense = true
-if bottomIntense
-    κ = @. κ0 + κ1*exp(-(z + H(x))/h)
-else
-    κ = κ1*ones(nξ, nσ)
-end
+#= # not bottom enhanced: =#
+#= κ0 = 1e-4 =#
+#= κ1 = 0 =#
+#= h = 200 =#
+κ = @. κ0 + κ1*exp(-(z + H(x))/h)
 
 # timestepping
-Δt = 10*86400
-adaptiveTimestep = false
-#= adaptiveTimestep = true =#
+secsInDay = 86400
+Δt = 10*secsInDay
+tPlot = 100*Δt
+tSave = 100*Δt
 
 """
     log(ofile, text)
@@ -85,9 +86,7 @@ log(ofile, @sprintf("κ1 = %1.1e m2 s-1", κ1))
 log(ofile, @sprintf("h  = %d m", h))
 log(ofile, @sprintf("Δt = %.2f days", Δt/86400))
 
-log(ofile, string("\nVariations in ξ:        ", ξVariation))
-log(ofile, string("Bottom intensification: ", bottomIntense))
-log(ofile, string("Adaptive timestep:      ", adaptiveTimestep))
+log(ofile, string("\nVariations in ξ: ", ξVariation))
 
 log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*Pr*κ1/abs(f))))
 log(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", H0*(σ[2] - σ[1])))

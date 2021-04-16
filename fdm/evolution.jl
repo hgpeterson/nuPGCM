@@ -92,21 +92,18 @@ function getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)
 end
 
 """
-    b = evolve(tFinalDays)
+    b = evolve(tFinal)
 
-Solve full nonlinear equation for `b` for `tFinalDays` days.
+Solve full nonlinear equation for `b` for `tFinal` seconds.
 """
-function evolve(tFinalDays)
+function evolve(tFinal)
     # grid points
     nPts = nξ*nσ
 
     # timestep
-    nSteps = Int64(tFinalDays*86400/Δt)
-    nStepsInvert = 1
-    nDaysPlot = 1000
-    nDaysSave = 1000
-    nStepsPlot = Int64(nDaysPlot*86400/Δt)
-    nStepsSave = Int64(nDaysSave*86400/Δt)
+    nSteps = Int64(tFinal/Δt)
+    nStepsPlot = Int64(tPlot/Δt)
+    nStepsSave = Int64(tSave/Δt)
 
     # for flattening for matrix mult
     umap = reshape(1:nPts, nξ, nσ)    
@@ -127,14 +124,16 @@ function evolve(tFinalDays)
     # initial condition
     t = 0
     b = zeros(nξ, nσ)
-    #= b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, ξVariation, κ = loadCheckpointTF("checkpoint5000.h5") =#
-    chi, uξ, uη, uσ, U = invert(b)
-    saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
-    chiEkman = getChiEkman(b)
+    χ, uξ, uη, uσ, U = invert(b)
+    iSave = 0
+    saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, iSave)
+    iSave += 1
+    χEkman = getChiEkman(b)
     
     # plot initial state of all zeros and no flow
     iImg = 0
-    plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
+    plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
+    iImg += 1
 
     # flatten for matrix mult
     bVec = reshape(b, nPts, 1)
@@ -172,40 +171,30 @@ function evolve(tFinalDays)
 
         # log
         println(@sprintf("t = %.2f days (i = %d)", tDays, i))
-        if i % nStepsInvert == 0
-            # reshape
-            b = reshape(bVec, nξ, nσ)
 
-            # invert buoyancy for flow
-            chi, uξ, uη, uσ, U = invert(b)
-            uξVec = reshape(uξ, nPts, 1)
-            uσVec = reshape(uσ, nPts, 1)
-            if adaptiveTimestep
-                uξCFL = minimum(abs.(dξ./uξ))
-                uσCFL = minimum(abs.(dσ./uσ))
-                println(@sprintf("CFL uξ: %.2f days", uξCFL/86400))
-                println(@sprintf("CFL uσ: %.2f days", uσCFL/86400))
-                #= if 0.5*minimum([uξCFL, uσCFL]) < Δt =#
-                #=     # need to have smaller step size by CFL =#
-                #=     Δt = 0.5*minimum([uξCFL, uσCFL]) =#
-                #=     println(@sprintf("Decreasing timestep to %.2f days", Δt/86400)) =#
-                #=     evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)) =#
-                #= elseif 0.5*minimum([uξCFL, uσCFL]) > 2*Δt =#
-                #=     # could have much larger step size by CFL =#
-                #=     Δt = minimum([0.5*minimum([uξCFL, uσCFL]), 1*86400]) =#
-                #=     println(@sprintf("Increasing timestep to %.2f days", Δt/86400)) =#
-                #=     evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)) =#
-                #= end =#
-            end
-        end
+        # reshape
+        b = reshape(bVec, nξ, nσ)
+
+        # invert buoyancy for flow
+        χ, uξ, uη, uσ, U = invert(b)
+        uξVec = reshape(uξ, nPts, 1)
+        uσVec = reshape(uσ, nPts, 1)
+
+        #= # CFL stuff =#
+        #= uξCFL = minimum(abs.(dξ./uξ)) =#
+        #= uσCFL = minimum(abs.(dσ./uσ)) =#
+        #= println(@sprintf("CFL uξ: %.2f days", uξCFL/86400)) =#
+        #= println(@sprintf("CFL uσ: %.2f days", uσCFL/86400)) =#
+        
         if i % nStepsPlot == 0
             # plot flow
+            χEkman = getChiEkman(b)
+            plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
             iImg += 1
-            chiEkman = getChiEkman(b)
-            plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
         end
         if i % nStepsSave == 0
-            saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
+            saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, iSave)
+            iSave += 1
         end
     end
 

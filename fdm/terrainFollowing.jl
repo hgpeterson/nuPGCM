@@ -92,18 +92,18 @@ function transformToTF(u, v, w)
 end
 
 """
-    saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
+    saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
 
 Save .h5 checkpoint file for state `b` at time `t`.
 """
-function saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
+function saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
     tDays = t/86400
-    savefile = @sprintf("checkpoint%d.h5", tDays)
+    savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
     write(file, "x", x)
     write(file, "z", z)
     write(file, "b", b)
-    write(file, "chi", chi)
+    write(file, "χ", χ)
     write(file, "uξ", uξ)
     write(file, "uη", uη)
     write(file, "uσ", uσ)
@@ -116,6 +116,9 @@ function saveCheckpointTF(b, chi, uξ, uη, uσ, U, t)
     write(file, "N", N)
     write(file, "ξVariation", ξVariation)
     write(file, "κ", κ)
+    write(file, "κ0", κ0)
+    write(file, "κ1", κ1)
+    write(file, "h", h)
     close(file)
     println(savefile)
 end
@@ -127,12 +130,10 @@ Load .h5 checkpoint file given by `filename`.
 """
 function loadCheckpointTF(filename)
     file = h5open(filename, "r")
-    #= x = read(file, "x") =#
-    x = 1
-    #= z = read(file, "z") =#
-    z = 1
+    x = read(file, "x")
+    z = read(file, "z")
     b = read(file, "b")
-    chi = read(file, "chi")
+    χ = read(file, "χ")
     uξ = read(file, "uξ")
     uη = read(file, "uη")
     uσ = read(file, "uσ")
@@ -145,11 +146,14 @@ function loadCheckpointTF(filename)
     N = read(file, "N")
     ξVariation, = read(file, "ξVariation")
     κ = read(file, "κ")
+    κ0 = read(file, "κ0")
+    κ1 = read(file, "κ1")
+    h = read(file, "h")
     close(file)
     return (x=x,
             z=z,
             b=b, 
-            chi=chi, 
+            χ=χ, 
             uξ=uξ, 
             uη=uη, 
             uσ=uσ, 
@@ -161,5 +165,8 @@ function loadCheckpointTF(filename)
             f=f, 
             N=N, 
             ξVariation=ξVariation, 
-            κ=κ)
+            κ=κ,
+            κ0=κ0,
+            κ1=κ1,
+            h=h)
 end

@@ -257,70 +257,68 @@ function profiles2Dvs1D(folder)
     #= σ = 200 =# 
     
     # init plot
-    fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(3.404*2, 2*3.404/1.62), sharey=true)
 
-    ax[1, 1].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
     ax[1, 1].set_ylabel(L"$z$ (km)")
-    ax[1, 1].set_title("canonical 1D")
-
-    ax[1, 2].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
-    ax[1, 2].set_title(L"2D $\nu$PGCM")
-
-    ax[2, 1].set_xlabel(L"along-ridge flow, $v$ (m s$^{-1}$)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
 
+    ax[2, 1].set_xlabel(L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
     ax[2, 2].set_xlabel(L"along-ridge flow, $v$ (m s$^{-1}$)")
-
-    ax[3, 1].set_xlabel(L"stratification, $B_z$ (s$^{-2}$)")
-    ax[3, 1].set_ylabel(L"$z$ (km)")
-
-    ax[3, 2].set_xlabel(L"stratification, $B_z$ (s$^{-2}$)")
+    ax[2, 3].set_xlabel(L"stratification, $B_z$ (s$^{-2}$)")
 
     for a in ax
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
     end
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=5))
+    colors = pl.cm.viridis(range(1, 0, length=size(tDays, 1)))
+
+    # fixed x
+    #= ax[1, 1].set_xlim([-2e-2, 2.5e-1]) =#
+    #= ax[2, 1].set_xlim([-2e-2, 2.5e-1]) =#
+    #= ax[1, 2].set_xlim([-1.05, 0.01]) =#
+    #= ax[2, 2].set_xlim([-1.05, 0.01]) =#
+    #= ax[1, 3].set_xlim([-2.2e2, 0.5e2]) =#
+    #= ax[2, 3].set_xlim([-2.2e2, 0.5e2]) =#
 
     # plot data from folder
     for i=1:size(tDays, 1)
         tDay = tDays[i]
 
         # canonical 1D solution
-        c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint", tDay, ".h5"))
-        Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
-        ax[1, 1].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :], label=string("Day ", Int64(tDay)))
-        ax[2, 1].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :])
-        ax[3, 1].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1])/1e3, c=colors[i, :])
+        c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint", i, ".h5"))
+        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+        ax[1, 1].plot(c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=string("Day ", Int64(tDay)))
+        ax[1, 2].plot(c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :])
+        ax[1, 3].plot(Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :])
         
-        # 2D PG solution
-        c = loadCheckpointTF(string(folder, "2dpg/Pr", σ, "/checkpoint", tDay, ".h5"))
-        u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
-        Bz = c.N^2 .+ zDerivativeTF(c.b)
-        ax[1, 2].plot(c.chi[ix, :], z[ix, :]/1e3, c=colors[i, :])
-        ax[2, 2].plot(v[ix, :],     z[ix, :]/1e3, c=colors[i, :])
-        ax[3, 2].plot(Bz[ix, :],    z[ix, :]/1e3, c=colors[i, :])
+        #= # 2D PG solution =#
+        #= c = loadCheckpointTF(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5")) =#
+        #= u, v, w = transformFromTF(c.uξ, c.uη, c.uσ) =#
+        #= Bz = c.N^2 .+ zDerivativeTF(c.b) =#
+        #= ax[2, 1].plot(c.χ[ix, :], z[ix, :]/1e3, c=colors[i, :]) =#
+        #= ax[2, 2].plot(v[ix, :],   z[ix, :]/1e3, c=colors[i, :]) =#
+        #= ax[2, 3].plot(Bz[ix, :],  z[ix, :]/1e3, c=colors[i, :]) =#
 
         # transport-constrained 1D solution
-        c = loadCheckpointRot(string(folder, "1dtc/Pr", σ, "/checkpoint", tDay, ".h5"))
-        Bz = c.N^2*cos(c.θ[1]) .+ differentiate(c.b[1, :], c.ẑ[1, :].*cos(c.θ[1]))
-        ax[1, 2].plot(c.chi[1, :],  c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
-        ax[2, 2].plot(c.v[1, :],    c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
-        ax[3, 2].plot(Bz,           c.ẑ[1, :]*cos(c.θ[1])/1e3, c="k", ls=":")
+        c = loadCheckpointRot(string(folder, "1dtc/Pr", σ, "/checkpoint", i, ".h5"))
+        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+        ax[2, 1].plot(c.χ, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
+        ax[2, 2].plot(c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
+        ax[2, 3].plot(Bz,  c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
     end
 
     ax[1, 1].legend(loc="center left")
-    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["transport-constrained 1D"]
-    ax[1, 2].legend(custom_handles, custom_labels, loc=(0.3, 0.4))
+    #= custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")] =#
+    #= custom_labels = ["transport-constrained 1D"] =#
+    #= ax[2, 2].legend(custom_handles, custom_labels, loc=(0.3, 0.4)) =#
 
-    ax[1, 1].annotate("(a)", (0.06, 0.92), xycoords="axes fraction")
-    ax[1, 2].annotate("(b)", (0.06, 0.92), xycoords="axes fraction")
-    ax[2, 1].annotate("(c)", (0.06, 0.92), xycoords="axes fraction")
-    ax[2, 2].annotate("(d)", (0.06, 0.92), xycoords="axes fraction")
-    ax[3, 1].annotate("(e)", (0.06, 0.92), xycoords="axes fraction")
-    ax[3, 2].annotate("(f)", (0.06, 0.92), xycoords="axes fraction")
+    ax[1, 1].annotate("(a)", (0.1, 0.92), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", (0.1, 0.92), xycoords="axes fraction")
+    ax[1, 3].annotate("(c)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 1].annotate("(d)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 2].annotate("(e)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 3].annotate("(f)", (0.1, 0.92), xycoords="axes fraction")
 
     ax[1, 2].annotate(string("Pr = ", σ), (0.8, 0.8), xycoords="axes fraction")
 
@@ -557,24 +555,14 @@ end
 
 function spindownProfiles(folder)
     # init plot
-    fig, ax = subplots(3, 2, figsize=(3.404*2, 3*3.404/1.62), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(3.404*2, 2*3.404/1.62), sharey=true)
 
-    ax[1, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
     ax[1, 1].set_ylabel(L"$\tilde{z}$")
-    ax[1, 1].set_title("canonical 1D")
-
-    ax[1, 2].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
-    ax[1, 2].set_title("transport-constrained 1D")
-
-    ax[2, 1].set_xlabel(L"along-ridge flow, $\tilde{v}$")
     ax[2, 1].set_ylabel(L"$\tilde{z}$")
 
+    ax[2, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$")
     ax[2, 2].set_xlabel(L"along-ridge flow, $\tilde{v}$")
-
-    ax[3, 1].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$")
-    ax[3, 1].set_ylabel(L"$\tilde{z}$")
-
-    ax[3, 2].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$")
+    ax[2, 3].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$")
 
     for a in ax
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
@@ -586,7 +574,14 @@ function spindownProfiles(folder)
     # zoomed z
     ax[1, 1].set_ylim([0, 10])
     ax[2, 1].set_ylim([0, 10])
-    ax[3, 1].set_ylim([0, 10])
+
+    # fixed x
+    ax[1, 1].set_xlim([-2e-2, 2.5e-1])
+    ax[2, 1].set_xlim([-2e-2, 2.5e-1])
+    ax[1, 2].set_xlim([-1.05, 0.01])
+    ax[2, 2].set_xlim([-1.05, 0.01])
+    ax[1, 3].set_xlim([-2.2e2, 0.5e2])
+    ax[2, 3].set_xlim([-2.2e2, 0.5e2])
 
     # plot data from folder
     cases = ["can", "tc"]
@@ -610,26 +605,26 @@ function spindownProfiles(folder)
             end
 
             # plot
-            ax[1, j].plot(c.ũ,  c.z̃, c=color, label=label)
-            ax[2, j].plot(c.ṽ,  c.z̃, c=color, label=label)
-            ax[3, j].plot(Bz̃,   c.z̃, c=color, label=label)
-            ax[2, j].axvline(c.Px, lw=1.0, c=color, ls="--")
+            ax[j, 1].plot(c.ũ,  c.z̃, c=color, label=label)
+            ax[j, 2].plot(c.ṽ,  c.z̃, c=color, label=label)
+            ax[j, 2].axvline(c.Px, lw=1.0, c=color, ls="--")
+            ax[j, 3].plot(Bz̃,   c.z̃, c=color, label=label)
         end
     end
 
     ax[1, 1].legend()
 
-    ax[1, 1].annotate("(a)", (0.06, 0.92), xycoords="axes fraction")
-    ax[1, 2].annotate("(b)", (0.06, 0.92), xycoords="axes fraction")
-    ax[2, 1].annotate("(c)", (0.06, 0.92), xycoords="axes fraction")
-    ax[2, 2].annotate("(d)", (0.06, 0.92), xycoords="axes fraction")
-    ax[3, 1].annotate("(e)", (0.06, 0.92), xycoords="axes fraction")
-    ax[3, 2].annotate("(f)", (0.06, 0.92), xycoords="axes fraction")
+    ax[1, 1].annotate("(a)", (0.1, 0.92), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", (0.1, 0.92), xycoords="axes fraction")
+    ax[1, 3].annotate("(c)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 1].annotate("(d)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 2].annotate("(e)", (0.1, 0.92), xycoords="axes fraction")
+    ax[2, 3].annotate("(f)", (0.1, 0.92), xycoords="axes fraction")
 
     c = loadCheckpointSpinDown(string(folder, "/tc/checkpoint1.h5"))
-    ax[1, 2].annotate(string(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = $", @sprintf("%1.2f", 1/c.H/c.S)),  (0.6, 0.6), xycoords="axes fraction", size=10)
-    #= ax[2, 2].annotate(L"$P_x$", xy=(0.05, 0.1), xytext=(0.2, 0.1), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->")) =#
-    ax[2, 2].annotate(L"$P_x$", xy=(0.45, 0.1), xytext=(0.2, 0.1), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+    ax[1, 3].annotate(string(L"$\frac{\tilde{\tau}_A}{\tilde{\tau}_S} = $", @sprintf("%1.2f", 1/c.H/c.S)),  (0.2, 0.4), xycoords="axes fraction", size=10)
+    #= ax[2, 2].annotate(L"$P_x$", xy=(0.08, 0.1), xytext=(0.25, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->")) =#
+    ax[2, 2].annotate(L"$P_x$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
 
     tight_layout()
     savefig("spindownProfiles.pdf")
