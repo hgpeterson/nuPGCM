@@ -10,28 +10,30 @@ include("plottingLib.jl")
 include("rotated.jl")
 include("inversion.jl")
 include("evolution.jl")
+include("steady.jl")
 
 ################################################################################
 # Setup matrices 
 ################################################################################
 
-print("Computing inversion matrix: ")
-inversionLHS = lu(getInversionLHS())
-println("Done.")
+#= print("Computing inversion matrix: ") =#
+#= inversionLHS = lu(getInversionLHS()) =#
+#= println("Done.") =#
 
 ################################################################################
 # run evolution integrations
 ################################################################################
 
-b = evolve(5*tSave)
+#= b = evolve(5*tSave) =#
 
-#= b = steadyState() =#
+b = steadyState()
 
 ################################################################################
 # plots
 ################################################################################
 
-profilePlot(string.("checkpoint", 0:5, ".h5"))
+#= ii = [0, 1, 2, 3, 4, 5, 999] =#
+#= profilePlot(string.("checkpoint", ii, ".h5")) =#
 
 #= include("talkPlots.jl") =#
 #= vAnimation("images/constKappa/") =#

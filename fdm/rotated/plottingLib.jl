@@ -54,11 +54,17 @@ function profilePlot(datafiles)
         Bz = c.N^2*cos(θ) .+ differentiate(c.b, ẑ)
 
         # colors and labels
-        label = string("Day ", Int64(round(c.t/secsInDay)))
-        if i==1
-            color = "k"
+        if c.t == -42
+            # steady state
+            label = "steady state"
+            color = "tab:red"
         else
-            color = colors[i-1, :]
+            label = string("day ", Int64(round(c.t/secsInDay)))
+            if i==1
+                color = "k"
+            else
+                color = colors[i-1, :]
+            end
         end
 
         # plot

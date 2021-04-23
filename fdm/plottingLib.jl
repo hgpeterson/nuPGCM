@@ -47,7 +47,7 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     # 2D plot
     img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
     cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0))
+    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
 
     # isopycnal contours
     nLevels = 20
