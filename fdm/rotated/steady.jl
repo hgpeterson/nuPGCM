@@ -36,9 +36,8 @@ function getMatrices()
         push!(A, (row, umap[2, j+1], -Pr*(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
 
         # eqtn 3: N^2*û*sin(θ) - dẑ(κ*dẑ(b)) = dẑ(κ)*N^2*cos(θ) 
-        # b diffusion term: dẑ(κ(N^2*cos(θ) + dẑ(b))) = dẑ(κ)*N^2*cos(θ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
         row = umap[3, j]
-        push!(A, (row, umap[1, j],   N^2*cos(θ)))
+        push!(A, (row, umap[1, j],   N^2*sin(θ)))
         push!(A, (row, umap[3, j-1], -(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
         push!(A, (row, umap[3, j],   -(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
         push!(A, (row, umap[3, j+1], -(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))

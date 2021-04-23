@@ -1,22 +1,27 @@
 # parameters (as in RC20)
-Pr = 2e2
+Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 
 # turn on/off variations in ξ
 ξVariation = true
 
-# topography
+# topography: sine
 L = 2e6
 H0 = 2e3
 amp =  0.4*H0
 H(x) = H0 - amp*sin(2*π*x/L - π/2)
 Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
+
+# topography: skew gaussian
+#= L = 2e6 =#
+#= H0 = 2.5e3 =#
+#= amp = 0.65*H0 =#
 #= ϕ(s) = exp(-s^2/2) =#
 #= Φ(s) = 1/2*(1 + erf(s/√2)) =#
-#= α = 5 =#
-#= μ = L/2 =#
-#= ω = L/8 =#
+#= α = 3 =#
+#= μ = L/3 =#
+#= ω = L/5 =#
 #= H(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) =#
 #= Hx(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) =#
 
@@ -33,6 +38,12 @@ dξ = dx = L/nξ
 dσ = zeros(nξ, nσ)
 dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1]
 dσ[:, end] = dσ[:, end-1]
+
+#= plot(ξ, -H.(ξ)) =# 
+#= ylim([-H0, 0]) =#
+#= savefig("topo.png") =#
+#= println(Hx(0)) =#
+#= error() =#
 
 # domain in physical (x, z) space (2D arrays)
 x = repeat(ξ, 1, nσ)
