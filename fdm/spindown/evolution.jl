@@ -168,9 +168,9 @@ function evolve(tFinal)
     ũ = sol[umap[1, :]]
     ṽ = sol[umap[2, :]]
     b̃ = sol[umap[3, :]]
-    Px = sol[nPts]
+    P̃x̃ = sol[nPts]
     iSave = 0
-    saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, iSave)
+    saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
     iSave += 1
 
     # main loop
@@ -204,10 +204,10 @@ function evolve(tFinal)
             ũ = sol[umap[1, :]]
             ṽ = sol[umap[2, :]]
             b̃ = sol[umap[3, :]]
-            Px = sol[nPts]
+            P̃x̃ = sol[nPts]
 
             # save data
-            saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, iSave)
+            saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
             iSave += 1
         end
     end
@@ -215,6 +215,6 @@ function evolve(tFinal)
     ũ = sol[umap[1, :]]
     ṽ = sol[umap[2, :]]
     b̃ = sol[umap[3, :]]
-    Px = sol[nPts]
-    return ũ, ṽ, b̃, Px
+    P̃x̃ = sol[nPts]
+    return ũ, ṽ, b̃, P̃x̃
 end

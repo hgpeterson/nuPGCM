@@ -3,17 +3,17 @@
 ################################################################################
 
 """
-    saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, i)
+    saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, i)
 
 Save .h5 checkpoint file for state.
 """
-function saveCheckpointSpinDown(ũ, ṽ, b̃, Px, t̃, i)
+function saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, i)
     savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
     write(file, "ũ", ũ)
     write(file, "ṽ", ṽ)
     write(file, "b̃", b̃)
-    write(file, "Px", Px)
+    write(file, "P̃x̃", P̃x̃)
     write(file, "t̃", t̃)
     write(file, "H", H)
     write(file, "S", S)
@@ -41,7 +41,7 @@ function loadCheckpointSpinDown(filename)
     ũ = read(file, "ũ")
     ṽ = read(file, "ṽ")
     b̃ = read(file, "b̃")
-    Px = read(file, "Px")
+    P̃x̃ = read(file, "P̃x̃")
     t̃ = read(file, "t̃")
     H = read(file, "H")
     S = read(file, "S")
@@ -59,7 +59,7 @@ function loadCheckpointSpinDown(filename)
     return (ũ=ũ, 
             ṽ=ṽ, 
             b̃=b̃, 
-            Px=Px, 
+            P̃x̃=P̃x̃, 
             t̃=t̃, 
             H=H, 
             S=S, 

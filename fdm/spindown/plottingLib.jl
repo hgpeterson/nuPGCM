@@ -14,7 +14,8 @@ function profilePlot(datafiles; fname="profiles.png")
     # init plot
     fig, ax = subplots(1, 3, figsize=(3.404*3, 3.404/1.62), sharey=true)
 
-    ax[1].set_xlabel(L"$\tilde{B}_\tilde{z}$")
+    #= ax[1].set_xlabel(L"$\tilde{B}_\tilde{z}$") =#
+    ax[1].set_xlabel(L"$\tilde{b}_\tilde{z}$")
     ax[1].set_ylabel(L"$\tilde{z}$")
     ax[1].set_title("stratification")
 
@@ -42,7 +43,8 @@ function profilePlot(datafiles; fname="profiles.png")
         c = loadCheckpointSpinDown(datafiles[i])
 
         # stratification
-        Bz̃ = 1 .+ differentiate(c.b̃, c.z̃)
+        #= Bz̃ = 1 .+ differentiate(c.b̃, c.z̃) =#
+        b̃z̃ = differentiate(c.b̃, c.z̃)
 
         # colors and labels
         label = string(L"$\tilde{t}/\tilde{\tau}_A$ = ", Int64(round(c.t̃/τ_A)))
@@ -53,10 +55,11 @@ function profilePlot(datafiles; fname="profiles.png")
         end
 
         # plot
-        ax[1].plot(Bz̃,   c.z̃, c=color, label=label)
+        #= ax[1].plot(Bz̃,   c.z̃, c=color, label=label) =#
+        ax[1].plot(b̃z̃,   c.z̃, c=color, label=label)
         ax[2].plot(c.ũ,  c.z̃, c=color)
         ax[3].plot(c.ṽ,  c.z̃, c=color)
-        ax[3].axvline(c.Px, lw=1.0, c=color, ls="--")
+        ax[3].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
     end
 
     ax[1].legend()
