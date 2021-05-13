@@ -1,8 +1,9 @@
 # parameters (as in RC20)
-Pr = 2e2
+Pr = 1e0
 f = -5.5e-5
 N = 1e-3
-H = 2e3
+#= H = 2e3 =#
+H = 1e3
 θ = 2.5e-3
 
 # z grid
@@ -24,8 +25,8 @@ h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
-transportConstraint = false
-#= transportConstraint = true =#
+#= transportConstraint = false =#
+transportConstraint = true
 U₀ = 0
 #= U₀ = @. κ0*cot(θ) =#
 

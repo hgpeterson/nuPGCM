@@ -1,5 +1,5 @@
 ################################################################################
-# Utility functions for nondimensional spindown
+# Utility functions for nondimensional transport-constrained 1D model
 ################################################################################
 
 """

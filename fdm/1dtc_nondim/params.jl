@@ -6,10 +6,13 @@ canonical = false
 
 τ_A = 1e2 # nondim arrest time
 τ_S = 5e3 # nondim spindown time
+#= τ_A = 1/0.002066124311325255 =#
+#= τ_S = 117.2332942555686 =#
 Ek = 1/τ_S^2
 S = 1/τ_A
 H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
 ṽ_0 = -1
+#= ṽ_0 = 0 =#
 
 # timestep
 Δt̃ = minimum([τ_S/100, τ_A/100])
@@ -22,12 +25,17 @@ nz̃ = 2^11 # good for anything at or below τ_S = 1e4
 # grid (chebyshev, z̃ = 0 is bottom)
 z̃ = @. H*(1 - cos(pi*(0:nz̃-1)/(nz̃-1)))/2
 
-#= # bottom enhanced: =#
+# bottom enhanced:
 #= ν0 = 1e-1 =#
 #= ν1 = 1 - 1e-1 =#
 #= κ0 = 1e-1 =#
 #= κ1 = 1 - 1e-1 =#
 #= h = 10 =#
+#= ν0 = 0.03 =#
+#= ν1 = 1 =#
+#= κ0 = 0.03 =#
+#= κ1 = 1 =#
+#= h = 23.446658851113718 =#
 # not bottom enhanced:
 ν0 = 1
 ν1 = 0

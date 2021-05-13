@@ -104,6 +104,7 @@ function evolve(tFinal)
 
         # boundary fluxes
         evolutionRHS[1] = -N^2*cos(θ) 
+        #= evolutionRHS[nẑ] = -N^2*cos(θ) =# 
         evolutionRHS[nẑ] = 0
 
         # solve

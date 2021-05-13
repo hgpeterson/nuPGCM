@@ -1,5 +1,5 @@
 ################################################################################
-# Useful functions for terrain following coordinates
+# Utility functions for 2D νPGCM 
 ################################################################################
 
 """
@@ -64,7 +64,6 @@ Note: dz() = dσ()/H
 function zDerivativeTF(field)
     # dσ(field)/H
     fz = σDerivativeTF(field)./H.(x)
-
     return fz
 end
 
@@ -75,11 +74,8 @@ Transform from terrain-following coordinates to cartesian coordinates.
 """
 function transformFromTF(uξ, uη, uσ)
     u = uξ
-
     v = uη
-
     w = uσ.*H.(x) + σσ.*Hx.(x).*u
-
     return u, v, w
 end
 
@@ -90,10 +86,87 @@ Transform from cartesian coordinates to terrain-following coordinates.
 """
 function transformToTF(u, v, w)
     uξ = u
-
     uη = v
-
     uσ = (w - σσ.*Hx.(x).*u)./H.(x)
-
     return uξ, uη, uσ
+end
+
+"""
+    saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
+
+Save .h5 checkpoint file for state `b` at time `t`.
+"""
+function saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
+    tDays = t/86400
+    savefile = @sprintf("checkpoint%d.h5", i)
+    file = h5open(savefile, "w")
+    write(file, "x", x)
+    write(file, "z", z)
+    write(file, "b", b)
+    write(file, "χ", χ)
+    write(file, "uξ", uξ)
+    write(file, "uη", uη)
+    write(file, "uσ", uσ)
+    write(file, "U", U)
+    write(file, "t", t)
+    write(file, "L", L)
+    write(file, "H0", H0)
+    write(file, "Pr", Pr)
+    write(file, "f", f)
+    write(file, "N", N)
+    write(file, "ξVariation", ξVariation)
+    write(file, "κ", κ)
+    write(file, "κ0", κ0)
+    write(file, "κ1", κ1)
+    write(file, "h", h)
+    close(file)
+    println(savefile)
+end
+
+"""
+    checkpoint = loadCheckpointTF(filename)
+
+Load .h5 checkpoint file given by `filename`.
+"""
+function loadCheckpointTF(filename)
+    file = h5open(filename, "r")
+    x = read(file, "x")
+    z = read(file, "z")
+    b = read(file, "b")
+    χ = read(file, "χ")
+    uξ = read(file, "uξ")
+    uη = read(file, "uη")
+    uσ = read(file, "uσ")
+    U = read(file, "U")
+    t = read(file, "t")
+    L = read(file, "L")
+    H0 = read(file, "H0")
+    Pr = read(file, "Pr")
+    f = read(file, "f")
+    N = read(file, "N")
+    ξVariation, = read(file, "ξVariation")
+    κ = read(file, "κ")
+    κ0 = read(file, "κ0")
+    κ1 = read(file, "κ1")
+    h = read(file, "h")
+    close(file)
+    return (x=x,
+            z=z,
+            b=b, 
+            χ=χ, 
+            uξ=uξ, 
+            uη=uη, 
+            uσ=uσ, 
+            U=U, 
+            t=t, 
+            L=L, 
+            H0=H0, 
+            Pr=Pr, 
+            f=f, 
+            N=N, 
+            ξVariation=ξVariation, 
+            κ=κ,
+            κ0=κ0,
+            κ1=κ1,
+            h=h)
 end

@@ -4,10 +4,10 @@ plt.style.use("~/paper_plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../myJuliaLib.jl")
-include("setParams.jl")
-include("terrainFollowing.jl")
-include("plottingLib.jl")
+include("../../myJuliaLib.jl")
+include("params.jl")
+include("utils.jl")
+include("plotting.jl")
 include("inversion.jl")
 include("evolution.jl")
 
@@ -34,16 +34,3 @@ b = evolve(5*tSave)
 path = ""
 dfiles = string.(path, "checkpoint", 1:5, ".h5")
 profilePlot(dfiles, argmin(abs.(ξ .- L/4)))
-
-#= include("talkPlots.jl") =#
-#= path = "/home/hpeter/ResearchCallies/sims/" =# 
-#= chi_v_ridge(string(path, "sim021/")) =#
-#= profiles2Dvs1D(string(path, "sim021/"), 1) =#
-#= profiles2Dvs1D(string(path, "sim021/"), 200) =#
-#= spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/")) # ratio small =#
-#= spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/")) # ratio big =#
-#= spindownGrid(string(path, "sim022/")) =#
-#= asymmetricRidge(string(path, "sim020/")) =#
-#= chiForSketch(string(path, "sim023/")) =#
-#= sketchRidge() =#
-#= sketchSlope() =#

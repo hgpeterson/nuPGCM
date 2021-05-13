@@ -1,5 +1,5 @@
 ################################################################################
-# Utility functions for rotated coordinates
+# Utility functions for transport-constrained 1D PG model
 ################################################################################
 
 """
