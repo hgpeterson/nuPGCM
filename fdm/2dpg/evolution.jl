@@ -126,7 +126,7 @@ function evolve(tFinal)
     b = zeros(nξ, nσ)
     χ, uξ, uη, uσ, U = invert(b)
     iSave = 0
-    saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, iSave)
+    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
     iSave += 1
     χEkman = getChiEkman(b)
     
@@ -193,7 +193,7 @@ function evolve(tFinal)
             iImg += 1
         end
         if i % nStepsSave == 0
-            saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, iSave)
+            saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
             iSave += 1
         end
     end

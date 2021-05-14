@@ -170,7 +170,7 @@ function evolve(tFinal)
     b̃ = sol[umap[3, :]]
     P̃x̃ = sol[nPts]
     iSave = 0
-    saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
+    saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
     iSave += 1
 
     # main loop
@@ -207,7 +207,7 @@ function evolve(tFinal)
             P̃x̃ = sol[nPts]
 
             # save data
-            saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
+            saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
             iSave += 1
         end
     end

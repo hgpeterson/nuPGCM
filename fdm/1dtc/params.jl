@@ -1,4 +1,4 @@
-# parameters (as in RC20)
+# parameters
 Pr = 1e0
 f = -5.5e-5
 N = 1e-3
@@ -17,23 +17,28 @@ ẑ = z/cos(θ)
 # bottom enhanced:
 κ0 = 6e-5
 κ1 = 2e-3
+ν0 = Pr*κ0
+ν1 = Pr*κ1
 h = 200
 #= # not bottom enhanced: =#
 #= κ0 = 1e-4 =#
 #= κ1 = 0 =#
+#= ν0 = Pr*κ0 =#
+#= ν1 = Pr*κ1 =#
 #= h = 200 =#
+ν = @. ν0 + ν1*exp(-(z + H)/h)
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
 #= transportConstraint = false =#
 transportConstraint = true
 U₀ = 0
-#= U₀ = @. κ0*cot(θ) =#
 
 # timestepping
 secsInDay = 86400
-Δt = 10*secsInDay
-tSave = 100*Δt
+Δt = secsInDay/4
+tSave = 1000*secsInDay
+α = 0.5
 
 """
     log(ofile, text)
@@ -47,7 +52,7 @@ end
 
 # log properties
 ofile = open("out.txt", "w")
-log(ofile, "\nTransport-Contraned 1D PG Model with Parameters\n")
+log(ofile, "\nTransport-Contraned 1D Model with Parameters\n")
 
 log(ofile, @sprintf("nẑ = %d\n", nẑ))
 log(ofile, @sprintf("H  = %d m", H))
@@ -58,9 +63,10 @@ log(ofile, @sprintf("κ0 = %1.1e m2 s-1", κ0))
 log(ofile, @sprintf("κ1 = %1.1e m2 s-1", κ1))
 log(ofile, @sprintf("h  = %d m", h))
 log(ofile, @sprintf("Δt = %.2f days", Δt/secsInDay))
+log(ofile, @sprintf("α  = %.2f", α))
 
 log(ofile, string("Transport Constraint:   ", transportConstraint))
 
-log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*Pr*κ1/abs(f))))
+log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*ν1/abs(f))))
 log(ofile, @sprintf("          ẑ[2] - ẑ[1] ~ %1.2f m\n", ẑ[2] - ẑ[1]))
 close(ofile)

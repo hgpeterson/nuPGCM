@@ -85,7 +85,7 @@ function evolve(tFinal)
     b = zeros(nẑ)
     χ, û, v̂, U = invert(b)
     iSave = 0
-    saveCheckpointRot(b, χ, û, v̂, U, t, iSave)
+    saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
     iSave += 1
 
     # main loop
@@ -116,7 +116,7 @@ function evolve(tFinal)
         if i % nStepsSave == 0
             # log
             println(@sprintf("t = %.2f days (i = %d)", tDays, i))
-            saveCheckpointRot(b, χ, û, v̂, U, t, iSave)
+            saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
             iSave += 1
         end
     end
@@ -168,7 +168,7 @@ end
 #=     U = trapz(û, ẑ) =#
 
 #=     # save data =#
-#=     saveCheckpointRot(b, χ, û, v̂, U, Inf, 0) =#
+#=     saveCheckpoint1DTCPG(b, χ, û, v̂, U, Inf, 0) =#
 
 #=     return b =#
 #= end =#

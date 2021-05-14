@@ -130,7 +130,7 @@ function profilePlot(datafiles, iξ)
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        c = loadCheckpointTF(string(folder, "2dpg/Pr1/checkpoint1000.h5"))
+        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr1/checkpoint1000.h5"))
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
 
         # gradient

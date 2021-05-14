@@ -40,7 +40,7 @@ function profilePlot(datafiles; fname="profiles.png")
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        c = loadCheckpointSpinDown(datafiles[i])
+        c = loadCheckpoint1DTCNondim(datafiles[i])
 
         # stratification
         #= Bz̃ = 1 .+ differentiate(c.b̃, c.z̃) =#

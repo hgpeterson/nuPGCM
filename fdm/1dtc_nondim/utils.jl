@@ -3,11 +3,11 @@
 ################################################################################
 
 """
-    saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, i)
+    saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, i)
 
 Save .h5 checkpoint file for state.
 """
-function saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, i)
+function saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, i)
     savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
     write(file, "ũ", ũ)
@@ -32,11 +32,11 @@ function saveCheckpointSpinDown(ũ, ṽ, b̃, P̃x̃, t̃, i)
 end
 
 """
-    checkpoint = = loadCheckpointSpinDown(filename)
+    checkpoint = = loadCheckpoint1DTCNondim(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
-function loadCheckpointSpinDown(filename)
+function loadCheckpoint1DTCNondim(filename)
     file = h5open(filename, "r")
     ũ = read(file, "ũ")
     ṽ = read(file, "ṽ")

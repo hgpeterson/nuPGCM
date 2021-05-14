@@ -45,13 +45,16 @@ function profilePlot(datafiles)
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        c = loadCheckpoint1DTCPG(datafiles[i])
+        c = loadCheckpoint1DTC(datafiles[i])
 
         # convert to physical coordinates 
         u, w = rotate(c.û)
 
         # stratification
-        Bz = c.N^2*cos(θ) .+ differentiate(c.b, ẑ)
+        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ)
+
+        # streamfunction
+        χ = cumtrapz(c.û, c.ẑ)
 
         # colors and labels
         if c.t == -42
@@ -69,8 +72,8 @@ function profilePlot(datafiles)
 
         # plot
         ax[1, 1].plot(Bz,       z/1e3, c=color, label=label)
-        ax[1, 2].plot(c.χ,      z/1e3, c=color, label=label)
-        ax[1, 2].axvline(c.U,          c=color, lw=1.0, ls="--")
+        ax[1, 2].plot(χ,      z/1e3, c=color, label=label)
+        ax[1, 2].axvline(c.U₀,          c=color, lw=1.0, ls="--")
         ax[2, 1].plot(u,        z/1e3, c=color, label=label)
         ax[2, 2].plot(c.v̂,      z/1e3, c=color, label=label)
         axins21.plot(u,         z/1e3, c=color, label=label)

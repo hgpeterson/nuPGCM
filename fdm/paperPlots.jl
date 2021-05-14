@@ -41,9 +41,9 @@ end
 function chiForSketch(folder)
     iξ = argmin(abs.(ξ .- L/4))
     fig, ax = subplots(1, figsize=(3.404/1.62, 3.404))
-    c = loadCheckpointRot(string(folder, "1dcan/checkpoint1000.h5"))
+    c = loadCheckpoint1DTCPG(string(folder, "1dcan/checkpoint1000.h5"))
     ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
-    c = loadCheckpointRot(string(folder, "1dtc/checkpoint1000.h5"))
+    c = loadCheckpoint1DTCPG(string(folder, "1dtc/checkpoint1000.h5"))
     ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
 
     ax.set_xticks([])
@@ -58,7 +58,7 @@ end
 
 function chi_v_ridge(folder)
     # load
-    c = loadCheckpointTF(string(folder, "2dpg/Pr1/checkpoint1.h5"))
+    c = loadCheckpoint2DPG(string(folder, "2dpg/Pr1/checkpoint1.h5"))
     u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
 
     # plot
@@ -121,14 +121,14 @@ function profiles2Dvs1D(folder, σ)
         tDay = tDays[i]
         label = string(Int64(tDay), " days")
         # canonical 1D solution
-        c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dcan/Pr", σ, "/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :],     label=label)
         ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         
         # 2D PG solution
-        c = loadCheckpointTF(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
         Bz = c.N^2 .+ zDerivativeTF(c.b)
         ax[2, 1].plot(1e3*c.χ[ix, :], z[ix, :]/1e3, c=colors[i, :],     label=label)
@@ -136,7 +136,7 @@ function profiles2Dvs1D(folder, σ)
         ax[2, 3].plot(1e6*Bz[ix, :],  z[ix, :]/1e3, c=colors[i, :], label=label)
 
         # transport-constrained 1D solution
-        c = loadCheckpointRot(string(folder, "1dtc/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc/Pr", σ, "/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
         ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
@@ -144,7 +144,7 @@ function profiles2Dvs1D(folder, σ)
     end
 
     # steady state canonical
-    c = loadCheckpointRot(string(folder, "1dcan/Pr", σ, "/checkpoint999.h5"))
+    c = loadCheckpoint1DTCPG(string(folder, "1dcan/Pr", σ, "/checkpoint999.h5"))
     Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
     ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
     ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
@@ -175,7 +175,7 @@ function spindownProfiles(folder)
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
-    c = loadCheckpointSpinDown(string(folder, "/tc/checkpoint1.h5"))
+    c = loadCheckpoint1DTCNondim(string(folder, "/tc/checkpoint1.h5"))
     fig.text(0.05, 0.98, string(L"Canonical 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
     fig.text(0.05, 0.52, string(L"Transport-Constrained 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
 
@@ -207,7 +207,7 @@ function spindownProfiles(folder)
         case = cases[j]
         for i=0:5
             # load
-            c = loadCheckpointSpinDown(string(folder, "/", case, "/checkpoint", i, ".h5"))
+            c = loadCheckpoint1DTCNondim(string(folder, "/", case, "/checkpoint", i, ".h5"))
             τ_A = 1/c.S
 
             # stratification
@@ -289,7 +289,7 @@ end
 
 function asymmetricRidge(folder)
     # load
-    c = loadCheckpointTF(string(folder, "checkpoint1000.h5"))
+    c = loadCheckpoint2DPG(string(folder, "checkpoint1000.h5"))
     u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
 
     # plot

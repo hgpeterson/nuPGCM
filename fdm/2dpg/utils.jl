@@ -92,11 +92,11 @@ function transformToTF(u, v, w)
 end
 
 """
-    saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
+    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
 
 Save .h5 checkpoint file for state `b` at time `t`.
 """
-function saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
+function saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
     tDays = t/86400
     savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
@@ -124,11 +124,11 @@ function saveCheckpointTF(b, χ, uξ, uη, uσ, U, t, i)
 end
 
 """
-    checkpoint = loadCheckpointTF(filename)
+    checkpoint = loadCheckpoint2DPG(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
-function loadCheckpointTF(filename)
+function loadCheckpoint2DPG(filename)
     file = h5open(filename, "r")
     x = read(file, "x")
     z = read(file, "z")
