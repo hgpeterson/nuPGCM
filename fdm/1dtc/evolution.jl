@@ -184,6 +184,7 @@ function evolve(tFinal)
         RHSVec[umap[2, nẑ]] = 0           # v decay top
         RHSVec[umap[3, 1]]  = -N^2*cos(θ) # b flux bot
         RHSVec[umap[3, nẑ]] = 0           # b flux top
+        # RHSVec[umap[3, nẑ]] = -N^2*cos(θ) # b flux top
         if transportConstraint 
             RHSVec[nPts] = U₀ # ∫ u dz = U₀ 
         else

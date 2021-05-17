@@ -36,7 +36,7 @@ U₀ = 0
 
 # timestepping
 secsInDay = 86400
-Δt = secsInDay/4
+Δt = secsInDay/24
 tSave = 1000*secsInDay
 α = 0.5
 
@@ -67,6 +67,6 @@ log(ofile, @sprintf("α  = %.2f", α))
 
 log(ofile, string("Transport Constraint:   ", transportConstraint))
 
-log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*ν1/abs(f))))
+log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*(ν0 + ν1)/abs(f))))
 log(ofile, @sprintf("          ẑ[2] - ẑ[1] ~ %1.2f m\n", ẑ[2] - ẑ[1]))
 close(ofile)
