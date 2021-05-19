@@ -15,7 +15,7 @@ function profilePlot(datafiles; fname="profiles.png")
     fig, ax = subplots(1, 3, figsize=(3.404*3, 3.404/1.62), sharey=true)
 
     #= ax[1].set_xlabel(L"$\tilde{B}_\tilde{z}$") =#
-    ax[1].set_xlabel(L"$\tilde{b}_\tilde{z}$")
+    ax[1].set_xlabel(L"$\partial_{\tilde z} \tilde b$")
     ax[1].set_ylabel(L"$\tilde{z}$")
     ax[1].set_title("stratification")
 
@@ -34,8 +34,9 @@ function profilePlot(datafiles; fname="profiles.png")
     # color map
     colors = pl.cm.viridis(range(1, 0, length=size(datafiles, 1)-1))
 
-    #= # zoomed z =#
-    #= ax[1].set_ylim([0, 10]) =#
+    # zoomed z
+    # ax[1].set_ylim([0, 10])
+    ax[1].set_ylim([0, 2])
 
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
