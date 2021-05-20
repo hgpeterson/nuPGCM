@@ -120,7 +120,7 @@ function steadyState()
     U = trapz(û, ẑ)
 
     # save data
-    saveCheckpointRot(b, χ, û, v̂, U, -42, 999)
+    saveCheckpoint1DTCPG(b, χ, û, v̂, U, -42, 999)
 
     return b
 end

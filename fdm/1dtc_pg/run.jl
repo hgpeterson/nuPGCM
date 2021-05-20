@@ -24,20 +24,15 @@ println("Done.")
 # run evolution integrations
 ################################################################################
 
-b = evolve(5*tSave)
+# b = evolve(5*tSave)
 
-#= b = steadyState() =#
+b = steadyState()
 
 ################################################################################
 # plots
 ################################################################################
 
-ii = [0, 1, 2, 3, 4, 5]
-profilePlot(string.("checkpoint", ii, ".h5"))
+# ii = [0, 1, 2, 3, 4, 5]
+# profilePlot(string.("checkpoint", ii, ".h5"))
 #= ii = [0, 1, 2, 3, 4, 5, 999] =#
 #= profilePlot(string.("checkpoint", ii, ".h5")) =#
-
-#= include("talkPlots.jl") =#
-#= vAnimation("images/constKappa/") =#
-#= uProfile("images/constKappa/") =#
-#= uProfile("images/biKappa/") =#

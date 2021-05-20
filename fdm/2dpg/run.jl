@@ -15,17 +15,17 @@ include("evolution.jl")
 # run evolution integrations
 ################################################################################
 
-print("Computing inversion matrices: ")
-inversionLHSs = Array{Any}(undef, nξ)
-for i=1:nξ
-    inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i])))
-end 
-# particular solution 
-inversionRHS = getInversionRHS(zeros(nξ, nσ), 1)
-solᵖ = computeSol(inversionRHS)
-println("Done.")
+# print("Computing inversion matrices: ")
+# inversionLHSs = Array{Any}(undef, nξ)
+# for i=1:nξ
+#     inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i])))
+# end 
+# # particular solution 
+# inversionRHS = getInversionRHS(zeros(nξ, nσ), 1)
+# sol_U = computeSol(inversionRHS)
+# println("Done.")
 
-b = evolve(5*tSave)
+# b = evolve(5*tSave)
 
 ################################################################################
 # plots

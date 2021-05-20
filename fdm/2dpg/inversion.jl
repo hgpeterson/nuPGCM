@@ -158,51 +158,51 @@ function computeSol(inversionRHS)
 end
 
 """
-    U = computeU(solʰ, solᵖ)
+    U = computeU(sol_b, sol_U)
 
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(solʰ, solᵖ)
+function computeU(sol_b, sol_U)
     # unpack
-    χʰ = solʰ[:, 1:nσ]
-    χᵖ = solᵖ[:, 1:nσ]
+    χ_b = sol_b[:, 1:nσ]
+    χ_U = sol_U[:, 1:nσ]
 
-    # first term: ⟨(ν*χʰ_zz)_z⟩ at z = 0
-    #= term1 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χʰ))) =#
+    # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
+    #= term1 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χ_b))) =#
     #= term1 = term1[:, nσ] =#
     term1 = zeros(nξ)
     for i=1:nξ
         # χ_zzz on the boundary
-        term1[i] = Pr*κ[i, nσ]*differentiate_pointwise(χʰ[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
+        term1[i] = Pr*κ[i, nσ]*differentiate_pointwise(χ_b[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
         # κ_z*χ_zz on the boundary
-        term1[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χʰ[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
+        term1[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χ_b[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
     end
     term1 = sum(term1)/nξ
 
-    # second term: ⟨∫f^2/ν*χʰ⟩    
+    # second term: ⟨∫f^2/ν*χ_b⟩    
     term2 = zeros(nξ)
     for i=1:nξ
-        term2[i] = trapz(f^2 ./(Pr*κ[i, :]).*χʰ[i, :], σ)*H(ξ[i])
+        term2[i] = trapz(f^2 ./(Pr*κ[i, :]).*χ_b[i, :], σ)*H(ξ[i])
     end
     term2 = sum(term2)/nξ
 
-    # third term: ⟨∫f^2/ν*(χᵖ-1)⟩    
+    # third term: ⟨∫f^2/ν*(χ_U-1)⟩    
     term3 = zeros(nξ)
     for i=1:nξ
-        term3[i] = trapz(f^2 ./(Pr*κ[i, :]).*(χᵖ[i, :] .- 1), σ)*H(ξ[i])
+        term3[i] = trapz(f^2 ./(Pr*κ[i, :]).*(χ_U[i, :] .- 1), σ)*H(ξ[i])
     end
     term3 = sum(term3)/nξ
     
-    # fourth term: ⟨(ν*χᵖ_zz)_z⟩ at z = 0
-    #= term4 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χᵖ))) =#
+    # fourth term: ⟨(ν*χ_U_zz)_z⟩ at z = 0
+    #= term4 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χ_U))) =#
     #= term4 = term4[:, nσ] =#
     term4 = zeros(nξ)
     for i=1:nξ
         # χ_zzz on the boundary
-        term4[i] = Pr*κ[i, nσ]*differentiate_pointwise(χᵖ[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
+        term4[i] = Pr*κ[i, nσ]*differentiate_pointwise(χ_U[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
         # κ_z*χ_zz on the boundary
-        term4[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χᵖ[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
+        term4[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χ_U[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
     end
     term4 = sum(term4)/nξ
 
@@ -215,7 +215,7 @@ end
 Wrapper function that inverts for flow given buoyancy perturbation `b`.
 """
 function invert(b)
-    # homogeneous solution: rhs = dx(b), U = 0
+    # buoyancy solution: rhs = dx(b), U = 0
     # dx(b) = dξ(b) - dx(H)*σ*dσ(b)/H
     if ξVariation
         rhs = xDerivativeTF(b)
@@ -223,16 +223,15 @@ function invert(b)
         rhs = -Hx.(ξξ).*σσ.*σDerivativeTF(b)./H.(ξξ)
     end
     inversionRHS = getInversionRHS(rhs, 0)
-    solʰ = computeSol(inversionRHS)
+    sol_b = computeSol(inversionRHS)
 
     # particular solution is global variable computed in runPGSolver.jl
 
     # compute U such that "island rule" is satisfied
-    U = computeU(solʰ, solᵖ)
-    println(@sprintf("U = %1.1e m2 s-1", U))
+    U = computeU(sol_b, sol_U)
 
-    # linearity: solution = solʰ + U*solᵖ
-    χ, uξ, uη, uσ, U = postProcess(solʰ + U*solᵖ)
+    # linearity: solution = sol_b + U*sol_U
+    χ, uξ, uη, uσ, U = postProcess(sol_b + U*sol_U)
 
     return χ, uξ, uη, uσ, U
 end

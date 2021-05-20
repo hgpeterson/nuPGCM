@@ -59,7 +59,7 @@ function profilePlot(datafiles)
             label = "steady state"
             color = "k"
         else
-            label = string("day ", Int64(round(c.t/secsInDay)))
+            label = string(Int64(round(c.t/secsInYear)), " years")
             if i==1
                 color = "k"
             else

@@ -12,6 +12,9 @@ include("1dtc_pg/utils.jl")
 include("1dtc_nondim/utils.jl")
 include("2dpg/utils.jl")
 
+# for ridgePlot
+include("2dpg/plotting.jl")
+
 # matplotlib
 pl = pyimport("matplotlib.pylab")
 pe = pyimport("matplotlib.patheffects")
@@ -68,14 +71,15 @@ end
 function chi_v_ridge(folder)
     # load
     c = loadCheckpoint2DPG(string(folder, "2dpg/Pr1/checkpoint1.h5"))
-    u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
+    v = c.uη
+    ix = argmin(abs.(c.x[:, 1] .- c.L/4))
 
     # plot
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
-    ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
-    ridgePlot(v, c.b, "", L"along-ridge flow, $v$ (m s$^{-1}$)"; ax=ax[2])
-    ax[1].plot([L/1e3/4, L/1e3/4], [-H(L/4)/1e3, 0], "r-", alpha=0.5)
-    ax[2].plot([L/1e3/4, L/1e3/4], [-H(L/4)/1e3, 0], "r-", alpha=0.5)
+    ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1], x=c.x, z=c.z, N=c.N)
+    ridgePlot(v, c.b, "", L"along-ridge flow, $v$ (m s$^{-1}$)"; ax=ax[2], x=c.x, z=c.z, N=c.N)
+    ax[1].plot([c.L/1e3/4, c.L/1e3/4], [c.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[2].plot([c.L/1e3/4, c.L/1e3/4], [c.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
@@ -84,10 +88,9 @@ function chi_v_ridge(folder)
     close()
 end
 
-function profiles2Dvs1D(folder, σ)
-    ix = argmin(abs.(ξ .- L/4))
-    tDays = 1000:1000:5000
-    
+function spinupProfiles(folder; σ=1)
+    ii = 1:5
+
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
@@ -99,10 +102,10 @@ function profiles2Dvs1D(folder, σ)
 
     ax[2, 1].set_xlabel(string(L"streamfunction, $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
     ax[2, 2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-    ax[2, 3].set_xlabel(string(L"stratification, $B_z$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+    ax[2, 3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(tDays, 1)))
+    colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
 
     # fixed x
     if σ == 1
@@ -126,11 +129,10 @@ function profiles2Dvs1D(folder, σ)
     ax[2, 1].set_ylim([-2, 0])
 
     # plot data from folder
-    for i=1:size(tDays, 1)
-        tDay = tDays[i]
-        label = string(Int64(tDay), " days")
+    for i=ii
         # canonical 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dcan/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/Pr", σ, "/checkpoint", i, ".h5"))
+        label = string(Int64(c.t/86400/360), " years")
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :],     label=label)
         ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
@@ -138,14 +140,15 @@ function profiles2Dvs1D(folder, σ)
         
         # 2D PG solution
         c = loadCheckpoint2DPG(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
-        u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
-        Bz = c.N^2 .+ zDerivativeTF(c.b)
-        ax[2, 1].plot(1e3*c.χ[ix, :], z[ix, :]/1e3, c=colors[i, :],     label=label)
-        ax[2, 2].plot(1e2*v[ix, :],   z[ix, :]/1e3, c=colors[i, :], label=label)
-        ax[2, 3].plot(1e6*Bz[ix, :],  z[ix, :]/1e3, c=colors[i, :], label=label)
+        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
+        v = c.uη
+        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
+        ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c=colors[i, :], label=label)
+        ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c=colors[i, :], label=label)
+        ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c=colors[i, :], label=label)
 
         # transport-constrained 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/tc/Pr", σ, "/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
         ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
@@ -153,7 +156,7 @@ function profiles2Dvs1D(folder, σ)
     end
 
     # steady state canonical
-    c = loadCheckpoint1DTCPG(string(folder, "1dcan/Pr", σ, "/checkpoint999.h5"))
+    c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/Pr", σ, "/checkpoint999.h5"))
     Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
     ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
     ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
@@ -180,7 +183,7 @@ function profiles2Dvs1D(folder, σ)
     close()
 end
 
-function spindownProfiles(folder)
+function spindownProfiles(folder; ratio=nothing)
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
@@ -193,7 +196,7 @@ function spindownProfiles(folder)
 
     ax[2, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$ ($\times10^{-1}$)")
     ax[2, 2].set_xlabel(L"along-ridge flow, $\tilde{v}$")
-    ax[2, 3].set_xlabel(L"stratification, $\tilde{B}_\tilde{z}$ ($\times10^2$)")
+    ax[2, 3].set_xlabel(L"stratification, $\partial_{\tilde z} \tilde b$ ($\times10^2$)")
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
@@ -220,7 +223,7 @@ function spindownProfiles(folder)
             τ_A = 1/c.S
 
             # stratification
-            Bz̃ = 1 .+ differentiate(c.b̃, c.z̃)
+            bz̃ = differentiate(c.b̃, c.z̃)
 
             # colors and labels
             if i == 0
@@ -237,9 +240,9 @@ function spindownProfiles(folder)
             ax[j, 1].plot(1e1*c.ũ,  c.z̃, c=color, ls=ls, label=label)
             ax[j, 2].plot(c.ṽ,      c.z̃, c=color, ls=ls, label=label)
             if case=="tc"
-                ax[j, 2].axvline(c.Px, lw=1.0, c=color, ls="--")
+                ax[j, 2].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
             end
-            ax[j, 3].plot(1e-2*Bz̃,  c.z̃, c=color, ls=ls, label=label)
+            ax[j, 3].plot(1e-2*bz̃,  c.z̃, c=color, ls=ls, label=label)
         end
     end
 
@@ -252,12 +255,20 @@ function spindownProfiles(folder)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    ax[2, 2].annotate(L"$P_x$", xy=(0.08, 0.1), xytext=(0.25, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
-    #= ax[2, 2].annotate(L"$P_x$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->")) =#
+    if ratio == "Small"
+        ax[2, 2].annotate(L"$\partial_x P$", xy=(0.08, 0.1), xytext=(0.25, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+    elseif ratio == "Big"
+        ax[2, 2].annotate(L"$\partial_x P$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+    end
 
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
-    savefig("spindownProfiles.pdf")
-    println("spindownProfiles.pdf")
+    if ratio !== nothing
+        savefig(string("spindownProfilesRatio", ratio, ".pdf"))
+        println(string("spindownProfilesRatio", ratio, ".pdf"))
+    else
+        savefig("spindownProfiles.pdf")
+        println("spindownProfiles.pdf")
+    end
     close()
 end
 
@@ -384,9 +395,11 @@ path = "/home/hpeter/ResearchCallies/sims/"
 #= sketchRidge() =#
 #= sketchSlope() =#
 #= chiForSketch(string(path, "sim023/")) =#
-#= chi_v_ridge(string(path, "sim021/")) =#
-#= spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/")) # ratio small =#
-#= spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/")) # ratio big =#
+# chi_v_ridge(string(path, "sim026/"))
+# spinupProfiles(string(path, "sim026/"); σ=1)
+# spinupProfiles(string(path, "sim026/"); σ=200)
+spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
+spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
 #= spindownGrid(string(path, "sim024/")) =#
 #= asymmetricRidge(string(path, "sim020/")) =#
-PGvsNoPG(string(path, "sim025/"))
+# PGvsNoPG(string(path, "sim025/"))

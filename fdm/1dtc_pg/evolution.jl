@@ -71,7 +71,7 @@ Solve equation for `b` for `tFinal` seconds.
 """
 function evolve(tFinal)
     # timestep
-    nSteps = Int64(tFinal/Δt)
+    nSteps = Int64(ceil(tFinal/Δt))
     nStepsSave = Int64(floor(tSave/Δt))
 
     # get matrices and vectors
@@ -91,7 +91,6 @@ function evolve(tFinal)
     # main loop
     for i=1:nSteps
         t += Δt
-        tDays = t/secsInDay
 
         # implicit euler diffusion
         diffRHS = b + diffVec*Δt
@@ -115,7 +114,7 @@ function evolve(tFinal)
 
         if i % nStepsSave == 0
             # log
-            println(@sprintf("t = %.2f days (i = %d)", tDays, i))
+            println(@sprintf("t = %.2f years (i = %d)", t/secsInYear, i))
             saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
             iSave += 1
         end

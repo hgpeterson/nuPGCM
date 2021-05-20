@@ -1,5 +1,5 @@
 # parameters (as in RC20)
-Pr = 1e0
+Pr = 2e2
 f = -5.5e-5
 N = 1e-3
 
@@ -67,9 +67,10 @@ h = 200
 
 # timestepping
 secsInDay = 86400
+secsInYear = 360*86400
 Δt = 10*secsInDay
-tPlot = 100*Δt
-tSave = 100*Δt
+tPlot = 3*secsInYear
+tSave = 3*secsInYear
 
 """
     log(ofile, text)

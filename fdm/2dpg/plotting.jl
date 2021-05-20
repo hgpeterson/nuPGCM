@@ -6,7 +6,7 @@ pl = pyimport("matplotlib.pylab")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 
 """
-    ax = ridgePlot(field, b, titleString, cbarLabel; ax, vext, cmap)
+    ax = ridgePlot(field, b, titleString, cbarLabel; ax, vext, cmap, x, z)
 
 Create 2D plot of `field` with isopycnals given by the buoyancy perturbation `b`.
 Set the title to `titleString` and colorbar label to `cbarLabel`. Return the axis 
@@ -14,7 +14,7 @@ handle `ax`.
 
 Optional: set the vmin/vmax manually with vext.
 """
-function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, cmap="RdBu_r", x=x, z=z)
+function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, cmap="RdBu_r", x=x, z=z, N=N)
     # km
     xx = x/1000
     zz = z/1000
@@ -130,7 +130,7 @@ function profilePlot(datafiles, iξ)
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr1/checkpoint1000.h5"))
+        c = loadCheckpoint2DPG(datafiles[i])
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
 
         # gradient
@@ -140,12 +140,12 @@ function profilePlot(datafiles, iξ)
         Bz = c.N^2 .+ zDerivativeTF(c.b)
 
         # colors and labels
-        label = string("Day ", Int64(round(c.t/86400)))
+        label = string(Int64(round(c.t/secsInYear)), " years")
         color = colors[i, :]
 
         # plot
         ax[1, 1].plot(Bz[iξ, :],    z[iξ, :], c=color)
-        ax[1, 2].plot(c.chi[iξ, :], z[iξ, :], c=color)
+        ax[1, 2].plot(c.χ[iξ, :],   z[iξ, :], c=color)
         ax[1, 3].plot(bx[iξ, :],    z[iξ, :], c=color)
         ax[2, 1].plot(u[iξ, :],     z[iξ, :], c=color)
         ax[2, 2].plot(v[iξ, :],     z[iξ, :], c=color)
@@ -156,6 +156,7 @@ function profilePlot(datafiles, iξ)
     ax[2, 3].legend()
 
     savefig("profiles.png")
+    println("profiles.png")
 end
 
 #= """ =#

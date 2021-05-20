@@ -143,7 +143,6 @@ function evolve(tFinal)
     # main loop
     for i=1:nSteps
         t += Δt
-        tDays = t/86400
 
         # implicit euler diffusion
         diffRHS = bVec + diffVec*Δt
@@ -169,9 +168,6 @@ function evolve(tFinal)
         # solve
         bVec = evolutionLHS\evolutionRHS
 
-        # log
-        println(@sprintf("t = %.2f days (i = %d)", tDays, i))
-
         # reshape
         b = reshape(bVec, nξ, nσ)
 
@@ -179,6 +175,9 @@ function evolve(tFinal)
         χ, uξ, uη, uσ, U = invert(b)
         uξVec = reshape(uξ, nPts, 1)
         uσVec = reshape(uσ, nPts, 1)
+
+        # log
+        println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
 
         #= # CFL stuff =#
         #= uξCFL = minimum(abs.(dξ./uξ)) =#
