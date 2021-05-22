@@ -1,7 +1,3 @@
-################################################################################
-# Utility functions for 2D νPGCM 
-################################################################################
-
 """
     fξ = ξDerivativeTF(field)
 
@@ -64,6 +60,7 @@ Note: dz() = dσ()/H
 function zDerivativeTF(field)
     # dσ(field)/H
     fz = σDerivativeTF(field)./H.(x)
+
     return fz
 end
 
@@ -74,8 +71,11 @@ Transform from terrain-following coordinates to cartesian coordinates.
 """
 function transformFromTF(uξ, uη, uσ)
     u = uξ
+
     v = uη
+
     w = uσ.*H.(x) + σσ.*Hx.(x).*u
+
     return u, v, w
 end
 
@@ -88,15 +88,16 @@ function transformToTF(u, v, w)
     uξ = u
     uη = v
     uσ = (w - σσ.*Hx.(x).*u)./H.(x)
+
     return uξ, uη, uσ
 end
 
 """
-    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
+    saveCheckpoint2DPGRayleigh(b, χ, uξ, uη, uσ, U, t, i)
 
 Save .h5 checkpoint file for state `b` at time `t`.
 """
-function saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
+function saveCheckpoint2DPGRayleigh(b, χ, uξ, uη, uσ, U, t, i)
     savefile = @sprintf("checkpoint%d.h5", i)
     file = h5open(savefile, "w")
     write(file, "x", x)
@@ -110,7 +111,6 @@ function saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
     write(file, "t", t)
     write(file, "L", L)
     write(file, "H0", H0)
-    write(file, "Pr", Pr)
     write(file, "f", f)
     write(file, "N", N)
     write(file, "ξVariation", ξVariation)
@@ -118,16 +118,17 @@ function saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
     write(file, "κ0", κ0)
     write(file, "κ1", κ1)
     write(file, "h", h)
+    write(file, "r", r)
     close(file)
     println(savefile)
 end
 
 """
-    checkpoint = loadCheckpoint2DPG(filename)
+    checkpoint = loadCheckpoint2DPGRayleigh(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
-function loadCheckpoint2DPG(filename)
+function loadCheckpoint2DPGRayleigh(filename)
     file = h5open(filename, "r")
     x = read(file, "x")
     z = read(file, "z")
@@ -140,7 +141,6 @@ function loadCheckpoint2DPG(filename)
     t = read(file, "t")
     L = read(file, "L")
     H0 = read(file, "H0")
-    Pr = read(file, "Pr")
     f = read(file, "f")
     N = read(file, "N")
     ξVariation, = read(file, "ξVariation")
@@ -148,6 +148,7 @@ function loadCheckpoint2DPG(filename)
     κ0 = read(file, "κ0")
     κ1 = read(file, "κ1")
     h = read(file, "h")
+    r = read(file, "r")
     close(file)
     return (x=x,
             z=z,
@@ -160,12 +161,12 @@ function loadCheckpoint2DPG(filename)
             t=t, 
             L=L, 
             H0=H0, 
-            Pr=Pr, 
             f=f, 
             N=N, 
             ξVariation=ξVariation, 
             κ=κ,
             κ0=κ0,
             κ1=κ1,
-            h=h)
+            h=h,
+            r=r)
 end

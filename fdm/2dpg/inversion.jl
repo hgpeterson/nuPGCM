@@ -225,7 +225,7 @@ function invert(b)
     inversionRHS = getInversionRHS(rhs, 0)
     sol_b = computeSol(inversionRHS)
 
-    # particular solution is global variable computed in runPGSolver.jl
+    # particular solution (sol_U) is global variable computed in run.jl
 
     # compute U such that "island rule" is satisfied
     U = computeU(sol_b, sol_U)

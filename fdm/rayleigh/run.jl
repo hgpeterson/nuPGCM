@@ -5,9 +5,9 @@ close("all")
 pygui(false)
 
 include("../../myJuliaLib.jl")
-include("setParams.jl")
-include("terrainFollowing.jl")
-include("plottingLib.jl")
+include("params.jl")
+include("utils.jl")
+include("plotting.jl")
 include("inversion.jl")
 include("evolution.jl")
 
@@ -15,14 +15,25 @@ include("evolution.jl")
 # run evolution integrations
 ################################################################################
 
-# integrate
-b = evolve(5000)
-#= profilePlot(["b1000.h5", "b2000.h5", "b3000.h5", "b4000.h5", "b5000.h5"], 1) =#
+print("Computing inversion matrices: ")
+inversionLHSs = Array{Any}(undef, nξ)
+for i=1:nξ
+    inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i])))
+end 
+# particular solution 
+inversionRHS = getInversionRHS(zeros(nξ, nσ), 1)
+sol_U = computeSol(inversionRHS)
+println("Done.")
 
+b = evolve(5*tSave)
 
 ################################################################################
 # make some plots
 ################################################################################
+
+path = ""
+dfiles = string.(path, "checkpoint", 1:5, ".h5")
+profilePlot(dfiles, argmin(abs.(ξ .- L/4)))
 
 #= # 1D sol =#
 #= for t=[1000 2000 3000 4000 5000 Inf] =#

@@ -92,21 +92,18 @@ function getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)
 end
 
 """
-    b = evolve(tFinalDays)
+    b = evolve(tFinal)
 
-Solve full nonlinear equation for `b` for `tFinalDays` days.
+Solve full nonlinear equation for `b` for `tFinal` seconds.
 """
-function evolve(tFinalDays)
+function evolve(tFinal)
     # grid points
     nPts = nξ*nσ
 
     # timestep
-    nSteps = Int64(tFinalDays*86400/Δt)
-    nStepsInvert = 1
-    nDaysPlot = 100
-    nDaysSave = 1000
-    nStepsPlot = Int64(nDaysPlot*86400/Δt)
-    nStepsSave = Int64(nDaysSave*86400/Δt)
+    nSteps = Int64(tFinal/Δt)
+    nStepsPlot = Int64(tPlot/Δt)
+    nStepsSave = Int64(tSave/Δt)
 
     # for flattening for matrix mult
     umap = reshape(1:nPts, nξ, nσ)    
@@ -119,9 +116,6 @@ function evolve(tFinalDays)
     # left-hand side for evolution equation (save LU decomposition for speed)
     evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
 
-    # left-hand side for inversion equations
-    inversionLHS = lu(getInversionLHS())
-
     # vectors of H, Hx, and σ values for the N^*w term
     HVec = reshape(H.(x), nPts, 1)
     HxVec = reshape(Hx.(x), nPts, 1)
@@ -130,31 +124,24 @@ function evolve(tFinalDays)
     # initial condition
     t = 0
     b = zeros(nξ, nσ)
-    #= # load data =#
-    #= file = h5open("b.h5", "r") =#
-    #= b = read(file, "b") =#
-    #= t = read(file, "t") =#
-    #= close(file) =#
-
-    # invert initial condition
-    chi, uξ, uη, uσ, U = invert(b, inversionLHS)
+    χ, uξ, uη, uσ, U = invert(b)
+    iSave = 0
+    saveCheckpoint2DPGRayleigh(b, χ, uξ, uη, uσ, U, t, iSave)
+    iSave += 1
     
     # plot initial state of all zeros and no flow
     iImg = 0
-    plotCurrentState(t, chi, uξ, uη, uσ, b, iImg)
+    plotCurrentState(t, χ, uξ, uη, uσ, b, iImg)
+    iImg += 1
 
     # flatten for matrix mult
     bVec = reshape(b, nPts, 1)
     uξVec = reshape(uξ, nPts, 1)
     uσVec = reshape(uσ, nPts, 1)
         
-    # define function to compute advection RHS (to be altered each timestep)
-    fAdvRHS(bVec, t) = 0
-
     # main loop
     for i=1:nSteps
         t += Δt
-        tDays = t/86400
 
         # implicit euler diffusion
         diffRHS = bVec + diffVec*Δt
@@ -175,55 +162,36 @@ function evolve(tFinalDays)
         # boundary fluxes
         evolutionRHS[bottomBdy] .= -N^2
         evolutionRHS[topBdy] .= 0
+        #= evolutionRHS[topBdy] .= -N^2 =#
 
         # solve
         bVec = evolutionLHS\evolutionRHS
 
+        # reshape
+        b = reshape(bVec, nξ, nσ)
+
+        # invert buoyancy for flow
+        χ, uξ, uη, uσ, U = invert(b)
+        uξVec = reshape(uξ, nPts, 1)
+        uσVec = reshape(uσ, nPts, 1)
+
         # log
-        println(@sprintf("t = %.2f days (i = %d)", tDays, i))
-        if i % nStepsInvert == 0
-            # reshape
-            b = reshape(bVec, nξ, nσ)
+        println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
 
-            #= # test 1D error =#
-            #= b1D, u1D, v1D, w1D = pointwise1D(t) =#
-            #= println(@sprintf("1D Max Error: %1.2e", maximum(abs.(b - b1D)))) =#
-
-            # invert buoyancy for flow
-            chi, uξ, uη, uσ, U = invert(b, inversionLHS)
-            uξVec = reshape(uξ, nPts, 1)
-            uσVec = reshape(uσ, nPts, 1)
-            if adaptiveTimestep
-                uξCFL = minimum(abs.(dξ./uξ))
-                uσCFL = minimum(abs.(dσ./uσ))
-                println(@sprintf("CFL uξ: %.2f days", uξCFL/86400))
-                println(@sprintf("CFL uσ: %.2f days", uσCFL/86400))
-                #= if 0.5*minimum([uξCFL, uσCFL]) < Δt =#
-                #=     # need to have smaller step size by CFL =#
-                #=     Δt = 0.5*minimum([uξCFL, uσCFL]) =#
-                #=     println(@sprintf("Decreasing timestep to %.2f days", Δt/86400)) =#
-                #=     evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)) =#
-                #= elseif 0.5*minimum([uξCFL, uσCFL]) > 2*Δt =#
-                #=     # could have much larger step size by CFL =#
-                #=     Δt = minimum([0.5*minimum([uξCFL, uσCFL]), 1*86400]) =#
-                #=     println(@sprintf("Increasing timestep to %.2f days", Δt/86400)) =#
-                #=     evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)) =#
-                #= end =#
-            end
-        end
+        #= # CFL stuff =#
+        #= uξCFL = minimum(abs.(dξ./uξ)) =#
+        #= uσCFL = minimum(abs.(dσ./uσ)) =#
+        #= println(@sprintf("CFL uξ: %.2f days", uξCFL/86400)) =#
+        #= println(@sprintf("CFL uσ: %.2f days", uσCFL/86400)) =#
+        
         if i % nStepsPlot == 0
             # plot flow
+            plotCurrentState(t, χ, uξ, uη, uσ, b, iImg)
             iImg += 1
-            plotCurrentState(t, chi, uξ, uη, uσ, b, iImg)
         end
         if i % nStepsSave == 0
-            # save data
-            savefile = @sprintf("b%d.h5", tDays)
-            println("saving to ", savefile)
-            file = h5open(savefile, "w")
-            write(file, "b", b)
-            write(file, "t", t)
-            close(file)
+            saveCheckpoint2DPGRayleigh(b, χ, uξ, uη, uσ, U, t, iSave)
+            iSave += 1
         end
     end
 
@@ -231,3 +199,60 @@ function evolve(tFinalDays)
 
     return b
 end
+
+#= function advTest(nSteps) =#
+#=     # grid points =#
+#=     nPts = nξ*nσ =#
+
+#=     # timestep =#
+#=     Δt = 10*86400 =#
+#=     nStepsPlot = 10 =#
+
+#=     # adv speed =#
+#=     #1= uξ = dξ/Δt =1# =#
+#=     uξ = 1e-2 =#
+#=     #1= uσ = -minimum(dσ)/Δt =1# =#
+#=     uσ = -3e-9 =#
+
+#=     println("uξCFL: ", dξ/abs(uξ)) =#
+#=     println("uσCFL: ", minimum(dσ)/abs(uσ)) =#
+
+#=     # initial condition =#
+#=     t = 0 =#
+#=     b0(ξ, σ) = exp(-(ξ - L/2)^2/(L/8)^2 - (σ + 1/2)^2/(1/4)^2) =#
+#=     bExact(ξ, σ, t) = b0(ξ - uξ*t, σ - uσ*t) =#
+#=     b = @. b0(ξξ, σσ) =#
+
+#=     # plot initial state of all zeros and no flow =#
+#=     iImg = 0 =#
+#=     ridgePlot2Fields(b, bExact.(ξξ, σσ, 0), "", "") =#
+#=     savefig(@sprintf("b%03d.png", iImg)) =#
+#=     close() =#
+
+#=     # main loop =#
+#=     for i=1:nSteps =#
+#=         t += Δt =#
+#=         tDays = t/86400 =#
+
+#=         # function to compute advection RHS =#
+#=         # (note the parentheses here to allow for sparse matrices to work first) =#
+#=         fAdvRHS(b) = -uξ*ξDerivativeTF(b) - uσ*σDerivativeTF(b) =#
+
+#=         # explicit timestep for advection =#
+#=         advRHS = explicitRHS(Δt, b, fAdvRHS) =#
+
+#=         # solve =#
+#=         b += advRHS =#
+
+#=         # log =#
+#=         println(@sprintf("t = %.2f days (i = %d)", tDays, i)) =#
+#=         if i % nStepsPlot == 0 =#
+#=             # plot flow =#
+#=             iImg += 1 =#
+#=             ridgePlot2Fields(b, bExact.(ξξ, σσ, t), "", "") =#
+#=             savefig(@sprintf("b%03d.png", iImg)) =#
+#=             close() =#
+#=         end =#
+#=     end =#
+#=     return b =#
+#= end =#
