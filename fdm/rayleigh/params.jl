@@ -40,13 +40,13 @@ cosθ = @. 1/sqrt(1 + Hx(ξξ)^2)
 θ = asin.(sinθ[:, 1])
 
 # diffusivity
-# κ0 = 6e-5
-# κ1 = 2e-3
-# h = 200
-# not bottom enhanced:
 κ0 = 6e-7
-κ1 = 0
+κ1 = 2e-5
 h = 200
+# not bottom enhanced:
+# κ0 = 6e-7
+# κ1 = 0
+# h = 200
 κ = @. κ0 + κ1*exp(-(z + H(x))/h)
     
 # timestepping
@@ -80,6 +80,7 @@ log(ofile, @sprintf("r  = %1.1e s-1", r))
 log(ofile, @sprintf("κ0 = %1.1e m2 s-1", κ0))
 log(ofile, @sprintf("κ1 = %1.1e m2 s-1", κ1))
 log(ofile, @sprintf("h  = %d m", h))
+log(ofile, @sprintf("Δt = %1.1e s", Δt))
 
 log(ofile, string("\nVariations in ξ: ", ξVariation))
 

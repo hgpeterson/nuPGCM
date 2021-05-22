@@ -15,17 +15,17 @@ include("evolution.jl")
 # run evolution integrations
 ################################################################################
 
-print("Computing inversion matrices: ")
-inversionLHSs = Array{Any}(undef, nξ)
-for i=1:nξ
-    inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i])))
-end 
-# particular solution 
-inversionRHS = getInversionRHS(zeros(nξ, nσ), 1)
-sol_U = computeSol(inversionRHS)
-println("Done.")
+# print("Computing inversion matrices: ")
+# inversionLHSs = Array{Any}(undef, nξ)
+# for i=1:nξ
+#     inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i])))
+# end 
+# # particular solution 
+# inversionRHS = getInversionRHS(zeros(nξ, nσ), 1)
+# sol_U = computeSol(inversionRHS)
+# println("Done.")
 
-b = evolve(5*tSave)
+# b = evolve(5*tSave)
 
 ################################################################################
 # make some plots
@@ -34,17 +34,6 @@ b = evolve(5*tSave)
 path = ""
 dfiles = string.(path, "checkpoint", 1:5, ".h5")
 profilePlot(dfiles, argmin(abs.(ξ .- L/4)))
-
-#= # 1D sol =#
-#= for t=[1000 2000 3000 4000 5000 Inf] =#
-#=     b1D, u1D, v1D, w1D = pointwise1D(t*86400) =#
-#=     ridgePlot(b1D, b1D, "", "") =#
-#=     savefig(string("b1D", t, ".png")) =#
-#= end =#
-
-#= # redo profile plots =#
-#= folder = "images/constKappa/full2D/" =#
-#= profilePlot(string.(folder, ["b1000.h5", "b2000.h5", "b3000.h5", "b4000.h5", "b5000.h5"]), 1) =#
 
 #= # bξ vs bσ =#
 #= for bfile in string.("images/constKappa/full2D/", ["b1000.h5", "b2000.h5", "b3000.h5", "b4000.h5", "b5000.h5"]) =#

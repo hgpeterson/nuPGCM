@@ -167,7 +167,7 @@ function invert(b)
 end
 
 """
-    b, u, v, w = pointwise1DConstantκ(t, inversionLHS)
+    b, u, v, w = pointwise1DConstantκ(t)
 
 Apply the 1D solution to the Rayleigh drag problem pointwise over the domain.
 See CF18 for details.

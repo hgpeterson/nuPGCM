@@ -131,7 +131,7 @@ function getInversionRHS(b)
     if transportConstraint
         rhs[iU] = U₀
     else
-        rhs[iU] = -b[1]*tan(θ)
+        rhs[iU] = -b[1]*tan(θ) #FIXME: Why isn't this sin(θ)?
     end
     
     return rhs

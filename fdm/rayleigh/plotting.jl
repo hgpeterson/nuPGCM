@@ -87,7 +87,7 @@ function profilePlot(datafiles, iξ)
     # insets
     axins21 = inset_locator.inset_axes(ax[2, 1], width="40%", height="40%")
 
-    ax[1, 1].set_xlabel(L"$B_z$ (s$^{-2}$)")
+    ax[1, 1].set_xlabel(L"$\partial_z B$ (s$^{-2}$)")
     ax[1, 1].set_ylabel(L"$z$ (m)")
     ax[1, 1].set_title("stratification")
 
@@ -95,7 +95,7 @@ function profilePlot(datafiles, iξ)
     ax[1, 2].set_ylabel(L"$z$ (m)")
     ax[1, 2].set_title("streamfunction")
 
-    ax[1, 3].set_xlabel(L"$b_x$ (s$^{-2}$)")
+    ax[1, 3].set_xlabel(L"$\partial_x b$ (s$^{-2}$)")
     ax[1, 3].set_ylabel(L"$z$ (m)")
     ax[1, 3].set_title("buoyancy gradient")
 
@@ -122,22 +122,31 @@ function profilePlot(datafiles, iξ)
     colors = pl.cm.viridis(range(1, 0, length=5))
 
     # zoomed z
-    #= for a in ax =#
-    #=     a.set_ylim([z[iξ, 1], z[iξ, 1] + 2000]) =#
-    #= end =#
+    # for a in ax
+    #     a.set_ylim([z[iξ, 1], z[iξ, 1] + 100])
+    # end
     ax[2, 1].set_ylim([z[iξ, 1], z[iξ, 1] + 200])
 
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
-        c = loadCheckpoint2DPG(datafiles[i])
+        c = loadCheckpoint2DPGRayleigh(datafiles[i])
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
+
+        # 1D
+        b1D, u1D, v1D, w1D = pointwise1DConstantκ(c.t)
+        χ1D = zeros(size(u1D))
+        for i=1:size(u1D, 1)
+            χ1D[i, :] = cumtrapz(u1D[i, :], c.z[i, :])
+        end
 
         # gradient
         bx = xDerivativeTF(c.b)
+        bx1D = xDerivativeTF(b1D)
 
         # stratification
         Bz = c.N^2 .+ zDerivativeTF(c.b)
+        Bz1D = c.N^2*cosθ .+ zDerivativeTF(b1D)
 
         # colors and labels
         label = string(Int64(round(c.t/secsInYear)), " years")
@@ -151,6 +160,14 @@ function profilePlot(datafiles, iξ)
         ax[2, 2].plot(v[iξ, :],     z[iξ, :], c=color)
         ax[2, 3].plot(w[iξ, :],     z[iξ, :], c=color, label=label)
         axins21.plot(u[iξ, :],      z[iξ, :], c=color)
+
+        # ax[1, 1].plot(Bz1D[iξ, :],    z[iξ, :], "k:")
+        # ax[1, 2].plot(χ1D[iξ, :],     z[iξ, :], "k:")
+        # ax[1, 3].plot(bx1D[iξ, :],    z[iξ, :], "k:")
+        # ax[2, 1].plot(u1D[iξ, :],     z[iξ, :], "k:")
+        # ax[2, 2].plot(v1D[iξ, :],     z[iξ, :], "k:")
+        # ax[2, 3].plot(w1D[iξ, :],     z[iξ, :], "k:")
+        # axins21.plot(u1D[iξ, :],      z[iξ, :], "k:")
     end
 
     ax[2, 3].legend()
