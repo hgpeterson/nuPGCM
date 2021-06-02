@@ -40,13 +40,14 @@ cosθ = @. 1/sqrt(1 + Hx(ξξ)^2)
 θ = asin.(sinθ[:, 1])
 
 # diffusivity
-κ0 = 6e-7
-κ1 = 2e-5
-h = 200
-# not bottom enhanced:
+# # bottom enhanced:
 # κ0 = 6e-7
-# κ1 = 0
+# κ1 = 2e-5
 # h = 200
+# not bottom enhanced:
+κ0 = 2e-5
+κ1 = 0
+h = 200
 κ = @. κ0 + κ1*exp(-(z + H(x))/h)
     
 # timestepping

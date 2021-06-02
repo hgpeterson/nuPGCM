@@ -1,6 +1,6 @@
-using SparseArrays, LinearAlgebra, Printf, HDF5, PyPlot, PyCall
+using SparseArrays, LinearAlgebra, Printf, HDF5, PyPlot, PyCall, SpecialFunctions
 
-plt.style.use("~/paper_plots.mplstyle")
+plt.style.use("C:/paper_plots.mplstyle")
 close("all")
 pygui(false)
 
@@ -13,18 +13,14 @@ include("evolution.jl")
 include("steady.jl")
 
 ################################################################################
-# Setup matrices 
-################################################################################
-
-print("Computing inversion matrix: ")
-inversionLHS = lu(getInversionLHS())
-println("Done.")
-
-################################################################################
 # run evolution integrations
 ################################################################################
 
-b = evolve(5*tSave)
+# print("Computing inversion matrix: ")
+# inversionLHS = lu(getInversionLHS())
+# println("Done.")
+
+# b = evolve(5*tSave)
 
 # b = steadyState()
 

@@ -122,3 +122,27 @@ function invert(b)
 
     return χ, û, v̂, U
 end
+
+"""
+    b, u, v, w = pointwise1DConstantκ(t)
+
+Apply the 1D solution to the Rayleigh drag problem pointwise over the domain.
+See CF18 for details.
+"""
+function pointwise1DConstantκ(t)
+    # inverse boundary layer thickness
+    q = sqrt(r*N^2*tan(θ)^2/(κ[1]*(f^2 + r^2)))
+
+    # time dependent analytical buoyancy solution (only works for constant κ)
+    b = @. N^2*cos(θ)/q*(exp(-q*(ẑ + H)) - 0.5*(exp(-q*(ẑ + H))*erfc(q*sqrt(κ[1]*t) - (ẑ + H)/2/sqrt(κ[1]*t)) + exp(q*(ẑ + H))*erfc(q*sqrt(κ[1]*t) + (ẑ + H)/2/sqrt(κ[1]*t))))
+
+    # invert for flow using rotated 1D equations
+    û = @. b*sin(θ)/((f^2 + r^2)*cos(θ)^2/r)
+    v = @. -f*û*cos(θ)/r
+
+    # rotate
+    u = @. û*cos(θ)
+    w = @. û*sin(θ)
+
+    return b, u, v, w
+end
