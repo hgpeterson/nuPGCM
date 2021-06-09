@@ -35,8 +35,7 @@ function profilePlot(datafiles; fname="profiles.png")
     colors = pl.cm.viridis(range(1, 0, length=size(datafiles, 1)-1))
 
     # zoomed z
-    # ax[1].set_ylim([0, 10])
-    ax[1].set_ylim([0, 2])
+    ax[1].set_ylim([0, 10])
 
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)

@@ -5,11 +5,11 @@
 canonical = false
 
 τ_A = 1e2 # nondim arrest time
-τ_S = 5e3 # nondim spindown time
+τ_S = 1e2 # nondim spindown time
 Ek = 1/τ_S^2
 S = 1/τ_A
 H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
-ṽ_0 = -1
+ṽ_0 = 1
 #= ṽ_0 = 0 =#
 
 # timestep
