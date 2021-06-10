@@ -1,10 +1,10 @@
 using PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, SpecialFunctions
 
-plt.style.use("/paper_plots.mplstyle")
+plt.style.use("C:/paper_plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../../myJuliaLib.jl")
+include("../../../myJuliaLib.jl")
 include("params.jl")
 include("utils.jl")
 include("plotting.jl")
