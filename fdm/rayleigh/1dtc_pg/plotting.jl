@@ -47,16 +47,11 @@ function profilePlot(datafiles)
         # load
         c = loadCheckpoint1DTCPGRayleigh(datafiles[i])
 
-        # 1D
-        b1D, u1D, v1D, w1D = pointwise1DConstantκ(c.t)
-        χ1D = cumtrapz(u1D, z)
-
         # convert to physical coordinates 
         u, w = rotate(c.û)
 
         # stratification
         Bz = c.N^2*cos(θ) .+ differentiate(c.b, ẑ)
-        Bz1D = c.N^2*cos(θ) .+ differentiate(b1D, ẑ)
 
         # colors and labels
         if c.t == -42
@@ -66,10 +61,11 @@ function profilePlot(datafiles)
         else
             label = string(Int64(round(c.t/secsInYear)), " years")
             if i==1
-                color = "k"
+                color = "tab:red"
             else
                 color = colors[i-1, :]
             end
+
         end
 
         # plot
@@ -80,11 +76,17 @@ function profilePlot(datafiles)
         ax[2, 2].plot(c.v̂,      z/1e3, c=color, label=label)
         axins21.plot(u,         z/1e3, c=color, label=label)
 
-        ax[1, 1].plot(Bz1D,    z/1e3, "k:")
-        ax[1, 2].plot(χ1D,     z/1e3, "k:")
-        ax[2, 1].plot(u1D,     z/1e3, "k:")
-        ax[2, 2].plot(v1D,     z/1e3, "k:")
-        axins21.plot(u1D,      z/1e3, "k:")
+        # if c.t > 0
+        #     # 1D
+        #     b1D, u1D, v1D, w1D = pointwise1DConstantκ(c.t)
+        #     χ1D = cumtrapz(u1D, z)
+        #     Bz1D = c.N^2*cos(θ) .+ differentiate(b1D, ẑ)
+        #     ax[1, 1].plot(Bz1D,    z/1e3, "k:")
+        #     ax[1, 2].plot(χ1D,     z/1e3, "k:")
+        #     ax[2, 1].plot(u1D,     z/1e3, "k:")
+        #     ax[2, 2].plot(v1D,     z/1e3, "k:")
+        #     axins21.plot(u1D,      z/1e3, "k:")
+        # end
     end
 
     ax[2, 2].legend()
