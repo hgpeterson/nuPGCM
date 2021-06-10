@@ -56,7 +56,7 @@ function profilePlot(datafiles; fname="profiles.png")
 
         # plot
         #= ax[1].plot(Bz̃,   c.z̃, c=color, label=label) =#
-        ax[1].plot(b̃z̃ .+ 1e2,   c.z̃, c=color, label=label)
+        ax[1].plot(b̃z̃,   c.z̃, c=color, label=label)
         ax[2].plot(c.ũ,  c.z̃, c=color)
         ax[3].plot(c.ṽ,  c.z̃, c=color)
         ax[3].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
