@@ -48,11 +48,11 @@ function getMatrices()
         row = umap[3, j]
         # first term
         push!(A, (row, umap[1, j], -1.0))
-        # second term: dz̃(κ(1 + dz̃(b̃))) = dz̃(κ) + dz̃(κ)*dz̃(b̃) + κ*dz̃z̃(b̃)
+        # second term: dz̃(κ(N^2 + dz̃(b̃))) = N^2*dz̃(κ) + dz̃(κ)*dz̃(b̃) + κ*dz̃z̃(b̃)
         push!(A, (row, umap[3, j-1], (κ_z̃*fd_z̃[1] + κ[j]*fd_z̃z̃[1])))
         push!(A, (row, umap[3, j],   (κ_z̃*fd_z̃[2] + κ[j]*fd_z̃z̃[2])))
         push!(A, (row, umap[3, j+1], (κ_z̃*fd_z̃[3] + κ[j]*fd_z̃z̃[3])))
-        diffVec[row] = κ_z̃
+        diffVec[row] = N^2*κ_z̃
     end
 
     # Boundary Conditions: Bottom
@@ -62,7 +62,7 @@ function getMatrices()
     # ṽ = 0
     row = umap[2, 1] 
     push!(A, (row, row, 1.0))
-    # b̃_z̃ = -1
+    # b̃_z̃ = -N^2
     row = umap[3, 1] 
     fd_z̃ = mkfdstencil(z̃[1:3], z̃[1], 1)
     push!(A, (row, umap[3, 1], fd_z̃[1]))
@@ -185,7 +185,7 @@ function evolve(tFinal)
         RHSVec[umap[1, nz̃]] = 0  # u decay top
         RHSVec[umap[2, 1]]  = 0  # v = 0 bot
         RHSVec[umap[2, nz̃]] = 0  # v decay top
-        RHSVec[umap[3, 1]]  = -1 # b flux bot
+        RHSVec[umap[3, 1]]  = -N^2 # b flux bot
         RHSVec[umap[3, nz̃]] = 0  # b flux top
         if canonical
             RHSVec[nPts] = ṽ_0 # ṽ_0 = P_x

@@ -25,6 +25,7 @@ function saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, i)
     write(file, "κ0", κ0)
     write(file, "κ1", κ1)
     write(file, "h", h)
+    write(file, "N", N)
     write(file, "α", α)
     write(file, "z̃", z̃)
     close(file)
@@ -54,6 +55,7 @@ function loadCheckpoint1DTCNondim(filename)
     κ0 = read(file, "κ0")
     κ1 = read(file, "κ1")
     h = read(file, "h")
+    N = read(file, "N")
     α = read(file, "α")
     z̃ = read(file, "z̃")
     close(file)
@@ -72,6 +74,7 @@ function loadCheckpoint1DTCNondim(filename)
             κ0=κ0, 
             κ1=κ1, 
             h=h, 
+            N=N, 
             α=α,
             z̃=z̃)
 end

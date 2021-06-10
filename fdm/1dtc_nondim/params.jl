@@ -9,8 +9,9 @@ canonical = false
 Ek = 1/τ_S^2
 S = 1/τ_A
 H = τ_S # z ∈ [0, H0] ⟹ z̃ ∈ [0, H0/δ = 1/sqrt(Ek) = τ_S]
-ṽ_0 = 1
+ṽ_0 = -1
 #= ṽ_0 = 0 =#
+N = 1 
 
 # timestep
 Δt̃ = minimum([τ_S/100, τ_A/100])
@@ -61,8 +62,9 @@ log(ofile, @sprintf("κ0 = %1.5e", κ0))
 log(ofile, @sprintf("κ1 = %1.5e", κ1))
 log(ofile, @sprintf("ν0 = %1.5e", ν0))
 log(ofile, @sprintf("ν1 = %1.5e", ν1))
+log(ofile, @sprintf("ṽ_0 = %1.5e", ṽ_0))
+log(ofile, @sprintf("N = %1.5e", N))
 log(ofile, @sprintf("h  = %1.5e", h))
-log(ofile, @sprintf("v0 = %1.5e", ṽ_0))
 log(ofile, @sprintf("Δt = %1.5e", Δt̃))
 log(ofile, @sprintf("α  = %1.5e", α))
 
