@@ -390,7 +390,6 @@ function spindownGrid(folder)
     ax.annotate("Fig. 7", xy=(0.8, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
 
     tight_layout()
-    #= subplots_adjust(bottom=0.2, top=0.9, left=0.0, right=0.9, wspace=0.0, hspace=0.0) =#
     savefig("spindownGrid.pdf")
     println("spindownGrid.pdf")
 end
@@ -479,6 +478,36 @@ function PGvsNoPG(folder)
 
 end
 
+function compareChapman02Fig5a(folder)
+    # read data
+    file = h5open(string(folder, "vs.h5"), "r")
+    vs = read(file, "vs")
+    ṽ_0 = read(file, "ṽ_0")
+    τ_Ss = read(file, "τ_Ss")
+    τ_As = read(file, "τ_As")
+    close(file)
+
+    # plot 
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"ratio, $\tilde{\tau}_S/\tilde{\tau}_A$")
+    ax.set_ylabel(L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$")
+    maxRatio = 2
+    ax.set_xlim([0, maxRatio])
+    ax.set_ylim([0, 1])
+    for i=1:size(τ_Ss, 1)
+        for j=1:size(τ_As, 1)
+            ratio = τ_Ss[i]/τ_As[j]
+            if ratio < maxRatio
+                ax.plot(τ_Ss[i]/τ_As[j], vs[i, j]/ṽ_0, "k.")
+            end
+        end
+    end
+
+    tight_layout()
+    savefig("compareChapman02Fig5a.png")
+    println("compareChapman02Fig5a.png")
+end
+
 path = "C:/Users/11/Documents/ResearchCallies/sims/"
 #= sketchRidge() =#
 #= sketchSlope() =#
@@ -487,9 +516,10 @@ path = "C:/Users/11/Documents/ResearchCallies/sims/"
 # spinupProfiles(string(path, "sim026/"); σ=1)
 # spinupProfiles(string(path, "sim026/"); σ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/"))
-spinupProfilesRayleigh(string(path, "sim027/bi/"))
+# spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
 #= spindownGrid(string(path, "sim024/")) =#
 #= asymmetricRidge(string(path, "sim020/")) =#
 # PGvsNoPG(string(path, "sim025/"))
+compareChapman02Fig5a(string(path, "sim024/"))
