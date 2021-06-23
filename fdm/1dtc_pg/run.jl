@@ -1,6 +1,6 @@
 using SparseArrays, LinearAlgebra, Printf, HDF5, PyPlot, PyCall
 
-plt.style.use("~/paper_plots.mplstyle")
+plt.style.use("../../plots.mplstyle")
 close("all")
 pygui(false)
 
