@@ -123,51 +123,59 @@ function evolve(tFinal)
     return b
 end
 
-#= function steadyState() =#
-#=     # grid points =#
-#=     nVars = 3 =#
-#=     nPts = nVars*nẑ =#
+"""
+    b = evolveBL(tFinal)
 
-#=     # for flattening for matrix mult =#
-#=     umap = reshape(1:nPts, nVars, nẑ) =#
-#=     bottomBdy = umap[:, 1][:] =#
-#=     topBdy = umap[:, nẑ][:] =#
+Solve BL equation for `b` for `tFinal` seconds.
+"""
+function evolveBL(tFinal)
+    # timestep
+    nSteps = Int64(ceil(tFinal/Δt))
+    nStepsSave = Int64(floor(tSave/Δt))
 
-#=     # get matrices and vectors =#
-#=     diffMat, diffVec, bdyMat, explicitMat = getMatrices() =#
+    # get matrices and vectors
+    diffMat, diffVec, bdyFluxMat = getEvolutionMatrices()
 
-#=     # LHS =#
-#=     LHS = explicitMat + diffMat =#
+    # diffusion correction from BL theory
+    S = N^2*tan(θ)^2/f^2
+    println(@sprintf("1 + σS = %1.12f", 1 + Pr*S))
+    diffMat *= 1 + Pr*S
 
-#=     # boundaries =#
-#=     LHS[bottomBdy, :] = bdyMat[bottomBdy, :] =#
-#=     LHS[topBdy, :] = bdyMat[topBdy, :] =#
+    # left-hand side for evolution equation (save LU decomposition for speed)
+    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat))
 
-#=     # RHS =#
-#=     RHS = -diffVec =#
-#=     # boundaries =#
-#=     RHS[umap[1, 1]]  .= 0 # u = 0 bot =#
-#=     RHS[umap[1, nẑ]] .= 0 # u decay top =#
-#=     RHS[umap[2, 1]]  .= 0 # v = 0 bot =#
-#=     RHS[umap[2, nẑ]] .= 0 # v decay top =#
-#=     RHS[umap[3, 1]]  .= -N^2*cos(θ) # b flux bot =#
-#=     RHS[umap[3, nẑ]] .= 0    # b flux top =#
+    # initial condition
+    t = 0
+    b = zeros(nẑ)
+    χ, û, v̂, U = invert(b)
+    iSave = 0
+    saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
+    iSave += 1
 
-#=     # solve =#
-#=     solVec = LHS\RHS =#
+    # main loop
+    for i=1:nSteps
+        t += Δt
 
-#=     # gather solution and rotate =#
-#=     sol = reshape(solVec, 3, nẑ) =#
-#=     û = sol[1, :] =#
-#=     v̂ = sol[2, :] =#
-#=     b = sol[3, :] =#
+        # advection has been absorbed in 1 + σS term in BL theory
+        evolutionRHS = b + diffVec*Δt
 
-#=     # compute χ and U =#
-#=     χ = cumptrapz(û, ẑ) =#
-#=     U = trapz(û, ẑ) =#
+        # boundary fluxes
+        evolutionRHS[1] = -N^2*cos(θ)/(1 + Pr*S)
+        evolutionRHS[nẑ] = 0
 
-#=     # save data =#
-#=     saveCheckpoint1DTCPG(b, χ, û, v̂, U, Inf, 0) =#
+        # solve
+        b = evolutionLHS\evolutionRHS
 
-#=     return b =#
-#= end =#
+        # invert buoyancy for flow
+        χ, û, v̂, U = invert(b)
+
+        if i % nStepsSave == 0
+            # log
+            println(@sprintf("t = %.2f years (i = %d)", t/secsInYear, i))
+            saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
+            iSave += 1
+        end
+    end
+
+    return b
+end

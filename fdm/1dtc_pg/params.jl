@@ -1,10 +1,10 @@
 # parameters (as in RC20)
-Pr = 1e0
+Pr = 2e2
 f = -5.5e-5
 N = 1e-3
 H = 2e3
-# H = 1e3
 θ = 2.5e-3
+#= θ = 6e-2 =#
 
 # z grid
 nẑ = 2^8
@@ -25,8 +25,8 @@ h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
-transportConstraint = false
-# transportConstraint = true
+transportConstraint = true
+#= transportConstraint = false =#
 U₀ = 0
 #= U₀ = @. κ0*cot(θ) =#
 
@@ -55,6 +55,7 @@ log(ofile, @sprintf("H  = %d m", H))
 log(ofile, @sprintf("Pr = %1.1f", Pr))
 log(ofile, @sprintf("f  = %1.1e s-1", f))
 log(ofile, @sprintf("N  = %1.1e s-1", N))
+log(ofile, @sprintf("θ  = %1.1e rad", θ))
 log(ofile, @sprintf("κ0 = %1.1e m2 s-1", κ0))
 log(ofile, @sprintf("κ1 = %1.1e m2 s-1", κ1))
 log(ofile, @sprintf("h  = %d m", h))
