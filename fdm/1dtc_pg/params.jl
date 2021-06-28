@@ -4,7 +4,6 @@ f = -5.5e-5
 N = 1e-3
 H = 2e3
 θ = 2.5e-3
-#= θ = 6e-2 =#
 
 # z grid
 nẑ = 2^8
@@ -14,14 +13,14 @@ z = @. -H*(cos(pi*(0:nẑ-1)/(nẑ-1)) + 1)/2 # chebyshev
 ẑ = z/cos(θ)
 
 # diffusivity
-# bottom enhanced:
-κ0 = 6e-5
-κ1 = 2e-3
-h = 200
-#= # not bottom enhanced: =#
-#= κ0 = 1e-4 =#
-#= κ1 = 0 =#
+#= # bottom enhanced: =#
+#= κ0 = 6e-5 =#
+#= κ1 = 2e-3 =#
 #= h = 200 =#
+# not bottom enhanced:
+κ0 = 1e-4
+κ1 = 0
+h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
@@ -63,6 +62,6 @@ log(ofile, @sprintf("Δt = %.2f days", Δt/secsInDay))
 
 log(ofile, string("Transport Constraint:   ", transportConstraint))
 
-log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*Pr*κ1/abs(f))))
+log(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*Pr*κ[1]/abs(f))))
 log(ofile, @sprintf("          ẑ[2] - ẑ[1] ~ %1.2f m\n", ẑ[2] - ẑ[1]))
 close(ofile)
