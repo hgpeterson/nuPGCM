@@ -16,33 +16,33 @@ include("steady.jl")
 # Setup matrices 
 ################################################################################
 
-#= print("Computing inversion matrix: ") =#
-#= inversionLHS = lu(getInversionLHS()) =#
-#= println("Done.") =#
+print("Computing inversion matrix: ")
+inversionLHS = lu(getInversionLHS())
+println("Done.")
 
 ################################################################################
 # run evolution integrations
 ################################################################################
 
-#= b = evolve(5*tSave) =#
-#= b = evolveBL(5*tSave) =#
+# b = evolve(5*tSave)
+# b = evolveBL(5*tSave)
 
-#= b = steadyState() =#
+# b = steadyState()
 
 ################################################################################
 # plots
 ################################################################################
 
-#= ii = [0, 1, 2, 3, 4, 5] =#
-#= profilePlot(string.("checkpoint", ii, ".h5")) =#
+# ii = [0, 1, 2, 3, 4, 5]
+# profilePlot(string.("checkpoint", ii, ".h5"))
 #= ii = [0, 1, 2, 3, 4, 5, 999] =#
 #= profilePlot(string.("checkpoint", ii, ".h5")) =#
 
 ii = [0, 1, 2, 3, 4, 5]
-path = "/home/hpeter/Documents/ResearchCallies/rapid_adjustment/sims/sim028/tht2.5e-3/"
-#= path = "/home/hpeter/Documents/ResearchCallies/rapid_adjustment/sims/sim028/tht2.5e-2/" =#
-#= path = "/home/hpeter/Documents/ResearchCallies/rapid_adjustment/sims/sim028/tht6e-2/" =#
-#= path = "/home/hpeter/Documents/ResearchCallies/rapid_adjustment/sims/sim028/Pr2e2/" =#
+# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht2.5e-3/"
+# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht2.5e-2/"
+# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht6e-2/"
+path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/Pr2e2/"
 datafilesFull = string.(path, "full/checkpoint", ii, ".h5")
 datafilesBL = string.(path, "bl/checkpoint", ii, ".h5")
 profilePlotBL(datafilesFull, datafilesBL)

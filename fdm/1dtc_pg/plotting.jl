@@ -124,9 +124,9 @@ function profilePlotBL(datafilesFull, datafilesBL)
     colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull, 1)-1))
 
     # limits
-    ax[2, 1].set_ylim([-c.H/1e3, -c.H/1e3 + 0.1])
-    ax[2, 2].set_ylim([-c.H/1e3, -c.H/1e3 + 0.1])
-    ax[2, 3].set_ylim([-c.H/1e3, -c.H/1e3 + 0.1])
+    ax[2, 1].set_ylim([c.ẑ[1]/1e3, c.ẑ[1]/1e3 + 0.1])
+    ax[2, 2].set_ylim([c.ẑ[1]/1e3, c.ẑ[1]/1e3 + 0.1])
+    ax[2, 3].set_ylim([c.ẑ[1]/1e3, c.ẑ[1]/1e3 + 0.1])
     ax[2, 2].set_xlim([-1e-7, c.N^2/1.5])
 
     # plot data
@@ -138,7 +138,7 @@ function profilePlotBL(datafilesFull, datafilesBL)
         # compute full BL solution
         S = cBL.N^2*tan(cBL.θ)^2/cBL.f^2
         bI = cBL.b
-        bB = get_bB(bI, cBL.ẑ, cBL.f, cBL.θ, cBL.Pr, S, cBL.Pr*cBL.κ, cBL.H)
+        bB = get_bB(bI, cBL.ẑ, cBL.f, cBL.θ, cBL.Pr, S, cBL.Pr*cBL.κ)
         bBL = bI + bB
         χI = -differentiate(bI, cBL.ẑ)*sin(cBL.θ)*cBL.Pr.*cBL.κ/(cBL.f^2*cos(cBL.θ)^2)
         χB = cBL.κ[1]/cBL.N^2/sin(cBL.θ)*differentiate(bB, cBL.ẑ)
@@ -238,18 +238,19 @@ function buoyancyFlux(datafile)
 end
 
 """
-    bB = get_bB(bI, ẑ, f, θ, Pr, S, ν, H)
+    bB = get_bB(bI, ẑ, f, θ, Pr, S, ν)
 
 Compute boundary correction to interior solution `bI`.
 """
-function get_bB(bI, ẑ, f, θ, Pr, S, ν, H)
-    z = ẑ .+ H
+function get_bB(bI, ẑ, f, θ, Pr, S, ν)
+    z = ẑ .- ẑ[1]
     q = (f^2*cos(θ)^2*(1 + Pr*S)/4/ν[1]^2)^(1/4)
-    bIz0 = differentiate_pointwise(bI[1:3], z[1:3], 0, 1)
-    bIzz0 = differentiate_pointwise(bI[1:5], z[1:5], 0, 2)
-    #= B = Pr*S*bIzz0/(2*q^2) =#
-    #= A = -Pr*S*bIz0/q - B =#
-    B = 0
-    A = -Pr*S*bIz0/q
+    bIz0 = differentiate_pointwise(bI[1:3], z[1:3], z[1], 1)
+    bIzz0 = differentiate_pointwise(bI[1:5], z[1:5], z[1], 2)
+    B = -Pr*S*bIzz0/(2*q^2)
+    A = -Pr*S*bIz0/q + B
+    # # approximation:
+    # B = 0
+    # A = -Pr*S*bIz0/q
     return @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
 end

@@ -1,9 +1,10 @@
 # parameters (as in RC20)
-Pr = 2e2
+Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 H = 2e3
-θ = 2.5e-3
+# θ = 2.5e-3
+θ = 6e-2
 
 # z grid
 nẑ = 2^8
@@ -13,14 +14,14 @@ z = @. -H*(cos(pi*(0:nẑ-1)/(nẑ-1)) + 1)/2 # chebyshev
 ẑ = z/cos(θ)
 
 # diffusivity
-#= # bottom enhanced: =#
-#= κ0 = 6e-5 =#
-#= κ1 = 2e-3 =#
-#= h = 200 =#
-# not bottom enhanced:
-κ0 = 1e-4
-κ1 = 0
-h = 200
+# bottom enhanced: 
+κ0 = 6e-5 
+κ1 = 2e-3 
+h = 200 
+# # not bottom enhanced:
+# κ0 = 1e-4
+# κ1 = 0
+# h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
