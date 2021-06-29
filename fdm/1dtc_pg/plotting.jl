@@ -254,3 +254,41 @@ function get_bB(bI, ẑ, f, θ, Pr, S, ν)
     # A = -Pr*S*bIz0/q
     return @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
 end
+
+function convergence()
+    S = N^2*tan(θ)^2/f^2
+
+    Prs = 2*(10. .^ (-2:1:2))
+    qs = zeros(size(Prs))
+    errors = zeros(size(Prs))
+
+    for i=1:size(Prs, 1)  
+        println()
+        global Pr = Prs[i]
+        println("$Pr")
+
+        print("Computing inversion matrix: ")
+        global inversionLHS = lu(getInversionLHS())
+        println("Done.")
+
+        b = evolve(5*tSave)
+        bI = evolveBL(5*tSave)
+        bB = get_bB(bI, ẑ, f, θ, Pr, S, Pr*κ)
+        bBL = bI + bB
+
+        qs[i] = (f^2*cos(θ)^2*(1 + Pr*S)/(4*Pr*κ[1]^2))^(1/4)
+        println(qs[i]*h)
+        errors[i] = norm(b - bBL)
+        println()
+    end
+
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"$qh$")
+    ax.set_ylabel(L"$\ell^2$ error")
+    ax.loglog(qs*h, errors, "o-")
+    tight_layout()
+    savefig("errors.png")
+    println("errors.png")
+
+    return qs, errors 
+end
