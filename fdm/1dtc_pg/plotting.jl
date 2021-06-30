@@ -258,7 +258,8 @@ end
 function convergence()
     S = N^2*tan(θ)^2/f^2
 
-    Prs = 2*(10. .^ (-2:1:2))
+    # Prs = 2*(10. .^ (-2:1:2))
+    Prs = 1:1:200
     qs = zeros(size(Prs))
     errors = zeros(size(Prs))
 
@@ -285,7 +286,8 @@ function convergence()
     fig, ax = subplots(1)
     ax.set_xlabel(L"$qh$")
     ax.set_ylabel(L"$\ell^2$ error")
-    ax.loglog(qs*h, errors, "o-")
+    # ax.loglog(qs*h, errors, "o-")
+    ax.loglog(qs*h, errors)
     tight_layout()
     savefig("errors.png")
     println("errors.png")
