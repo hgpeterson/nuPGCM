@@ -17,7 +17,7 @@ axes.linewidth:        0.5
 axes.grid:             False
 axes.labelpad:         4.0
 axes.axisbelow:        False
-axes.xmargin:          0.0
+axes.xmargin:          0.01
 axes.ymargin:          0.0
 axes.spines.right:     False
 axes.spines.top:       False
@@ -29,7 +29,6 @@ xtick.minor.size:      1.5
 xtick.major.width:     0.5
 xtick.minor.width:     0.5
 xtick.direction:       in
-# xtick.direction:       out
 
 ytick.color:           black
 ytick.left:            True
@@ -38,7 +37,6 @@ ytick.minor.size:      1.5
 ytick.major.width:     0.5
 ytick.minor.width:     0.5
 ytick.direction:       in
-# ytick.direction:       out
 
 grid.color:            0.7
 grid.linewidth:        0.5
