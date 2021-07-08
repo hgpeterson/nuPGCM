@@ -163,7 +163,6 @@ function evolve(tFinal)
         # boundary fluxes
         evolutionRHS[bottomBdy] .= -N^2
         evolutionRHS[topBdy] .= 0
-        #= evolutionRHS[topBdy] .= -N^2 =#
 
         # solve
         bVec = evolutionLHS\evolutionRHS
@@ -179,11 +178,11 @@ function evolve(tFinal)
         # log
         println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
 
-        #= # CFL stuff =#
-        #= uξCFL = minimum(abs.(dξ./uξ)) =#
-        #= uσCFL = minimum(abs.(dσ./uσ)) =#
-        #= println(@sprintf("CFL uξ: %.2f days", uξCFL/86400)) =#
-        #= println(@sprintf("CFL uσ: %.2f days", uσCFL/86400)) =#
+         # CFL stuff
+         uξCFL = minimum(abs.(dξ./uξ)) 
+         uσCFL = minimum(abs.(dσ./uσ)) 
+         println(@sprintf("CFL uξ: %.2f days", uξCFL/secsInDay)) 
+         println(@sprintf("CFL uσ: %.2f days", uσCFL/secsInDay)) 
         
         if i % nStepsPlot == 0
             # plot flow
@@ -289,11 +288,11 @@ function evolveBL(tFinal)
         # log
         println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
 
-        #= # CFL stuff =#
-        #= uξCFL = minimum(abs.(dξ./uξ)) =#
-        #= uσCFL = minimum(abs.(dσ./uσ)) =#
-        #= println(@sprintf("CFL uξ: %.2f days", uξCFL/86400)) =#
-        #= println(@sprintf("CFL uσ: %.2f days", uσCFL/86400)) =#
+        # CFL stuff =#
+        uξCFL = minimum(abs.(dξ./uξ))
+        uσCFL = minimum(abs.(dσ./uσ))
+        println(@sprintf("CFL uξ: %.2f days", uξCFL/secsInDay))
+        println(@sprintf("CFL uσ: %.2f days", uσCFL/secsInDay))
         
         if i % nStepsPlot == 0
             # plot flow

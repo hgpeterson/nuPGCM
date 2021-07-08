@@ -7,9 +7,13 @@ N = 1e-3
 ξVariation = true
 
 # topography: sine
-L = 2e6
+# L = 2e6
 H0 = 2e3
 amp =  0.4*H0
+# for S = 1 at ξ = L/4, must have:
+θ₀ = atan(abs(f/N))
+# choose L such that θ = θ₀ at ξ = L/4
+L = 2*π*amp/tan(θ₀)  
 H(x) = H0 - amp*sin(2*π*x/L - π/2)
 Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
 
@@ -54,6 +58,10 @@ sinθ = @. -Hx(ξξ)/sqrt(1 + Hx(ξξ)^2)
 cosθ = @. 1/sqrt(1 + Hx(ξξ)^2) 
 θ = asin.(sinθ[:, 1])
 
+# println(θ[argmin(abs.(ξ .- L/4))])
+# println(N^2/f^2*tan(θ[argmin(abs.(ξ .- L/4))])^2)
+# error()
+
 # diffusivity
 # bottom enhanced:
 κ0 = 6e-5
@@ -68,7 +76,8 @@ h = 200
 # timestepping
 secsInDay = 86400
 secsInYear = 360*86400
-Δt = 10*secsInDay
+# Δt = 10*secsInDay
+Δt = secsInDay
 tPlot = 3*secsInYear
 tSave = 3*secsInYear
 

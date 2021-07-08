@@ -62,7 +62,7 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     ax.set_title(titleString)
     ax.set_xlabel(L"$x$ (km)")
     ax.set_ylabel(L"$z$ (km)")
-    ax.set_xticks([0, 500, 1000, 1500, 2000])
+    # ax.set_xticks([0, 500, 1000, 1500, 2000])
 
     # no spines
     ax.spines["left"].set_visible(false)
