@@ -1,5 +1,5 @@
 # parameters (as in RC20)
-Pr = 2e2
+Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 

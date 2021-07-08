@@ -202,59 +202,112 @@ function evolve(tFinal)
     return b
 end
 
-#= function advTest(nSteps) =#
-#=     # grid points =#
-#=     nPts = nξ*nσ =#
+"""
+    b = evolveBL(tFinal)
 
-#=     # timestep =#
-#=     Δt = 10*86400 =#
-#=     nStepsPlot = 10 =#
+Solve full nonlinear equation for interior `b` based on BL theory for `tFinal` seconds.
+"""
+function evolveBL(tFinal)
+    # grid points
+    nPts = nξ*nσ
 
-#=     # adv speed =#
-#=     #1= uξ = dξ/Δt =1# =#
-#=     uξ = 1e-2 =#
-#=     #1= uσ = -minimum(dσ)/Δt =1# =#
-#=     uσ = -3e-9 =#
+    # timestep
+    nSteps = Int64(tFinal/Δt)
+    nStepsPlot = Int64(tPlot/Δt)
+    nStepsSave = Int64(tSave/Δt)
 
-#=     println("uξCFL: ", dξ/abs(uξ)) =#
-#=     println("uσCFL: ", minimum(dσ)/abs(uσ)) =#
+    # for flattening for matrix mult
+    umap = reshape(1:nPts, nξ, nσ)    
+    bottomBdy = umap[:, 1]
+    topBdy = umap[:, nσ]
 
-#=     # initial condition =#
-#=     t = 0 =#
-#=     b0(ξ, σ) = exp(-(ξ - L/2)^2/(L/8)^2 - (σ + 1/2)^2/(1/4)^2) =#
-#=     bExact(ξ, σ, t) = b0(ξ - uξ*t, σ - uσ*t) =#
-#=     b = @. b0(ξξ, σσ) =#
+    # get matrices and vectors
+    diffMat, diffVec, bdyFluxMat, ξDerivativeMat, σDerivativeMat = getEvolutionMatrices()
 
-#=     # plot initial state of all zeros and no flow =#
-#=     iImg = 0 =#
-#=     ridgePlot2Fields(b, bExact.(ξξ, σσ, 0), "", "") =#
-#=     savefig(@sprintf("b%03d.png", iImg)) =#
-#=     close() =#
+    # left-hand side for evolution equation (save LU decomposition for speed)
+    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
 
-#=     # main loop =#
-#=     for i=1:nSteps =#
-#=         t += Δt =#
-#=         tDays = t/86400 =#
+    # vectors of H, Hx, and σ values for the N^*w term
+    HVec = reshape(H.(x), nPts, 1)
+    HxVec = reshape(Hx.(x), nPts, 1)
+    σσVec = reshape(σσ, nPts, 1)
 
-#=         # function to compute advection RHS =#
-#=         # (note the parentheses here to allow for sparse matrices to work first) =#
-#=         fAdvRHS(b) = -uξ*ξDerivativeTF(b) - uσ*σDerivativeTF(b) =#
+    # initial condition
+    t = 0
+    b = zeros(nξ, nσ)
+    χ, uξ, uη, uσ, U = invertBL(b) ###NEW BL INVERSION
+    iSave = 0
+    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
+    iSave += 1
+    χEkman = getChiEkman(b)
+    
+    # plot initial state of all zeros and no flow
+    iImg = 0
+    plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
+    iImg += 1
 
-#=         # explicit timestep for advection =#
-#=         advRHS = explicitRHS(Δt, b, fAdvRHS) =#
+    # flatten for matrix mult
+    bVec = reshape(b, nPts, 1)
+    uξVec = reshape(uξ, nPts, 1)
+    uσVec = reshape(uσ, nPts, 1)
+        
+    # main loop
+    for i=1:nSteps
+        t += Δt
 
-#=         # solve =#
-#=         b += advRHS =#
+        # implicit euler diffusion
+        diffRHS = bVec + diffVec*Δt
 
-#=         # log =#
-#=         println(@sprintf("t = %.2f days (i = %d)", tDays, i)) =#
-#=         if i % nStepsPlot == 0 =#
-#=             # plot flow =#
-#=             iImg += 1 =#
-#=             ridgePlot2Fields(b, bExact.(ξξ, σσ, t), "", "") =#
-#=             savefig(@sprintf("b%03d.png", iImg)) =#
-#=             close() =#
-#=         end =#
-#=     end =#
-#=     return b =#
-#= end =#
+        if ξVariation
+            # RHS function (note the parentheses here to allow for sparse matrices to work first)
+            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec)
+
+            # explicit timestep for advection
+            advRHS = RK4(t, Δt, bVec, fAdvRHS)
+        else
+            advRHS = -Δt*N^2*uξVec.*HxVec.*σσVec
+        end
+
+        # sum the two
+        evolutionRHS = diffRHS + advRHS
+
+        # boundary fluxes ###NEW FOR BL THEORY
+        evolutionRHS[bottomBdy] = -N^2 .- χ[:, 1]./κ[:, 1].*(ξDerivativeTF(b[:, 1]) .- N^2*Hx.(ξ))
+        evolutionRHS[topBdy] = @. -N^2*χ[:, 1]/κ[:, 1]*Hx(ξ)
+
+        # solve
+        bVec = evolutionLHS\evolutionRHS
+
+        # reshape
+        b = reshape(bVec, nξ, nσ)
+
+        # invert buoyancy for flow
+        χ, uξ, uη, uσ, U = invertBL(b) ###NEW BL INVERSION
+        uξVec = reshape(uξ, nPts, 1)
+        uσVec = reshape(uσ, nPts, 1)
+
+        # log
+        println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
+
+        #= # CFL stuff =#
+        #= uξCFL = minimum(abs.(dξ./uξ)) =#
+        #= uσCFL = minimum(abs.(dσ./uσ)) =#
+        #= println(@sprintf("CFL uξ: %.2f days", uξCFL/86400)) =#
+        #= println(@sprintf("CFL uσ: %.2f days", uσCFL/86400)) =#
+        
+        if i % nStepsPlot == 0
+            # plot flow
+            χEkman = getChiEkman(b)
+            plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
+            iImg += 1
+        end
+        if i % nStepsSave == 0
+            saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
+            iSave += 1
+        end
+    end
+
+    b = reshape(bVec, nξ, nσ)
+
+    return b
+end

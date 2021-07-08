@@ -9,10 +9,10 @@ Compute dξ(`field`) in terrian-following coordinates.
 """
 function ξDerivativeTF(field)
     # allocate
-    fξ = zeros(nξ, nσ)
+    fξ = zeros(size(field))
 
     # dξ(field)
-    for j=1:nσ
+    for j=1:size(fξ, 2)
         # use the fact that ξ is evenly spaced and periodic
         fξ[2:end-1, j] = (field[3:end, j] - field[1:end-2, j])/(2*dξ)
         fξ[1, j] = (field[2, j] - field[nξ, j])/(2*dξ)

@@ -237,6 +237,34 @@ function invert(b)
 end
 
 """
+    χ, uξ, uη, uσ, U = invertBL(b)
+
+Simplified boundary layer theory inversion for interior flow given buoyancy perturbation `b`.
+"""
+function invertBL(b)
+    if ξVariation
+        rhs = xDerivativeTF(b)
+    else
+        rhs = -Hx.(ξξ).*σσ.*σDerivativeTF(b)./H.(ξξ)
+    end
+
+    # interior solution (no need for dzzzz anymore!)
+    χ = @. Pr*κ/f^2*rhs
+
+
+    # pass sol array to postProcess
+    sol = zeros(nξ, nσ + 1)
+    sol[:, 1:nσ] = χ
+
+    # assume U = 0 for now so sol[:, nσ + 1] = 0
+
+    # get interior flow
+    χ, uξ, uη, uσ, U = postProcess(sol)
+
+    return χ, uξ, uη, uσ, U
+end
+
+"""
     χEkman = getChiEkman(b)
 
 Compute Ekman layer solution to problem given buoyancy perturbation b.

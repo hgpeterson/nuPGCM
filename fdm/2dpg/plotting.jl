@@ -3,7 +3,6 @@
 ################################################################################
 
 pl = pyimport("matplotlib.pylab")
-inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 
 """
     ax = ridgePlot(field, b, titleString, cbarLabel; ax, vext, cmap, x, z)
@@ -82,59 +81,30 @@ at ξ = ξ[iξ].
 """
 function profilePlot(datafiles, iξ)
     # init plot
-    fig, ax = subplots(2, 3, figsize=(10, 6.5/1.62))
+    fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
 
-    # insets
-    axins21 = inset_locator.inset_axes(ax[2, 1], width="40%", height="40%")
 
-    ax[1, 1].set_xlabel(L"$B_z$ (s$^{-2}$)")
-    ax[1, 1].set_ylabel(L"$z$ (m)")
-    ax[1, 1].set_title("stratification")
+    ax[1].set_xlabel(string("streamfunction,\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
+    ax[1].set_ylabel(L"$z$ (km)")
 
-    ax[1, 2].set_xlabel(L"$\chi$ (m$^2$ s$^{-1}$)")
-    ax[1, 2].set_ylabel(L"$z$ (m)")
-    ax[1, 2].set_title("streamfunction")
+    ax[2].set_xlabel(string("along-ridge vel.,\n", L"$v$ (m s$^{-1}$)"))
 
-    ax[1, 3].set_xlabel(L"$b_x$ (s$^{-2}$)")
-    ax[1, 3].set_ylabel(L"$z$ (m)")
-    ax[1, 3].set_title("buoyancy gradient")
+    ax[3].set_xlabel(string("stratification,\n", L"$\partial_z B$ (s$^{-2}$)"))
 
-    ax[2, 1].set_xlabel(L"$u$ (m s$^{-1}$)")
-    ax[2, 1].set_ylabel(L"$z$ (m)")
-    ax[2, 1].set_title("cross-ridge velocity")
-
-    ax[2, 2].set_xlabel(L"$v$ (m s$^{-1}$)")
-    ax[2, 2].set_ylabel(L"$z$ (m)")
-    ax[2, 2].set_title("along-ridge velocity")
-
-    ax[2, 3].set_xlabel(L"$w$ (m s$^{-1}$)")
-    ax[2, 3].set_ylabel(L"$z$ (m)")
-    ax[2, 3].set_title("vertical velocity")
-
-    subplots_adjust(bottom=0.1, top=0.9, left=0.1, right=0.9, wspace=0.3, hspace=0.6)
+    subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
 
     for a in ax
-        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
+        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
     end
-    axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
-
-    # zoomed z
-    #= for a in ax =#
-    #=     a.set_ylim([z[iξ, 1], z[iξ, 1] + 2000]) =#
-    #= end =#
-    ax[2, 1].set_ylim([z[iξ, 1], z[iξ, 1] + 200])
 
     # plot data from `datafiles`
     for i=1:size(datafiles, 1)
         # load
         c = loadCheckpoint2DPG(datafiles[i])
         u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
-
-        # gradient
-        bx = xDerivativeTF(c.b)
 
         # stratification
         Bz = c.N^2 .+ zDerivativeTF(c.b)
@@ -144,16 +114,12 @@ function profilePlot(datafiles, iξ)
         color = colors[i, :]
 
         # plot
-        ax[1, 1].plot(Bz[iξ, :],    z[iξ, :], c=color)
-        ax[1, 2].plot(c.χ[iξ, :],   z[iξ, :], c=color)
-        ax[1, 3].plot(bx[iξ, :],    z[iξ, :], c=color)
-        ax[2, 1].plot(u[iξ, :],     z[iξ, :], c=color)
-        ax[2, 2].plot(v[iξ, :],     z[iξ, :], c=color)
-        ax[2, 3].plot(w[iξ, :],     z[iξ, :], c=color, label=label)
-        axins21.plot(u[iξ, :],      z[iξ, :], c=color)
+        ax[1].plot(c.χ[iξ, :], z[iξ, :]/1e3, c=color, label=label)
+        ax[2].plot(v[iξ, :],   z[iξ, :]/1e3, c=color)
+        ax[3].plot(Bz[iξ, :],  z[iξ, :]/1e3, c=color)
     end
 
-    ax[2, 3].legend()
+    ax[1].legend()
 
     savefig("profiles.png")
     println("profiles.png")
@@ -245,27 +211,27 @@ function plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
     u, v, w = transformFromTF(uξ, uη, uσ)
 
     # plots
-    ridgePlot(chi, b, @sprintf("streamfunction at t = %4d days", t/86400), L"$\chi$ (m$^2$ s$^{-1}$)")
+    ridgePlot(chi, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("chi%03d.png", iImg))
     close()
 
-    ridgePlot(chiEkman, b, @sprintf("streamfunction theory at t = %4d days", t/86400), L"$\chi$ (m$^2$ s$^{-1}$)")
+    ridgePlot(chiEkman, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction theory, $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("chiEkman%03d.png", iImg))
     close()
 
-    ridgePlot(b, b, @sprintf("buoyancy perturbation at t = %4d days", t/86400), L"$b$ (m s$^{-2}$)")
+    ridgePlot(b, b, @sprintf("t = %4d years", t/secsInYear), L"buoyancy, $b$ (m s$^{-2}$)")
     savefig(@sprintf("b%03d.png", iImg))
     close()
 
-    ridgePlot(u, b, @sprintf("cross-ridge velocity at t = %4d days", t/86400), L"$u$ (m s$^{-1}$)")
+    ridgePlot(u, b, @sprintf("t = %4d years", t/secsInYear), L"cross-ridge velocity, $u$ (m s$^{-1}$)")
     savefig(@sprintf("u%03d.png", iImg))
     close()
 
-    ridgePlot(v, b, @sprintf("along-ridge velocity at t = %4d days", t/86400), L"$v$ (m s$^{-1}$)")
+    ridgePlot(v, b, @sprintf("t = %4d years", t/secsInYear), L"along-ridge velocity, $v$ (m s$^{-1}$)")
     savefig(@sprintf("v%03d.png", iImg))
     close()
 
-    ridgePlot(w, b, @sprintf("vertical velocity at t = %4d days", t/86400), L"$w$ (m s$^{-1}$)")
+    ridgePlot(w, b, @sprintf("t = %4d years", t/secsInYear), L"vertical velocity, $w$ (m s$^{-1}$)")
     savefig(@sprintf("w%03d.png", iImg))
     close()
 end
