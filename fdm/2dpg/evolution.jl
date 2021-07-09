@@ -50,7 +50,7 @@ function getEvolutionMatrices()
         row = umap[i, 1] 
         # dσ stencil
         fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
-        # flux term: dσ(b)/H = -N^2
+        # flux term: dσ(b)/H = ...
         push!(bdyFluxMat, (row, umap[i, 1], fd_σ[1]/H(ξ[i])))
         push!(bdyFluxMat, (row, umap[i, 2], fd_σ[2]/H(ξ[i])))
         push!(bdyFluxMat, (row, umap[i, 3], fd_σ[3]/H(ξ[i])))
@@ -59,7 +59,7 @@ function getEvolutionMatrices()
         row = umap[i, nσ] 
         # dσ stencil
         fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
-        # flux term: dσ(b)/H = -N^2
+        # flux term: dσ(b)/H = ...
         push!(bdyFluxMat, (row, umap[i, nσ-2], fd_σ[1]/H(ξ[i])))
         push!(bdyFluxMat, (row, umap[i, nσ-1], fd_σ[2]/H(ξ[i])))
         push!(bdyFluxMat, (row, umap[i, nσ],   fd_σ[3]/H(ξ[i])))
@@ -271,8 +271,8 @@ function evolveBL(tFinal)
         evolutionRHS = diffRHS + advRHS
 
         # boundary fluxes ###NEW FOR BL THEORY
-        evolutionRHS[bottomBdy] = -N^2 .- χ[:, 1]./κ[:, 1].*(ξDerivativeTF(b[:, 1]) .- N^2*Hx.(ξ))
-        evolutionRHS[topBdy] = @. -N^2*χ[:, 1]/κ[:, 1]*Hx(ξ)
+        evolutionRHS[bottomBdy] = -N^2 .+ χ[:, 1]./κ[:, 1].*(ξDerivativeTF(b[:, 1]) .- N^2*Hx.(ξ))
+        evolutionRHS[topBdy] = χ[:, nσ]./κ[:, nσ].*ξDerivativeTF(b[:, nσ])
 
         # solve
         bVec = evolutionLHS\evolutionRHS
@@ -288,7 +288,7 @@ function evolveBL(tFinal)
         # log
         println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
 
-        # CFL stuff =#
+        # CFL stuff
         uξCFL = minimum(abs.(dξ./uξ))
         uσCFL = minimum(abs.(dσ./uσ))
         println(@sprintf("CFL uξ: %.2f days", uξCFL/secsInDay))

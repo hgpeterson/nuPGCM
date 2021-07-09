@@ -114,15 +114,55 @@ function profilePlot(datafiles, iξ)
         color = colors[i, :]
 
         # plot
-        ax[1].plot(c.χ[iξ, :], z[iξ, :]/1e3, c=color, label=label)
-        ax[2].plot(v[iξ, :],   z[iξ, :]/1e3, c=color)
-        ax[3].plot(Bz[iξ, :],  z[iξ, :]/1e3, c=color)
+        ax[1].plot(c.χ[iξ, :], c.z[iξ, :]/1e3, c=color, label=label)
+        ax[2].plot(v[iξ, :],   c.z[iξ, :]/1e3, c=color)
+        ax[3].plot(Bz[iξ, :],  c.z[iξ, :]/1e3, c=color)
     end
 
     ax[1].legend()
 
     savefig("profiles.png")
     println("profiles.png")
+end
+
+"""
+    profilePlot(t, χ, uξ, uη, uσ, b, iξ)
+
+Plot profiles of χ, v, Bz from model at ξ = ξ[iξ].
+"""
+function profilePlot(t, χ, uξ, uη, uσ, b, iξ)
+    # init plot
+    fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
+
+
+    ax[1].set_xlabel(string("streamfunction,\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
+    ax[1].set_ylabel(L"$z$ (km)")
+
+    ax[2].set_xlabel(string("along-ridge vel.,\n", L"$v$ (m s$^{-1}$)"))
+
+    ax[3].set_xlabel(string("stratification,\n", L"$\partial_z B$ (s$^{-2}$)"))
+
+    subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
+
+    for a in ax
+        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+    end
+
+    # plot
+    u, v, w = transformFromTF(uξ, uη, uσ)
+
+    # stratification
+    Bz = N^2 .+ zDerivativeTF(b)
+
+    # colors and labels
+    label = string(Int64(round(t/secsInYear)), " years")
+
+    # plot
+    ax[1].plot(χ[iξ, :],   z[iξ, :]/1e3, "k", label=label)
+    ax[2].plot(v[iξ, :],   z[iξ, :]/1e3, "k")
+    ax[3].plot(Bz[iξ, :],  z[iξ, :]/1e3, "k")
+
+    ax[1].legend()
 end
 
 #= """ =#
@@ -139,7 +179,7 @@ end
 
 #=     for i=1:size(datafiles, 1) =#
 #=         # load =#
-#=         b, chi, uξ, uη, uσ, U, t, L, H0, Pr, f, N, ξVariation, κ = loadCheckpointTF(datafiles[i]) =#
+#=         b, χ, uξ, uη, uσ, U, t, L, H0, Pr, f, N, ξVariation, κ = loadCheckpointTF(datafiles[i]) =#
     
 #=         adv1 = -uξ.*ξDerivativeTF(b) =#
 #=         adv2 = -uσ.*σDerivativeTF(b) =#
@@ -202,20 +242,20 @@ end
 #= end =#
 
 """
-    plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
+    plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
 
 Plot the buoyancy and velocity state of the model at time `t` using label number `iImg`.
 """
-function plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
+function plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
     # convert to physical coordinates 
     u, v, w = transformFromTF(uξ, uη, uσ)
 
     # plots
-    ridgePlot(chi, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
+    ridgePlot(χ, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("chi%03d.png", iImg))
     close()
 
-    ridgePlot(chiEkman, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction theory, $\chi$ (m$^2$ s$^{-1}$)")
+    ridgePlot(χEkman, b, @sprintf("t = %4d years", t/secsInYear), L"streamfunction theory, $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("chiEkman%03d.png", iImg))
     close()
 
@@ -233,5 +273,9 @@ function plotCurrentState(t, chi, chiEkman, uξ, uη, uσ, b, iImg)
 
     ridgePlot(w, b, @sprintf("t = %4d years", t/secsInYear), L"vertical velocity, $w$ (m s$^{-1}$)")
     savefig(@sprintf("w%03d.png", iImg))
+    close()
+
+    profilePlot(t, χ, uξ, uη, uσ, b, argmin(abs.(ξ .- L/4)))
+    savefig(@sprintf("profiles%03d.png", iImg))
     close()
 end

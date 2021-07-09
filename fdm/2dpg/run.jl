@@ -26,12 +26,22 @@ include("evolution.jl")
 # println("Done.") 
 # b = evolve(5*tSave) 
 
-b = evolveBL(5*tSave)
+#= b = evolveBL(15*secsInYear) =#
 
 ################################################################################
 # plots
 ################################################################################
 
-path = ""
-dfiles = string.(path, "checkpoint", 1:5, ".h5")
-profilePlot(dfiles, argmin(abs.(ξ .- L/4)))
+#= path = "" =#
+#= dfiles = string.(path, "checkpoint", 1:5, ".h5") =#
+#= profilePlot(dfiles, argmin(abs.(ξ .- L/4))) =#
+
+
+#= c = loadCheckpoint2DPG("checkpoint30.h5") =#
+#= ridgePlot(c.χ, c.b, "t = 30 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
+#= savefig("chi030.png") =#
+#= close() =#
+#= c = loadCheckpoint2DPG("checkpoint31.h5") =#
+#= ridgePlot(c.χ, c.b, "t = 31 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
+#= savefig("chi031.png") =#
+#= close() =#

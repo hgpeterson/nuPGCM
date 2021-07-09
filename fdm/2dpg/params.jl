@@ -31,17 +31,20 @@ Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
 
 # number of grid points
 nξ = 2^8 + 1 
+#= nσ = 2^8 =#
 nσ = 2^8
 
 # domain in terrain-following (ξ, σ) space
 dξ = dx = L/nξ
 ξ = 0:dξ:(L - dξ)
-σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2 # chebyshev 
+#= σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2 # chebyshev =# 
+dσ = 1/(nσ - 1)
+σ = @. -1:dσ:0
 ξξ = repeat(ξ, 1, nσ)
 σσ = repeat(σ', nξ, 1)
-dσ = zeros(nξ, nσ)
-dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1]
-dσ[:, end] = dσ[:, end-1]
+#= dσ = zeros(nξ, nσ) =#
+#= dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1] =#
+#= dσ[:, end] = dσ[:, end-1] =#
 
 #= plot(ξ, -H.(ξ)) =# 
 #= ylim([-H0, 0]) =#
@@ -79,8 +82,8 @@ secsInYear = 360*86400
 # Δt = 10*secsInDay
 Δt = secsInDay
 tPlot = 3*secsInYear
-tSave = 3*secsInYear
-
+#= tSave = 3*secsInYear =#
+tSave = Δt
 """
     log(ofile, text)
 
