@@ -528,6 +528,123 @@ function compareChapman02Fig5a(folder)
     println("compareChapman02Fig5a.png")
 end
 
+"""
+    spinupProfilesBL(datafilesFull, datafilesBL)
+
+Compare profiles of b from HDF5 snapshot files of buoyancy in the `datafilesFull` and `datafilesBL` lists.
+"""
+function spinupProfilesBL(datafilesFull, datafilesBL)
+    # init plot
+    fig, ax = subplots(2, 3, figsize=(6.5, 4))
+
+    ax[1, 1].set_xlabel(L"$b$ (m s$^{-2}$)")
+    ax[1, 1].set_ylabel(L"$z$ (km)")
+
+    ax[1, 2].set_xlabel(L"$\partial_{\hat z} B$ (s$^{-2}$)")
+
+    ax[1, 3].set_xlabel(L"$\chi$ (m$^2$ s$^{-1}$)")
+
+    ax[2, 1].set_xlabel(L"BL $b$ (m s$^{-2}$)")
+    ax[2, 1].set_ylabel(L"$z$ (km)")
+
+    ax[2, 2].set_xlabel(L"BL $\partial_{\hat z} B$ (s$^{-2}$)")
+
+    ax[2, 3].set_xlabel(L"BL $\chi$ (m$^2$ s$^{-1}$)")
+
+    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+
+    c = loadCheckpoint1DTCPG(datafilesBL[1])
+    ax[1, 1].annotate(string(L"\sigma =", @sprintf("%1.2e", c.Pr)),                   (0.5, 0.6), xycoords="axes fraction")
+    ax[1, 1].annotate(string(L"S =",      @sprintf("%1.2e", c.N^2*tan(c.θ)^2/c.f^2)), (0.5, 0.5), xycoords="axes fraction")
+
+    c = loadCheckpoint2DPG(datafilesFull[1])
+    iξ = argmin(abs.(c.x[:, 1] .- c.L/4))
+
+    for a in ax
+        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+    end
+    for col=2:3
+        ax[1, col].set_yticklabels([])
+        ax[2, col].set_yticklabels([])
+    end
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull, 1)-1))
+
+    # limits
+    ax[2, 1].set_ylim([0, 0.1])
+    ax[2, 2].set_ylim([0, 0.1])
+    ax[2, 3].set_ylim([0, 0.1])
+    ax[2, 2].set_xlim([-1e-7, c.N^2/1.5])
+
+    # plot data
+    for i=1:size(datafilesFull, 1)
+        # load
+        c = loadCheckpoint2DPG(datafilesFull[i])
+        cBL = loadCheckpoint1DTCPG(datafilesBL[i])
+
+        # compute full BL solution
+        S = cBL.N^2*tan(cBL.θ)^2/cBL.f^2
+        bI = cBL.b
+        bB = get_bB(bI, cBL.ẑ, cBL.f, cBL.θ, cBL.Pr, S, cBL.Pr*cBL.κ)
+        bBL = bI + bB
+        χI = -differentiate(bI, cBL.ẑ)*sin(cBL.θ)*cBL.Pr.*cBL.κ/(cBL.f^2*cos(cBL.θ)^2)
+        χB = cBL.κ[1]/cBL.N^2/sin(cBL.θ)*differentiate(bB, cBL.ẑ)
+        χBL = χI + χB
+
+        # stratification
+        Bz = c.N^2 .+ differentiate(c.b[iξ, :], c.z[iξ, :])
+        BzBL = cBL.N^2*cos(cBL.θ) .+ differentiate(bBL, cBL.ẑ*cos(cBL.θ))
+
+        # colors and labels
+        label = string(Int64(round(c.t/86400/360)), " years")
+        if i==1
+            color = "k"
+        else
+            color = colors[i-1, :]
+        end
+
+        # plot
+        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[2, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[1, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[2, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[1, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[2, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+    end
+
+    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = ["BL theory"]
+    ax[1, 2].legend(custom_handles, custom_labels)
+    ax[1, 3].legend()
+    
+    savefig("profilesSpinUpBL.png")
+    println("profilesSpinUpBL.png")
+end
+"""
+    bB = get_bB(bI, ẑ, f, θ, Pr, S, ν)
+
+Compute boundary correction to interior solution `bI`.
+"""
+function get_bB(bI, ẑ, f, θ, Pr, S, ν)
+    z = ẑ .- ẑ[1]
+    q = (f^2*cos(θ)^2*(1 + Pr*S)/4/ν[1]^2)^(1/4)
+    bIz0 = differentiate_pointwise(bI[1:3], z[1:3], z[1], 1)
+    bIzz0 = differentiate_pointwise(bI[1:5], z[1:5], z[1], 2)
+    B = -Pr*S*bIzz0/(2*q^2)
+    A = -Pr*S*bIz0/q + B
+    # # approximation:
+    # B = 0
+    # A = -Pr*S*bIz0/q
+    return @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
+end
+
 path = "../../sims/"
 #= sketchRidge() =#
 #= sketchSlope() =#
@@ -535,7 +652,7 @@ path = "../../sims/"
 # chi_v_ridge(string(path, "sim026/"))
 # spinupProfiles(string(path, "sim026/"); σ=1)
 # spinupProfiles(string(path, "sim026/"); σ=200)
-spinupProfilesRayleigh(string(path, "sim027/const/"))
+#= spinupProfilesRayleigh(string(path, "sim027/const/")) =#
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
@@ -543,3 +660,5 @@ spinupProfilesRayleigh(string(path, "sim027/const/"))
 #= asymmetricRidge(string(path, "sim020/")) =#
 # PGvsNoPG(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
+ii = 0:5
+spinupProfilesBL(string.(path, "sim029/tht5.5e-2/full/checkpoint", ii, ".h5"), string.(path, "sim028/tht5.5e-2/bl/checkpoint", ii, ".h5"))
