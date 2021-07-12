@@ -251,7 +251,6 @@ function invertBL(b)
     # interior solution (no need for dzzzz anymore!)
     χ = @. Pr*κ/f^2*rhs
 
-
     # pass sol array to postProcess
     sol = zeros(nξ, nσ + 1)
     sol[:, 1:nσ] = χ

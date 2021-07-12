@@ -51,6 +51,7 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     # isopycnal contours
     nLevels = 20
     lowerLevel = N^2*minimum(z)
+    # lowerLevel = 1e-3^2*minimum(z)
     upperLevel = 0
     levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
     ax.contour(xx, zz, B, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)

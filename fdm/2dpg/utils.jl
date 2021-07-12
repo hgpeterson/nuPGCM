@@ -31,9 +31,16 @@ function σDerivativeTF(field)
     # allocate
     fσ = zeros(nξ, nσ)
 
+    if typeof(dσ) == Float64
+        # use uniform grid spacing to speed up `differentiate`
+        arg = dσ
+    else
+        arg = σ
+    end
+
     # dσ(field)
     for i=1:nξ
-        fσ[i, :] .+= differentiate(field[i, :], σ)
+        fσ[i, :] = differentiate(field[i, :], arg)
     end
 
     return fσ

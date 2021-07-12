@@ -92,11 +92,18 @@ function getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy)
 end
 
 """
-    b = evolve(tFinal)
+    b = evolve(tFinal; bl=false)
 
 Solve full nonlinear equation for `b` for `tFinal` seconds.
+If `bl` set to `true`, use boundary layer theory inversion and boundary conditions. 
 """
-function evolve(tFinal)
+function evolve(tFinal; bl=false)
+    if bl
+        inversion = invertBL
+    else
+        inversion = invert
+    end
+
     # grid points
     nPts = nξ*nσ
 
@@ -124,16 +131,16 @@ function evolve(tFinal)
     # initial condition
     t = 0
     b = zeros(nξ, nσ)
-    χ, uξ, uη, uσ, U = invert(b)
+    χ, uξ, uη, uσ, U = inversion(b)
     iSave = 0
     saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
     iSave += 1
     χEkman = getChiEkman(b)
     
-    # plot initial state of all zeros and no flow
+    # plot initial state
     iImg = 0
-    plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
-    iImg += 1
+    # plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
+    # iImg += 1
 
     # flatten for matrix mult
     bVec = reshape(b, nPts, 1)
@@ -149,7 +156,20 @@ function evolve(tFinal)
 
         if ξVariation
             # RHS function (note the parentheses here to allow for sparse matrices to work first)
-            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec)
+
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
+
+            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # breaks
+
+            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # runs
+            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec)) # breaks
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
+            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # breaks
 
             # explicit timestep for advection
             advRHS = RK4(t, Δt, bVec, fAdvRHS)
@@ -161,8 +181,13 @@ function evolve(tFinal)
         evolutionRHS = diffRHS + advRHS
 
         # boundary fluxes
-        evolutionRHS[bottomBdy] .= -N^2
-        evolutionRHS[topBdy] .= 0
+        if bl
+            evolutionRHS[bottomBdy] = -N^2 .+ χ[:, 1]./κ[:, 1].*(ξDerivativeTF(b[:, 1]) .- N^2*Hx.(ξ))
+            evolutionRHS[topBdy] = χ[:, nσ]./κ[:, nσ].*ξDerivativeTF(b[:, nσ])
+        else
+            evolutionRHS[bottomBdy] .= -N^2
+            evolutionRHS[topBdy] .= 0
+        end
 
         # solve
         bVec = evolutionLHS\evolutionRHS
@@ -171,7 +196,7 @@ function evolve(tFinal)
         b = reshape(bVec, nξ, nσ)
 
         # invert buoyancy for flow
-        χ, uξ, uη, uσ, U = invert(b)
+        χ, uξ, uη, uσ, U = inversion(b)
         uξVec = reshape(uξ, nPts, 1)
         uσVec = reshape(uσ, nPts, 1)
 
@@ -181,118 +206,7 @@ function evolve(tFinal)
          # CFL stuff
          uξCFL = minimum(abs.(dξ./uξ)) 
          uσCFL = minimum(abs.(dσ./uσ)) 
-         println(@sprintf("CFL uξ: %.2f days", uξCFL/secsInDay)) 
-         println(@sprintf("CFL uσ: %.2f days", uσCFL/secsInDay)) 
-        
-        if i % nStepsPlot == 0
-            # plot flow
-            χEkman = getChiEkman(b)
-            plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
-            iImg += 1
-        end
-        if i % nStepsSave == 0
-            saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
-            iSave += 1
-        end
-    end
-
-    b = reshape(bVec, nξ, nσ)
-
-    return b
-end
-
-"""
-    b = evolveBL(tFinal)
-
-Solve full nonlinear equation for interior `b` based on BL theory for `tFinal` seconds.
-"""
-function evolveBL(tFinal)
-    # grid points
-    nPts = nξ*nσ
-
-    # timestep
-    nSteps = Int64(tFinal/Δt)
-    nStepsPlot = Int64(tPlot/Δt)
-    nStepsSave = Int64(tSave/Δt)
-
-    # for flattening for matrix mult
-    umap = reshape(1:nPts, nξ, nσ)    
-    bottomBdy = umap[:, 1]
-    topBdy = umap[:, nσ]
-
-    # get matrices and vectors
-    diffMat, diffVec, bdyFluxMat, ξDerivativeMat, σDerivativeMat = getEvolutionMatrices()
-
-    # left-hand side for evolution equation (save LU decomposition for speed)
-    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
-
-    # vectors of H, Hx, and σ values for the N^*w term
-    HVec = reshape(H.(x), nPts, 1)
-    HxVec = reshape(Hx.(x), nPts, 1)
-    σσVec = reshape(σσ, nPts, 1)
-
-    # initial condition
-    t = 0
-    b = zeros(nξ, nσ)
-    χ, uξ, uη, uσ, U = invertBL(b) ###NEW BL INVERSION
-    iSave = 0
-    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, iSave)
-    iSave += 1
-    χEkman = getChiEkman(b)
-    
-    # plot initial state of all zeros and no flow
-    iImg = 0
-    plotCurrentState(t, χ, χEkman, uξ, uη, uσ, b, iImg)
-    iImg += 1
-
-    # flatten for matrix mult
-    bVec = reshape(b, nPts, 1)
-    uξVec = reshape(uξ, nPts, 1)
-    uσVec = reshape(uσ, nPts, 1)
-        
-    # main loop
-    for i=1:nSteps
-        t += Δt
-
-        # implicit euler diffusion
-        diffRHS = bVec + diffVec*Δt
-
-        if ξVariation
-            # RHS function (note the parentheses here to allow for sparse matrices to work first)
-            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec)
-
-            # explicit timestep for advection
-            advRHS = RK4(t, Δt, bVec, fAdvRHS)
-        else
-            advRHS = -Δt*N^2*uξVec.*HxVec.*σσVec
-        end
-
-        # sum the two
-        evolutionRHS = diffRHS + advRHS
-
-        # boundary fluxes ###NEW FOR BL THEORY
-        evolutionRHS[bottomBdy] = -N^2 .+ χ[:, 1]./κ[:, 1].*(ξDerivativeTF(b[:, 1]) .- N^2*Hx.(ξ))
-        evolutionRHS[topBdy] = χ[:, nσ]./κ[:, nσ].*ξDerivativeTF(b[:, nσ])
-
-        # solve
-        bVec = evolutionLHS\evolutionRHS
-
-        # reshape
-        b = reshape(bVec, nξ, nσ)
-
-        # invert buoyancy for flow
-        χ, uξ, uη, uσ, U = invertBL(b) ###NEW BL INVERSION
-        uξVec = reshape(uξ, nPts, 1)
-        uσVec = reshape(uσ, nPts, 1)
-
-        # log
-        println(@sprintf("t = %.2f years (i = %d) (U = %.2e m2 s-1)", t/secsInYear, i, U))
-
-        # CFL stuff
-        uξCFL = minimum(abs.(dξ./uξ))
-        uσCFL = minimum(abs.(dσ./uσ))
-        println(@sprintf("CFL uξ: %.2f days", uξCFL/secsInDay))
-        println(@sprintf("CFL uσ: %.2f days", uσCFL/secsInDay))
+         println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
         
         if i % nStepsPlot == 0
             # plot flow

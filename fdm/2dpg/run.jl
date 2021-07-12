@@ -26,7 +26,7 @@ include("evolution.jl")
 # println("Done.") 
 # b = evolve(5*tSave) 
 
-#= b = evolveBL(15*secsInYear) =#
+b = evolve(15*secsInYear; bl=true) 
 
 ################################################################################
 # plots
