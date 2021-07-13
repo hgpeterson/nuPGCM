@@ -97,7 +97,7 @@ function spinupProfiles(folder; σ=1)
     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
     fig.text(0.05, 0.98, string("Canonical 1D (Pr = ", σ, "):"), ha="left", va="top")
-    fig.text(0.05, 0.52, string(L"2D $\nu$PGCM (Pr = ", σ, "):"), ha="left", va="top")
+    fig.text(0.05, 0.52, string("Transport-Constrained 1D (Pr = ", σ, "):"), ha="left", va="top")
 
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
@@ -111,24 +111,20 @@ function spinupProfiles(folder; σ=1)
 
     # fixed x
     if σ == 1
-        ax[1, 1].set_xlim([0, 57])
+        ax[1, 1].set_xlim([-5, 57])
         ax[2, 1].set_xlim([-0.1, 1.65])
         ax[1, 2].set_xlim([-2.7, 1.4])
         ax[2, 2].set_xlim([-2.7, 1.4])
         ax[1, 3].set_xlim([0, 1.3])
         ax[2, 3].set_xlim([0, 1.3])
     elseif σ == 200
-        ax[1, 1].set_xlim([0, 190])
+        ax[1, 1].set_xlim([-10, 190])
         ax[2, 1].set_xlim([-5, 95])
         ax[1, 2].set_xlim([-2.0, 0.3])
         ax[2, 2].set_xlim([-2.0, 0.3])
         ax[1, 3].set_xlim([0, 1.3])
         ax[2, 3].set_xlim([0, 1.3])
     end
-
-    # fixed y
-    ax[1, 1].set_ylim([-2, 0])
-    ax[2, 1].set_ylim([-2, 0])
 
     # plot data from folder
     for i=ii
@@ -145,32 +141,39 @@ function spinupProfiles(folder; σ=1)
         ix = argmin(abs.(c.x[:, 1] .- c.L/4))
         v = c.uη
         Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
-        ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c=colors[i, :], label=label)
-        ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c=colors[i, :], label=label)
-        ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c=colors[i, :], label=label)
+        ax[1, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, "k:")
+        ax[1, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, "k:")
+        ax[1, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, "k:")
 
         # transport-constrained 1D solution
         c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/tc/Pr", σ, "/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
-        ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
-        ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
+        ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+
+        # 2D PG solution
+        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
+        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
+        v = c.uη
+        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
+        ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, "k:")
+        ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, "k:")
+        ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, "k:")
     end
 
     # steady state canonical
     c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/Pr", σ, "/checkpoint999.h5"))
     Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-    ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
-    ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
-    ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
+    ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k")
+    ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k")
+    ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k")
 
-    ax[2, 3].legend(loc=(0.12, 0.3))
-    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["transport-\nconstrained 1D"]
-    ax[2, 1].legend(custom_handles, custom_labels, loc=(0.3, 0.4))
-    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1")]
-    custom_labels = ["steady state"]
-    ax[1, 3].legend(custom_handles, custom_labels, loc=(0.1, 0.6))
+    ax[2, 3].legend(loc=(0.05, 0.3))
+    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
+                      lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = ["steady state", L"2D $\nu$PGCM"]
+    ax[1, 3].legend(custom_handles, custom_labels, loc=(0.05, 0.72))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -744,8 +747,8 @@ path = "../../sims/"
 #= sketchSlope() =#
 #= chiForSketch(string(path, "sim023/")) =#
 # chi_v_ridge(string(path, "sim026/"))
-# spinupProfiles(string(path, "sim026/"); σ=1)
-# spinupProfiles(string(path, "sim026/"); σ=200)
+spinupProfiles(string(path, "sim026/"); σ=1)
+spinupProfiles(string(path, "sim026/"); σ=200)
 #= spinupProfilesRayleigh(string(path, "sim027/const/")) =#
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
@@ -755,13 +758,13 @@ path = "../../sims/"
 # PGvsNoPG(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
 
-ii = 0:5
-# θ = "5.5e-2"
-# datafilesBL1D =   string.(path, "sim028/tht", θ, "/bl/checkpoint",   ii, ".h5")
+# ii = 0:5
+# # θ = "5.5e-2"
+# # datafilesBL1D =   string.(path, "sim028/tht", θ, "/bl/checkpoint",   ii, ".h5")
+# # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
+# # spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
+# # θ = "2.7e-2"
+# θ = "3.9e-2"
+# datafilesBL2D =   string.(path, "sim029/tht", θ, "/bl/checkpoint",   ii, ".h5")
 # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
-# spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
-# θ = "2.7e-2"
-θ = "3.9e-2"
-datafilesBL2D =   string.(path, "sim029/tht", θ, "/bl/checkpoint",   ii, ".h5")
-datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
-spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
+# spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
