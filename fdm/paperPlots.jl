@@ -498,42 +498,42 @@ function PGvsNoPG(folder)
 
 end
 
-function compareChapman02Fig5a(folder)
-    # read data
-    file = h5open(string(folder, "vs.h5"), "r")
-    vs = read(file, "vs")
-    ṽ_0 = read(file, "ṽ_0")
-    τ_Ss = read(file, "τ_Ss")
-    τ_As = read(file, "τ_As")
-    close(file)
+# function compareChapman02Fig5a(folder)
+#     # read data
+#     file = h5open(string(folder, "vs.h5"), "r")
+#     vs = read(file, "vs")
+#     ṽ_0 = read(file, "ṽ_0")
+#     τ_Ss = read(file, "τ_Ss")
+#     τ_As = read(file, "τ_As")
+#     close(file)
 
-    # plot 
-    fig, ax = subplots(1)
-    ax.set_xlabel(L"ratio, $\tilde{\tau}_S/\tilde{\tau}_A$")
-    ax.set_ylabel(L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$")
-    maxRatio = 2
-    ax.set_xlim([0, maxRatio])
-    ax.set_ylim([0, 1])
-    for i=1:size(τ_Ss, 1)
-        for j=1:size(τ_As, 1)
-            ratio = τ_Ss[i]/τ_As[j]
-            if ratio < maxRatio
-                ax.plot(τ_Ss[i]/τ_As[j], vs[i, j]/ṽ_0, "k.")
-            end
-        end
-    end
+#     # plot 
+#     fig, ax = subplots(1)
+#     ax.set_xlabel(L"ratio, $\tilde{\tau}_S/\tilde{\tau}_A$")
+#     ax.set_ylabel(L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$")
+#     maxRatio = 2
+#     ax.set_xlim([0, maxRatio])
+#     ax.set_ylim([0, 1])
+#     for i=1:size(τ_Ss, 1)
+#         for j=1:size(τ_As, 1)
+#             ratio = τ_Ss[i]/τ_As[j]
+#             if ratio < maxRatio
+#                 ax.plot(τ_Ss[i]/τ_As[j], vs[i, j]/ṽ_0, "k.")
+#             end
+#         end
+#     end
 
-    tight_layout()
-    savefig("compareChapman02Fig5a.png")
-    println("compareChapman02Fig5a.png")
-end
+#     tight_layout()
+#     savefig("compareChapman02Fig5a.png")
+#     println("compareChapman02Fig5a.png")
+# end
 
 """
-    spinupProfilesBL(datafilesFull, datafilesBL)
+    spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
 
-Compare profiles of b from HDF5 snapshot files of buoyancy in the `datafilesFull` and `datafilesBL` lists.
+Compare profiles of b from HDF5 snapshot files of buoyancy in the `datafilesFull2D` and `datafilesBL1D` lists.
 """
-function spinupProfilesBL(datafilesFull, datafilesBL)
+function spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 4))
 
@@ -553,11 +553,11 @@ function spinupProfilesBL(datafilesFull, datafilesBL)
 
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
 
-    c = loadCheckpoint1DTCPG(datafilesBL[1])
-    ax[1, 1].annotate(string(L"\sigma =", @sprintf("%1.2e", c.Pr)),                   (0.5, 0.6), xycoords="axes fraction")
-    ax[1, 1].annotate(string(L"S =",      @sprintf("%1.2e", c.N^2*tan(c.θ)^2/c.f^2)), (0.5, 0.5), xycoords="axes fraction")
+    c = loadCheckpoint1DTCPG(datafilesBL1D[1])
+    ax[1, 1].annotate(@sprintf("Pr = %1.2e", c.Pr),                              (0.5, 0.6), xycoords="axes fraction")
+    ax[1, 1].annotate(string(L"S =", @sprintf("%1.2e", c.N^2*tan(c.θ)^2/c.f^2)), (0.5, 0.5), xycoords="axes fraction")
 
-    c = loadCheckpoint2DPG(datafilesFull[1])
+    c = loadCheckpoint2DPG(datafilesFull2D[1])
     iξ = argmin(abs.(c.x[:, 1] .- c.L/4))
 
     for a in ax
@@ -569,7 +569,7 @@ function spinupProfilesBL(datafilesFull, datafilesBL)
     end
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull, 1)-1))
+    colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull2D, 1)-1))
 
     # limits
     ax[2, 1].set_ylim([0, 0.1])
@@ -578,10 +578,10 @@ function spinupProfilesBL(datafilesFull, datafilesBL)
     ax[2, 2].set_xlim([-1e-7, c.N^2/1.5])
 
     # plot data
-    for i=1:size(datafilesFull, 1)
+    for i=1:size(datafilesFull2D, 1)
         # load
-        c = loadCheckpoint2DPG(datafilesFull[i])
-        cBL = loadCheckpoint1DTCPG(datafilesBL[i])
+        c = loadCheckpoint2DPG(datafilesFull2D[i])
+        cBL = loadCheckpoint1DTCPG(datafilesBL1D[i])
 
         # compute full BL solution
         S = cBL.N^2*tan(cBL.θ)^2/cBL.f^2
@@ -645,7 +645,101 @@ function get_bB(bI, ẑ, f, θ, Pr, S, ν)
     return @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
 end
 
+"""
+    spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
+
+Compare profiles of b from HDF5 snapshot files of buoyancy in the `datafilesFull2D` and `datafilesBL2D` lists.
+"""
+function spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
+    # init plot
+    fig, ax = subplots(2, 3, figsize=(6.5, 4))
+
+    ax[1, 1].set_xlabel(L"$b$ (m s$^{-2}$)")
+    ax[1, 1].set_ylabel(L"$z$ (km)")
+
+    ax[1, 2].set_xlabel(L"$\partial_{\hat z} B$ (s$^{-2}$)")
+
+    ax[1, 3].set_xlabel(L"$\chi$ (m$^2$ s$^{-1}$)")
+
+    ax[2, 1].set_xlabel(L"BL $b$ (m s$^{-2}$)")
+    ax[2, 1].set_ylabel(L"$z$ (km)")
+
+    ax[2, 2].set_xlabel(L"BL $\partial_{\hat z} B$ (s$^{-2}$)")
+
+    ax[2, 3].set_xlabel(L"BL $\chi$ (m$^2$ s$^{-1}$)")
+
+    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+
+    c = loadCheckpoint2DPG(datafilesFull2D[1])
+    iξ = argmin(abs.(c.x[:, 1] .- c.L/4))
+    tanθ = 2*pi*0.4*c.H0/c.L
+    ax[1, 1].annotate(@sprintf("Pr = %1.2e", c.Pr),                          (0.5, 0.6), xycoords="axes fraction")
+    ax[1, 1].annotate(string(L"S =", @sprintf("%1.2e", c.N^2*tanθ^2/c.f^2)), (0.5, 0.5), xycoords="axes fraction")
+
+    for a in ax
+        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+    end
+    for col=2:3
+        ax[1, col].set_yticklabels([])
+        ax[2, col].set_yticklabels([])
+    end
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull2D, 1)-1))
+
+    # limits
+    ax[2, 1].set_ylim([0, 0.1])
+    ax[2, 2].set_ylim([0, 0.1])
+    ax[2, 3].set_ylim([0, 0.1])
+    ax[2, 2].set_xlim([0, 4e-7])
+
+    # plot data
+    for i=1:size(datafilesFull2D, 1)
+        # load
+        c = loadCheckpoint2DPG(datafilesFull2D[i])
+        cBL = loadCheckpoint2DPG(datafilesBL2D[i])
+
+        # todo: compute full BL solution
+
+        # stratification
+        Bz = c.N^2 .+ differentiate(c.b[iξ, :], c.z[iξ, :])
+        BzBL = cBL.N^2 .+ differentiate(cBL.b[iξ, :], cBL.z[iξ, :])
+
+        # colors and labels
+        label = string(Int64(round(c.t/86400/360)), " years")
+        if i==1
+            color = "k"
+        else
+            color = colors[i-1, :]
+        end
+
+        # plot
+        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
+
+        ax[1, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[2, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[1, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[2, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[1, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[2, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+    end
+
+    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = ["BL theory"]
+    ax[1, 2].legend(custom_handles, custom_labels)
+    ax[1, 3].legend()
+    
+    savefig("profilesSpinUpFull2DvsBL2D.png")
+    println("profilesSpinUpFull2DvsBL2D.png")
+end
+
 path = "../../sims/"
+
 #= sketchRidge() =#
 #= sketchSlope() =#
 #= chiForSketch(string(path, "sim023/")) =#
@@ -660,5 +754,14 @@ path = "../../sims/"
 #= asymmetricRidge(string(path, "sim020/")) =#
 # PGvsNoPG(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
+
 ii = 0:5
-spinupProfilesBL(string.(path, "sim029/tht5.5e-2/full/checkpoint", ii, ".h5"), string.(path, "sim028/tht5.5e-2/bl/checkpoint", ii, ".h5"))
+# θ = "5.5e-2"
+# datafilesBL1D =   string.(path, "sim028/tht", θ, "/bl/checkpoint",   ii, ".h5")
+# datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
+# spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
+# θ = "2.7e-2"
+θ = "3.9e-2"
+datafilesBL2D =   string.(path, "sim029/tht", θ, "/bl/checkpoint",   ii, ".h5")
+datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
+spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)

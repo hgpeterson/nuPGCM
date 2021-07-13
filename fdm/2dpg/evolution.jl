@@ -157,19 +157,8 @@ function evolve(tFinal; bl=false)
         if ξVariation
             # RHS function (note the parentheses here to allow for sparse matrices to work first)
 
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
-
-            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # breaks
-
-            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # runs
-            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec)) # breaks
-            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uσVec.*HVec) # breaks
-            # fAdvRHS(bVec, t) = -(uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # breaks
+            fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + uσVec.*(σDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec + N^2*uσVec.*HVec)
+            # fAdvRHS(bVec, t) = -(uξVec.*(ξDerivativeMat*bVec) + N^2*uξVec.*HxVec.*σσVec) # no vertical advection terms
 
             # explicit timestep for advection
             advRHS = RK4(t, Δt, bVec, fAdvRHS)

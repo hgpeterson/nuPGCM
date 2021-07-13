@@ -2,25 +2,25 @@
 Pr = 1e0
 f = -5.5e-5
 N = 1e-3
-# N = 0
 
 # turn on/off variations in ξ
 ξVariation = true
-# ξVariation = false
 
 # topography: sine
+symmetry = true
 # L = 2e6
 H0 = 2e3
 amp =  0.4*H0
-# for S = 1 at ξ = L/4, must have:
-θ₀ = atan(abs(f/N))
-# θ₀ = atan(abs(f/1e-3))
+# for S = S₀ at ξ = L/4, must have:
+S₀ = 0.5
+θ₀ = atan(sqrt(S₀)*abs(f)/N)
 # choose L such that θ = θ₀ at ξ = L/4
 L = 2*π*amp/tan(θ₀)  
 H(x) = H0 - amp*sin(2*π*x/L - π/2)
 Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
 
 # topography: skew gaussian
+# symmetry = false
 #= L = 2e6 =#
 #= H0 = 2.5e3 =#
 #= amp = 0.65*H0 =#
@@ -37,16 +37,19 @@ nξ = 2^8 + 1
 nσ = 2^8
 
 # domain in terrain-following (ξ, σ) space
+# uniform
+# dσ = 1/(nσ - 1)
+# σ = @. -1:dσ:0
+# chebyshev
+σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+σσ = repeat(σ', nξ, 1)
+dσ = zeros(nξ, nσ) 
+dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1] 
+dσ[:, end] = dσ[:, end-1] 
+# uniform
 dξ = dx = L/nξ
 ξ = 0:dξ:(L - dξ)
-# σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2 # chebyshev 
-dσ = 1/(nσ - 1)
-σ = @. -1:dσ:0
 ξξ = repeat(ξ, 1, nσ)
-σσ = repeat(σ', nξ, 1)
-# dσ = zeros(nξ, nσ) 
-# dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1] 
-# dσ[:, end] = dσ[:, end-1] 
 
 #= plot(ξ, -H.(ξ)) =# 
 #= ylim([-H0, 0]) =#
@@ -58,14 +61,10 @@ dσ = 1/(nσ - 1)
 x = repeat(ξ, 1, nσ)
 z = repeat(σ', nξ, 1).*repeat(H.(ξ), 1, nσ)
 
-# arrays of sin(θ) and cos(θ) for 1D solutions
+# arrays of sin(θ) and cos(θ) for 1d solutions
 sinθ = @. -Hx(ξξ)/sqrt(1 + Hx(ξξ)^2)
 cosθ = @. 1/sqrt(1 + Hx(ξξ)^2) 
 θ = asin.(sinθ[:, 1])
-
-# println(θ[argmin(abs.(ξ .- L/4))])
-# println(N^2/f^2*tan(θ[argmin(abs.(ξ .- L/4))])^2)
-# error()
 
 # diffusivity
 # bottom enhanced:
@@ -84,9 +83,7 @@ secsInYear = 360*86400
 # Δt = 10*secsInDay
 Δt = secsInDay
 tPlot = 3*secsInYear
-# tPlot = 50*secsInDay
 tSave = 3*secsInYear
-# tSave = Δt
 
 """
     log(ofile, text)

@@ -195,8 +195,6 @@ function computeU(sol_b, sol_U)
     term3 = sum(term3)/nξ
     
     # fourth term: ⟨(ν*χ_U_zz)_z⟩ at z = 0
-    #= term4 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χ_U))) =#
-    #= term4 = term4[:, nσ] =#
     term4 = zeros(nξ)
     for i=1:nξ
         # χ_zzz on the boundary
@@ -228,7 +226,11 @@ function invert(b)
     # particular solution (sol_U) is global variable computed in run.jl
 
     # compute U such that "island rule" is satisfied
-    U = computeU(sol_b, sol_U)
+    if symmetry
+        U = 0
+    else
+        U = computeU(sol_b, sol_U)
+    end
 
     # linearity: solution = sol_b + U*sol_U
     χ, uξ, uη, uσ, U = postProcess(sol_b + U*sol_U)
