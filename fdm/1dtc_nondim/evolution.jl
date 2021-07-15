@@ -144,7 +144,11 @@ function evolve(tFinal)
 
     # timestep
     nSteps = Int64(ceil(tFinal/Δt̃))
-    nStepsSave = Int64(floor(tSave/Δt̃))
+    if tSave === nothing
+        nStepsSave = nothing
+    else
+        nStepsSave = Int64(floor(tSave/Δt̃))
+    end
 
     # for flattening for matrix mult
     umap = reshape(1:(nPts-1), nVars, nz̃)    
@@ -165,13 +169,15 @@ function evolve(tFinal)
     sol[umap[2, :]] .= ṽ_0
     sol[nPts] = ṽ_0
     # save initial condition
-    ũ = sol[umap[1, :]]
-    ṽ = sol[umap[2, :]]
-    b̃ = sol[umap[3, :]]
-    P̃x̃ = sol[nPts]
-    iSave = 0
-    saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
-    iSave += 1
+    if nStepsSave !== nothing
+        ũ = sol[umap[1, :]]
+        ṽ = sol[umap[2, :]]
+        b̃ = sol[umap[3, :]]
+        P̃x̃ = sol[nPts]
+        iSave = 0
+        saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, iSave)
+        iSave += 1
+    end
 
     # main loop
     for i=1:nSteps
@@ -197,7 +203,7 @@ function evolve(tFinal)
         sol = LHS\RHSVec
 
         # log
-        if i % nStepsSave == 0
+        if nStepsSave !== nothing && i % nStepsSave == 0
             #= println(@sprintf("t = %.1e (i = %d)", t, i)) =#
 
             # gather solution

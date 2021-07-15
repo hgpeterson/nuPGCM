@@ -12,3 +12,6 @@
 
 # ignore swap files
 *.swp
+
+# ignore nohup files
+*.out
