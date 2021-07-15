@@ -21,12 +21,12 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     # full buoyancy for isopycnals
     B = N^2*z + b 
 
-    if ax == nothing
+    if ax === nothing
         fig, ax = subplots(1)
     end
 
     # set min and max
-    if vext == nothing
+    if vext === nothing
         vmax = maximum(abs.(field))
         vmin = -vmax
         extend = "neither"
@@ -51,7 +51,6 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     # isopycnal contours
     nLevels = 20
     lowerLevel = N^2*minimum(z)
-    # lowerLevel = 1e-3^2*minimum(z)
     upperLevel = 0
     levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
     ax.contour(xx, zz, B, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
@@ -63,7 +62,7 @@ function ridgePlot(field, b, titleString, cbarLabel; ax=nothing, vext=nothing, c
     ax.set_title(titleString)
     ax.set_xlabel(L"$x$ (km)")
     ax.set_ylabel(L"$z$ (km)")
-    # ax.set_xticks([0, 500, 1000, 1500, 2000])
+    ax.set_xticks([0, 500, 1000, 1500, 2000])
 
     # no spines
     ax.spines["left"].set_visible(false)

@@ -6,31 +6,31 @@ N = 1e-3
 # turn on/off variations in ξ
 ξVariation = true
 
-# topography: sine
-symmetry = true
-# L = 2e6
-H0 = 2e3
-amp =  0.4*H0
-# for S = S₀ at ξ = L/4, must have:
-S₀ = 0.5
-θ₀ = atan(sqrt(S₀)*abs(f)/N)
-# choose L such that θ = θ₀ at ξ = L/4
-L = 2*π*amp/tan(θ₀)  
-H(x) = H0 - amp*sin(2*π*x/L - π/2)
-Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
+# # topography: sine
+# symmetry = true
+# # L = 2e6
+# H0 = 2e3
+# amp =  0.4*H0
+# # for S = S₀ at ξ = L/4, must have:
+# S₀ = 0.5
+# θ₀ = atan(sqrt(S₀)*abs(f)/N)
+# # choose L such that θ = θ₀ at ξ = L/4
+# L = 2*π*amp/tan(θ₀)  
+# H(x) = H0 - amp*sin(2*π*x/L - π/2)
+# Hx(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
 
 # topography: skew gaussian
-# symmetry = false
-#= L = 2e6 =#
-#= H0 = 2.5e3 =#
-#= amp = 0.65*H0 =#
-#= ϕ(s) = exp(-s^2/2) =#
-#= Φ(s) = 1/2*(1 + erf(s/√2)) =#
-#= α = 3 =#
-#= μ = L/3 =#
-#= ω = L/5 =#
-#= H(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) =#
-#= Hx(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) =#
+symmetry = false
+L = 2e6 
+H0 = 2.5e3 
+amp = 0.65*H0 
+ϕ(s) = exp(-s^2/2) 
+Φ(s) = 1/2*(1 + erf(s/√2)) 
+α = 3 
+μ = L/3 
+ω = L/5 
+H(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) 
+Hx(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) 
 
 # number of grid points
 nξ = 2^8 + 1 
@@ -51,11 +51,10 @@ dξ = dx = L/nξ
 ξ = 0:dξ:(L - dξ)
 ξξ = repeat(ξ, 1, nσ)
 
-#= plot(ξ, -H.(ξ)) =# 
-#= ylim([-H0, 0]) =#
-#= savefig("topo.png") =#
-#= println(Hx(0)) =#
-#= error() =#
+# plot(ξ, -H.(ξ))  
+# ylim([-H0, 0]) 
+# savefig("topo.png") 
+# error() 
 
 # domain in physical (x, z) space (2D arrays)
 x = repeat(ξ, 1, nσ)
@@ -80,8 +79,8 @@ h = 200
 # timestepping
 secsInDay = 86400
 secsInYear = 360*86400
-# Δt = 10*secsInDay
-Δt = secsInDay
+Δt = 10*secsInDay
+# Δt = secsInDay
 tPlot = 3*secsInYear
 tSave = 3*secsInYear
 

@@ -90,6 +90,19 @@ function chi_v_ridge(folder)
     close()
 end
 
+function spinupRidgeAsym(folder)
+    # load
+    c = loadCheckpoint2DPG(string(folder, "checkpoint1.h5"))
+
+    # plot
+    ax = ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z, N=c.N)
+    savefig("spinupRidgeAsym.pdf")
+    println("spinupRidgeAsym.pdf")
+    close()
+
+    println(@sprintf("U = %1.2e m2 s-1", c.χ[1, end]))
+end
+
 function spinupProfiles(folder; σ=1)
     ii = 1:5
 
@@ -417,18 +430,6 @@ function spindownGrid(folder)
     tight_layout()
     savefig("spindownGrid.pdf")
     println("spindownGrid.pdf")
-end
-
-function asymmetricRidge(folder)
-    # load
-    c = loadCheckpoint2DPG(string(folder, "checkpoint1000.h5"))
-    u, v, w = transformFromTF(c.uξ, c.uη, c.uσ)
-
-    # plot
-    ax = ridgePlot(c.chi, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z)
-    savefig("spinupRidgeAsym.pdf")
-    println("spinupRidgeAsym.pdf")
-    close()
 end
 
 function spinupProfilesPGvsFull(folder)
@@ -809,19 +810,19 @@ end
 
 path = "../../sims/"
 
-#= sketchRidge() =#
-#= sketchSlope() =#
-#= chiForSketch(string(path, "sim023/")) =#
+# sketchRidge() 
+# sketchSlope() 
+# chiForSketch(string(path, "sim023/")) 
 # chi_v_ridge(string(path, "sim026/"))
 # spinupProfiles(string(path, "sim026/"); σ=1)
 # spinupProfiles(string(path, "sim026/"); σ=200)
-#= spinupProfilesRayleigh(string(path, "sim027/const/")) =#
+# spinupProfilesRayleigh(string(path, "sim027/const/")) 
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
-#= spindownGrid(string(path, "sim024/")) =#
-#= asymmetricRidge(string(path, "sim020/")) =#
-spinupProfilesPGvsFull(string(path, "sim025/"))
+# spindownGrid(string(path, "sim024/")) 
+spinupRidgeAsym(string(path, "sim031/")) 
+# spinupProfilesPGvsFull(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
 
 # ii = 0:5
