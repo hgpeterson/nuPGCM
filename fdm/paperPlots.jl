@@ -85,6 +85,8 @@ function chi_v_ridge(folder)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
+    ax[1].set_xlim([0, c.L/1e3])
+    ax[2].set_xlim([0, c.L/1e3])
     savefig("spinupRidge.pdf")
     println("spinupRidge.pdf")
     close()
@@ -314,8 +316,6 @@ function spindownProfiles(folder; ratio=nothing)
     c = loadCheckpoint1DTCNondim(string(folder, "/tc/checkpoint1.h5"))
     fig.text(0.05, 0.98, string(L"Canonical 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
     fig.text(0.05, 0.52, string(L"Transport-Constrained 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
-    println(c.S)
-    println(c.H^-2)
 
     ax[1, 1].set_ylabel(L"$\tilde{z}$")
     ax[2, 1].set_ylabel(L"$\tilde{z}$")
@@ -354,7 +354,7 @@ function spindownProfiles(folder; ratio=nothing)
             # colors and labels
             if i == 0
                 color = "tab:red"
-                label = L"$\tilde{t} = 0$"
+                label = L"$\tilde{t}/\tilde\tau_A$ = 0"
                 ls = "-"
             else
                 color = colors[i, :]
@@ -813,7 +813,7 @@ path = "../../sims/"
 # sketchRidge() 
 # sketchSlope() 
 # chiForSketch(string(path, "sim023/")) 
-# chi_v_ridge(string(path, "sim026/"))
+chi_v_ridge(string(path, "sim026/"))
 # spinupProfiles(string(path, "sim026/"); σ=1)
 # spinupProfiles(string(path, "sim026/"); σ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 
@@ -821,7 +821,7 @@ path = "../../sims/"
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
 # spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
 # spindownGrid(string(path, "sim024/")) 
-spinupRidgeAsym(string(path, "sim031/")) 
+# spinupRidgeAsym(string(path, "sim031/")) 
 # spinupProfilesPGvsFull(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
 

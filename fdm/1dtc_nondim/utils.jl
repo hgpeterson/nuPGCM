@@ -42,8 +42,8 @@ function loadCheckpoint1DTCNondim(filename)
     ũ = read(file, "ũ")
     ṽ = read(file, "ṽ")
     b̃ = read(file, "b̃")
-    P̃x̃ = read(file, "P̃x̃")
-    # P̃x̃ = read(file, "Px") # for old saves :(
+    # P̃x̃ = read(file, "P̃x̃")
+    P̃x̃ = read(file, "Px") # for old saves :(
     t̃ = read(file, "t̃")
     H = read(file, "H")
     S = read(file, "S")
@@ -55,7 +55,7 @@ function loadCheckpoint1DTCNondim(filename)
     κ0 = read(file, "κ0")
     κ1 = read(file, "κ1")
     h = read(file, "h")
-    N = read(file, "N")
+    # N = read(file, "N")
     α = read(file, "α")
     z̃ = read(file, "z̃")
     close(file)
@@ -74,7 +74,7 @@ function loadCheckpoint1DTCNondim(filename)
             κ0=κ0, 
             κ1=κ1, 
             h=h, 
-            N=N, 
+            # N=N, 
             α=α,
             z̃=z̃)
 end
