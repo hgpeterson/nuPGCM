@@ -1,10 +1,10 @@
-# parameters (as in RC20)
+# parameters (as in RC20/CF18)
 Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 H = 2e3
 θ = 2.5e-3
-r = 4e-6
+r = 1.2e-5
 
 # z grid
 nẑ = 2^8
@@ -15,26 +15,25 @@ ẑ = z/cos(θ)
 
 # diffusivity
 # bottom enhanced:
-# κ0 = 6e-7
-# κ1 = 2e-5
+κ0 = 6e-5 
+κ1 = 2e-3 
+h = 2000
+# # not bottom enhanced:
+# κ0 = 2e-5
+# κ1 = 0
 # h = 200
-# not bottom enhanced:
-κ0 = 2e-5
-κ1 = 0
-h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
 # transportConstraint = false
 transportConstraint = true
 U₀ = 0
-#= U₀ = @. κ0*cot(θ) =#
 
 # timestepping
 secsInDay = 86400
 secsInYear = 360*secsInDay
 Δt = secsInDay
-tSave = 3*secsInYear
+tSave = 10*secsInYear
 
 """
     log(ofile, text)

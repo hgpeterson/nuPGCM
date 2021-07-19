@@ -20,7 +20,7 @@ print("Computing inversion matrix: ")
 inversionLHS = lu(getInversionLHS())
 println("Done.")
 
-b = evolve(5*tSave)
+b = evolve(10*secsInYear)
 
 # b = steadyState()
 
@@ -28,7 +28,7 @@ b = evolve(5*tSave)
 # plots
 ################################################################################
 
-ii = [0, 1, 2, 3, 4, 5]
-profilePlot(string.("checkpoint", ii, ".h5"))
+# ii = [0, 1, 2, 3, 4, 5]
+# profilePlot(string.("checkpoint", ii, ".h5"))
 # ii = [0, 1, 2, 3, 4, 5, 999]
 # profilePlot(string.("checkpoint", ii, ".h5"))

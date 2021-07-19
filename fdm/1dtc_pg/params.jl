@@ -3,8 +3,7 @@ Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 H = 2e3
-#= θ = 2.5e-3 =#
-θ = 5.5e-2
+θ = 2.5e-3
 
 # z grid
 nẑ = 2^8
@@ -28,13 +27,12 @@ h = 200
 transportConstraint = true
 #= transportConstraint = false =#
 U₀ = 0
-#= U₀ = @. κ0*cot(θ) =#
 
 # timestepping
 secsInDay = 86400
 secsInYear = 360*secsInDay
 Δt = 10*secsInDay
-tSave = 3*secsInYear
+tSave = 10*secsInYear
 
 """
     log(ofile, text)
