@@ -807,10 +807,11 @@ function RayleighVsFickian(datafileR, datafileF)
 
     ax[1].set_xlabel(L"$x$ (km)")
     ax[1].set_ylabel(L"$z$ (km)")
+    ax[1].set_ylim([0, 2.5])
 
     ax[2].set_xlabel(L"along-slope flow $u^y$ ($\times 10^2$ m s$^{-1}$)")
     ax[2].set_ylabel(L"$z$ (km)")
-    ax[2].set_xlim([-0.2, 1.2])
+    ax[2].set_xlim([-0.2, 0.8])
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -820,8 +821,6 @@ function RayleighVsFickian(datafileR, datafileF)
     cF = loadCheckpoint1DTCPG(datafileF)
 
     # interpolate buoyancy
-    # zR = cR.ẑ*cos(cR.θ) .+ cR.H
-    # zF = cF.ẑ*cos(cF.θ) .+ cF.H
     θ = cR.θ
     if cF.θ != θ
         error("These simulations do not have the same slope.")
@@ -831,7 +830,7 @@ function RayleighVsFickian(datafileR, datafileF)
     nx = 2^10
     nzR = size(cR.ẑ, 1)
     nzF = size(cF.ẑ, 1)
-    L = 8e5
+    L = 9e5
     x = 0:L/(nx - 1):L
     xxR = repeat(x, 1, nzR)
     xxF = repeat(x, 1, nzF)
@@ -843,51 +842,26 @@ function RayleighVsFickian(datafileR, datafileF)
     BF = cF.N^2*zF + repeat(cF.b', nx, 1)
 
     # contour plot
-    level = cR.N^2*2000
-    ax[1].plot(x/1e3, x*tan(θ)/1e3, "k", lw=0.5)
-    ax[1].contour(xxR/1e3, zR/1e3, BR, colors="tab:blue", levels=[level])
-    ax[1].contour(xxF/1e3, zF/1e3, BF, colors="tab:orange", levels=[level])
-    custom_handles = [lines.Line2D([0], [0], lw=1, ls="-", c="tab:blue"),
-                      lines.Line2D([0], [0], lw=1, ls="-", c="tab:orange")]
-    custom_labels = ["Rayleigh drag", "Fickian friction"]
-    ax[1].legend(custom_handles, custom_labels)
+    levels = cR.N^2*[1000, 1500, 2000]
+    ax[1].plot([0, 400], [1.0, 1.0], "k--", lw=0.5, zorder=1)
+    ax[1].plot([0, 600], [1.5, 1.5], "k--", lw=0.5, zorder=1)
+    ax[1].plot([0, 800], [2.0, 2.0], "k--", lw=0.5, zorder=1)
+    ax[1].plot(x/1e3, x*tan(θ)/1e3,  "k-",  lw=0.5)
+    ax[1].contour(xxR/1e3, zR/1e3, BR, colors="tab:blue",   levels=levels)
+    ax[1].contour(xxF/1e3, zF/1e3, BF, colors="tab:orange", levels=levels)
+    # custom_handles = [lines.Line2D([0], [0], lw=1, ls="-", c="tab:blue"),
+    #                   lines.Line2D([0], [0], lw=1, ls="-", c="tab:orange")]
+    # custom_labels = ["Rayleigh drag", "Fickian friction"]
+    # ax[1].legend(custom_handles, custom_labels)
     ax[1].spines["bottom"].set_visible(false)
+    ax[1].annotate("isopycnals", (0.05, 0.85), xycoords="axes fraction")
 
-    # # isopycnal heights
-    # yR = zeros(size(x))
-    # yF = zeros(size(x))
-
-    # # initialize at some height
-    # y0 = 1000
-    # iR0 = argmin(abs.(zR .- y0))
-    # iF0 = argmin(abs.(zF .- y0))
-    # BR0 = cR.N^2*y0 + cR.b[iR0] 
-    # BF0 = cF.N^2*y0 + cF.b[iF0] 
-    # yR[1] = y0
-    # yF[1] = y0
-
-    # # solve for isopycnal heights at each x
-    # for i=1:size(x, 1)
-    #     # solve B0 = N^2(z + Δx*tan(θ)) + b(z)
-    #     splR = Spline1D(zR, cR.N^2*(zR .+ x[i]*tan(cR.θ)) + cR.b .- BR0)
-    #     rootsR = roots(splR)
-    #     if size(rootsR, 1) > 0
-    #         yR[i] = rootsR[1]
-    #     else
-    #         yR[i] = -1
-    #     end
-    #     # splF = Spline1D(zF, cF.N^2*(zF .+ x[i]*tan(cF.θ)) + cF.b .- BF0)
-    #     # yF[i] = roots(splF)[1]
-    # end
-
-    # ax[1].plot(x, x*tan(θ), "k", lw=0.5)
-    # ax[1].plot(x, yR, label="Rayleigh drag")
-    # ax[1].plot(x, yF, label="Fickian friction")
-
-    # ax[1].legend()
-
+    # line plot
+    ax[2].spines["left"].set_visible(false)
+    ax[2].axvline(0, lw=0.5, ls="-", c="k")
     ax[2].plot(1e2*cR.v̂, (cR.ẑ*cos(cR.θ) .+ cR.H)/1e3, label="Rayleigh drag")
     ax[2].plot(1e2*cF.v̂, (cF.ẑ*cos(cF.θ) .+ cF.H)/1e3, label="Fickian friction")
+    ax[2].legend()
 
     tight_layout()
 
@@ -977,7 +951,7 @@ function TCRidge(folder)
     ax[1, 2].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k")
     ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k")
 
-    ax[2, 3].legend(loc="upper right")
+    ax[2, 3].legend(loc=(0.4, 0.2))
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
                       lines.Line2D([0], [0], c="k", ls=":", lw="1")]
     custom_labels = ["steady state", L"2D $\nu$PGCM"]
@@ -1093,7 +1067,7 @@ path = "../../sims/"
 # spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
 
 # RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
-# TCRidge(string(path, "sim026/"))
+TCRidge(string(path, "sim026/"))
 # ii = 1:5
 # θ = "2.5e-3"
 # datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")

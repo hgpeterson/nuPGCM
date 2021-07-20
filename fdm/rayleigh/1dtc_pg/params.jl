@@ -17,7 +17,7 @@ ẑ = z/cos(θ)
 # bottom enhanced:
 κ0 = 6e-5 
 κ1 = 2e-3 
-h = 2000
+h = 200
 # # not bottom enhanced:
 # κ0 = 2e-5
 # κ1 = 0
@@ -25,8 +25,8 @@ h = 2000
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
-# transportConstraint = false
-transportConstraint = true
+transportConstraint = false
+# transportConstraint = true
 U₀ = 0
 
 # timestepping
