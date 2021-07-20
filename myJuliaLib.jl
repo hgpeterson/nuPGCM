@@ -29,7 +29,8 @@ Cumulatively integrate array `f` over domain `x` using trapezoidal rule.
 function cumtrapz(f::Vector{Float64}, x::Union{Vector{Float64}, AbstractRange{Float64}})
     y = zeros(size(f, 1))
     for i=2:size(f, 1)
-        y[i] = y[i-1] + 0.5*(f[i] + f[i-1])/(x[i] - x[i-1])
+        y[i] = y[i-1] + 0.5*(f[i] + f[i-1])*(x[i] - x[i-1])
+        y[i] = trapz(f[1:i], x[1:i])
     end
     return y
 end
