@@ -12,23 +12,20 @@ Plot profiles from HDF5 snapshot files the `datafiles` list.
 """
 function profilePlot(datafiles; fname="profiles.png")
     # init plot
-    fig, ax = subplots(1, 3, figsize=(3.404*3, 3.404/1.62), sharey=true)
+    fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
 
-    #= ax[1].set_xlabel(L"$\tilde{B}_\tilde{z}$") =#
-    ax[1].set_xlabel(L"$\partial_{\tilde z} \tilde b$")
+
+    ax[1].set_xlabel(L"cross-slope flow, $\tilde{u}$")
     ax[1].set_ylabel(L"$\tilde{z}$")
-    ax[1].set_title("stratification")
 
-    ax[2].set_xlabel(L"$\tilde{u}$")
-    ax[2].set_title("cross-ridge velocity")
+    ax[2].set_xlabel(L"along-slope flow, $\tilde{v}$")
 
-    ax[3].set_xlabel(L"$\tilde{v}$")
-    ax[3].set_title("along-ridge velocity")
+    ax[3].set_xlabel(L"stratification, $\partial_{\tilde z} \tilde b$")
 
-    subplots_adjust(bottom=0.2, top=0.9, left=0.1, right=0.9, wspace=0.3, hspace=0.6)
+    subplots_adjust(bottom=0.2, top=0.9, left=0.1, right=0.9, wspace=0.2, hspace=0.6)
 
     for a in ax
-        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
+        a.ticklabel_format(style="sci", axis="x", scilimits=(-3, 3))
     end
 
     # color map
@@ -43,7 +40,6 @@ function profilePlot(datafiles; fname="profiles.png")
         c = loadCheckpoint1DTCNondim(datafiles[i])
 
         # stratification
-        #= Bz̃ = N^2 .+ differentiate(c.b̃, c.z̃) =#
         b̃z̃ = differentiate(c.b̃, c.z̃)
 
         # colors and labels
@@ -55,14 +51,13 @@ function profilePlot(datafiles; fname="profiles.png")
         end
 
         # plot
-        #= ax[1].plot(Bz̃,   c.z̃, c=color, label=label) =#
-        ax[1].plot(b̃z̃,   c.z̃, c=color, label=label)
-        ax[2].plot(c.ũ,  c.z̃, c=color)
-        ax[3].plot(c.ṽ,  c.z̃, c=color)
-        ax[3].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
+        ax[1].plot(c.ũ,  c.z̃, c=color)
+        ax[2].plot(c.ṽ,  c.z̃, c=color)
+        ax[2].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
+        ax[3].plot(b̃z̃,   c.z̃, c=color, label=label)
     end
 
-    ax[1].legend()
+    ax[3].legend()
 
     savefig(fname)
     println(fname)

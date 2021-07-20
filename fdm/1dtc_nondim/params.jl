@@ -1,10 +1,10 @@
 # parameters
 
 # canonical or transport-constrained case?
-#= canonical = true =#
-canonical = false
+canonical = true
+# canonical = false
 
-τ_A = 1e2 # nondim arrest time
+τ_A = 2e0 # nondim arrest time
 τ_S = 1e2 # nondim spindown time
 Ek = 1/τ_S^2
 S = 1/τ_A

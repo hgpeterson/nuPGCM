@@ -322,7 +322,7 @@ function spindownProfiles(folder; ratio=nothing)
 
     ax[2, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$ ($\times10^{-1}$)")
     ax[2, 2].set_xlabel(L"along-ridge flow, $\tilde{v}$")
-    ax[2, 3].set_xlabel(L"stratification, $\partial_{\tilde z} \tilde b$ ($\times10^2$)")
+    ax[2, 3].set_xlabel(L"stratification, $\partial_{\tilde z} \tilde b$ ($\times10$)")
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
@@ -332,12 +332,17 @@ function spindownProfiles(folder; ratio=nothing)
     ax[2, 1].set_ylim([0, 10])
 
     # fixed x
-    ax[1, 1].set_xlim([-2, 2.5])
-    ax[2, 1].set_xlim([-2, 2.5])
+    ax[1, 1].set_xlim([-0.5, 3])
+    ax[2, 1].set_xlim([-0.5, 3])
     ax[1, 2].set_xlim([-1.05, 0.05])
     ax[2, 2].set_xlim([-1.05, 0.05])
-    ax[1, 3].set_xlim([-2.2, 0.5])
-    ax[2, 3].set_xlim([-2.2, 0.5])
+    if ratio == "Small"
+        ax[1, 3].set_xlim([-0.5, 0.1])
+        ax[2, 3].set_xlim([-0.5, 0.1])
+    elseif ratio == "Big"
+        ax[1, 3].set_xlim([-25, 4])
+        ax[2, 3].set_xlim([-25, 4])
+    end
 
     # plot data from folder
     cases = ["can", "tc"]
@@ -368,7 +373,7 @@ function spindownProfiles(folder; ratio=nothing)
             if case=="tc"
                 ax[j, 2].axvline(c.P̃x̃, lw=1.0, c=color, ls="--")
             end
-            ax[j, 3].plot(1e-2*bz̃,  c.z̃, c=color, ls=ls, label=label)
+            ax[j, 3].plot(1e-1*bz̃,  c.z̃, c=color, ls=ls, label=label)
         end
     end
 
@@ -382,9 +387,9 @@ function spindownProfiles(folder; ratio=nothing)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     if ratio == "Small"
-        ax[2, 2].annotate(L"$\partial_x P$", xy=(0.08, 0.1), xytext=(0.25, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.08, 0.8), xytext=(0.25, 0.78), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     elseif ratio == "Big"
-        ax[2, 2].annotate(L"$\partial_x P$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     end
 
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
@@ -401,7 +406,8 @@ end
 function spindownGrid(folder)
     # read data
     file = h5open(string(folder, "vs.h5"), "r")
-    vs = read(file, "vs")
+    vs_5A = read(file, "vs_5A")
+    vs_5S = read(file, "vs_5S")
     ṽ_0 = read(file, "ṽ_0")
     τ_Ss = read(file, "τ_Ss")
     τ_As = read(file, "τ_As")
@@ -410,24 +416,44 @@ function spindownGrid(folder)
     # text outline
     outline = [pe.withStroke(linewidth=0.6, foreground="k")]
 
-    # plot grid
-    fig, ax = subplots(1, figsize=(3.404, 3.404))
-    ax.set_box_aspect(1)
-    ax.set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
-    ax.set_ylabel(L"arrest time, $\tilde{\tau}_A$")
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    img = ax.pcolormesh(τ_Ss, τ_As, vs'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
-    cb = colorbar(img, ax=ax, shrink=0.63, label=string("far-field along-slope flow,\n", L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$"))
-    ax.loglog([0, 1], [0, 1], transform=ax.transAxes, "w--", lw=0.5)
-    ax.annotate(L"$\tilde{\tau}_A/\tilde{\tau}_S = 1$", xy=(0.9, 0.9), xytext=(0.5, 0.9), 
-                xycoords="axes fraction", c="w", path_effects=outline, arrowprops=Dict("arrowstyle" => "->", "color" => "w"))
-    ax.scatter(1e2, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
-    ax.scatter(5e3, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
-    ax.annotate("Fig. 6", xy=(0.3, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
-    ax.annotate("Fig. 7", xy=(0.8, 0.25), xycoords="axes fraction", c="w", path_effects=outline)
+    # aspect ratio
+    aspect = log(τ_As[end]/τ_As[1])/log(τ_Ss[end]/τ_Ss[1])
 
-    tight_layout()
+    # plot grid
+    fig, ax = subplots(1, 2, figsize=(3.404, 3), sharey=true)
+    ax[1].set_box_aspect(aspect)
+    ax[1].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
+    ax[1].set_ylabel(L"arrest time, $\tilde{\tau}_A$")
+    ax[1].spines["left"].set_visible(false)
+    ax[1].spines["bottom"].set_visible(false)
+    ax[1].set_xlim([τ_Ss[1], τ_Ss[end]])
+    ax[1].set_ylim([τ_As[1], τ_As[end]])
+    img = ax[1].pcolormesh(τ_Ss, τ_As, vs_5A'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
+    cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"far-field along-slope flow, $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
+    ax[1].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
+    ax[1].annotate(L"$\tilde{\tau}_A/\tilde{\tau}_S = 1$", xy=(0.7, 0.8), xytext=(0.05, 0.9), 
+                xycoords="axes fraction", c="w", path_effects=outline, arrowprops=Dict("arrowstyle" => "->", "color" => "w"))
+    ax[1].scatter(1e2, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+    ax[1].scatter(1e2, 2e0, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+    ax[1].annotate("Fig. 6", xy=(1.5e2, 1.9e0), xycoords="data", c="w", path_effects=outline)
+    ax[1].annotate("Fig. 7", xy=(1.5e2, 0.9e2), xycoords="data", c="w", path_effects=outline)
+
+    ax[2].set_box_aspect(aspect)
+    ax[2].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
+    ax[2].spines["left"].set_visible(false)
+    ax[2].spines["bottom"].set_visible(false)
+    ax[2].set_xlim([τ_Ss[1], τ_Ss[end]])
+    ax[2].set_ylim([τ_As[1], τ_As[end]])
+    img = ax[2].pcolormesh(τ_Ss, τ_As, vs_5S'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
+    ax[2].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
+    ax[2].scatter(1e2, 1e2, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+    ax[2].scatter(1e2, 2e0, marker="o", facecolor="w", edgecolor="k", linewidths=0.5, zorder=2.5)
+
+    ax[1].annotate(L"(a) $\tilde t = 5\tilde\tau_A$", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate(L"(b) $\tilde t = 5\tilde\tau_S$", (-0.04, 1.05), xycoords="axes fraction")
+    
+    subplots_adjust(left=0.15, right=0.85, bottom=0.35, top=0.9, wspace=0.2, hspace=0.6)
+
     savefig("spindownGrid.pdf")
     println("spindownGrid.pdf")
 end
@@ -1015,17 +1041,17 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
         color = colors[i, :]
 
         # plot
-        ax[1].plot(1e3*c.χ[iξ, :],   c.z[iξ, :]/1e3, c=color, label=label)
-        ax[2].plot(1e2*c.uη[iξ, :],  c.z[iξ, :]/1e3, c=color, label=label)
-        ax[3].plot(1e6*Bz,           c.z[iξ, :]/1e3, c=color, label=label)
-        ax[1].plot(1e3*χBL,   cBL.ẑ*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[2].plot(1e2*cBL.v̂,   cBL.ẑ*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[3].plot(1e6*BzBL,  cBL.ẑ*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[1].plot(1e3*χBL,     cBL.ẑ*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[2].plot(1e2*cBL.v̂,   cBL.ẑ*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[3].plot(1e6*BzBL,    cBL.ẑ*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[1].plot(1e3*c.χ[iξ, :],   c.z[iξ, :]/1e3, "k:")
+        ax[2].plot(1e2*c.uη[iξ, :],  c.z[iξ, :]/1e3, "k:")
+        ax[3].plot(1e6*Bz,           c.z[iξ, :]/1e3, "k:")
     end
 
     ax[1].legend()
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["BL theory"]
+    custom_labels = [L"2D $\nu$PGCM"]
     ax[3].legend(custom_handles, custom_labels)
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -1048,9 +1074,9 @@ path = "../../sims/"
 # spinupProfiles(string(path, "sim026/"); σ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
-# spindownProfiles(string(path, "sim024/tauA1e2_tauS5e3/"); ratio="Small")
-# spindownProfiles(string(path, "sim024/tauA1e2_tauS1e2/"); ratio="Big")
-# spindownGrid(string(path, "sim024/")) 
+# spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
+# spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
+spindownGrid(string(path, "sim033/")) 
 # spinupRidgeAsym(string(path, "sim031/")) 
 # spinupProfilesPGvsFull(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
@@ -1066,7 +1092,7 @@ path = "../../sims/"
 # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
 # spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
 
-RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
+# RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
 # TCRidge(string(path, "sim026/"))
 # ii = 1:5
 # θ = "2.5e-3"

@@ -14,54 +14,54 @@ include("utils.jl")
 # run single integration
 ################################################################################
 
-# ũ, ṽ, b̃, P̃x̃ = evolve(5*τ_A)
+ũ, ṽ, b̃, P̃x̃ = evolve(5*τ_A)
 
 ################################################################################
 # plots
 ################################################################################
 
-# path = ""
-# iSaves = 0:1:5
-# dfiles = string.(path, "checkpoint", iSaves, ".h5")
-# profilePlot(dfiles)
+path = ""
+iSaves = 0:1:5
+dfiles = string.(path, "checkpoint", iSaves, ".h5")
+profilePlot(dfiles)
 
-file = h5open("vs.h5", "r")
-vs_5A = read(file, "vs_5A")
-vs_5S = read(file, "vs_5S")
-ṽ_0 = read(file, "ṽ_0")
-τ_Ss = read(file, "τ_Ss")
-τ_As = read(file, "τ_As")
-close(file)
+# file = h5open("vs.h5", "r")
+# vs_5A = read(file, "vs_5A")
+# vs_5S = read(file, "vs_5S")
+# ṽ_0 = read(file, "ṽ_0")
+# τ_Ss = read(file, "τ_Ss")
+# τ_As = read(file, "τ_As")
+# close(file)
 
-aspect = log(τ_As[end]/τ_As[1])/log(τ_Ss[end]/τ_Ss[1])
-fig, ax = subplots(1, 2, figsize=(3.404, 3), sharey=true)
-ax[1].set_box_aspect(aspect)
-ax[1].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
-ax[1].set_ylabel(L"arrest time, $\tilde{\tau}_A$")
-ax[1].set_title(L"$t = 5\tilde\tau_A$")
-ax[1].spines["left"].set_visible(false)
-ax[1].spines["bottom"].set_visible(false)
-ax[1].set_xlim([τ_Ss[1], τ_Ss[end]])
-ax[1].set_ylim([τ_As[1], τ_As[end]])
-img = ax[1].pcolormesh(τ_Ss, τ_As, vs_5A'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
-cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"far-field along-slope flow, $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
-ax[1].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
+# aspect = log(τ_As[end]/τ_As[1])/log(τ_Ss[end]/τ_Ss[1])
+# fig, ax = subplots(1, 2, figsize=(3.404, 3), sharey=true)
+# ax[1].set_box_aspect(aspect)
+# ax[1].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
+# ax[1].set_ylabel(L"arrest time, $\tilde{\tau}_A$")
+# ax[1].set_title(L"$t = 5\tilde\tau_A$")
+# ax[1].spines["left"].set_visible(false)
+# ax[1].spines["bottom"].set_visible(false)
+# ax[1].set_xlim([τ_Ss[1], τ_Ss[end]])
+# ax[1].set_ylim([τ_As[1], τ_As[end]])
+# img = ax[1].pcolormesh(τ_Ss, τ_As, vs_5A'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
+# cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"far-field along-slope flow, $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
+# ax[1].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
 
-ax[2].set_box_aspect(aspect)
-ax[2].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
-ax[2].set_title(L"$t = 5\tilde\tau_S$")
-ax[2].spines["left"].set_visible(false)
-ax[2].spines["bottom"].set_visible(false)
-ax[2].set_xlim([τ_Ss[1], τ_Ss[end]])
-ax[2].set_ylim([τ_As[1], τ_As[end]])
-img = ax[2].pcolormesh(τ_Ss, τ_As, vs_5S'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
-ax[2].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
+# ax[2].set_box_aspect(aspect)
+# ax[2].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
+# ax[2].set_title(L"$t = 5\tilde\tau_S$")
+# ax[2].spines["left"].set_visible(false)
+# ax[2].spines["bottom"].set_visible(false)
+# ax[2].set_xlim([τ_Ss[1], τ_Ss[end]])
+# ax[2].set_ylim([τ_As[1], τ_As[end]])
+# img = ax[2].pcolormesh(τ_Ss, τ_As, vs_5S'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
+# ax[2].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
 
-subplots_adjust(left=0.15, right=0.85, bottom=0.35, top=0.9, wspace=0.2, hspace=0.6)
+# subplots_adjust(left=0.15, right=0.85, bottom=0.35, top=0.9, wspace=0.2, hspace=0.6)
 
-println("spindownGrid.png")
-savefig("spindownGrid.png")
-close()
+# println("spindownGrid.png")
+# savefig("spindownGrid.png")
+# close()
 
 ################################################################################
 # sweep parameter space
