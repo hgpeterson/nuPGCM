@@ -809,9 +809,9 @@ function RayleighVsFickian(datafileR, datafileF)
     ax[1].set_ylabel(L"$z$ (km)")
     ax[1].set_ylim([0, 2.5])
 
-    ax[2].set_xlabel(L"along-slope flow $u^y$ ($\times 10^2$ m s$^{-1}$)")
+    ax[2].set_xlabel(L"along-slope flow $u^y$ ($\times 10^{-2}$ m s$^{-1}$)")
     ax[2].set_ylabel(L"$z$ (km)")
-    ax[2].set_xlim([-0.2, 0.8])
+    ax[2].set_xlim([-2.1, 0.8])
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -849,10 +849,10 @@ function RayleighVsFickian(datafileR, datafileF)
     ax[1].plot(x/1e3, x*tan(θ)/1e3,  "k-",  lw=0.5)
     ax[1].contour(xxR/1e3, zR/1e3, BR, colors="tab:blue",   levels=levels)
     ax[1].contour(xxF/1e3, zF/1e3, BF, colors="tab:orange", levels=levels)
-    # custom_handles = [lines.Line2D([0], [0], lw=1, ls="-", c="tab:blue"),
-    #                   lines.Line2D([0], [0], lw=1, ls="-", c="tab:orange")]
-    # custom_labels = ["Rayleigh drag", "Fickian friction"]
-    # ax[1].legend(custom_handles, custom_labels)
+    custom_handles = [lines.Line2D([0], [0], lw=1, ls="-", c="tab:blue"),
+                      lines.Line2D([0], [0], lw=1, ls="-", c="tab:orange")]
+    custom_labels = ["Rayleigh drag", "Fickian friction"]
+    ax[1].legend(custom_handles, custom_labels, loc="lower right")
     ax[1].spines["bottom"].set_visible(false)
     ax[1].annotate("isopycnals", (0.05, 0.85), xycoords="axes fraction")
 
@@ -861,7 +861,7 @@ function RayleighVsFickian(datafileR, datafileF)
     ax[2].axvline(0, lw=0.5, ls="-", c="k")
     ax[2].plot(1e2*cR.v̂, (cR.ẑ*cos(cR.θ) .+ cR.H)/1e3, label="Rayleigh drag")
     ax[2].plot(1e2*cF.v̂, (cF.ẑ*cos(cF.θ) .+ cF.H)/1e3, label="Fickian friction")
-    ax[2].legend()
+    # ax[2].legend()
 
     tight_layout()
 
@@ -1066,8 +1066,8 @@ path = "../../sims/"
 # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
 # spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
 
-# RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
-TCRidge(string(path, "sim026/"))
+RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
+# TCRidge(string(path, "sim026/"))
 # ii = 1:5
 # θ = "2.5e-3"
 # datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
