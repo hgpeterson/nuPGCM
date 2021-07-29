@@ -489,27 +489,27 @@ function spinupProfilesPGvsFull(folder)
         tDay = tDays[i]
         label = string(Int64(tDay), " days")
 
-        # 1D PG
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        u = c.û*cos(c.θ)
-        ax[1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        axins1.plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        
         # 1D Full
         c = loadCheckpoint1DTC(string(folder, "1dtc/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         u = c.û*cos(c.θ)
-        ax[1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], ls=":")
-        axins1.plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], ls=":")
-        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
-        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k", ls=":")
+        ax[1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        axins1.plot(1e4*u,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+
+        # 1D PG
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
+        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+        u = c.û*cos(c.θ)
+        ax[1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, "k:")
+        axins1.plot(1e4*u,  c.ẑ*cos(c.θ)/1e3, "k:")
+        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, "k:")
+        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, "k:")
     end
 
     ax[2].legend(loc="upper right")
-    custom_labels = ["PG", "Full"]
+    custom_labels = ["Full", "PG"]
     custom_handles = [lines.Line2D([0], [0], lw=1, ls="-", c="k"),
                       lines.Line2D([0], [0], lw=1, ls=":", c="k")]
     ax[3].legend(custom_handles, custom_labels, loc="upper left")
@@ -700,27 +700,27 @@ function spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
         end
 
         # plot
-        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[2, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[1, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[2, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[1, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
-        ax[2, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c="k", ls=":")
+        ax[1, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[2, 1].plot(bBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[1, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[2, 2].plot(BzBL,  (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[1, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[2, 3].plot(χBL,   (cBL.ẑ .- cBL.ẑ[1])*cos(cBL.θ)/1e3, c=color, label=label)
+        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["BL theory"]
+    custom_labels = [L"2D $\nu$PGCM"]
     ax[1, 2].legend(custom_handles, custom_labels)
     ax[1, 3].legend()
     
-    savefig("profilesSpinUpBL.png")
-    println("profilesSpinUpBL.png")
+    savefig("profilesSpinUpFull2DvsBL1D.pdf")
+    println("profilesSpinUpFull2DvsBL1D.pdf")
 end
 function get_bB(bI, ẑ, f, θ, Pr, S, ν)
     z = ẑ .- ẑ[1]
@@ -799,28 +799,27 @@ function spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
         end
 
         # plot
-        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, c=color, label=label)
-
-        ax[1, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
-        ax[2, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
-        ax[1, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
-        ax[2, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
-        ax[1, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
-        ax[2, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, "k:")
+        ax[1, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[2, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
+        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["BL theory"]
+    custom_labels = [L"2D $\nu$PGCM"]
     ax[1, 2].legend(custom_handles, custom_labels)
     ax[1, 3].legend()
     
-    savefig("profilesSpinUpFull2DvsBL2D.png")
-    println("profilesSpinUpFull2DvsBL2D.png")
+    savefig("profilesSpinUpFull2DvsBL2D.pdf")
+    println("profilesSpinUpFull2DvsBL2D.pdf")
 end
 
 ################################################################################
@@ -1001,7 +1000,8 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
     fig, ax = subplots(1, 3, figsize=(6.5, 2.1), sharey=true)
 
     ax[1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"along-ridge flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    # ax[2].set_xlabel(string(L"along-ridge flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
     ax[3].set_xlabel(string(L"stratification $\partial b/\partial z$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
     ax[1].set_ylabel(L"$z$ (km)")
 
@@ -1051,7 +1051,7 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
 
     ax[1].legend()
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = [L"2D $\nu$PGCM"]
+    custom_labels = ["2D solution"]
     ax[3].legend(custom_handles, custom_labels)
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -1076,17 +1076,17 @@ path = "../../sims/"
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
-spindownGrid(string(path, "sim033/")) 
+# spindownGrid(string(path, "sim033/")) 
 # spinupRidgeAsym(string(path, "sim031/")) 
 # spinupProfilesPGvsFull(string(path, "sim025/"))
 # compareChapman02Fig5a(string(path, "sim024/"))
 
 # ii = 0:5
-# # θ = "5.5e-2"
-# # datafilesBL1D =   string.(path, "sim028/tht", θ, "/bl/checkpoint",   ii, ".h5")
-# # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
-# # spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
-# # θ = "2.7e-2"
+# θ = "5.5e-2"
+# datafilesBL1D =   string.(path, "sim028/tht", θ, "/bl/checkpoint",   ii, ".h5")
+# datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
+# spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
+# # # θ = "2.7e-2"
 # θ = "3.9e-2"
 # datafilesBL2D =   string.(path, "sim029/tht", θ, "/bl/checkpoint",   ii, ".h5")
 # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
@@ -1094,8 +1094,8 @@ spindownGrid(string(path, "sim033/"))
 
 # RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
 # TCRidge(string(path, "sim026/"))
-# ii = 1:5
-# θ = "2.5e-3"
-# datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
-# datafilesFull2D = string.(path, "sim026/2dpg/Pr1/checkpoint", ii, ".h5")
-# full2DvsBL1D(datafilesFull2D, datafilesBL1D)
+ii = 1:5
+θ = "2.5e-3"
+datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
+datafilesFull2D = string.(path, "sim026/2dpg/Pr1/checkpoint", ii, ".h5")
+full2DvsBL1D(datafilesFull2D, datafilesBL1D)
