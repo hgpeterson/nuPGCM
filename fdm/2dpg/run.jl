@@ -1,5 +1,7 @@
 using PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx, SpecialFunctions
 
+CPUtic()
+
 plt.style.use("../../plots.mplstyle")
 close("all")
 pygui(false)
@@ -24,7 +26,8 @@ end
 inversionRHS = getInversionRHS(zeros(nξ, nσ), 1) 
 sol_U = computeSol(inversionRHS) 
 println("Done.") 
-b = evolve(5*tSave) 
+
+b = evolve(1*tSave) 
 
 # b = evolve(15*secsInYear; bl=true) 
 
@@ -32,9 +35,9 @@ b = evolve(5*tSave)
 # plots
 ################################################################################
 
-path = ""
-dfiles = string.(path, "checkpoint", 1:5, ".h5")
-profilePlot(dfiles, argmin(abs.(ξ .- L/4))) 
+# path = ""
+# dfiles = string.(path, "checkpoint", 1:5, ".h5")
+# profilePlot(dfiles, argmin(abs.(ξ .- L/4))) 
 
 #= c = loadCheckpoint2DPG("checkpoint30.h5") =#
 #= ridgePlot(c.χ, c.b, "t = 30 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
@@ -44,3 +47,7 @@ profilePlot(dfiles, argmin(abs.(ξ .- L/4)))
 #= ridgePlot(c.χ, c.b, "t = 31 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
 #= savefig("chi031.png") =#
 #= close() =#
+
+CPUtoc()
+
+# Before refactor: 3 years = 71 s
