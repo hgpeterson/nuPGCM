@@ -9,7 +9,8 @@
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(κ, H)
+function getInversionLHS(ν::Array{Float64,1}, f::Float64,H::Float64,σ::Array{Float64,1})
+    nσ = size(σ, 1)
     iU = nσ + 1
     A = Tuple{Int64,Int64,Float64}[]  
 
@@ -43,11 +44,11 @@ function getInversionLHS(κ, H)
 
         # dσ stencil
         fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
-        κ_σ = sum(fd_σ.*κ[j-1:j+1])
+        ν_σ = sum(fd_σ.*ν[j-1:j+1])
 
         # dσσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
-        κ_σσ = sum(fd_σσ.*κ[j-1:j+1])
+        ν_σσ = sum(fd_σσ.*ν[j-1:j+1])
 
         # dσσσ stencil
         fd_σσσ = mkfdstencil(σ[j-2:j+2], σ[j], 3)
@@ -57,24 +58,24 @@ function getInversionLHS(κ, H)
         
         # eqtn: dσσ(nu*dσσ(χ))/H^4 + f^2*(χ - U)/nu = dξ(b) - dx(H)*σ*dσ(b)/H
         # term 1 (product rule)
-        push!(A, (row, j-1, Pr*κ_σσ*fd_σσ[1]/H^4))
-        push!(A, (row, j,   Pr*κ_σσ*fd_σσ[2]/H^4))
-        push!(A, (row, j+1, Pr*κ_σσ*fd_σσ[3]/H^4))
+        push!(A, (row, j-1, ν_σσ*fd_σσ[1]/H^4))
+        push!(A, (row, j,   ν_σσ*fd_σσ[2]/H^4))
+        push!(A, (row, j+1, ν_σσ*fd_σσ[3]/H^4))
 
-        push!(A, (row, j-2, 2*Pr*κ_σ*fd_σσσ[1]/H^4))
-        push!(A, (row, j-1, 2*Pr*κ_σ*fd_σσσ[2]/H^4))
-        push!(A, (row, j,   2*Pr*κ_σ*fd_σσσ[3]/H^4))
-        push!(A, (row, j+1, 2*Pr*κ_σ*fd_σσσ[4]/H^4))
-        push!(A, (row, j+2, 2*Pr*κ_σ*fd_σσσ[5]/H^4))
+        push!(A, (row, j-2, 2*ν_σ*fd_σσσ[1]/H^4))
+        push!(A, (row, j-1, 2*ν_σ*fd_σσσ[2]/H^4))
+        push!(A, (row, j,   2*ν_σ*fd_σσσ[3]/H^4))
+        push!(A, (row, j+1, 2*ν_σ*fd_σσσ[4]/H^4))
+        push!(A, (row, j+2, 2*ν_σ*fd_σσσ[5]/H^4))
 
-        push!(A, (row, j-2, Pr*κ[j]*fd_σσσσ[1]/H^4))
-        push!(A, (row, j-1, Pr*κ[j]*fd_σσσσ[2]/H^4))
-        push!(A, (row, j,   Pr*κ[j]*fd_σσσσ[3]/H^4))
-        push!(A, (row, j+1, Pr*κ[j]*fd_σσσσ[4]/H^4))
-        push!(A, (row, j+2, Pr*κ[j]*fd_σσσσ[5]/H^4))
+        push!(A, (row, j-2, ν[j]*fd_σσσσ[1]/H^4))
+        push!(A, (row, j-1, ν[j]*fd_σσσσ[2]/H^4))
+        push!(A, (row, j,   ν[j]*fd_σσσσ[3]/H^4))
+        push!(A, (row, j+1, ν[j]*fd_σσσσ[4]/H^4))
+        push!(A, (row, j+2, ν[j]*fd_σσσσ[5]/H^4))
         # term 2
-        push!(A, (row, j,   f^2/(Pr*κ[j])))
-        push!(A, (row, iU, -f^2/(Pr*κ[j])))
+        push!(A, (row, j,   f^2/(ν[j])))
+        push!(A, (row, iU, -f^2/(ν[j])))
     end
 
     # U equation: U = ?
@@ -92,7 +93,11 @@ end
 
 Setup right hand side of linear system for problem.
 """
-function getInversionRHS(rhs, U)
+function getInversionRHS(rhs::Array{Float64,2}, U::Real)
+    # get shape
+    nξ = size(rhs, 1)
+    nσ = size(rhs, 2)
+
     # last row is for U
     inversionRHS = zeros(nξ, nσ+1)
     iU = nσ + 1
@@ -110,186 +115,144 @@ function getInversionRHS(rhs, U)
 end
 
 """
-    χ, uξ, uη, uσ, U = postProcess(sol)
-
-Take solution `sol` and extract reshaped `χ` and `U`. Compute `uξ`, `uη`, `uσ` 
-from definition of χ.
-"""
-function postProcess(sol)
-    iU = nσ + 1
-
-    # χ at σ = 0 is vertical integral of uξ
-    U = sol[1, iU] # just take first one since they all must be the same
-
-    # rest of solution is χ
-    χ = sol[:, 1:nσ]
-
-    # compute uξ = dσ(χ)/H
-    uξ = σDerivativeTF(χ)./H.(x)
-
-    # compute uη = int_-1^0 f*χ/nu dσ*H
-    uη = zeros(nξ, nσ)
-    for i=1:nξ
-        uη[i, :] = cumtrapz(f*(χ[i, :] .- U)./(Pr*κ[i, :]), σ)*H(ξ[i])
-    end
-
-    # compute uσ = -dξ(χ)/H
-    if ξVariation
-        uσ = -ξDerivativeTF(χ)./H.(x)
-    else
-        uσ = zeros(nξ, nσ)
-    end
-
-    return χ, uξ, uη, uσ, U
-end
-
-"""
-    sol = computeSol(inversionRHS)
+    sol = computeSol(m, inversionRHS)
 
 Compute inversion solution given right hand side `inversionRHS`.
 """
-function computeSol(inversionRHS)
+function computeSol(m::ModelSetup, inversionRHS::Array{Float64,2})
     # solve
-    sol = zeros(nξ, nσ+1)
-    for i=1:nξ
-        sol[i, :] = inversionLHSs[i]\inversionRHS[i, :]
+    sol = zeros(m.nξ, m.nσ+1)
+    for i=1:m.nξ
+        sol[i, :] = m.inversionLHSs[i]\inversionRHS[i, :]
     end
     return sol
 end
 
 """
-    U = computeU(sol_b, sol_U)
+    U = computeU(m, sol_b)
 
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(sol_b, sol_U)
+function computeU(m::ModelSetup, sol_b::Array{Float64,2})
     # unpack
-    χ_b = sol_b[:, 1:nσ]
-    χ_U = sol_U[:, 1:nσ]
+    χ_b = sol_b[:, 1:m.nσ]
+    χ_U = m.sol_U[:, 1:m.nσ]
 
     # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
-    #= term1 = zDerivativeTF(Pr*κ .*zDerivativeTF(zDerivativeTF(χ_b))) =#
-    #= term1 = term1[:, nσ] =#
-    term1 = zeros(nξ)
-    for i=1:nξ
-        # χ_zzz on the boundary
-        term1[i] = Pr*κ[i, nσ]*differentiate_pointwise(χ_b[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
-        # κ_z*χ_zz on the boundary
-        term1[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χ_b[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
+    term1 = zeros(m.nξ)
+    for i=1:m.nξ
+        # ν*χ_zzz on the boundary
+        term1[i] = m.ν[i, m.nσ]*differentiate_pointwise(χ_b[i, m.nσ-4:m.nσ], m.σ[m.nσ-4:m.nσ], m.σ[m.nσ], 3)/m.H[i]^3
+        # ν_z*χ_zz on the boundary
+        term1[i] += differentiate_pointwise(m.ν[i, m.nσ-2:m.nσ], m.σ[m.nσ-2:m.nσ], m.σ[m.nσ], 1)*differentiate_pointwise(χ_b[i, m.nσ-3:m.nσ], m.σ[m.nσ-3:m.nσ], m.σ[m.nσ], 2)/m.H[i]^3
     end
-    term1 = sum(term1)/nξ
+    term1 = sum(term1)/m.nξ
 
     # second term: ⟨∫f^2/ν*χ_b⟩    
-    term2 = zeros(nξ)
-    for i=1:nξ
-        term2[i] = trapz(f^2 ./(Pr*κ[i, :]).*χ_b[i, :], σ)*H(ξ[i])
+    term2 = zeros(m.nξ)
+    for i=1:m.nξ
+        term2[i] = trapz(m.f^2 ./(m.ν[i, :]).*χ_b[i, :], m.σ)*m.H[i]
     end
-    term2 = sum(term2)/nξ
+    term2 = sum(term2)/m.nξ
 
     # third term: ⟨∫f^2/ν*(χ_U-1)⟩    
-    term3 = zeros(nξ)
-    for i=1:nξ
-        term3[i] = trapz(f^2 ./(Pr*κ[i, :]).*(χ_U[i, :] .- 1), σ)*H(ξ[i])
+    term3 = zeros(m.nξ)
+    for i=1:m.nξ
+        term3[i] = trapz(m.f^2 ./(m.ν[i, :]).*(χ_U[i, :] .- 1), m.σ)*m.H[i]
     end
-    term3 = sum(term3)/nξ
+    term3 = sum(term3)/m.nξ
     
     # fourth term: ⟨(ν*χ_U_zz)_z⟩ at z = 0
-    term4 = zeros(nξ)
-    for i=1:nξ
-        # χ_zzz on the boundary
-        term4[i] = Pr*κ[i, nσ]*differentiate_pointwise(χ_U[i, nσ-4:nσ], σ[nσ-4:nσ], σ[nσ], 3)/H(ξ[i])^3
-        # κ_z*χ_zz on the boundary
-        term4[i] += Pr*differentiate_pointwise(κ[i, nσ-2:nσ], σ[nσ-2:nσ], σ[nσ], 1)*differentiate_pointwise(χ_U[i, nσ-3:nσ], σ[nσ-3:nσ], σ[nσ], 2)/H(ξ[i])^3
+    term4 = zeros(m.nξ)
+    for i=1:m.nξ
+        # ν*χ_zzz on the boundary
+        term4[i] = m.ν[i, m.nσ]*differentiate_pointwise(χ_U[i, m.nσ-4:m.nσ], m.σ[m.nσ-4:m.nσ], m.σ[m.nσ], 3)/m.H[i]^3
+        # ν_z*χ_zz on the boundary
+        term4[i] += differentiate_pointwise(m.ν[i, m.nσ-2:m.nσ], m.σ[m.nσ-2:m.nσ], m.σ[m.nσ], 1)*differentiate_pointwise(χ_U[i, m.nσ-3:m.nσ], m.σ[m.nσ-3:m.nσ], m.σ[m.nσ], 2)/m.H[i]^3
     end
-    term4 = sum(term4)/nξ
+    term4 = sum(term4)/m.nξ
 
     return -(term1 + term2)/(term3 + term4)
 end
 
 """
-    χ, uξ, uη, uσ, U = invert(b)
+    χ, uξ, uη, uσ, U = postProcess(m, sol)
 
-Wrapper function that inverts for flow given buoyancy perturbation `b`.
+Take solution `sol` and extract reshaped `χ` and `U`. Compute `uξ`, `uη`, `uσ` 
+from definition of χ.
 """
-function invert(b)
-    # buoyancy solution: rhs = dx(b), U = 0
-    # dx(b) = dξ(b) - dx(H)*σ*dσ(b)/H
-    if ξVariation
-        rhs = xDerivativeTF(b)
-    else
-        rhs = -Hx.(ξξ).*σσ.*σDerivativeTF(b)./H.(ξξ)
+function postProcess(m::ModelSetup, sol::Array{Float64,2})
+    iU = m.nσ + 1
+
+    # χ at σ = 0 is vertical integral of uξ
+    U = sol[1, iU] # just take first one since they all must be the same
+
+    # rest of solution is χ
+    χ = sol[:, 1:m.nσ]
+
+    # compute uξ = dσ(χ)/H
+    uξ = σDerivativeTF(m, χ)./repeat(m.H, 1, m.nσ)
+
+    # compute uη = int_-1^0 f*χ/nu dσ*H
+    uη = zeros(m.nξ, m.nσ)
+    for i=1:m.nξ
+        uη[i, :] = cumtrapz(m.f*(χ[i, :] .- U)./(m.ν[i, :]), m.σ)*m.H[i]
     end
-    inversionRHS = getInversionRHS(rhs, 0)
-    sol_b = computeSol(inversionRHS)
 
-    # particular solution (sol_U) is global variable computed in run.jl
-
-    # compute U such that "island rule" is satisfied
-    if symmetry
-        U = 0
+    # compute uσ = -dξ(χ)/H
+    if m.ξVariation
+        uσ = -ξDerivativeTF(m, χ)./repeat(m.H, 1, m.nσ)
     else
-        U = computeU(sol_b, sol_U)
+        uσ = zeros(m.nξ, m.nσ)
+    end
+
+    return χ, uξ, uη, uσ, U
+end
+
+"""
+    χ, uξ, uη, uσ, U = invert(m, b; bl=false)
+
+Invert for flow given current model state buoyancy perturbation.
+"""
+function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
+    # buoyancy solution: rhs = dx(b), U = 0;
+    # (U = 1 solution `sol_U` is stored in ModelSetup struct)
+    if m.ξVariation
+        rhs = xDerivativeTF(m, b)
+    else
+        rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivativeTF(m, b)
+    end
+
+    if bl # BL Solution
+        # no need for dzzzz anymore!
+        χ = @. m.ν/m.f^2*rhs
+
+        # pass sol array to postProcess
+        sol = zeros(m.nξ, m.nσ + 1)
+        sol[:, 1:m.nσ] = χ
+    else # Full Inversion
+        # buoyancy solution
+        inversionRHS = getInversionRHS(rhs, 0)
+        sol_b = computeSol(m, inversionRHS)
+
+        # compute U such that "island rule" is satisfied
+        if symmetry
+            U = 0
+        else
+            U = computeU(m, sol_b)
+        end
     end
 
     # linearity: solution = sol_b + U*sol_U
-    χ, uξ, uη, uσ, U = postProcess(sol_b + U*sol_U)
+    χ, uξ, uη, uσ, U = postProcess(m, sol_b + U*m.sol_U)
 
     return χ, uξ, uη, uσ, U
 end
-
-"""
-    χ, uξ, uη, uσ, U = invertBL(b)
-
-Simplified boundary layer theory inversion for interior flow given buoyancy perturbation `b`.
-"""
-function invertBL(b)
-    if ξVariation
-        rhs = xDerivativeTF(b)
-    else
-        rhs = -Hx.(ξξ).*σσ.*σDerivativeTF(b)./H.(ξξ)
-    end
-
-    # interior solution (no need for dzzzz anymore!)
-    χ = @. Pr*κ/f^2*rhs
-
-    # pass sol array to postProcess
-    sol = zeros(nξ, nσ + 1)
-    sol[:, 1:nσ] = χ
-
-    # assume U = 0 for now so sol[:, nσ + 1] = 0
-
-    # get interior flow
-    χ, uξ, uη, uσ, U = postProcess(sol)
-
-    return χ, uξ, uη, uσ, U
-end
-
-"""
-    χEkman = getChiEkman(b)
-
-Compute Ekman layer solution to problem given buoyancy perturbation b.
-"""
-function getChiEkman(b)
-    # compute x derivative of b
-    bx = xDerivativeTF(b)
-
-    # Ekman layer thickness
-    δ = sqrt(2*Pr*κ1/abs(f)) # using κ at the bottom
-
-    # interior solution: thermal wind balance
-    χ_I = bx
-    χ_I_bot = repeat(χ_I[:, 1], 1, nσ)
-    χ_I_top = repeat(χ_I[:, nσ], 1, nσ)
-
-    # bottom Ekman layer correction
-    χ_B_bot = @. -exp(-(z + H(x))/δ)*χ_I_bot*(cos((z + H(x))/δ) + sin((z + H(x))/δ))
-
-    # top Ekman layer correction
-    χ_B_top = @. -exp(z/δ)*χ_I_top*cos(z/δ)
-
-    # full solution (use full κ with assumption that its variation is larger than δ)
-    χEkman = @. Pr*κ/f^2*(χ_I + χ_B_bot + χ_B_top)
-
-    return χEkman
+function invert!(m::ModelSetup, s::ModelState; bl=false)
+    χ, uξ, uη, uσ, U = invert(m, s.b; bl)
+    s.χ[:, :] = χ
+    s.uξ[:, :] = uξ
+    s.uη[:, :] = uη
+    s.uσ[:, :] = uσ
 end

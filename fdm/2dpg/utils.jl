@@ -3,19 +3,22 @@
 ################################################################################
 
 """
-    fξ = ξDerivativeTF(field)
+    fξ = ξDerivativeTF(m, field)
 
 Compute dξ(`field`) in terrian-following coordinates.
 """
-function ξDerivativeTF(field)
+function ξDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # allocate
-    fξ = zeros(size(field))
+    fξ = zeros(m.nξ, m.nσ)
+
+    # uniform grid spacing
+    dξ = m.ξ[2] - m.ξ[1]
 
     # dξ(field)
-    for j=1:size(fξ, 2)
+    for j=1:m.nσ
         # use the fact that ξ is evenly spaced and periodic
         fξ[2:end-1, j] = (field[3:end, j] - field[1:end-2, j])/(2*dξ)
-        fξ[1, j] = (field[2, j] - field[nξ, j])/(2*dξ)
+        fξ[1, j] = (field[2, j] - field[end, j])/(2*dξ)
         fξ[end, j] = (field[1, j] - field[end-1, j])/(2*dξ)
     end
 
@@ -23,156 +26,167 @@ function ξDerivativeTF(field)
 end
 
 """
-    fσ = σDerivativeTF(field)
+    fσ = σDerivativeTF(m, field)
 
 Compute dσ(`field`) in terrian-following coordinates.
 """
-function σDerivativeTF(field)
+function σDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # allocate
-    fσ = zeros(nξ, nσ)
+    fσ = zeros(m.nξ, m.nσ)
 
-    if typeof(dσ) == Float64
-        # use uniform grid spacing to speed up `differentiate`
-        arg = dσ
-    else
-        arg = σ
-    end
+    # if typeof(dσ) == Float64
+    #     # use uniform grid spacing to speed up `differentiate`
+    #     arg = dσ
+    # else
+    #     arg = σ
+    # end
 
     # dσ(field)
-    for i=1:nξ
-        fσ[i, :] = differentiate(field[i, :], arg)
+    for i=1:m.nξ
+        fσ[i, :] = differentiate(field[i, :], m.σ)
     end
 
     return fσ
 end
 
 """
-    fx = xDerivativeTF(field)
+    fx = xDerivativeTF(m, field)
 
 Compute dx(`field`) in terrian-following coordinates.
 Note: dx() = dξ() - dx(H)*σ*dσ()/H
 """
-function xDerivativeTF(field)
+function xDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # dξ(field)
-    fx = ξDerivativeTF(field)
+    fx = ξDerivativeTF(m, field)
 
     # -dx(H)*σ*dσ(field)/H
-    fx -= Hx.(x).*σσ.*σDerivativeTF(field)./H.(x)
+    fx -= repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivativeTF(m, field)
 
     return fx
 end
 
 """
-    fz = zDerivativeTF(field)
+    fz = zDerivativeTF(m, field)
 
 Compute dz(`field`) in terrian-following coordinates.
 Note: dz() = dσ()/H
 """
-function zDerivativeTF(field)
+function zDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # dσ(field)/H
-    fz = σDerivativeTF(field)./H.(x)
+    fz = σDerivativeTF(field)./repeat(m.H, 1, m.nσ)
     return fz
 end
 
 """
-    u, v, w = transformFromTF(uξ, uη, uσ)
+    u, v, w = transformFromTF(m, s)
 
 Transform from terrain-following coordinates to cartesian coordinates.
 """
-function transformFromTF(uξ, uη, uσ)
-    u = uξ
-    v = uη
-    w = uσ.*H.(x) + σσ.*Hx.(x).*u
+function transformFromTF(m::ModelSetup, s::ModelState)
+    u = s.uξ
+    v = s.uη
+    w = s.uσ.*repeat(m.H, 1, m.nσ) + repeat(m.σ', m.nξ, 1).*repeat(m.Hx, 1, m.nσ).*s.uξ
     return u, v, w
 end
 
-"""
-    uξ, uη, uσ = transformToTF(u, v, w)
+# """
+#     uξ, uη, uσ = transformToTF(u, v, w)
 
-Transform from cartesian coordinates to terrain-following coordinates.
-"""
-function transformToTF(u, v, w)
-    uξ = u
-    uη = v
-    uσ = (w - σσ.*Hx.(x).*u)./H.(x)
-    return uξ, uη, uσ
-end
+# Transform from cartesian coordinates to terrain-following coordinates.
+# """
+# function transformToTF(u, v, w)
+#     uξ = u
+#     uη = v
+#     uσ = (w - σσ.*Hx.(x).*u)./H.(x)
+#     return uξ, uη, uσ
+# end
 
 """
-    saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
+    saveSetup2DPG(m)
 
-Save .h5 checkpoint file for state `b` at time `t`.
+Save .h5 file for parameters.
 """
-function saveCheckpoint2DPG(b, χ, uξ, uη, uσ, U, t, i)
-    savefile = @sprintf("checkpoint%d.h5", i)
+function saveSetup2DPG(m::ModelSetup)
+    savefile = "setup.h5"
     file = h5open(savefile, "w")
-    write(file, "x", x)
-    write(file, "z", z)
-    write(file, "b", b)
-    write(file, "χ", χ)
-    write(file, "uξ", uξ)
-    write(file, "uη", uη)
-    write(file, "uσ", uσ)
-    write(file, "U", U)
-    write(file, "t", t)
-    write(file, "L", L)
-    write(file, "H0", H0)
-    write(file, "Pr", Pr)
-    write(file, "f", f)
-    write(file, "N", N)
-    write(file, "ξVariation", ξVariation)
-    write(file, "κ", κ)
-    write(file, "κ0", κ0)
-    write(file, "κ1", κ1)
-    write(file, "h", h)
+    write(file, "f", m.f)
+    write(file, "N", m.N)
+    write(file, "ξVariation", m.ξVariation)
+    write(file, "L", m.L)
+    write(file, "nξ", m.nξ)
+    write(file, "nσ", m.nσ)
+    write(file, "ξ", m.ξ)
+    write(file, "σ", m.σ)
+    write(file, "x", m.x)
+    write(file, "z", m.z)
+    write(file, "H", m.H)
+    write(file, "Hx", m.Hx)
+    write(file, "ν", m.ν)
+    write(file, "κ", m.κ)
+    write(file, "Δt", m.Δt)
+    write(file, "sol_U", m.sol_U)
     close(file)
     println(savefile)
 end
 
 """
-    checkpoint = loadCheckpoint2DPG(filename)
+    m = loadSetup2DPG(filename)
+
+Load .h5 setup file given by `filename`.
+"""
+function loadSetup2DPG(filename::String)
+    file = h5open(filename, "r")
+    f = read(file, "f")
+    N = read(file, "N")
+    ξVariation = read(file, "ξVariation")
+    L = read(file, "L")
+    nξ = read(file, "nξ")
+    nσ = read(file, "nσ")
+    ξ = read(file, "ξ")
+    σ = read(file, "σ")
+    x = read(file, "x")
+    z = read(file, "z")
+    H = read(file, "H")
+    Hx = read(file, "Hx")
+    ν = read(file, "ν")
+    κ = read(file, "κ")
+    Δt = read(file, "Δt")
+    sol_U = read(file, "sol_U")
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Array{Any}, sol_U)
+end
+
+"""
+    saveCheckpoint2DPG(s, iSave)
+
+Save .h5 checkpoint file for state.
+"""
+function saveCheckpoint2DPG(s::ModelState, iSave::Int64)
+    savefile = @sprintf("checkpoint%d.h5", iSave)
+    file = h5open(savefile, "w")
+    write(file, "b", s.b)
+    write(file, "χ", s.χ)
+    write(file, "uξ", s.uξ)
+    write(file, "uη", s.uη)
+    write(file, "uσ", s.uσ)
+    write(file, "i", s.i)
+    close(file)
+    println(savefile)
+end
+
+"""
+    s = loadCheckpoint2DPG(filename)
 
 Load .h5 checkpoint file given by `filename`.
 """
-function loadCheckpoint2DPG(filename)
+function loadCheckpoint2DPG(filename::String)
     file = h5open(filename, "r")
-    x = read(file, "x")
-    z = read(file, "z")
     b = read(file, "b")
     χ = read(file, "χ")
     uξ = read(file, "uξ")
     uη = read(file, "uη")
     uσ = read(file, "uσ")
-    U = read(file, "U")
-    t = read(file, "t")
-    L = read(file, "L")
-    H0 = read(file, "H0")
-    Pr = read(file, "Pr")
-    f = read(file, "f")
-    N = read(file, "N")
-    ξVariation, = read(file, "ξVariation")
-    κ = read(file, "κ")
-    κ0 = read(file, "κ0")
-    κ1 = read(file, "κ1")
-    h = read(file, "h")
+    i = read(file, "i")
     close(file)
-    return (x=x,
-            z=z,
-            b=b, 
-            χ=χ, 
-            uξ=uξ, 
-            uη=uη, 
-            uσ=uσ, 
-            U=U, 
-            t=t, 
-            L=L, 
-            H0=H0, 
-            Pr=Pr, 
-            f=f, 
-            N=N, 
-            ξVariation=ξVariation, 
-            κ=κ,
-            κ0=κ0,
-            κ1=κ1,
-            h=h)
+    s = ModelState(b, χ, uξ, uη, uσ, i)
+    return s
 end

@@ -1,53 +1,145 @@
-using PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx, SpecialFunctions
+using PyPlot, PyCall, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5, Dierckx, SpecialFunctions
 
-CPUtic()
-
+# plotting stylesheet
 plt.style.use("../../plots.mplstyle")
 close("all")
 pygui(false)
 
+# libraries
 include("../../myJuliaLib.jl")
-include("params.jl")
+include("structs.jl")
 include("utils.jl")
 include("plotting.jl")
 include("inversion.jl")
 include("evolution.jl")
 
-################################################################################
-# run evolution integrations
-################################################################################
+using CPUTime
+CPUtic()
 
-print("Computing inversion matrices: ") 
-inversionLHSs = Array{Any}(undef, nξ) 
-for i=1:nξ 
-    inversionLHSs[i] = lu(getInversionLHS(κ[i, :], H(ξ[i]))) 
-end  
-# particular solution  
-inversionRHS = getInversionRHS(zeros(nξ, nσ), 1) 
-sol_U = computeSol(inversionRHS) 
-println("Done.") 
+# constants
+const secsInDay = 86400
+const secsInYear = 360*86400
+const symmetry = true
 
-b = evolve(1*tSave) 
+"""
+    run()
 
-# b = evolve(15*secsInYear; bl=true) 
+Run a simulation.
+"""
+function run()
+    # parameters (see `structs.jl`)
+    f = -5.5e-5
+    N = 1e-3
+    ξVariation = true
+    nξ = 2^7 + 1 
+    nσ = 2^7
+    
+    # topography: sine
+    L = 2e6
+    H0 = 2e3
+    amp =  0.4*H0
+    H_func(x) = H0 - amp*sin(2*π*x/L - π/2)
+    Hx_func(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
+    
+    # diffusivity
+    κ0 = 6e-5
+    κ1 = 2e-3
+    h = 200
+    κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
+
+    # viscosity
+    Pr = 1e0
+    ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
+    
+    # timestepping
+    Δt = 10*secsInDay
+    tPlot = 3*secsInYear
+    tSave = 3*secsInYear
+    
+    # create model struct
+    m = ModelSetup(f, N, ξVariation, L, nξ, nσ, H_func, Hx_func, ν_func, κ_func, Δt)
+
+    # save and log params
+    saveSetup2DPG(m)
+    ofile = open("out.txt", "w")
+    logParams(ofile, "\n2D νPGCM with Parameters\n")
+    logParams(ofile, @sprintf("nξ = %d", nξ))
+    logParams(ofile, @sprintf("nσ = %d\n", nσ))
+    logParams(ofile, @sprintf("L  = %d km", L/1000))
+    logParams(ofile, @sprintf("H0 = %d m", H0))
+    logParams(ofile, @sprintf("Pr = %1.1f", Pr))
+    logParams(ofile, @sprintf("f  = %1.1e s-1", f))
+    logParams(ofile, @sprintf("N  = %1.1e s-1", N))
+    logParams(ofile, @sprintf("κ0 = %1.1e m2 s-1", κ0))
+    logParams(ofile, @sprintf("κ1 = %1.1e m2 s-1", κ1))
+    logParams(ofile, @sprintf("h  = %d m", h))
+    logParams(ofile, @sprintf("Δt = %.2f days", Δt/86400))
+    logParams(ofile, string("\nVariations in ξ: ", ξVariation))
+    logParams(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*Pr*κ1/abs(f))))
+    logParams(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", H0*(m.σ[2] - m.σ[1])))
+    close(ofile)
+
+    # set initial state
+    b = N^2*m.z
+    # b = zeros(nξ, nσ)
+    χ, uξ, uη, uσ, U = invert(m, b)
+    i = [1]
+    s = ModelState(b, χ, uξ, uη, uσ, i)
+
+    # ridgePlot(m, s, χ, "", "")
+    # savefig("test1.png")
+    # close()
+    # error()
+
+    # # test
+    # ξξ = repeat(m.ξ, 1, nσ)
+    # g = sin.(2π*ξξ/m.L)
+    # gξ = 2π/m.L*cos.(2π*ξξ/m.L)
+    # println(maximum(abs.(ξDerivativeTF(m, g) - gξ)))
+    # fig, ax = subplots(1)
+    # img = ax.imshow(ξDerivativeTF(m, g)' - gξ', origin="lower") 
+    # colorbar(img, ax=ax)
+    # ax.spines["left"].set_visible(false)
+    # ax.spines["bottom"].set_visible(false)
+    # savefig("test1.png")
+    # close()
+
+    # σσ = repeat(m.σ', nξ, 1)
+    # g = σσ
+    # gσ = ones(nξ, nσ)
+    # println(maximum(abs.(σDerivativeTF(m, g) - gσ)))
+    # fig, ax = subplots(1)
+    # img = ax.imshow(σDerivativeTF(m, g)' - gσ', origin="lower") 
+    # colorbar(img, ax=ax)
+    # ax.spines["left"].set_visible(false)
+    # ax.spines["bottom"].set_visible(false)
+    # savefig("test2.png")
+    # close()
+
+    # g = sin.(2π*m.x/m.L)
+    # gx = 2π/m.L*cos.(2π*m.x/m.L)
+    # println(maximum(abs.(xDerivativeTF(m, g) - gx)))
+    # fig, ax = subplots(1)
+    # img = ax.imshow(xDerivativeTF(m, g)' - gx', origin="lower") 
+    # colorbar(img, ax=ax)
+    # ax.spines["left"].set_visible(false)
+    # ax.spines["bottom"].set_visible(false)
+    # savefig("test3.png")
+    # close()
+
+    # error()
+
+    evolve!(m, s, 5*tSave, tPlot, tSave) 
+end
+
+# run()
 
 ################################################################################
 # plots
 ################################################################################
 
-# path = ""
-# dfiles = string.(path, "checkpoint", 1:5, ".h5")
-# profilePlot(dfiles, argmin(abs.(ξ .- L/4))) 
-
-#= c = loadCheckpoint2DPG("checkpoint30.h5") =#
-#= ridgePlot(c.χ, c.b, "t = 30 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
-#= savefig("chi030.png") =#
-#= close() =#
-#= c = loadCheckpoint2DPG("checkpoint31.h5") =#
-#= ridgePlot(c.χ, c.b, "t = 31 days", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; vext=2.5e-2) =#
-#= savefig("chi031.png") =#
-#= close() =#
-
-CPUtoc()
-
-# Before refactor: 3 years = 71 s
+path = ""
+setupFile = "setup.h5"
+m = loadSetup2DPG(setupFile)
+stateFiles = string.(path, "checkpoint", 1:5, ".h5")
+profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
