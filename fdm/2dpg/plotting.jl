@@ -62,7 +62,7 @@ function ridgePlot(m::ModelSetup, s::ModelState, field::Array{Float64,2}, titleS
     ax.set_title(titleString)
     ax.set_xlabel(L"$x$ (km)")
     ax.set_ylabel(L"$z$ (km)")
-    ax.set_xticks([0, 500, 1000, 1500, 2000])
+    ax.set_xlim([m.ξ[1]/1e3, m.ξ[end]/1e3])
 
     # no spines
     ax.spines["left"].set_visible(false)

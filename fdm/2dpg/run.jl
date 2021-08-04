@@ -35,7 +35,8 @@ function run()
     nσ = 2^8
     
     # topography: sine
-    L = 2e6
+    # L = 2e6
+    L = 1e5
     H0 = 2e3
     amp =  0.4*H0
     H_func(x) = H0 - amp*sin(2*π*x/L - π/2)
@@ -129,11 +130,8 @@ function run()
 
     # error()
 
-    # CPUtic()
-    # evolve!(m, s, Δt, tPlot, tSave) 
-    # CPUtoc()
-    # evolve!(m, s, 1*tSave, tPlot, tSave) 
-    evolve!(m, s, 5*tSave, tPlot, tSave; bl=true) 
+    evolve!(m, s, 5*tSave, tPlot, tSave) 
+    # evolve!(m, s, 5*tSave, tPlot, tSave; bl=true) 
 
     return m, s
 end
