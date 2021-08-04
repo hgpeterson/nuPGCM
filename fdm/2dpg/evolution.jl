@@ -115,15 +115,15 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
     # left-hand side for evolution equation (save LU decomposition for speed)
     evolutionLHS = lu(getEvolutionLHS(m.Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
 
-    # plot initial condition
-    iSave = 0
-    saveCheckpoint2DPG(s, iSave)
-    iSave += 1
+    # # save initial state
+    # iSave = 0
+    # saveCheckpoint2DPG(s, iSave)
+    # iSave += 1
     
-    # plot initial state
-    iImg = 0
-    plotCurrentState(m, s, iImg)
-    iImg += 1
+    # # plot initial state
+    # iImg = 0
+    # plotCurrentState(m, s, iImg)
+    # iImg += 1
 
     # main loop
     t = 0
@@ -134,30 +134,31 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
         diffRHS = s.b
 
         # explicit timestep for advection
+        χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl)
         function fAdvRHS(b, t)
-            χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
+            # χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
             if m.ξVariation
-                return -uξ.*ξDerivativeTF(m, b) - uσ.*σDerivativeTF(m, b)
+                return reshape(-uξ[:].*(ξDerivativeMat*b[:]) .- uσ[:].*(σDerivativeMat*b[:]), m.nξ, m.nσ)
             else
-                return -uσ.*σDerivativeTF(m, b)
+                return reshape(-uσ[:].*(σDerivativeMat*b[:]), m.nξ, m.nσ)
             end
         end
         advRHS = RK4(t, m.Δt, s.b, fAdvRHS)
 
         # sum the two
-        evolutionRHS = reshape(diffRHS + advRHS, nPts, 1)
+        evolutionRHS = diffRHS .+ advRHS
 
         # boundary fluxes
         if bl
-            evolutionRHS[bottomBdy] = s.χ[:, 1].*m.H./m.κ[:, 1].*ξDerivativeTF(s.b[:, 1])
-            evolutionRHS[topBdy] = s.χ[:, m.nσ].*m.H./m.κ[:, m.nσ].*ξDerivativeTF(s.b[:, m.nσ])
+            evolutionRHS[bottomBdy] = m.H./m.κ[:, 1].*s.χ[:, 1].*ξDerivativeTF(m, s.b[:, 1])
+            evolutionRHS[topBdy] = m.H./m.κ[:, m.nσ].*(m.N^2 .+ s.χ[:, m.nσ].*ξDerivativeTF(m, s.b[:, m.nσ]))
         else
             evolutionRHS[bottomBdy] .= 0
             evolutionRHS[topBdy] .= m.N^2
         end
 
         # solve and update model state
-        s.b[:] = reshape(evolutionLHS\evolutionRHS, m.nξ, m.nσ)
+        s.b[:, :] = reshape(evolutionLHS\evolutionRHS[:], m.nξ, m.nσ)
         s.i[1] = i + 1
 
         # invert buoyancy for flow and save to state
@@ -171,14 +172,14 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
         # uσCFL = minimum(abs.(dσ./uσ)) 
         # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
         
-        if i % nStepsPlot == 0
-            # plot flow
-            plotCurrentState(m, s, iImg)
-            iImg += 1
-        end
-        if i % nStepsSave == 0
-            saveCheckpoint2DPG(s, iSave)
-            iSave += 1
-        end
+        # if i % nStepsPlot == 0
+        #     # plot flow
+        #     plotCurrentState(m, s, iImg)
+        #     iImg += 1
+        # end
+        # if i % nStepsSave == 0
+        #     saveCheckpoint2DPG(s, iSave)
+        #     iSave += 1
+        # end
     end
 end

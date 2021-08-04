@@ -242,10 +242,12 @@ function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
         else
             U = computeU(m, sol_b)
         end
+
+        # linearity: solution = sol_b + U*sol_U
+        sol = sol_b + U*m.sol_U
     end
 
-    # linearity: solution = sol_b + U*sol_U
-    χ, uξ, uη, uσ, U = postProcess(m, sol_b + U*m.sol_U)
+    χ, uξ, uη, uσ, U = postProcess(m, sol)
 
     return χ, uξ, uη, uσ, U
 end

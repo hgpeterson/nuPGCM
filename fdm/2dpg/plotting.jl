@@ -91,7 +91,7 @@ function profilePlot(setupFile, stateFiles, iξ)
 
     ax[2].set_xlabel(string("along-ridge vel.,\n", L"$v$ (m s$^{-1}$)"))
 
-    ax[3].set_xlabel(string("stratification,\n", L"$\partial_z B$ (s$^{-2}$)"))
+    ax[3].set_xlabel(string("stratification,\n", L"$\partial_z b$ (s$^{-2}$)"))
 
     subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
 

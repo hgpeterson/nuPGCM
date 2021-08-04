@@ -31,8 +31,8 @@ function run()
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    nξ = 2^7 + 1 
-    nσ = 2^7
+    nξ = 2^8 + 1 
+    nσ = 2^8
     
     # topography: sine
     L = 2e6
@@ -129,17 +129,24 @@ function run()
 
     # error()
 
-    evolve!(m, s, 5*tSave, tPlot, tSave) 
+    # CPUtic()
+    # evolve!(m, s, Δt, tPlot, tSave) 
+    # CPUtoc()
+    # evolve!(m, s, 1*tSave, tPlot, tSave) 
+    evolve!(m, s, 5*tSave, tPlot, tSave; bl=true) 
+
+    return m, s
 end
 
-# run()
+m, s = run()
+CPUtoc()
 
 ################################################################################
 # plots
 ################################################################################
 
-path = ""
-setupFile = "setup.h5"
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(path, "checkpoint", 1:5, ".h5")
-profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+# path = ""
+# setupFile = "setup.h5"
+# m = loadSetup2DPG(setupFile)
+# stateFiles = string.(path, "checkpoint", 1:5, ".h5")
+# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 

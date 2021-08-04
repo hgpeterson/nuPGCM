@@ -24,6 +24,20 @@ function ξDerivativeTF(m::ModelSetup, field::Array{Float64,2})
 
     return fξ
 end
+function ξDerivativeTF(m::ModelSetup, field::Array{Float64,1})
+    # allocate
+    fξ = zeros(m.nξ, 1)
+
+    # uniform grid spacing
+    dξ = m.ξ[2] - m.ξ[1]
+
+    # dξ(field): use the fact that ξ is evenly spaced and periodic
+    fξ[2:end-1] = (field[3:end] - field[1:end-2])/(2*dξ)
+    fξ[1] = (field[2] - field[end])/(2*dξ)
+    fξ[end] = (field[1] - field[end-1])/(2*dξ)
+
+    return fξ
+end
 
 """
     fσ = σDerivativeTF(m, field)
@@ -33,13 +47,6 @@ Compute dσ(`field`) in terrian-following coordinates.
 function σDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # allocate
     fσ = zeros(m.nξ, m.nσ)
-
-    # if typeof(dσ) == Float64
-    #     # use uniform grid spacing to speed up `differentiate`
-    #     arg = dσ
-    # else
-    #     arg = σ
-    # end
 
     # dσ(field)
     for i=1:m.nξ
@@ -73,7 +80,7 @@ Note: dz() = dσ()/H
 """
 function zDerivativeTF(m::ModelSetup, field::Array{Float64,2})
     # dσ(field)/H
-    fz = σDerivativeTF(field)./repeat(m.H, 1, m.nσ)
+    fz = σDerivativeTF(m, field)./repeat(m.H, 1, m.nσ)
     return fz
 end
 
@@ -88,18 +95,6 @@ function transformFromTF(m::ModelSetup, s::ModelState)
     w = s.uσ.*repeat(m.H, 1, m.nσ) + repeat(m.σ', m.nξ, 1).*repeat(m.Hx, 1, m.nσ).*s.uξ
     return u, v, w
 end
-
-# """
-#     uξ, uη, uσ = transformToTF(u, v, w)
-
-# Transform from cartesian coordinates to terrain-following coordinates.
-# """
-# function transformToTF(u, v, w)
-#     uξ = u
-#     uη = v
-#     uσ = (w - σσ.*Hx.(x).*u)./H.(x)
-#     return uξ, uη, uσ
-# end
 
 """
     saveSetup2DPG(m)
@@ -151,8 +146,9 @@ function loadSetup2DPG(filename::String)
     ν = read(file, "ν")
     κ = read(file, "κ")
     Δt = read(file, "Δt")
+    inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64, Int64}}(undef, nξ)
     sol_U = read(file, "sol_U")
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Array{Any}, sol_U)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, inversionLHSs, sol_U)
 end
 
 """
