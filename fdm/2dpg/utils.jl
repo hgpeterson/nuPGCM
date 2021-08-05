@@ -3,28 +3,11 @@
 ################################################################################
 
 """
-    fξ = ξDerivativeTF(m, field)
+    fξ = ξDerivative(m, field)
 
 Compute dξ(`field`) in terrian-following coordinates.
 """
-function ξDerivativeTF(m::ModelSetup, field::Array{Float64,2})
-    # allocate
-    fξ = zeros(m.nξ, m.nσ)
-
-    # uniform grid spacing
-    dξ = m.ξ[2] - m.ξ[1]
-
-    # dξ(field)
-    for j=1:m.nσ
-        # use the fact that ξ is evenly spaced and periodic
-        fξ[2:end-1, j] = (field[3:end, j] - field[1:end-2, j])/(2*dξ)
-        fξ[1, j] = (field[2, j] - field[end, j])/(2*dξ)
-        fξ[end, j] = (field[1, j] - field[end-1, j])/(2*dξ)
-    end
-
-    return fξ
-end
-function ξDerivativeTF(m::ModelSetup, field::Array{Float64,1})
+function ξDerivative(m::ModelSetup, field::Array{Float64,1})
     # allocate
     fξ = zeros(m.nξ, 1)
 
@@ -38,49 +21,44 @@ function ξDerivativeTF(m::ModelSetup, field::Array{Float64,1})
 
     return fξ
 end
-
-"""
-    fσ = σDerivativeTF(m, field)
-
-Compute dσ(`field`) in terrian-following coordinates.
-"""
-function σDerivativeTF(m::ModelSetup, field::Array{Float64,2})
-    # allocate
-    fσ = zeros(m.nξ, m.nσ)
-
-    # dσ(field)
-    for i=1:m.nξ
-        fσ[i, :] = differentiate(field[i, :], m.σ)
-    end
-
-    return fσ
+function ξDerivative(m::ModelSetup, field::Array{Float64,2})
+    return reshape(m.Dξ*field[:], m.nξ, m.nσ)
 end
 
 """
-    fx = xDerivativeTF(m, field)
+    fσ = σDerivative(m, field)
+
+Compute dσ(`field`) in terrian-following coordinates.
+"""
+function σDerivative(m::ModelSetup, field::Array{Float64,2})
+    return reshape(m.Dσ*field[:], m.nξ, m.nσ)
+end
+
+"""
+    fx = xDerivative(m, field)
 
 Compute dx(`field`) in terrian-following coordinates.
 Note: dx() = dξ() - dx(H)*σ*dσ()/H
 """
-function xDerivativeTF(m::ModelSetup, field::Array{Float64,2})
+function xDerivative(m::ModelSetup, field::Array{Float64,2})
     # dξ(field)
-    fx = ξDerivativeTF(m, field)
+    fx = ξDerivative(m, field)
 
     # -dx(H)*σ*dσ(field)/H
-    fx -= repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivativeTF(m, field)
+    fx -= repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivative(m, field)
 
     return fx
 end
 
 """
-    fz = zDerivativeTF(m, field)
+    fz = zDerivative(m, field)
 
 Compute dz(`field`) in terrian-following coordinates.
 Note: dz() = dσ()/H
 """
-function zDerivativeTF(m::ModelSetup, field::Array{Float64,2})
+function zDerivative(m::ModelSetup, field::Array{Float64,2})
     # dσ(field)/H
-    fz = σDerivativeTF(m, field)./repeat(m.H, 1, m.nσ)
+    fz = σDerivative(m, field)./repeat(m.H, 1, m.nσ)
     return fz
 end
 
@@ -146,9 +124,13 @@ function loadSetup2DPG(filename::String)
     ν = read(file, "ν")
     κ = read(file, "κ")
     Δt = read(file, "Δt")
-    inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64, Int64}}(undef, nξ)
+    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
+    inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
+    for i=1:nξ 
+        inversionLHSs[i] = lu(getInversionLHS(ν[i, :], f, H[i], σ)) 
+    end  
     sol_U = read(file, "sol_U")
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, inversionLHSs, sol_U)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, inversionLHSs, sol_U)
 end
 
 """

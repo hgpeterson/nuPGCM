@@ -13,9 +13,6 @@ include("plotting.jl")
 include("inversion.jl")
 include("evolution.jl")
 
-using CPUTime
-CPUtic()
-
 # constants
 const secsInDay = 86400
 const secsInYear = 360*86400
@@ -53,7 +50,8 @@ function run()
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    Δt = 10*secsInDay
+    # Δt = 10*secsInDay
+    Δt = 1*secsInDay
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -82,69 +80,25 @@ function run()
 
     # set initial state
     b = N^2*m.z
-    # b = zeros(nξ, nσ)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState(b, χ, uξ, uη, uσ, i)
 
-    # ridgePlot(m, s, χ, "", "")
-    # savefig("test1.png")
-    # close()
-    # error()
-
-    # # test
-    # ξξ = repeat(m.ξ, 1, nσ)
-    # g = sin.(2π*ξξ/m.L)
-    # gξ = 2π/m.L*cos.(2π*ξξ/m.L)
-    # println(maximum(abs.(ξDerivativeTF(m, g) - gξ)))
-    # fig, ax = subplots(1)
-    # img = ax.imshow(ξDerivativeTF(m, g)' - gξ', origin="lower") 
-    # colorbar(img, ax=ax)
-    # ax.spines["left"].set_visible(false)
-    # ax.spines["bottom"].set_visible(false)
-    # savefig("test1.png")
-    # close()
-
-    # σσ = repeat(m.σ', nξ, 1)
-    # g = σσ
-    # gσ = ones(nξ, nσ)
-    # println(maximum(abs.(σDerivativeTF(m, g) - gσ)))
-    # fig, ax = subplots(1)
-    # img = ax.imshow(σDerivativeTF(m, g)' - gσ', origin="lower") 
-    # colorbar(img, ax=ax)
-    # ax.spines["left"].set_visible(false)
-    # ax.spines["bottom"].set_visible(false)
-    # savefig("test2.png")
-    # close()
-
-    # g = sin.(2π*m.x/m.L)
-    # gx = 2π/m.L*cos.(2π*m.x/m.L)
-    # println(maximum(abs.(xDerivativeTF(m, g) - gx)))
-    # fig, ax = subplots(1)
-    # img = ax.imshow(xDerivativeTF(m, g)' - gx', origin="lower") 
-    # colorbar(img, ax=ax)
-    # ax.spines["left"].set_visible(false)
-    # ax.spines["bottom"].set_visible(false)
-    # savefig("test3.png")
-    # close()
-
-    # error()
-
-    evolve!(m, s, 5*tSave, tPlot, tSave) 
-    # evolve!(m, s, 5*tSave, tPlot, tSave; bl=true) 
+    # solve
+    # evolve!(m, s, 5*tSave, tPlot, tSave) 
+    evolve!(m, s, 5*tSave, tPlot, tSave; bl=true) 
 
     return m, s
 end
 
 m, s = run()
-CPUtoc()
 
 ################################################################################
 # plots
 ################################################################################
 
-# path = ""
-# setupFile = "setup.h5"
-# m = loadSetup2DPG(setupFile)
-# stateFiles = string.(path, "checkpoint", 1:5, ".h5")
-# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+path = ""
+setupFile = "setup.h5"
+m = loadSetup2DPG(setupFile)
+stateFiles = string.(path, "checkpoint", 1:5, ".h5")
+profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 

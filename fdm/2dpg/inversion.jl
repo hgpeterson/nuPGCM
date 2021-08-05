@@ -9,7 +9,7 @@
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(ν::Array{Float64,1}, f::Float64,H::Float64,σ::Array{Float64,1})
+function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array{Float64,1})
     nσ = size(σ, 1)
     iU = nσ + 1
     A = Tuple{Int64,Int64,Float64}[]  
@@ -127,6 +127,14 @@ function computeSol(m::ModelSetup, inversionRHS::Array{Float64,2})
     end
     return sol
 end
+function computeSol(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Array{Float64,2})
+    # solve
+    sol = zeros(size(inversionRHS))
+    for i=1:size(sol, 1)
+        sol[i, :] = inversionLHSs[i]\inversionRHS[i, :]
+    end
+    return sol
+end
 
 """
     U = computeU(m, sol_b)
@@ -192,7 +200,7 @@ function postProcess(m::ModelSetup, sol::Array{Float64,2})
     χ = sol[:, 1:m.nσ]
 
     # compute uξ = dσ(χ)/H
-    uξ = σDerivativeTF(m, χ)./repeat(m.H, 1, m.nσ)
+    uξ = σDerivative(m, χ)./repeat(m.H, 1, m.nσ)
 
     # compute uη = int_-1^0 f*χ/nu dσ*H
     uη = zeros(m.nξ, m.nσ)
@@ -202,7 +210,7 @@ function postProcess(m::ModelSetup, sol::Array{Float64,2})
 
     # compute uσ = -dξ(χ)/H
     if m.ξVariation
-        uσ = -ξDerivativeTF(m, χ)./repeat(m.H, 1, m.nσ)
+        uσ = -ξDerivative(m, χ)./repeat(m.H, 1, m.nσ)
     else
         uσ = zeros(m.nξ, m.nσ)
     end
@@ -219,9 +227,9 @@ function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
     # buoyancy solution: rhs = dx(b), U = 0;
     # (U = 1 solution `sol_U` is stored in ModelSetup struct)
     if m.ξVariation
-        rhs = xDerivativeTF(m, b)
+        rhs = xDerivative(m, b)
     else
-        rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivativeTF(m, b)
+        rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivative(m, b)
     end
 
     if bl # BL Solution

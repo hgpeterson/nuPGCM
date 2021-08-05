@@ -109,7 +109,7 @@ function profilePlot(setupFile, stateFiles, iξ)
         u, v, w = transformFromTF(m, s)
 
         # stratification
-        bz = zDerivativeTF(m, s.b)
+        bz = zDerivative(m, s.b)
 
         # colors and labels
         label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")

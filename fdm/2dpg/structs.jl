@@ -36,9 +36,9 @@ struct ModelSetup
     # timestep (s)
 	Δt::Float64
 
-    # # derivative matrices
-    # ξDerivative::SparseMatrixCSC{Float64, Int64}
-    # σDerivative::SparseMatrixCSC{Float64, Int64}
+    # derivative matrices
+    Dξ::SparseMatrixCSC{Float64,Int64}
+    Dσ::SparseMatrixCSC{Float64,Int64}
 
     # inversion matrices
     inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
@@ -48,10 +48,11 @@ struct ModelSetup
 end
 
 # construct ModelSetup object using analytical functions for H, Hx, ν, κ
-function ModelSetup(f, N, ξVariation, L, nξ, nσ, H_func, Hx_func, ν_func, κ_func, Δt)
+function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, H_func::Function, Hx_func::Function, ν_func::Function, κ_func::Function, Δt::Real)
     # create grids: even spacing in ξ and chebyshev in σ
-    ξ = 0:L/nξ:(L - L/nξ)
+    ξ = collect(0:L/nξ:(L - L/nξ))
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+    # σ = collect(-1:1/(nσ - 1):0)
 
     # evaluate functions 
     H = @. H_func(ξ)
@@ -67,96 +68,89 @@ function ModelSetup(f, N, ξVariation, L, nξ, nσ, H_func, Hx_func, ν_func, κ
     x = repeat(ξ, 1, nσ)
     z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
 
-    # # get derivative matrices
-    # ξDerivative, σDerivative = getDerivativeMatrices(ξ, σ, L)
+    # get derivative matrices
+    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
     
     # inversion matrices
     inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
     for i=1:nξ 
         inversionLHSs[i] = lu(getInversionLHS(ν[i, :], f, H[i], σ)) 
     end  
-
-    # make placeholder struct to call the `computeSol` function
-    m = ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, inversionLHSs, zeros(nξ, nσ+1))
     
     # U = 1 solution  
     inversionRHS = getInversionRHS(zeros(nξ, nσ), 1) 
-    sol_U = computeSol(m, inversionRHS) 
+    sol_U = computeSol(inversionLHSs, inversionRHS) 
 
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, inversionLHSs, sol_U)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, inversionLHSs, sol_U)
 end
 
-# """
-#     ξDerivative, σDerivative = getDerivativeMatrices(ξ, σ, L)
+"""
+    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
 
-# Compute the derivative matrices.
-# """
-# function getDerivativeMatrices(ξ, σ, L)
-#     nξ = size(ξ, 1)
-#     nσ = size(σ, 1)
-#     nPts = nξ*nσ
+Compute the derivative matrices.
+"""
+function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Float64)
+    nξ = size(ξ, 1)
+    nσ = size(σ, 1)
+    nPts = nξ*nσ
 
-#     umap = reshape(1:nPts, nξ, nσ)    
-#     ξDerivative = Tuple{Int64,Int64,Float64}[]
-#     σDerivative = Tuple{Int64,Int64,Float64}[]
+    umap = reshape(1:nPts, nξ, nσ)    
+    Dξ = Tuple{Int64,Int64,Float64}[]
+    Dσ = Tuple{Int64,Int64,Float64}[]
 
-#     # Main loop, insert stencil in matrices for each node point
-#     for i=2:nξ-1
-#         # interior nodes
-#         for j=2:nσ-1
-#             row = umap[i, j] 
+    # Insert stencil in matrices for each node point
+    for i=1:nξ
+        for j=1:nσ
+            row = umap[i, j] 
 
-#             # stencils
-#             fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
-#             fd_ξ = mkfdstencil(ξ[i-1:i+1], ξ[i], 1)
+            if j == 1 
+                # bottom 
+                fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
+                push!(Dσ, (row, umap[i, 1], fd_σ[1]))
+                push!(Dσ, (row, umap[i, 2], fd_σ[2]))
+                push!(Dσ, (row, umap[i, 3], fd_σ[3]))
+            elseif j == nσ
+                # top 
+                fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+                push!(Dσ, (row, umap[i, nσ-2], fd_σ[1]))
+                push!(Dσ, (row, umap[i, nσ-1], fd_σ[2]))
+                push!(Dσ, (row, umap[i, nσ],   fd_σ[3]))
+            else
+                # interior
+                fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+                push!(Dσ, (row, umap[i, j-1], fd_σ[1]))
+                push!(Dσ, (row, umap[i, j],   fd_σ[2]))
+                push!(Dσ, (row, umap[i, j+1], fd_σ[3]))
+            end
 
-#             # add to matrices
-#             push!(ξDerivative, (row, umap[i-1, j], fd_ξ[1]))
-#             push!(ξDerivative, (row, umap[i, j],   fd_ξ[2]))
-#             push!(ξDerivative, (row, umap[i+1, j], fd_ξ[3]))
+            if i == 1
+                # left (periodic)
+                fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) 
+                push!(Dξ, (row, umap[nξ, j], fd_ξ[1]))
+                push!(Dξ, (row, umap[1, j],  fd_ξ[2]))
+                push!(Dξ, (row, umap[2, j],  fd_ξ[3]))
+            elseif i == nξ
+                # right (periodic)
+                fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1)
+                push!(Dξ, (row, umap[nξ-1, j], fd_ξ[1]))
+                push!(Dξ, (row, umap[nξ, j],   fd_ξ[2]))
+                push!(Dξ, (row, umap[1, j],    fd_ξ[3]))
+            else
+                # interior
+                fd_ξ = mkfdstencil(ξ[i-1:i+1], ξ[i], 1)
+                push!(Dξ, (row, umap[i-1, j], fd_ξ[1]))
+                push!(Dξ, (row, umap[i, j],   fd_ξ[2]))
+                push!(Dξ, (row, umap[i+1, j], fd_ξ[3]))
+            end
+        end
+    end
 
-#             push!(σDerivative, (row, umap[i, j-1], fd_σ[1]))
-#             push!(σDerivative, (row, umap[i, j],   fd_σ[2]))
-#             push!(σDerivative, (row, umap[i, j+1], fd_σ[3]))
-#         end
-#     end
+    # Create CSC sparse matrix from matrix elements
+    Dξ = sparse((x->x[1]).(Dξ), (x->x[2]).(Dξ), (x->x[3]).(Dξ), nPts, nPts)
+    Dσ = sparse((x->x[1]).(Dσ), (x->x[2]).(Dσ), (x->x[3]).(Dσ), nPts, nPts)
 
-#     # boundaries
-#     for i=1:nξ
-#         # bottom 
-#         row = umap[i, 1] 
-#         fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
-#         push!(σDerivative, (row, umap[i, 1], fd_σ[1]))
-#         push!(σDerivative, (row, umap[i, 2], fd_σ[2]))
-#         push!(σDerivative, (row, umap[i, 3], fd_σ[3]))
-#         # top 
-#         row = umap[i, nσ] 
-#         fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
-#         push!(σDerivative, (row, umap[i, nσ-2], fd_σ[1]))
-#         push!(σDerivative, (row, umap[i, nσ-1], fd_σ[2]))
-#         push!(σDerivative, (row, umap[i, nσ],   fd_σ[3]))
-#     end
-#     for j=1:nσ
-#         # left 
-#         row = umap[1, j] 
-#         fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) # periodic
-#         push!(ξDerivative, (row, umap[nξ, j], fd_ξ[1]))
-#         push!(ξDerivative, (row, umap[1, j],  fd_ξ[2]))
-#         push!(ξDerivative, (row, umap[2, j],  fd_ξ[3]))
-#         # right 
-#         row = umap[nξ, j] 
-#         fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1) # periodic
-#         push!(ξDerivative, (row, umap[nξ-1, j], fd_ξ[1]))
-#         push!(ξDerivative, (row, umap[nξ, j],   fd_ξ[2]))
-#         push!(ξDerivative, (row, umap[1, j],    fd_ξ[3]))
-#     end
-
-#     # Create CSC sparse matrix from matrix elements
-#     ξDerivative = sparse((x->x[1]).(ξDerivative), (x->x[2]).(ξDerivative), (x->x[3]).(ξDerivative), nPts, nPts)
-#     σDerivative = sparse((x->x[1]).(σDerivative), (x->x[2]).(σDerivative), (x->x[3]).(σDerivative), nPts, nPts)
-
-#     return ξDerivative, σDerivative
-# end
+    return Dξ, Dσ
+end
 
 struct ModelState
     # buoyancy (m s-2)

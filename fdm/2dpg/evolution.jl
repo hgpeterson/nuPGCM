@@ -9,15 +9,9 @@ function getEvolutionMatrices(m::ModelSetup)
     umap = reshape(1:nPts, m.nξ, m.nσ)    
     diffMat = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
     bdyFluxMat = Tuple{Int64,Int64,Float64}[]      # flux at boundary matrix
-    ξDerivativeMat = Tuple{Int64,Int64,Float64}[]  # advection operator matrix (ξ)
-    σDerivativeMat = Tuple{Int64,Int64,Float64}[]  # advection operator matrix (σ)
 
     # Main loop, insert stencil in matrices for each node point
     for i=1:m.nξ
-        # periodic in ξ
-        iL = mod1(i-1, m.nξ)
-        iR = mod1(i+1, m.nξ)
-
         # interior nodes only for operators
         for j=2:m.nσ-1
             row = umap[i, j] 
@@ -33,15 +27,6 @@ function getEvolutionMatrices(m::ModelSetup)
             push!(diffMat, (row, umap[i, j-1], (κ_σ*fd_σ[1] + m.κ[i, j]*fd_σσ[1])/m.H[i]^2))
             push!(diffMat, (row, umap[i, j],   (κ_σ*fd_σ[2] + m.κ[i, j]*fd_σσ[2])/m.H[i]^2))
             push!(diffMat, (row, umap[i, j+1], (κ_σ*fd_σ[3] + m.κ[i, j]*fd_σσ[3])/m.H[i]^2))
-
-            # ξ advection term: dξ()
-            push!(ξDerivativeMat, (row, umap[iR, j],  1.0/(2*(m.ξ[2] - m.ξ[1]))))
-            push!(ξDerivativeMat, (row, umap[iL, j], -1.0/(2*(m.ξ[2] - m.ξ[1]))))
-
-            # σ advection term: dσ()
-            push!(σDerivativeMat, (row, umap[i, j-1], fd_σ[1]))
-            push!(σDerivativeMat, (row, umap[i, j],   fd_σ[2]))
-            push!(σDerivativeMat, (row, umap[i, j+1], fd_σ[3]))
         end
 
         # flux at boundaries: bottom
@@ -66,10 +51,8 @@ function getEvolutionMatrices(m::ModelSetup)
     # Create CSC sparse matrix from matrix elements
     diffMat = sparse((x->x[1]).(diffMat), (x->x[2]).(diffMat), (x->x[3]).(diffMat), nPts, nPts)
     bdyFluxMat = sparse((x->x[1]).(bdyFluxMat), (x->x[2]).(bdyFluxMat), (x->x[3]).(bdyFluxMat), nPts, nPts)
-    ξDerivativeMat = sparse((x->x[1]).(ξDerivativeMat), (x->x[2]).(ξDerivativeMat), (x->x[3]).(ξDerivativeMat), nPts, nPts)
-    σDerivativeMat = sparse((x->x[1]).(σDerivativeMat), (x->x[2]).(σDerivativeMat), (x->x[3]).(σDerivativeMat), nPts, nPts)
 
-    return diffMat, bdyFluxMat, ξDerivativeMat, σDerivativeMat
+    return diffMat, bdyFluxMat
 end
 
 """
@@ -110,7 +93,7 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
     topBdy = umap[:, m.nσ]
 
     # get matrices and vectors
-    diffMat, bdyFluxMat, ξDerivativeMat, σDerivativeMat = getEvolutionMatrices(m)
+    diffMat, bdyFluxMat = getEvolutionMatrices(m)
 
     # left-hand side for evolution equation (save LU decomposition for speed)
     evolutionLHS = lu(getEvolutionLHS(m.Δt, diffMat, bdyFluxMat, bottomBdy, topBdy))
@@ -138,9 +121,9 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
         function fAdvRHS(b, t)
             χ, uξ, uη, uσ, U = invert(m, b; bl=bl) # for accuracy
             if m.ξVariation
-                return reshape(-uξ[:].*(ξDerivativeMat*b[:]) .- uσ[:].*(σDerivativeMat*b[:]), m.nξ, m.nσ)
+                return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
             else
-                return reshape(-uσ[:].*(σDerivativeMat*b[:]), m.nξ, m.nσ)
+                return -uσ.*σDerivative(m, b)
             end
         end
         advRHS = RK4(t, m.Δt, s.b, fAdvRHS)
@@ -150,8 +133,8 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
 
         # boundary fluxes: dσ(b)/H at σ = -1, 0
         if bl
-            evolutionRHS[bottomBdy] = s.χ[:, 1].*ξDerivativeTF(m, s.b[:, 1])./m.κ[:, 1]
-            evolutionRHS[topBdy] = s.χ[:, m.nσ].*ξDerivativeTF(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N^2
+            evolutionRHS[bottomBdy] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
+            evolutionRHS[topBdy] = s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N^2
         else
             evolutionRHS[bottomBdy] .= 0
             evolutionRHS[topBdy] .= m.N^2
