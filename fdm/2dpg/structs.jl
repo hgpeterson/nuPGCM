@@ -21,10 +21,10 @@ struct ModelSetup
     x::Array{Float64,2}
     z::Array{Float64,2}
 
-    # depth (m) as a function of x
+    # depth (m)
     H::Array{Float64, 1}
 
-    # derivative of depth w.r.t. x as a function of x
+    # derivative of depth w.r.t. x
     Hx::Array{Float64,1}
 
     # turbulent viscosity (m2 s-1)
