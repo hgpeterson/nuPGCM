@@ -1,6 +1,9 @@
 ################################################################################
-# Utility functions for 2D νPGCM 
+# General utility functions
 ################################################################################
+
+using HDF5
+include("setup.jl")
 
 """
     fξ = ξDerivative(m, field)
@@ -97,7 +100,6 @@ function saveSetup2DPG(m::ModelSetup)
     write(file, "ν", m.ν)
     write(file, "κ", m.κ)
     write(file, "Δt", m.Δt)
-    write(file, "sol_U", m.sol_U)
     close(file)
     println(savefile)
 end
@@ -124,13 +126,7 @@ function loadSetup2DPG(filename::String)
     ν = read(file, "ν")
     κ = read(file, "κ")
     Δt = read(file, "Δt")
-    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
-    inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
-    for i=1:nξ 
-        inversionLHSs[i] = lu(getInversionLHS(ν[i, :], f, H[i], σ)) 
-    end  
-    sol_U = read(file, "sol_U")
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, inversionLHSs, sol_U)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt)
 end
 
 """
