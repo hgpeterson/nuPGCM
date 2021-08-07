@@ -78,6 +78,16 @@ function transformFromTF(m::ModelSetup, s::ModelState)
 end
 
 """
+    logParams(ofile, text)
+
+Write `text` to `ofile` and print it.
+"""
+function logParams(ofile::IOStream, text::String)
+    write(ofile, string(text, "\n"))
+    println(text)
+end
+
+"""
     saveSetup2DPG(m)
 
 Save .h5 file for parameters.
@@ -102,6 +112,20 @@ function saveSetup2DPG(m::ModelSetup)
     write(file, "Δt", m.Δt)
     close(file)
     println(savefile)
+
+    # log 
+    ofile = open("out.txt", "w")
+    logParams(ofile, "\n2D νPGCM with Parameters\n")
+    logParams(ofile, @sprintf("nξ = %d", m.nξ))
+    logParams(ofile, @sprintf("nσ = %d\n", m.nσ))
+    logParams(ofile, @sprintf("L  = %d km", m.L/1000))
+    logParams(ofile, @sprintf("f  = %1.1e s-1", m.f))
+    logParams(ofile, @sprintf("N  = %1.1e s-1", m.N))
+    logParams(ofile, @sprintf("Δt = %.2f days", m.Δt/secsInDay))
+    logParams(ofile, string("\nVariations in ξ: ", m.ξVariation))
+    logParams(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1, 1]/abs(m.f))))
+    logParams(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
+    close(ofile)
 end
 
 """

@@ -102,7 +102,7 @@ end
     χ, uξ, uη, uσ, U = postProcess(m, sol)
 
 Take solution `sol` and extract reshaped `χ` and `U`. Compute `uξ`, `uη`, `uσ` 
-from definition of χ.
+from definition of χ. Computation is different depending on choice of coordinates.
 """
 function postProcess(m::ModelSetup, sol::Array{Float64,2})
     iU = m.nσ + 1
@@ -113,18 +113,23 @@ function postProcess(m::ModelSetup, sol::Array{Float64,2})
     # rest of solution is χ
     χ = sol[:, 1:m.nσ]
 
-    # compute uξ = dσ(χ)/H
+    # uξ = dσ(χ)/H
     uξ = σDerivative(m, χ)./repeat(m.H, 1, m.nσ)
 
-    # compute uη = int_-1^0 f*χ/nu dσ*H
+    # uη = int_-1^0 f*χ/nu dσ*H
     uη = zeros(m.nξ, m.nσ)
     for i=1:m.nξ
         uη[i, :] = cumtrapz(m.f*(χ[i, :] .- U)./(m.ν[i, :]), m.σ)*m.H[i]
     end
 
-    # compute uσ = -dξ(χ)/H
     if m.ξVariation
-        uσ = -ξDerivative(m, χ)./repeat(m.H, 1, m.nσ)
+        if m.coords == "cartesian"
+            # uσ = -dξ(χ)/H
+            uσ = -ξDerivative(m, χ)./repeat(m.H, 1, m.nσ)
+        elseif m.coords == "cylindrical"
+            # uσ = -dρ(ρ*χ)/(H*ρ)
+            uσ = -ξDerivative(m, repeat(m.ξ, 1, m.nσ).*χ)./repeat(m.H.*m.ξ, 1, m.nσ)
+        end
     else
         uσ = zeros(m.nξ, m.nσ)
     end
@@ -174,7 +179,7 @@ function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
     return χ, uξ, uη, uσ, U
 end
 function invert!(m::ModelSetup, s::ModelState; bl=false)
-    χ, uξ, uη, uσ, U = invert(m, s.b; bl)
+    χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl)
     s.χ[:, :] = χ
     s.uξ[:, :] = uξ
     s.uη[:, :] = uη

@@ -44,6 +44,12 @@ struct ModelSetup
 	nξ::Int64
 	nσ::Int64
 
+    # coordinates
+    coords::String
+
+    # periodic in x direction?
+    periodic::Bool
+
 	# grid coordinates
 	ξ::Array{Float64,1}
 	σ::Array{Float64,1}
@@ -91,7 +97,7 @@ end
 
 Construct a ModelSetup struct using analytical functions of H, Hx, ν, and κ.
 """
-function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, ξ::Array{Float64,1}, σ::Array{Float64,1}, H_func::Function, Hx_func::Function, ν_func::Function, κ_func::Function, Δt::Real)
+function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, H_func::Function, Hx_func::Function, ν_func::Function, κ_func::Function, Δt::Real)
     # evaluate functions 
     H = @. H_func(ξ)
     Hx = @. Hx_func(ξ)
@@ -107,17 +113,17 @@ function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::
     z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
 
     # pass to setup for arrays
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt)
 end
 
 """
-    m = ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt)
+    m = ModelSetup(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt)
 
 Construct a ModelSetup struct using arrays of H, Hx, ν, and κ.
 """
-function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, Δt::Real)
+function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, Δt::Real)
     # get derivative matrices
-    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
+    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L, periodic)
 
     # get diffusion matrix
     D = getDiffusionMatrix(ξ, σ, κ, H)
@@ -135,15 +141,15 @@ function ModelSetup(f::Float64, N::Float64, ξVariation::Bool, L::Float64, nξ::
     inversionRHS = getInversionRHS(zeros(nξ, nσ), 1) 
     sol_U = computeSol(inversionLHSs, inversionRHS) 
 
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, evolutionLHS, sol_U)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, evolutionLHS, sol_U)
 end
 
 """
-    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L)
+    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L, periodic)
 
 Compute the derivative matrices.
 """
-function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Float64)
+function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Float64, periodic::Bool)
     nξ = size(ξ, 1)
     nσ = size(σ, 1)
     nPts = nξ*nσ
@@ -178,17 +184,31 @@ function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Fl
             end
 
             if i == 1
-                # left (periodic)
-                fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) 
-                push!(Dξ, (row, umap[nξ, j], fd_ξ[1]))
-                push!(Dξ, (row, umap[1, j],  fd_ξ[2]))
-                push!(Dξ, (row, umap[2, j],  fd_ξ[3]))
+                # left 
+                if periodic
+                    fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) 
+                    push!(Dξ, (row, umap[nξ, j], fd_ξ[1]))
+                    push!(Dξ, (row, umap[1, j],  fd_ξ[2]))
+                    push!(Dξ, (row, umap[2, j],  fd_ξ[3]))
+                else
+                    fd_ξ = mkfdstencil(ξ[1:3], ξ[1], 1) 
+                    push!(Dξ, (row, umap[1, j], fd_ξ[1]))
+                    push!(Dξ, (row, umap[2, j],  fd_ξ[2]))
+                    push!(Dξ, (row, umap[3, j],  fd_ξ[3]))
+                end
             elseif i == nξ
-                # right (periodic)
-                fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1)
-                push!(Dξ, (row, umap[nξ-1, j], fd_ξ[1]))
-                push!(Dξ, (row, umap[nξ, j],   fd_ξ[2]))
-                push!(Dξ, (row, umap[1, j],    fd_ξ[3]))
+                # right
+                if periodic
+                    fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1)
+                    push!(Dξ, (row, umap[nξ-1, j], fd_ξ[1]))
+                    push!(Dξ, (row, umap[nξ, j],   fd_ξ[2]))
+                    push!(Dξ, (row, umap[1, j],    fd_ξ[3]))
+                else
+                    fd_ξ = mkfdstencil(ξ[nξ-2:nξ], ξ[nξ], 1)
+                    push!(Dξ, (row, umap[nξ-2, j], fd_ξ[1]))
+                    push!(Dξ, (row, umap[nξ-1, j], fd_ξ[2]))
+                    push!(Dξ, (row, umap[nξ, j],   fd_ξ[3]))
+                end
             else
                 # interior
                 fd_ξ = mkfdstencil(ξ[i-1:i+1], ξ[i], 1)
@@ -367,14 +387,4 @@ function getEvolutionLHS(nξ::Int64, nσ::Int64, D::SparseMatrixCSC{Float64,Int6
     evolutionLHS[topBdy, :] = D[topBdy, :]
 
     return lu(evolutionLHS)
-end
-
-"""
-    logParams(ofile, text)
-
-Write `text` to `ofile` and print it.
-"""
-function logParams(ofile::IOStream, text::String)
-    write(ofile, string(text, "\n"))
-    println(text)
 end
