@@ -1,4 +1,4 @@
-# <img src="https://latex.codecogs.com/gif.latex?\nu\text{PGCM}" /> 
+# νPGCM 
 
 This repository hosts Julia code for obtaining numerical solutions to the planetary geostrophic equations (with momentum fluxes parameterized by Fickian diffusion) for general topography.
 For a similar model using Rayleigh drag, see [https://github.com/joernc/pgcm](https://github.com/joernc/pgcm).
