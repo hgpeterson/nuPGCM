@@ -138,14 +138,14 @@ function plotCurrentState(m::ModelSetup, s::ModelState, iImg::Int64)
 
     # plots
     ridgePlot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
-    savefig(@sprintf("chi%03d.png", iImg))
+    savefig(@sprintf("%schi%03d.png", outFolder, iImg))
     close()
 
     ridgePlot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"buoyancy, $b$ (m s$^{-2}$)")
-    savefig(@sprintf("b%03d.png", iImg))
+    savefig(@sprintf("%sb%03d.png", outFolder, iImg))
     close()
 
     ridgePlot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"along-ridge velocity, $v$ (m s$^{-1}$)")
-    savefig(@sprintf("v%03d.png", iImg))
+    savefig(@sprintf("%sv%03d.png", outFolder, iImg))
     close()
 end

@@ -93,7 +93,7 @@ end
 Save .h5 file for parameters.
 """
 function saveSetup2DPG(m::ModelSetup)
-    savefile = "setup.h5"
+    savefile = string(outFolder, "setup.h5")
     file = h5open(savefile, "w")
     write(file, "f", m.f)
     write(file, "N", m.N)
@@ -114,7 +114,7 @@ function saveSetup2DPG(m::ModelSetup)
     println(savefile)
 
     # log 
-    ofile = open("out.txt", "w")
+    ofile = open(string(outFolder, "out.txt"), "w")
     logParams(ofile, "\n2D νPGCM with Parameters\n")
     logParams(ofile, @sprintf("nξ = %d", m.nξ))
     logParams(ofile, @sprintf("nσ = %d\n", m.nσ))
@@ -159,7 +159,7 @@ end
 Save .h5 checkpoint file for state.
 """
 function saveCheckpoint2DPG(s::ModelState, iSave::Int64)
-    savefile = @sprintf("checkpoint%d.h5", iSave)
+    savefile = @sprintf("%scheckpoint%d.h5", outFolder, iSave)
     file = h5open(savefile, "w")
     write(file, "b", s.b)
     write(file, "χ", s.χ)

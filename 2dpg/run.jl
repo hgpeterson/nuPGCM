@@ -17,9 +17,10 @@ include("plotting.jl")
 include("inversion.jl")
 include("evolution.jl")
 
-# constants
+# global constants
 const secsInDay = 86400
 const secsInYear = 360*86400
+const outFolder = "out/"
 
 function runRidge(; bl = false)
     # parameters (see `setup.jl`)
@@ -113,15 +114,15 @@ function runSeamount(; bl = false)
     else
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
-    println(size(ξ))
     
     # topography
     global symmetry = true
     a = -2e-3
-    H0 = 3e3
+    H0 = 5.5e3
+    H1 = 3e3
     L0 = 5e3
-    H_func(x) = a*x + H0*exp(-x^2/(2*L0^2))
-    Hx_func(x) = a - H0*x/L0^2*exp(-x^2/(2*L0^2))
+    H_func(x) = H0 - a*x - H1*exp(-x^2/(2*L0^2))
+    Hx_func(x) = -a + H1*x/L0^2*exp(-x^2/(2*L0^2))
     
     # diffusivity
     κ0 = 6e-5
@@ -134,9 +135,10 @@ function runSeamount(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    Δt = 10*secsInDay
-    # Δt = 1*secsInDay
-    tPlot = 3*secsInYear
+    # Δt = 10*secsInDay
+    Δt = 1*secsInDay
+    # tPlot = 3*secsInYear
+    tPlot = 1*secsInDay
     tSave = 3*secsInYear
     
     # create model struct
