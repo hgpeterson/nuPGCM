@@ -19,7 +19,7 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
 
     # save initial state
     iSave = 0
-    saveCheckpoint2DPG(s, iSave)
+    saveState2DPG(s, iSave)
     iSave += 1
     
     # plot initial state
@@ -80,7 +80,7 @@ function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave:
             iImg += 1
         end
         if i % nStepsSave == 0
-            saveCheckpoint2DPG(s, iSave)
+            saveState2DPG(s, iSave)
             iSave += 1
         end
     end

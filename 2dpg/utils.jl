@@ -2,9 +2,6 @@
 # General utility functions
 ################################################################################
 
-using HDF5
-include("setup.jl")
-
 """
     fξ = ξDerivative(m, field)
 
@@ -101,6 +98,8 @@ function saveSetup2DPG(m::ModelSetup)
     write(file, "L", m.L)
     write(file, "nξ", m.nξ)
     write(file, "nσ", m.nσ)
+    write(file, "coords", m.coords)
+    write(file, "periodic", m.periodic)
     write(file, "ξ", m.ξ)
     write(file, "σ", m.σ)
     write(file, "x", m.x)
@@ -123,6 +122,8 @@ function saveSetup2DPG(m::ModelSetup)
     logParams(ofile, @sprintf("N  = %1.1e s-1", m.N))
     logParams(ofile, @sprintf("Δt = %.2f days", m.Δt/secsInDay))
     logParams(ofile, string("\nVariations in ξ: ", m.ξVariation))
+    logParams(ofile, string("Coordinates:     ", m.coords))
+    logParams(ofile, string("Periodic:        ", m.periodic))
     logParams(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1, 1]/abs(m.f))))
     logParams(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
     close(ofile)
@@ -141,6 +142,8 @@ function loadSetup2DPG(filename::String)
     L = read(file, "L")
     nξ = read(file, "nξ")
     nσ = read(file, "nσ")
+    coords = read(file, "coords")
+    periodic = read(file, "periodic")
     ξ = read(file, "ξ")
     σ = read(file, "σ")
     x = read(file, "x")
@@ -150,16 +153,16 @@ function loadSetup2DPG(filename::String)
     ν = read(file, "ν")
     κ = read(file, "κ")
     Δt = read(file, "Δt")
-    return ModelSetup(f, N, ξVariation, L, nξ, nσ, ξ, σ, x, z, H, Hx, ν, κ, Δt)
+    return ModelSetup(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt)
 end
 
 """
-    saveCheckpoint2DPG(s, iSave)
+    saveState2DPG(s, iSave)
 
-Save .h5 checkpoint file for state.
+Save .h5 state file.
 """
-function saveCheckpoint2DPG(s::ModelState, iSave::Int64)
-    savefile = @sprintf("%scheckpoint%d.h5", outFolder, iSave)
+function saveState2DPG(s::ModelState, iSave::Int64)
+    savefile = @sprintf("%sstate%d.h5", outFolder, iSave)
     file = h5open(savefile, "w")
     write(file, "b", s.b)
     write(file, "χ", s.χ)
@@ -172,11 +175,11 @@ function saveCheckpoint2DPG(s::ModelState, iSave::Int64)
 end
 
 """
-    s = loadCheckpoint2DPG(filename)
+    s = loadState2DPG(filename)
 
-Load .h5 checkpoint file given by `filename`.
+Load .h5 state file given by `filename`.
 """
-function loadCheckpoint2DPG(filename::String)
+function loadState2DPG(filename::String)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")

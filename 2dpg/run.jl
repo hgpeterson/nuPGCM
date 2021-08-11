@@ -5,12 +5,12 @@
 using PyPlot, PyCall, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5, Dierckx, SpecialFunctions
 
 # plotting stylesheet
-plt.style.use("../../plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 close("all")
 pygui(false)
 
 # libraries
-include("../../myJuliaLib.jl")
+include("../myJuliaLib.jl")
 include("setup.jl")
 include("utils.jl")
 include("plotting.jl")
@@ -101,7 +101,8 @@ function runSeamount(; bl = false)
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    L = 2e4
+    # L = 2e4
+    L = 2e5
     nξ = 2^8 + 1 
     nσ = 2^8
     coords = "cylindrical"
@@ -117,12 +118,11 @@ function runSeamount(; bl = false)
     
     # topography
     global symmetry = true
-    a = -2e-3
     H0 = 5.5e3
     H1 = 3e3
-    L0 = 5e3
-    H_func(x) = H0 - a*x - H1*exp(-x^2/(2*L0^2))
-    Hx_func(x) = -a + H1*x/L0^2*exp(-x^2/(2*L0^2))
+    L0 = L/4
+    H_func(x) = H0 - H1*exp(-x^2/(2*L0^2))
+    Hx_func(x) = H1*x/L0^2*exp(-x^2/(2*L0^2))
     
     # diffusivity
     κ0 = 6e-5
@@ -135,10 +135,8 @@ function runSeamount(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    # Δt = 10*secsInDay
     Δt = 1*secsInDay
-    # tPlot = 3*secsInYear
-    tPlot = 1*secsInDay
+    tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
     # create model struct
@@ -153,6 +151,10 @@ function runSeamount(; bl = false)
     i = [1]
     s = ModelState(b, χ, uξ, uη, uσ, i)
 
+    # burger?
+    S = @. m.N^2/m.f^2*m.Hx^2
+    println(maximum(S))
+
     # solve
     evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
 
@@ -160,14 +162,13 @@ function runSeamount(; bl = false)
 end
 
 # m, s = runRidge(; bl=false)
-m, s = runSeamount(; bl=false)
+# m, s = runSeamount(; bl=false)
 
 ################################################################################
 # plots
 ################################################################################
 
-path = ""
-setupFile = "setup.h5"
+setupFile = string(outFolder, "setup.h5")
 m = loadSetup2DPG(setupFile)
-stateFiles = string.(path, "checkpoint", 1:5, ".h5")
+stateFiles = string.(outFolder, "state", 1:5, ".h5")
 profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 

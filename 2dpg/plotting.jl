@@ -105,7 +105,7 @@ function profilePlot(setupFile, stateFiles, iξ)
     # plot data from `datafiles`
     for i=1:size(stateFiles, 1)
         # load
-        s = loadCheckpoint2DPG(stateFiles[i])
+        s = loadState2DPG(stateFiles[i])
         u, v, w = transformFromTF(m, s)
 
         # stratification

@@ -175,8 +175,8 @@ function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
     end
 
     if m.coords == "cylindrical"
-        # b.c.: no flow on left and right?
-        sol[[1, m.nξ], :] .= 0
+        # b.c.: no flow at ρ = 0
+        sol[1, :] .= 0
     end
     χ, uξ, uη, uσ, U = postProcess(m, sol)
 
