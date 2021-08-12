@@ -3,7 +3,91 @@
 ################################################################################
 
 """
-    RHS = getInversionRHS(rhs, U)
+    inversionLHS = getInversionLHS(ν, f, H, σ)
+
+Setup left hand side of linear system for problem.
+"""
+function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array{Float64,1})
+    nσ = size(σ, 1)
+    iU = nσ + 1
+    A = Tuple{Int64,Int64,Float64}[]  
+
+    # for finite difference on the top and bottom boundary
+    fd_bot = mkfdstencil(σ[1:3], σ[1], 1)
+    fd_top = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+    fd_top_σσ = mkfdstencil(σ[nσ-3:nσ], σ[nσ], 2)
+
+    # Main loop, insert stencil in matrix for each node point
+    # Lower boundary conditions 
+    # b.c. 1: dσ(χ) = 0
+    push!(A, (1, 1, fd_bot[1]))
+    push!(A, (1, 2, fd_bot[2]))
+    push!(A, (1, 3, fd_bot[3]))
+    # b.c. 2: χ = 0 
+    push!(A, (2, 1, 1.0))
+
+    # Upper boundary conditions
+    # b.c. 1: dσσ(χ) = 0 
+    push!(A, (nσ, nσ-3, fd_top_σσ[1]))
+    push!(A, (nσ, nσ-2, fd_top_σσ[2]))
+    push!(A, (nσ, nσ-1, fd_top_σσ[3]))
+    push!(A, (nσ, nσ,   fd_top_σσ[4]))
+    # b.c. 2: χ - U = 0
+    push!(A, (nσ-1, nσ,  1.0))
+    push!(A, (nσ-1, iU, -1.0))
+
+    # Interior nodes
+    for j=3:nσ-2
+        row = j
+
+        # dσ stencil
+        fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+        ν_σ = sum(fd_σ.*ν[j-1:j+1])
+
+        # dσσ stencil
+        fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
+        ν_σσ = sum(fd_σσ.*ν[j-1:j+1])
+
+        # dσσσ stencil
+        fd_σσσ = mkfdstencil(σ[j-2:j+2], σ[j], 3)
+
+        # dσσσσ stencil
+        fd_σσσσ = mkfdstencil(σ[j-2:j+2], σ[j], 4)
+        
+        # eqtn: dσσ(nu*dσσ(χ))/H^4 + f^2*(χ - U)/nu = dξ(b) - dx(H)*σ*dσ(b)/H
+        # term 1 (product rule)
+        push!(A, (row, j-1, ν_σσ*fd_σσ[1]/H^4))
+        push!(A, (row, j,   ν_σσ*fd_σσ[2]/H^4))
+        push!(A, (row, j+1, ν_σσ*fd_σσ[3]/H^4))
+
+        push!(A, (row, j-2, 2*ν_σ*fd_σσσ[1]/H^4))
+        push!(A, (row, j-1, 2*ν_σ*fd_σσσ[2]/H^4))
+        push!(A, (row, j,   2*ν_σ*fd_σσσ[3]/H^4))
+        push!(A, (row, j+1, 2*ν_σ*fd_σσσ[4]/H^4))
+        push!(A, (row, j+2, 2*ν_σ*fd_σσσ[5]/H^4))
+
+        push!(A, (row, j-2, ν[j]*fd_σσσσ[1]/H^4))
+        push!(A, (row, j-1, ν[j]*fd_σσσσ[2]/H^4))
+        push!(A, (row, j,   ν[j]*fd_σσσσ[3]/H^4))
+        push!(A, (row, j+1, ν[j]*fd_σσσσ[4]/H^4))
+        push!(A, (row, j+2, ν[j]*fd_σσσσ[5]/H^4))
+        # term 2
+        push!(A, (row, j,   f^2/(ν[j])))
+        push!(A, (row, iU, -f^2/(ν[j])))
+    end
+
+    # U equation: U = ?
+    row = iU
+    push!(A, (row, row, 1.0))
+
+    # Create CSC sparse matrix from matrix elements
+    inversionLHS = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nσ+1, nσ+1)
+
+    return lu(inversionLHS)
+end
+
+"""
+    inversionRHS = getInversionRHS(rhs, U)
 
 Setup right hand side of linear system for problem.
 """
@@ -33,7 +117,7 @@ end
 
 Compute inversion solution given right hand side `inversionRHS`.
 """
-function computeSol(m::ModelSetup, inversionRHS::Array{Float64,2})
+function computeSol(m::ModelSetup2DPG, inversionRHS::Array{Float64,2})
     # solve
     sol = zeros(m.nξ, m.nσ+1)
     for i=1:m.nξ
@@ -56,7 +140,7 @@ end
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(m::ModelSetup, sol_b::Array{Float64,2})
+function computeU(m::ModelSetup2DPG, sol_b::Array{Float64,2})
     # unpack
     χ_b = sol_b[:, 1:m.nσ]
     χ_U = m.sol_U[:, 1:m.nσ]
@@ -104,7 +188,7 @@ end
 Take solution `sol` and extract reshaped `χ` and `U`. Compute `uξ`, `uη`, `uσ` 
 from definition of χ. Computation is different depending on choice of coordinates.
 """
-function postProcess(m::ModelSetup, sol::Array{Float64,2})
+function postProcess(m::ModelSetup2DPG, sol::Array{Float64,2})
     iU = m.nσ + 1
 
     # χ at σ = 0 is vertical integral of uξ
@@ -142,9 +226,9 @@ end
 
 Invert for flow given current model state buoyancy perturbation.
 """
-function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
+function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
     # buoyancy solution: rhs = dx(b), U = 0;
-    # (U = 1 solution `sol_U` is stored in ModelSetup struct)
+    # (U = 1 solution `sol_U` is stored in ModelSetup2DPG struct)
     if m.ξVariation
         rhs = xDerivative(m, b)
     else
@@ -182,7 +266,7 @@ function invert(m::ModelSetup, b::Array{Float64,2}; bl=false)
 
     return χ, uξ, uη, uσ, U
 end
-function invert!(m::ModelSetup, s::ModelState; bl=false)
+function invert!(m::ModelSetup2DPG, s::ModelState2DPG; bl=false)
     χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl)
     s.χ[:, :] = χ
     s.uξ[:, :] = uξ

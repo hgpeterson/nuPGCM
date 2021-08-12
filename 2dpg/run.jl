@@ -2,7 +2,7 @@
 # Run 2D νPGCM
 ################################################################################
 
-using PyPlot, PyCall, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5, Dierckx, SpecialFunctions
+using PyPlot, PyCall
 
 # plotting stylesheet
 plt.style.use("../plots.mplstyle")
@@ -10,12 +10,8 @@ close("all")
 pygui(false)
 
 # libraries
-include("../myJuliaLib.jl")
 include("setup.jl")
-include("utils.jl")
 include("plotting.jl")
-include("inversion.jl")
-include("evolution.jl")
 
 # global constants
 const secsInDay = 86400
@@ -27,8 +23,8 @@ function runRidge(; bl = false)
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    L = 2e6
-    # L = 1e5
+    # L = 2e6
+    L = 1e5
     nξ = 2^8 + 1 
     nσ = 2^8
     coords = "cartesian"
@@ -46,8 +42,8 @@ function runRidge(; bl = false)
     global symmetry = true
     H0 = 2e3
     amp =  0.4*H0
-    H_func(x) = H0 - amp*sin(2*π*x/L - π/2)
-    Hx_func(x) = -2*π/L*amp*cos(2*π*x/L - π/2)
+    H_func(x) = H0 + amp*cos(2*π*x/L)
+    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
     # # topography: skew gaussian
     # global const symmetry = false
@@ -73,8 +69,8 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    Δt = 10*secsInDay
-    # Δt = 1*secsInDay
+    # Δt = 10*secsInDay
+    Δt = 1*secsInDay
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -151,7 +147,7 @@ function runSeamount(; bl = false)
     i = [1]
     s = ModelState(b, χ, uξ, uη, uσ, i)
 
-    # burger?
+    # debug: what's the max Burger number?
     S = @. m.N^2/m.f^2*m.Hx^2
     println(maximum(S))
 
@@ -161,7 +157,7 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge(; bl=false)
+m, s = runRidge(; bl=false)
 # m, s = runSeamount(; bl=false)
 
 ################################################################################

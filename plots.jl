@@ -1,15 +1,16 @@
 using PyPlot, PyCall, Printf, HDF5, Dierckx
 
-plt.style.use("../plots.mplstyle")
+plt.style.use("plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../myJuliaLib.jl")
+include("myJuliaLib.jl")
 
 # for loading data
 include("1dtc/utils.jl")
 include("1dtc_pg/utils.jl")
 include("1dtc_nondim/utils.jl")
+include("2dpg/setup.jl")
 include("2dpg/utils.jl")
 include("rayleigh/2dpg/utils.jl")
 include("rayleigh/1dtc_pg/utils.jl")
@@ -22,6 +23,10 @@ pl = pyimport("matplotlib.pylab")
 pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
+
+################################################################################
+# Transport Constraint Paper
+################################################################################
 
 function sketchRidge()
     fig, ax = subplots(1)
@@ -523,110 +528,46 @@ function spinupProfilesPGvsFull(folder)
     println("spinupProfilesPGvsFull.pdf")
     close()
 end
-# function spinupProfilesPGvsFull(folder)
-#     tDays = 1000:1000:5000
-    
-#     # init plot
-#     fig, ax = subplots(2, 3, figsize=(6.5, 4))
-
-#     fig.text(0.05, 0.98, string("PG transport-constrained 1D:"), ha="left", va="top")
-#     fig.text(0.05, 0.52, string("Full transport-constrained 1D:"), ha="left", va="top")
-
-#     ax[1, 1].set_ylabel(L"$z$ (km)")
-#     ax[2, 1].set_ylabel(L"$z$ (km)")
-
-#     ax[2, 1].set_xlabel(string(L"cross-slope flow, $u$", "\n", L"($\times10^{-4}$ m s$^{-1}$)"))
-#     ax[2, 2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-#     ax[2, 3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
-
-#     # color map
-#     colors = pl.cm.viridis(range(1, 0, length=size(tDays, 1)))
-
-#     # fixed x
-#     ax[1, 1].set_xlim([-0.2, 2])
-#     ax[2, 1].set_xlim([-0.2, 2])
-#     ax[1, 2].set_xlim([-2.7, 1.4])
-#     ax[2, 2].set_xlim([-2.7, 1.4])
-#     ax[1, 3].set_xlim([0, 1.3])
-#     ax[2, 3].set_xlim([0, 1.3])
-
-#     # fixed y
-#     ax[1, 1].set_ylim([-1, -0.8])
-#     ax[2, 1].set_ylim([-1, -0.8])
-#     ax[1, 2].set_ylim([-1, 0])
-#     ax[2, 2].set_ylim([-1, 0])
-#     ax[1, 3].set_ylim([-1, 0])
-#     ax[2, 3].set_ylim([-1, 0])
-
-#     # plot data from folder
-#     for i=1:size(tDays, 1)
-#         tDay = tDays[i]
-#         label = string(Int64(tDay), " days")
-#         # canonical 1D solution
-#         c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
-#         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-#         u = c.û*cos(c.θ)
-#         ax[1, 1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-#         ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-#         ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        
-#         # 2D PG solution
-#         c = loadCheckpoint1DTC(string(folder, "1dtc/checkpoint", i, ".h5"))
-#         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-#         u = c.û*cos(c.θ)
-#         ax[2, 1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-#         ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-#         ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-#     end
-
-#     ax[1, 1].legend(loc=(0.3, 0.2))
-
-#     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[1, 3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[2, 1].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
-
-#     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.25, hspace=0.6)
-#     savefig("spinupProfilesPGvsFull.pdf")
-#     println("spinupProfilesPGvsFull.pdf")
-#     close()
-# end
-
-# function compareChapman02Fig5a(folder)
-#     # read data
-#     file = h5open(string(folder, "vs.h5"), "r")
-#     vs = read(file, "vs")
-#     ṽ_0 = read(file, "ṽ_0")
-#     τ_Ss = read(file, "τ_Ss")
-#     τ_As = read(file, "τ_As")
-#     close(file)
-
-#     # plot 
-#     fig, ax = subplots(1)
-#     ax.set_xlabel(L"ratio, $\tilde{\tau}_S/\tilde{\tau}_A$")
-#     ax.set_ylabel(L"$\tilde{v}/\tilde{v}_0$ at $\tilde{t} = 5\tilde{\tau}_A$")
-#     maxRatio = 2
-#     ax.set_xlim([0, maxRatio])
-#     ax.set_ylim([0, 1])
-#     for i=1:size(τ_Ss, 1)
-#         for j=1:size(τ_As, 1)
-#             ratio = τ_Ss[i]/τ_As[j]
-#             if ratio < maxRatio
-#                 ax.plot(τ_Ss[i]/τ_As[j], vs[i, j]/ṽ_0, "k.")
-#             end
-#         end
-#     end
-
-#     tight_layout()
-#     savefig("compareChapman02Fig5a.png")
-#     println("compareChapman02Fig5a.png")
-# end
 
 ################################################################################
-# BL Theory
+# BL Theory Paper
 ################################################################################
+
+function spinupRidge(folder)
+    fig, ax = subplots(2, 2, figsize=(6.5, 6.5/1.62), sharey=true)
+
+    # L = 2000 km
+    m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "L2000km/full2D/state1.h5"))
+    fig.text(0.05, 0.98, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1, 1])
+    ridgePlot(m, s, s.uη, "", L"along-ridge flow $v$ (m s$^{-1}$)"; ax=ax[1, 2])
+    ax[1, 1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[1, 2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[1, 1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
+    ax[1, 2].set_ylabel("")
+
+    # L = 100 km
+    m = loadSetup2DPG(string(folder, "L100km/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "L100km/full2D/state1.h5"))
+    fig.text(0.05, 0.52, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[2, 1])
+    ridgePlot(m, s, s.uη, "", L"along-ridge flow $v$ (m s$^{-1}$)"; ax=ax[2, 2])
+    ax[2, 1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[2, 2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[2, 1].annotate("(c)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2, 2].annotate("(d)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2, 2].set_ylabel("")
+
+    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+
+    savefig("spinupRidge.pdf")
+    println("spinupRidge.pdf")
+    close()
+end
 
 function spinupProfilesFull2DvsBL1D(datafilesFull2D, datafilesBL1D)
     # init plot
@@ -1064,7 +1005,7 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
     println("full2DvsBL1D.pdf")
 end
 
-path = "../../sims/"
+path = "../sims/"
 
 # sketchRidge() 
 # sketchSlope() 
@@ -1092,10 +1033,11 @@ path = "../../sims/"
 # datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
 # spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
 
+spinupRidge(string(path, "sim034/"))
 # RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
 # TCRidge(string(path, "sim026/"))
-ii = 1:5
-θ = "2.5e-3"
-datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
-datafilesFull2D = string.(path, "sim026/2dpg/Pr1/checkpoint", ii, ".h5")
-full2DvsBL1D(datafilesFull2D, datafilesBL1D)
+# ii = 1:5
+# θ = "2.5e-3"
+# datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
+# datafilesFull2D = string.(path, "sim026/2dpg/Pr1/checkpoint", ii, ".h5")
+# full2DvsBL1D(datafilesFull2D, datafilesBL1D)

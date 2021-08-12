@@ -2,13 +2,94 @@
 # PG evolution functions
 ################################################################################
 
+using Printf
+
+"""
+    D = getDiffusionMatrix(ξ, σ, κ, H)
+
+Compute the matrices needed for evolution equation integration.
+"""
+function getDiffusionMatrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Array{Float64,2},  H::Array{Float64,1})
+    nξ = size(ξ, 1)
+    nσ = size(σ, 1)
+    nPts = nξ*nσ
+
+    umap = reshape(1:nPts, nξ, nσ)    
+    D = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix (with boundary flux conditions)
+
+    # Main loop, insert stencil in matrices for each node point
+    for i=1:nξ
+        # interior nodes only for operators
+        for j=2:nσ-1
+            row = umap[i, j] 
+
+            # dσ stencil
+            fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+            κ_σ = sum(fd_σ.*κ[i, j-1:j+1])
+
+            # dσσ stencil
+            fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
+
+            # diffusion term: dσ(κ*dσ(b))/H^2 = 1/H^2*(dσ(κ)*dσ(b) + κ*dσσ(b))
+            push!(D, (row, umap[i, j-1], (κ_σ*fd_σ[1] + κ[i, j]*fd_σσ[1])/H[i]^2))
+            push!(D, (row, umap[i, j],   (κ_σ*fd_σ[2] + κ[i, j]*fd_σσ[2])/H[i]^2))
+            push!(D, (row, umap[i, j+1], (κ_σ*fd_σ[3] + κ[i, j]*fd_σσ[3])/H[i]^2))
+        end
+
+        # flux at boundaries: bottom
+        row = umap[i, 1] 
+        # dσ stencil
+        fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
+        # flux term: dσ(b)/H = ...
+        push!(D, (row, umap[i, 1], fd_σ[1]/H[i]))
+        push!(D, (row, umap[i, 2], fd_σ[2]/H[i]))
+        push!(D, (row, umap[i, 3], fd_σ[3]/H[i]))
+
+        # flux at boundaries: top
+        row = umap[i, nσ] 
+        # dσ stencil
+        fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+        # flux term: dσ(b)/H = ...
+        push!(D, (row, umap[i, nσ-2], fd_σ[1]/H[i]))
+        push!(D, (row, umap[i, nσ-1], fd_σ[2]/H[i]))
+        push!(D, (row, umap[i, nσ],   fd_σ[3]/H[i]))
+    end
+
+    # Create CSC sparse matrix from matrix elements
+    D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), nPts, nPts)
+
+    return D
+end
+
+"""
+    evolutionLHS = getEvolutionLHS(nξ, nσ, D, Δt)
+
+Generate the left-hand side matrix for the evolution problem of the form `I - D*Δt`
+and flux boundary conditions on the boundaries.
+"""
+function getEvolutionLHS(nξ::Int64, nσ::Int64, D::SparseMatrixCSC{Float64,Int64}, Δt::Real)
+    # implicit euler
+    evolutionLHS = I - D*Δt 
+
+    # bottom and top boundaries in 1D
+    umap = reshape(1:nξ*nσ, nξ, nσ)    
+    bottomBdy = umap[:, 1]
+    topBdy = umap[:, nσ]
+
+    # no flux boundaries
+    evolutionLHS[bottomBdy, :] = D[bottomBdy, :]
+    evolutionLHS[topBdy, :] = D[topBdy, :]
+
+    return lu(evolutionLHS)
+end
+
 """
     evolve!(m, s, tFinal, tPlot, tSave; bl=false)
 
 Solve evoluion equation for `b` and update model state.
 If `bl` set to `true`, use boundary layer theory inversion and boundary conditions. 
 """
-function evolve!(m::ModelSetup, s::ModelState, tFinal::Real, tPlot::Real, tSave::Real; bl=false)
+function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real, tSave::Real; bl=false)
     # grid points
     nPts = m.nξ*m.nσ
 

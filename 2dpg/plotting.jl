@@ -2,6 +2,7 @@
 # Functions useful for plotting
 ################################################################################
 
+# for colors
 pl = pyimport("matplotlib.pylab")
 
 """
@@ -16,7 +17,7 @@ Optional:
     - set the vmin/vmax manually with `vext`
     - set different colormap `cmap`
 """
-function ridgePlot(m::ModelSetup, s::ModelState, field::Array{Float64,2}, titleString::AbstractString, cbarLabel::AbstractString; ax=nothing, vext=nothing, cmap="RdBu_r")
+function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, titleString::AbstractString, cbarLabel::AbstractString; ax=nothing, vext=nothing, cmap="RdBu_r")
     # km
     xx = m.x/1000
     zz = m.z/1000
@@ -62,7 +63,7 @@ function ridgePlot(m::ModelSetup, s::ModelState, field::Array{Float64,2}, titleS
     ax.set_title(titleString)
     ax.set_xlabel(L"$x$ (km)")
     ax.set_ylabel(L"$z$ (km)")
-    ax.set_xlim([m.ξ[1]/1e3, m.ξ[end]/1e3])
+    ax.set_xlim([0, m.L/1e3])
 
     # no spines
     ax.spines["left"].set_visible(false)
@@ -123,8 +124,8 @@ function profilePlot(setupFile, stateFiles, iξ)
 
     ax[1].legend()
 
-    savefig("profiles.png")
-    println("profiles.png")
+    savefig(string(outFolder, "profiles.png"))
+    println(string(outFolder, "profiles.png"))
 end
 
 """
@@ -132,7 +133,7 @@ end
 
 Make some ridge plots of the current model state using the label number `iImg`.
 """
-function plotCurrentState(m::ModelSetup, s::ModelState, iImg::Int64)
+function plotCurrentState(m::ModelSetup2DPG, s::ModelState2DPG, iImg::Int64)
     # convert to physical coordinates 
     u, v, w = transformFromTF(m, s)
 
