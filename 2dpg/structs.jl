@@ -80,5 +80,5 @@ struct ModelSetup2DPG
     evolutionLHS::SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}
 
     # U = 1 solution
-    sol_U::Array{Float64,2}
+    χ_U::Array{Float64,2}
 end

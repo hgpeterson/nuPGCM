@@ -2,7 +2,7 @@
 # General utility functions
 ################################################################################
 
-using HDF5
+using HDF5, Printf
 
 include("../myJuliaLib.jl")
 

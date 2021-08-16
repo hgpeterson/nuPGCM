@@ -3,6 +3,7 @@
 ################################################################################
 
 include("structs.jl")
+include("utils.jl")
 include("inversion.jl")
 include("evolution.jl")
 
@@ -56,8 +57,8 @@ function ModelSetup2DPG(f::Float64, N::Float64, ξVariation::Bool, L::Float64, n
     evolutionLHS = getEvolutionLHS(nξ, nσ, D, Δt)
     
     # U = 1 inversion solution  
-    inversionRHS = getInversionRHS(zeros(nξ, nσ), 1) 
-    sol_U = computeSol(inversionLHSs, inversionRHS) 
+    inversionRHS = getInversionRHS(f^2 ./ν, 1)
+    χ_U = computeχ(inversionLHSs, inversionRHS) 
 
-    return ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, evolutionLHS, sol_U)
+    return ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, evolutionLHS, χ_U)
 end

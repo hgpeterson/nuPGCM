@@ -9,7 +9,6 @@ Setup left hand side of linear system for problem.
 """
 function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array{Float64,1})
     nσ = size(σ, 1)
-    iU = nσ + 1
     A = Tuple{Int64,Int64,Float64}[]  
 
     # for finite difference on the top and bottom boundary
@@ -32,9 +31,8 @@ function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array
     push!(A, (nσ, nσ-2, fd_top_σσ[2]))
     push!(A, (nσ, nσ-1, fd_top_σσ[3]))
     push!(A, (nσ, nσ,   fd_top_σσ[4]))
-    # b.c. 2: χ - U = 0
+    # b.c. 2: χ = U
     push!(A, (nσ-1, nσ,  1.0))
-    push!(A, (nσ-1, iU, -1.0))
 
     # Interior nodes
     for j=3:nσ-2
@@ -54,7 +52,7 @@ function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array
         # dσσσσ stencil
         fd_σσσσ = mkfdstencil(σ[j-2:j+2], σ[j], 4)
         
-        # eqtn: dσσ(nu*dσσ(χ))/H^4 + f^2*(χ - U)/nu = dξ(b) - dx(H)*σ*dσ(b)/H
+        # eqtn: dσσ(nu*dσσ(χ))/H^4 + f^2*χ/nu = rhs
         # term 1 (product rule)
         push!(A, (row, j-1, ν_σσ*fd_σσ[1]/H^4))
         push!(A, (row, j,   ν_σσ*fd_σσ[2]/H^4))
@@ -73,15 +71,10 @@ function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array
         push!(A, (row, j+2, ν[j]*fd_σσσσ[5]/H^4))
         # term 2
         push!(A, (row, j,   f^2/(ν[j])))
-        push!(A, (row, iU, -f^2/(ν[j])))
     end
 
-    # U equation: U = ?
-    row = iU
-    push!(A, (row, row, 1.0))
-
     # Create CSC sparse matrix from matrix elements
-    inversionLHS = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nσ+1, nσ+1)
+    inversionLHS = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nσ, nσ)
 
     return lu(inversionLHS)
 end
@@ -92,59 +85,41 @@ end
 Setup right hand side of linear system for problem.
 """
 function getInversionRHS(rhs::Array{Float64,2}, U::Real)
-    # get shape
-    nξ = size(rhs, 1)
-    nσ = size(rhs, 2)
-
-    # last row is for U
-    inversionRHS = zeros(nξ, nσ+1)
-    iU = nσ + 1
-
-    # fill rhs for interior nodes
-    inversionRHS[:, 1:nσ] = rhs
-
-    # zeros for boundary conditions
-    inversionRHS[:, [1, 2, nσ-1, nσ]] .= 0 
-
-    # U = ?
-    inversionRHS[:, iU] .= U
-
-    return inversionRHS
+    # boundary conditions
+    rhs[:, [1, 2, end]] .= 0 # χ = 0, dσ(χ) = 0 at σ = -1, dσσ(χ) = 0 at σ = 0
+    rhs[:, end-1] .= U       # χ = U at σ = 0
+    return rhs
 end
 
 """
-    sol = computeSol(m, inversionRHS)
+    χ = computeχ(m, inversionRHS)
 
 Compute inversion solution given right hand side `inversionRHS`.
 """
-function computeSol(m::ModelSetup2DPG, inversionRHS::Array{Float64,2})
+function computeχ(m::ModelSetup2DPG, inversionRHS::Array{Float64,2})
     # solve
-    sol = zeros(m.nξ, m.nσ+1)
+    χ = zeros(m.nξ, m.nσ)
     for i=1:m.nξ
-        sol[i, :] = m.inversionLHSs[i]\inversionRHS[i, :]
+        χ[i, :] = m.inversionLHSs[i]\inversionRHS[i, :]
     end
-    return sol
+    return χ
 end
-function computeSol(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Array{Float64,2})
+function computeχ(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Array{Float64,2})
     # solve
-    sol = zeros(size(inversionRHS))
-    for i=1:size(sol, 1)
-        sol[i, :] = inversionLHSs[i]\inversionRHS[i, :]
+    χ = zeros(size(inversionRHS))
+    for i=1:size(χ, 1)
+        χ[i, :] = inversionLHSs[i]\inversionRHS[i, :]
     end
-    return sol
+    return χ
 end
 
 """
-    U = computeU(m, sol_b)
+    U = computeU(m, χ_b)
 
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(m::ModelSetup2DPG, sol_b::Array{Float64,2})
-    # unpack
-    χ_b = sol_b[:, 1:m.nσ]
-    χ_U = m.sol_U[:, 1:m.nσ]
-
+function computeU(m::ModelSetup2DPG, χ_b::Array{Float64,2})
     # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
     term1 = zeros(m.nξ)
     for i=1:m.nξ
@@ -165,7 +140,7 @@ function computeU(m::ModelSetup2DPG, sol_b::Array{Float64,2})
     # third term: ⟨∫f^2/ν*(χ_U-1)⟩    
     term3 = zeros(m.nξ)
     for i=1:m.nξ
-        term3[i] = trapz(m.f^2 ./(m.ν[i, :]).*(χ_U[i, :] .- 1), m.σ)*m.H[i]
+        term3[i] = trapz(m.f^2 ./(m.ν[i, :]).*(m.χ_U[i, :] .- 1), m.σ)*m.H[i]
     end
     term3 = sum(term3)/m.nξ
     
@@ -173,9 +148,9 @@ function computeU(m::ModelSetup2DPG, sol_b::Array{Float64,2})
     term4 = zeros(m.nξ)
     for i=1:m.nξ
         # ν*χ_zzz on the boundary
-        term4[i] = m.ν[i, m.nσ]*differentiate_pointwise(χ_U[i, m.nσ-4:m.nσ], m.σ[m.nσ-4:m.nσ], m.σ[m.nσ], 3)/m.H[i]^3
+        term4[i] = m.ν[i, m.nσ]*differentiate_pointwise(m.χ_U[i, m.nσ-4:m.nσ], m.σ[m.nσ-4:m.nσ], m.σ[m.nσ], 3)/m.H[i]^3
         # ν_z*χ_zz on the boundary
-        term4[i] += differentiate_pointwise(m.ν[i, m.nσ-2:m.nσ], m.σ[m.nσ-2:m.nσ], m.σ[m.nσ], 1)*differentiate_pointwise(χ_U[i, m.nσ-3:m.nσ], m.σ[m.nσ-3:m.nσ], m.σ[m.nσ], 2)/m.H[i]^3
+        term4[i] += differentiate_pointwise(m.ν[i, m.nσ-2:m.nσ], m.σ[m.nσ-2:m.nσ], m.σ[m.nσ], 1)*differentiate_pointwise(m.χ_U[i, m.nσ-3:m.nσ], m.σ[m.nσ-3:m.nσ], m.σ[m.nσ], 2)/m.H[i]^3
     end
     term4 = sum(term4)/m.nξ
 
@@ -183,19 +158,14 @@ function computeU(m::ModelSetup2DPG, sol_b::Array{Float64,2})
 end
 
 """
-    χ, uξ, uη, uσ, U = postProcess(m, sol)
+    uξ, uη, uσ, U = postProcess(m, χ)
 
-Take solution `sol` and extract reshaped `χ` and `U`. Compute `uξ`, `uη`, `uσ` 
-from definition of χ. Computation is different depending on choice of coordinates.
+Take streamfunction `χ` and compute `uξ`, `uη`, `uσ`, and `U`
+from its definition. Computation is different depending on choice of coordinates.
 """
-function postProcess(m::ModelSetup2DPG, sol::Array{Float64,2})
-    iU = m.nσ + 1
-
+function postProcess(m::ModelSetup2DPG, χ::Array{Float64,2})
     # χ at σ = 0 is vertical integral of uξ
-    U = sol[1, iU] # just take first one since they all must be the same
-
-    # rest of solution is χ
-    χ = sol[:, 1:m.nσ]
+    U = χ[1, end] # just take first one since they all must be the same
 
     # uξ = dσ(χ)/H
     uξ = σDerivative(m, χ)./repeat(m.H, 1, m.nσ)
@@ -218,7 +188,7 @@ function postProcess(m::ModelSetup2DPG, sol::Array{Float64,2})
         uσ = zeros(m.nξ, m.nσ)
     end
 
-    return χ, uξ, uη, uσ, U
+    return uξ, uη, uσ, U
 end
 
 """
@@ -238,31 +208,28 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
     if bl # BL Solution
         # no need for dzzzz anymore!
         χ = @. m.ν/m.f^2*rhs
-
-        # pass sol array to postProcess
-        sol = zeros(m.nξ, m.nσ + 1)
-        sol[:, 1:m.nσ] = χ
     else # Full Inversion
         # buoyancy solution
         inversionRHS = getInversionRHS(rhs, 0)
-        sol_b = computeSol(m, inversionRHS)
+        χ_b = computeχ(m, inversionRHS)
 
         # compute U such that "island rule" is satisfied
         if symmetry
             U = 0
         else
-            U = computeU(m, sol_b)
+            U = computeU(m, χ_b)
+            println(U)
         end
 
-        # linearity: solution = sol_b + U*sol_U
-        sol = sol_b + U*m.sol_U
+        # linearity: solution = χ_b + U*χ_U
+        χ = χ_b + U*m.χ_U
     end
 
     if m.coords == "cylindrical"
         # b.c.: no flow at ρ = 0
-        sol[1, :] .= 0
+        χ[1, :] .= 0
     end
-    χ, uξ, uη, uσ, U = postProcess(m, sol)
+    uξ, uη, uσ, U = postProcess(m, χ)
 
     return χ, uξ, uη, uσ, U
 end
