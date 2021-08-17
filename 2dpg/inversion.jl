@@ -218,7 +218,6 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
             U = 0
         else
             U = computeU(m, χ_b)
-            println(U)
         end
 
         # linearity: solution = χ_b + U*χ_U

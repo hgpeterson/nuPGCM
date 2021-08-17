@@ -23,8 +23,8 @@ function runRidge(; bl = false)
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    L = 2e6
-    # L = 1e5
+    # L = 2e6
+    L = 1.2e5
     nξ = 2^8 + 1 
     nσ = 2^8
     coords = "cartesian"
@@ -38,25 +38,25 @@ function runRidge(; bl = false)
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
     
-    # # topography: sine
-    # global symmetry = true
-    # H0 = 2e3
-    # amp =  0.4*H0
-    # H_func(x) = H0 + amp*cos(2*π*x/L)
-    # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    # topography: sine
+    global symmetry = true
+    H0 = 2e3
+    amp =  0.4*H0
+    H_func(x) = H0 + amp*cos(2*π*x/L)
+    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
-    # topography: skew gaussian
-    global symmetry = false
-    L = 2e6 
-    H0 = 2.5e3 
-    amp = 0.65*H0 
-    ϕ(s) = exp(-s^2/2) 
-    Φ(s) = 1/2*(1 + erf(s/√2)) 
-    α = 3 
-    μ = L/3 
-    ω = L/5 
-    H_func(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) 
-    Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) 
+    # # topography: skew gaussian
+    # global symmetry = false
+    # L = 2e6 
+    # H0 = 2.5e3 
+    # amp = 0.65*H0 
+    # ϕ(s) = exp(-s^2/2) 
+    # Φ(s) = 1/2*(1 + erf(s/√2)) 
+    # α = 3 
+    # μ = L/3 
+    # ω = L/5 
+    # H_func(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) 
+    # Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) 
     
     # diffusivity
     κ0 = 6e-5
@@ -69,8 +69,8 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    Δt = 10*secsInDay
-    # Δt = 1*secsInDay
+    # Δt = 10*secsInDay
+    Δt = 1*secsInDay
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -85,6 +85,11 @@ function runRidge(; bl = false)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
+
+    # debug: what's the max Burger number?
+    S = @. m.N^2/m.f^2*m.Hx^2
+    # println(maximum(S))
+    # println(atan(m.Hx[argmin(abs.(m.ξ .- m.L/4))]))
 
     # solve
     evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
@@ -157,7 +162,8 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-m, s = runRidge(; bl=false)
+# m, s = runRidge(; bl=false)
+m, s = runRidge(; bl=true)
 # m, s = runSeamount(; bl=false)
 
 ################################################################################

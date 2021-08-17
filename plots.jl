@@ -536,7 +536,7 @@ end
 function ridge(folder)
     fig, ax = subplots(2, 2, figsize=(6.5, 6.5/1.62), sharey=true)
 
-    # L = 2000 km
+    # big L
     m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L2000km/full2D/state1.h5"))
     fig.text(0.05, 0.98, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
@@ -549,9 +549,11 @@ function ridge(folder)
     ax[1, 2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[1, 2].set_ylabel("")
 
-    # L = 100 km
-    m = loadSetup2DPG(string(folder, "L100km/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "L100km/full2D/state1.h5"))
+    # little L
+    # m = loadSetup2DPG(string(folder, "L100km/full2D/setup.h5"))
+    # s = loadState2DPG(string(folder, "L100km/full2D/state1.h5"))
+    m = loadSetup2DPG(string(folder, "L120km/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "L120km/full2D/state1.h5"))
     fig.text(0.05, 0.52, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[2, 1])
@@ -595,67 +597,73 @@ function full2DvsBL1D(folder)
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
 
-    m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
-    fig.text(0.05, 0.98, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
-    ix1 = argmin(abs.(m.x[:, 1] .- m.L/4))
+    mBig = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
+    fig.text(0.05, 0.98, string(L"$L = $", Int64(mBig.L/1e3), " km:"), ha="left", va="top")
+    ix1 = argmin(abs.(mBig.x[:, 1] .- mBig.L/4))
 
-    m = loadSetup2DPG(string(folder, "L100km/full2D/setup.h5"))
-    fig.text(0.05, 0.52, string(L"$L = $", Int64(m.L/1e3), " km:"), ha="left", va="top")
-    ix2 = argmin(abs.(m.x[:, 1] .- m.L/4))
+    # m = loadSetup2DPG(string(folder, "L100km/full2D/setup.h5"))
+    mSmall = loadSetup2DPG(string(folder, "L120km/full2D/setup.h5"))
+    fig.text(0.05, 0.52, string(L"$L = $", Int64(mSmall.L/1e3), " km:"), ha="left", va="top")
+    ix2 = argmin(abs.(mSmall.x[:, 1] .- mSmall.L/4))
 
     # limits
-    # ax[1, 1].set_xlim([-1e-7, c.N^2/1.5])
+    # ax[1, 1].set_ylim([mBig.z[ix1, 1]/1e3,   (mBig.z[ix1, 1] + 100)/1e3])
+    # ax[2, 1].set_ylim([mSmall.z[ix2, 1]/1e3, (mSmall.z[ix1, 1] + 100)/1e3])
 
     # plot data
     for i=1:5
         # line color
         color = colors[i, :]
 
-        # BL 1D: L = 2000 km
+        # BL 1D: big L
         c = loadCheckpoint1DTCPG(string(folder, "L2000km/bl1D/checkpoint$i.h5"))
-        S = c.N^2*tan(c.θ)^2/c.f^2
+        ẑ = c.ẑ .- c.ẑ[1]
+        q = (1/(4*c.Pr*c.κ[1])*(c.f^2*cos(c.θ)^2/(c.Pr*c.κ[1]) + c.N^2*sin(c.θ)^2/c.κ[1]))^(1/4)
         bI = c.b
-        bB = get_bB(bI, c.ẑ, c.f, c.θ, c.Pr, S, c.Pr*c.κ)
-        b = bI + bB
-        Bz = c.N^2*cos(c.θ) .+ differentiate(b, c.ẑ*cos(c.θ))
         χI = -differentiate(bI, c.ẑ)*sin(c.θ)*c.Pr.*c.κ/(c.f^2*cos(c.θ)^2)
-        χB = c.κ[1]/c.N^2/sin(c.θ)*differentiate(bB, c.ẑ)
+        χB = boundaryCorrection(χI, ẑ, q)
+        bB = cumtrapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ) .- trapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ)
         χ = χI + χB
-        v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), c.ẑ)
+        b = bI + bB
+        Bz = c.N^2*cos(c.θ) .+ differentiate(b, ẑ*cos(c.θ))
+        v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), ẑ)
         label = string(Int64(c.t/86400/360), " years")
-        ax[1, 1].plot(χ,   (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
-        ax[1, 2].plot(v,   (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
-        ax[1, 3].plot(Bz,  (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
+        ax[1, 1].plot(χ,   ẑ*cos(c.θ)/1e3 .+ mBig.z[ix1, 1]/1e3, c=color, label=label)
+        ax[1, 2].plot(v,   ẑ*cos(c.θ)/1e3 .+ mBig.z[ix1, 1]/1e3, c=color, label=label)
+        ax[1, 3].plot(Bz,  ẑ*cos(c.θ)/1e3 .+ mBig.z[ix1, 1]/1e3, c=color, label=label)
 
-        # full 2D: L = 2000 km 
+        # full 2D: big L 
         s = loadState2DPG(string(folder, "L2000km/full2D/state$i.h5"))
-        bz = differentiate(s.b[ix1, :], m.z[ix1, :])
-        ax[1, 1].plot(s.χ[ix1, :],   m.z[ix1, :]/1e3, "k:")
-        ax[1, 2].plot(s.uη[ix1, :],  m.z[ix1, :]/1e3, "k:")
-        ax[1, 3].plot(bz,           m.z[ix1, :]/1e3, "k:")
+        bz = differentiate(s.b[ix1, :], mBig.z[ix1, :])
+        ax[1, 1].plot(s.χ[ix1, :],   mBig.z[ix1, :]/1e3, "k:")
+        ax[1, 2].plot(s.uη[ix1, :],  mBig.z[ix1, :]/1e3, "k:")
+        ax[1, 3].plot(bz,            mBig.z[ix1, :]/1e3, "k:")
 
-        # BL 1D: L = 100 km
-        c = loadCheckpoint1DTCPG(string(folder, "L100km/bl1D/checkpoint$i.h5"))
-        S = c.N^2*tan(c.θ)^2/c.f^2
+        # BL 1D: little L
+        # c = loadCheckpoint1DTCPG(string(folder, "L100km/bl1D/checkpoint$i.h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "L120km/bl1D/checkpoint$i.h5"))
+        ẑ = c.ẑ .- c.ẑ[1]
+        q = (1/(4*c.Pr*c.κ[1])*(c.f^2*cos(c.θ)^2/(c.Pr*c.κ[1]) + c.N^2*sin(c.θ)^2/c.κ[1]))^(1/4)
         bI = c.b
-        bB = get_bB(bI, c.ẑ, c.f, c.θ, c.Pr, S, c.Pr*c.κ)
-        b = bI + bB
-        Bz = c.N^2*cos(c.θ) .+ differentiate(b, c.ẑ*cos(c.θ))
         χI = -differentiate(bI, c.ẑ)*sin(c.θ)*c.Pr.*c.κ/(c.f^2*cos(c.θ)^2)
-        χB = c.κ[1]/c.N^2/sin(c.θ)*differentiate(bB, c.ẑ)
+        χB = boundaryCorrection(χI, ẑ, q)
+        bB = cumtrapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ) .- trapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ)
         χ = χI + χB
-        v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), c.ẑ)
+        b = bI + bB
+        Bz = c.N^2*cos(c.θ) .+ differentiate(b, ẑ*cos(c.θ))
+        v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), ẑ)
         label = string(Int64(c.t/86400/360), " years")
-        ax[2, 1].plot(χ,   (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
-        ax[2, 2].plot(v,   (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
-        ax[2, 3].plot(Bz,  (c.ẑ .- c.ẑ[1])*cos(c.θ)/1e3 .- 2, c=color, label=label)
+        ax[2, 1].plot(χ,   ẑ*cos(c.θ)/1e3 .+ mSmall.z[ix2, 1]/1e3, c=color, label=label)
+        ax[2, 2].plot(v,   ẑ*cos(c.θ)/1e3 .+ mSmall.z[ix2, 1]/1e3, c=color, label=label)
+        ax[2, 3].plot(Bz,  ẑ*cos(c.θ)/1e3 .+ mSmall.z[ix2, 1]/1e3, c=color, label=label)
 
-        # full 2D: L = 100 km
-        s = loadState2DPG(string(folder, "L100km/full2D/state$i.h5"))
-        bz = differentiate(s.b[ix2, :], m.z[ix2, :])
-        ax[2, 1].plot(s.χ[ix2, :],   m.z[ix2, :]/1e3, "k:")
-        ax[2, 2].plot(s.uη[ix2, :],  m.z[ix2, :]/1e3, "k:")
-        ax[2, 3].plot(bz,           m.z[ix2, :]/1e3, "k:")
+        # full 2D: little L
+        # s = loadState2DPG(string(folder, "L100km/full2D/state$i.h5"))
+        s = loadState2DPG(string(folder, "L120km/full2D/state$i.h5"))
+        bz = differentiate(s.b[ix2, :], mSmall.z[ix2, :])
+        ax[2, 1].plot(s.χ[ix2, :],   mSmall.z[ix2, :]/1e3, "k:")
+        ax[2, 2].plot(s.uη[ix2, :],  mSmall.z[ix2, :]/1e3, "k:")
+        ax[2, 3].plot(bz,            mSmall.z[ix2, :]/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
@@ -667,104 +675,80 @@ function full2DvsBL1D(folder)
     savefig("full2DvsBL1D.pdf")
     println("full2DvsBL1D.pdf")
 end
-function get_bB(bI, ẑ, f, θ, Pr, S, ν)
-    z = ẑ .- ẑ[1]
-    q = (f^2*cos(θ)^2*(1 + Pr*S)/4/ν[1]^2)^(1/4)
-    bIz0 = differentiate_pointwise(bI[1:3], z[1:3], z[1], 1)
-    bIzz0 = differentiate_pointwise(bI[1:5], z[1:5], z[1], 2)
-    B = -Pr*S*bIzz0/(2*q^2)
-    A = -Pr*S*bIz0/q + B
-    # # approximation:
-    # B = 0
-    # A = -Pr*S*bIz0/q
-    return @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
+function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float64)
+    A = -χI[1]
+    χIz0 = differentiate_pointwise(χI[1:3], z[1:3], z[1], 1)
+    B = -χIz0/q + A
+    χB = @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
+    return χB
 end
 
-function spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
+function full2DvsBL2D(folder)
     # init plot
-    fig, ax = subplots(2, 3, figsize=(6.5, 4))
+    fig, ax = subplots(1, 3, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
-    ax[1, 1].set_xlabel(L"$b$ (m s$^{-2}$)")
-    ax[1, 1].set_ylabel(L"$z$ (km)")
+    ax[1].set_ylabel(L"$z$ (km)")
+    ax[1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"(m$^2$ s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"(m s$^{-1}$)"))
+    ax[3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"(s$^{-2}$)"))
 
-    ax[1, 2].set_xlabel(L"$\partial_{\hat z} B$ (s$^{-2}$)")
+    ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
 
-    ax[1, 3].set_xlabel(L"$\chi$ (m$^2$ s$^{-1}$)")
-
-    ax[2, 1].set_xlabel(L"BL $b$ (m s$^{-2}$)")
-    ax[2, 1].set_ylabel(L"$z$ (km)")
-
-    ax[2, 2].set_xlabel(L"BL $\partial_{\hat z} B$ (s$^{-2}$)")
-
-    ax[2, 3].set_xlabel(L"BL $\chi$ (m$^2$ s$^{-1}$)")
-
-    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
-
-    c = loadCheckpoint2DPG(datafilesFull2D[1])
-    iξ = argmin(abs.(c.x[:, 1] .- c.L/4))
-    tanθ = 2*pi*0.4*c.H0/c.L
-    ax[1, 1].annotate(@sprintf("Pr = %1.2e", c.Pr),                          (0.5, 0.6), xycoords="axes fraction")
-    ax[1, 1].annotate(string(L"S =", @sprintf("%1.2e", c.N^2*tanθ^2/c.f^2)), (0.5, 0.5), xycoords="axes fraction")
+    subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
 
     for a in ax
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
     end
-    for col=2:3
-        ax[1, col].set_yticklabels([])
-        ax[2, col].set_yticklabels([])
-    end
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull2D, 1)-1))
+    colors = pl.cm.viridis(range(1, 0, length=5))
+
+    mBL = loadSetup2DPG(string(folder, "L120km/bl2D/setup.h5"))
+    mFull = loadSetup2DPG(string(folder, "L120km/full2D/setup.h5"))
+    ix = argmin(abs.(mFull.x[:, 1] .- mFull.L/4))
 
     # limits
-    ax[2, 1].set_ylim([0, 0.1])
-    ax[2, 2].set_ylim([0, 0.1])
-    ax[2, 3].set_ylim([0, 0.1])
-    ax[2, 2].set_xlim([0, 4e-7])
+    # ax[1].set_ylim([mBL.z[ix, 1]/1e3, (mBL.z[ix, 1] + 100)/1e3])
 
     # plot data
-    for i=1:size(datafilesFull2D, 1)
-        # load
-        c = loadCheckpoint2DPG(datafilesFull2D[i])
-        cBL = loadCheckpoint2DPG(datafilesBL2D[i])
+    for i=1:5
+        # line color
+        color = colors[i, :]
 
-        # todo: compute full BL solution
+        # BL 2D
+        s = loadState2DPG(string(folder, "L120km/bl2D/state$i.h5"))
+        bI = s.b[ix, :]
+        χI = s.χ[ix, :]
+        bIξ = ξDerivative(mBL, s.b)
+        q = (1/(4*mBL.ν[ix, 1])*(mBL.f^2/mBL.ν[ix, 1] - mBL.Hx[ix]*bIξ[ix, 1]/mBL.H[ix]/mBL.κ[ix, 1]))^(1/4)
+        χB = boundaryCorrection(χI, mBL.z[ix, :] .- mBL.z[ix, 1], q)
+        bB = cumtrapz(χB*bIξ[ix, 1]/mBL.κ[ix, 1], mBL.z[ix, :]) .- trapz(χB.*bIξ[ix, 1]/mBL.κ[ix, 1], mBL.z[ix, :]) 
+        χ = χI + χB
+        b = bI + bB
+        bz = differentiate(b, mBL.z[ix, :])
+        label = string(Int64(round(s.i[1]*mBL.Δt/86400/360)), " years")
+        ax[1].plot(χ,            mBL.z[ix, :]/1e3, c=color, label=label)
+        ax[2].plot(s.uη[ix, :],  mBL.z[ix, :]/1e3, c=color, label=label)
+        ax[3].plot(bz,           mBL.z[ix, :]/1e3, c=color, label=label)
 
-        # stratification
-        Bz = c.N^2 .+ differentiate(c.b[iξ, :], c.z[iξ, :])
-        BzBL = cBL.N^2 .+ differentiate(cBL.b[iξ, :], cBL.z[iξ, :])
-
-        # colors and labels
-        label = string(Int64(round(c.t/86400/360)), " years")
-        if i==1
-            color = "k"
-        else
-            color = colors[i-1, :]
-        end
-
-        # plot
-        ax[1, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 1].plot(cBL.b[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 2].plot(BzBL,           (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[2, 3].plot(cBL.χ[iξ, :],   (cBL.z[iξ, :] .- cBL.z[iξ, 1])/1e3, c=color, label=label)
-        ax[1, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
-        ax[2, 1].plot(c.b[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
-        ax[1, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
-        ax[2, 2].plot(Bz,           (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
-        ax[1, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
-        ax[2, 3].plot(c.χ[iξ, :],   (c.z[iξ, :] .- c.z[iξ, 1])/1e3, "k:")
+        # full 2D
+        s = loadState2DPG(string(folder, "L120km/full2D/state$i.h5"))
+        bz = differentiate(s.b[ix, :], mFull.z[ix, :])
+        ax[1].plot(s.χ[ix, :],   mFull.z[ix, :]/1e3, "k:")
+        ax[2].plot(s.uη[ix, :],  mFull.z[ix, :]/1e3, "k:")
+        ax[3].plot(bz,           mFull.z[ix, :]/1e3, "k:")
     end
 
-    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = [L"2D $\nu$PGCM"]
-    ax[1, 2].legend(custom_handles, custom_labels)
-    ax[1, 3].legend()
+    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
+                      lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = ["BL 2D", "full 2D"]
+    ax[2].legend(custom_handles, custom_labels)
+    ax[1].legend()
     
-    savefig("profilesSpinUpFull2DvsBL2D.pdf")
-    println("profilesSpinUpFull2DvsBL2D.pdf")
+    savefig("full2DvsBL2D.pdf")
+    println("full2DvsBL2D.pdf")
 end
 
 # ################################################################################
@@ -1027,12 +1011,8 @@ path = "../sims/"
 # compareChapman02Fig5a(string(path, "sim024/"))
 
 # ridge(string(path, "sim034/"))
-full2DvsBL1D(string(path, "sim034/"))
-# # # θ = "2.7e-2"
-# θ = "3.9e-2"
-# datafilesBL2D =   string.(path, "sim029/tht", θ, "/bl/checkpoint",   ii, ".h5")
-# datafilesFull2D = string.(path, "sim029/tht", θ, "/full/checkpoint", ii, ".h5")
-# spinupProfilesFull2DvsBL2D(datafilesFull2D, datafilesBL2D)
+# full2DvsBL1D(string(path, "sim034/"))
+full2DvsBL2D(string(path, "sim034/"))
 
 # RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
 # TCRidge(string(path, "sim026/"))

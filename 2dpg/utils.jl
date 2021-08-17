@@ -55,8 +55,8 @@ function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Fl
                 else
                     fd_ξ = mkfdstencil(ξ[1:3], ξ[1], 1) 
                     push!(Dξ, (row, umap[1, j], fd_ξ[1]))
-                    push!(Dξ, (row, umap[2, j],  fd_ξ[2]))
-                    push!(Dξ, (row, umap[3, j],  fd_ξ[3]))
+                    push!(Dξ, (row, umap[2, j], fd_ξ[2]))
+                    push!(Dξ, (row, umap[3, j], fd_ξ[3]))
                 end
             elseif i == nξ
                 # right

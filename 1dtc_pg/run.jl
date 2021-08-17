@@ -1,10 +1,10 @@
 using SparseArrays, LinearAlgebra, Printf, HDF5, PyPlot, PyCall
 
-plt.style.use("../../plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../../myJuliaLib.jl")
+include("../myJuliaLib.jl")
 include("params.jl")
 include("plotting.jl")
 include("utils.jl")
@@ -24,8 +24,7 @@ println("Done.")
 # run evolution integrations
 ################################################################################
 
-b = evolve(10*secsInYear) 
-# b = evolveBL(5*tSave) 
+b = evolveBL(5*tSave) 
 
 # b = steadyState()
 
