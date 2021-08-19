@@ -113,12 +113,9 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     for i=1:nSteps
         t += m.Δt
 
-        # implicit euler diffusion
-        diffRHS = s.b
-
         # explicit timestep for advection
         # χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl) # for speed
-        function fAdvRHS(b, t)
+        function adv_func(b, t)
             χ, uξ, uη, uσ, U = invert(m, b; bl=bl) # for accuracy
             if m.ξVariation
                 return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
@@ -126,7 +123,10 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
                 return -uσ.*σDerivative(m, b)
             end
         end
-        advRHS = RK4(t, m.Δt, s.b, fAdvRHS)
+        advRHS = RK4(t, m.Δt, s.b, adv_func)
+
+        # implicit euler diffusion
+        diffRHS = s.b
 
         # sum the two
         evolutionRHS = diffRHS .+ advRHS
@@ -138,17 +138,41 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         else
             evolutionRHS[:, 1] .= 0
             evolutionRHS[:, m.nσ] .= m.N^2
+            # evolutionRHS[:, m.nσ] .= 0
         end
 
         # solve and update model state
         s.b[:, :] = reshape(m.evolutionLHS\evolutionRHS[:], m.nξ, m.nσ)
         s.i[1] = i + 1
+        # println(trapz(s.b[1, :], m.z[1, :]))
+        # Bi = -3.9199999965243717
+        # Bf = -3.9071636677290256
+        # println(abs((Bi - Bf)/Bi)) # about 0.3%
+        # error()
+
+        # b1 = s.b
+        # k1 = adv_func(b1, t)
+        # b2 = s.b + m.Δt/2*k1
+        # k2 = adv_func(b2, t + m.Δt/2)
+        # b3 = s.b + m.Δt/2*k2
+        # k3 = adv_func(b3, t + m.Δt/2)
+        # b4 = reshape((I - m.Δt*m.D)\(s.b + m.Δt*k3)[:], m.nξ, m.nσ)
+        # k4 = adv_func(b4, t + m.Δt)
+        # s.b[:, :] = s.b + m.Δt*(1/6*k1 + 1/3*k2 + 1/3*k3 + 1/6*k4 + reshape(m.D*b4[:], m.nξ, m.nσ))
+        # if bl
+        #     s.b[:, 1] = s.b[:, 2] + s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]*(m.σ[1] - m.σ[2])
+        #     s.b[:, m.nσ] = s.b[:, m.nσ-1] .+ (s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N^2)*(m.σ[m.nσ] - m.σ[m.nσ-1])
+        # else
+        #     s.b[:, 1] = s.b[:, 2]
+        #     s.b[:, m.nσ] = s.b[:, m.nσ-1] .+ m.N^2*(m.σ[m.nσ] - m.σ[m.nσ-1])
+        # end
+        # s.i[1] = i + 1
 
         # invert buoyancy for flow and save to state
         invert!(m, s; bl=bl)
 
         # log
-        println(@sprintf("t = %.2f years (i = %d)", t/secsInYear, i))
+        println(@sprintf("t = %.2f yr | i = %d | uₘₐₓ = %.2e m s-1", t/secsInYear, i, maximum(s.uξ)))
 
         # # CFL stuff
         # uξCFL = minimum(abs.(dξ./uξ)) 

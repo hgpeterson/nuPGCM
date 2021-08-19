@@ -684,6 +684,9 @@ function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float
 end
 
 function full2DvsBL2D(folder)
+    # L = "L120km"
+    L = "L200km"
+
     # init plot
     fig, ax = subplots(1, 3, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
@@ -705,9 +708,12 @@ function full2DvsBL2D(folder)
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
 
-    mBL = loadSetup2DPG(string(folder, "L120km/bl2D/setup.h5"))
-    mFull = loadSetup2DPG(string(folder, "L120km/full2D/setup.h5"))
-    ix = argmin(abs.(mFull.x[:, 1] .- mFull.L/4))
+    mBL = loadSetup2DPG(string(folder, L, "/bl2D/setup.h5"))
+    mFull = loadSetup2DPG(string(folder, L, "/full2D/setup.h5"))
+    ixBL = argmin(abs.(mBL.x[:, 1] .- mBL.L/4))
+    ixFull = argmin(abs.(mFull.x[:, 1] .- mFull.L/4))
+    println(mBL.x[ixBL, 1])
+    println(mFull.x[ixFull, 1])
 
     # limits
     # ax[1].set_ylim([mBL.z[ix, 1]/1e3, (mBL.z[ix, 1] + 100)/1e3])
@@ -718,27 +724,27 @@ function full2DvsBL2D(folder)
         color = colors[i, :]
 
         # BL 2D
-        s = loadState2DPG(string(folder, "L120km/bl2D/state$i.h5"))
-        bI = s.b[ix, :]
-        χI = s.χ[ix, :]
+        s = loadState2DPG(string(folder, L, "/bl2D/state$i.h5"))
+        bI = s.b[ixBL, :]
+        χI = s.χ[ixBL, :]
         bIξ = ξDerivative(mBL, s.b)
-        q = (1/(4*mBL.ν[ix, 1])*(mBL.f^2/mBL.ν[ix, 1] - mBL.Hx[ix]*bIξ[ix, 1]/mBL.H[ix]/mBL.κ[ix, 1]))^(1/4)
-        χB = boundaryCorrection(χI, mBL.z[ix, :] .- mBL.z[ix, 1], q)
-        bB = cumtrapz(χB*bIξ[ix, 1]/mBL.κ[ix, 1], mBL.z[ix, :]) .- trapz(χB.*bIξ[ix, 1]/mBL.κ[ix, 1], mBL.z[ix, :]) 
+        q = (1/(4*mBL.ν[ixBL, 1])*(mBL.f^2/mBL.ν[ixBL, 1] - mBL.Hx[ixBL]*bIξ[ixBL, 1]/mBL.H[ixBL]/mBL.κ[ixBL, 1]))^(1/4)
+        χB = boundaryCorrection(χI, mBL.z[ixBL, :] .- mBL.z[ixBL, 1], q)
+        bB = cumtrapz(χB*bIξ[ixBL, 1]/mBL.κ[ixBL, 1], mBL.z[ixBL, :]) .- trapz(χB.*bIξ[ixBL, 1]/mBL.κ[ixBL, 1], mBL.z[ixBL, :]) 
         χ = χI + χB
         b = bI + bB
-        bz = differentiate(b, mBL.z[ix, :])
+        bz = differentiate(b, mBL.z[ixBL, :])
         label = string(Int64(round(s.i[1]*mBL.Δt/86400/360)), " years")
-        ax[1].plot(χ,            mBL.z[ix, :]/1e3, c=color, label=label)
-        ax[2].plot(s.uη[ix, :],  mBL.z[ix, :]/1e3, c=color, label=label)
-        ax[3].plot(bz,           mBL.z[ix, :]/1e3, c=color, label=label)
+        ax[1].plot(χ,            mBL.z[ixBL, :]/1e3, c=color, label=label)
+        ax[2].plot(s.uη[ixBL, :],  mBL.z[ixBL, :]/1e3, c=color, label=label)
+        ax[3].plot(bz,           mBL.z[ixBL, :]/1e3, c=color, label=label)
 
         # full 2D
-        s = loadState2DPG(string(folder, "L120km/full2D/state$i.h5"))
-        bz = differentiate(s.b[ix, :], mFull.z[ix, :])
-        ax[1].plot(s.χ[ix, :],   mFull.z[ix, :]/1e3, "k:")
-        ax[2].plot(s.uη[ix, :],  mFull.z[ix, :]/1e3, "k:")
-        ax[3].plot(bz,           mFull.z[ix, :]/1e3, "k:")
+        s = loadState2DPG(string(folder, L, "/full2D/state$i.h5"))
+        bz = differentiate(s.b[ixFull, :], mFull.z[ixFull, :])
+        ax[1].plot(s.χ[ixFull, :],   mFull.z[ixFull, :]/1e3, "k:")
+        ax[2].plot(s.uη[ixFull, :],  mFull.z[ixFull, :]/1e3, "k:")
+        ax[3].plot(bz,           mFull.z[ixFull, :]/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
@@ -749,6 +755,27 @@ function full2DvsBL2D(folder)
     
     savefig("full2DvsBL2D.pdf")
     println("full2DvsBL2D.pdf")
+end
+
+function seamount(folder)
+    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+
+    m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
+    ridgePlot(m, s, s.uη, "", L"along-ridge flow $v$ (m s$^{-1}$)"; ax=ax[2])
+    ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].set_ylabel("")
+
+    subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
+
+    savefig("seamount.pdf")
+    println("seamount.pdf")
+    close()
 end
 
 # ################################################################################
@@ -1012,7 +1039,9 @@ path = "../sims/"
 
 # ridge(string(path, "sim034/"))
 # full2DvsBL1D(string(path, "sim034/"))
-full2DvsBL2D(string(path, "sim034/"))
+# full2DvsBL2D(string(path, "sim034/"))
+# seamount(string(path, "sim035/"))
+full2DvsBL2D(string(path, "sim035/"))
 
 # RayleighVsFickian(string(path, "sim032/rayleigh/checkpoint1.h5"), string(path, "sim032/fickian/checkpoint1.h5"))
 # TCRidge(string(path, "sim026/"))

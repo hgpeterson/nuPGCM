@@ -25,6 +25,7 @@ function runRidge(; bl = false)
     ξVariation = true
     # L = 2e6
     L = 1.2e5
+    # L = 1e5
     nξ = 2^8 + 1 
     nσ = 2^8
     coords = "cartesian"
@@ -86,8 +87,8 @@ function runRidge(; bl = false)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
-    # debug: what's the max Burger number?
-    S = @. m.N^2/m.f^2*m.Hx^2
+    # # debug: what's the max Burger number?
+    # S = @. m.N^2/m.f^2*m.Hx^2
     # println(maximum(S))
     # println(atan(m.Hx[argmin(abs.(m.ξ .- m.L/4))]))
 
@@ -157,7 +158,7 @@ function runSeamount(; bl = false)
     println(maximum(S))
 
     # solve
-    evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 1*tSave, tPlot, tSave; bl=bl) 
 
     return m, s
 end
@@ -165,12 +166,13 @@ end
 # m, s = runRidge(; bl=false)
 m, s = runRidge(; bl=true)
 # m, s = runSeamount(; bl=false)
+# m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(outFolder, "state", 1:5, ".h5")
-profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+# setupFile = string(outFolder, "setup.h5")
+# m = loadSetup2DPG(setupFile)
+# stateFiles = string.(outFolder, "state", 1:5, ".h5")
+# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
