@@ -93,22 +93,12 @@ end
 
 Compute dξ(`field`) in terrian-following coordinates.
 """
-function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,1})
-    # allocate
-    fξ = zeros(m.nξ, 1)
-
-    # uniform grid spacing
-    dξ = m.ξ[2] - m.ξ[1]
-
-    # dξ(field): use the fact that ξ is evenly spaced and periodic
-    fξ[2:end-1] = (field[3:end] - field[1:end-2])/(2*dξ)
-    fξ[1] = (field[2] - field[end])/(2*dξ)
-    fξ[end] = (field[1] - field[end-1])/(2*dξ)
-
-    return fξ
-end
 function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
     return reshape(m.Dξ*field[:], m.nξ, m.nσ)
+end
+function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2}, iσ::Int64)
+    umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
+    return m.Dξ[umap[:, iσ], umap[:, iσ]]field[:, iσ]
 end
 
 """

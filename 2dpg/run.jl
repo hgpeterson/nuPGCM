@@ -165,14 +165,14 @@ end
 
 # m, s = runRidge(; bl=false)
 # m, s = runRidge(; bl=true)
-m, s = runSeamount(; bl=false)
-# m, s = runSeamount(; bl=true)
+# m, s = runSeamount(; bl=false)
+m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(outFolder, "state", 1:5, ".h5")
-profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+# setupFile = string(outFolder, "setup.h5")
+# m = loadSetup2DPG(setupFile)
+# stateFiles = string.(outFolder, "state", 1:5, ".h5")
+# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 

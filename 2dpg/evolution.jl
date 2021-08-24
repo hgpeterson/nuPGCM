@@ -133,8 +133,8 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
 
         # boundary fluxes: dσ(b)/H at σ = -1, 0
         if bl
-            evolutionRHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
-            evolutionRHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N^2
+            evolutionRHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b, 1)./m.κ[:, 1]
+            evolutionRHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N^2
         else
             evolutionRHS[:, 1] .= 0
             evolutionRHS[:, m.nσ] .= m.N^2
