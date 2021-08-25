@@ -76,9 +76,6 @@ struct ModelSetup2DPG
     # inversion LHSs
     inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
 
-    # evolution LHS
-    evolutionLHS::SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}
-
     # U = 1 solution
     χ_U::Array{Float64,2}
 end

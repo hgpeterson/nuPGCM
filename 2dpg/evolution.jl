@@ -62,25 +62,41 @@ function getDiffusionMatrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Arra
 end
 
 """
-    evolutionLHS = getEvolutionLHS(nξ, nσ, D, Δt)
+    LHS = getEvolutionLHS(m, s)
 
-Generate the left-hand side matrix for the evolution problem of the form `I - D*Δt`
-and flux boundary conditions on the boundaries.
+Generate the left-hand side matrix for the evolution problem with flux boundary conditions on the boundaries.
 """
-function getEvolutionLHS(nξ::Int64, nσ::Int64, D::SparseMatrixCSC{Float64,Int64}, Δt::Real)
-    # implicit euler
-    evolutionLHS = I - D*Δt 
-
+function getEvolutionLHS(m::ModelSetup2DPG, s::ModelState2DPG, a::Real, b::Real)
     # bottom and top boundaries in 1D
-    umap = reshape(1:nξ*nσ, nξ, nσ)    
+    umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
     bottomBdy = umap[:, 1]
-    topBdy = umap[:, nσ]
+    topBdy = umap[:, m.nσ]
+
+    # LHS matrix
+    LHS = a*I - b*m.Δt*m.D 
 
     # no flux boundaries
-    evolutionLHS[bottomBdy, :] = D[bottomBdy, :]
-    evolutionLHS[topBdy, :] = D[topBdy, :]
+    LHS[bottomBdy, :] = m.D[bottomBdy, :]
+    LHS[topBdy, :] = m.D[topBdy, :]
 
-    return lu(evolutionLHS)
+    return lu(LHS)
+end
+
+"""
+    resetBCs!(m, s, RHS; bl)
+
+Modify the right-hand side vector `RHS` to include boundary conditions at the top and bottom.
+"""
+function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
+    # boundary fluxes: dσ(b)/H at σ = -1, 0
+    if bl
+        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b, 1)./m.κ[:, 1]
+        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N^2
+    else
+        RHS[:, 1] .= 0
+        RHS[:, m.nσ] .= m.N^2
+        # evolutionRHS[:, m.nσ] .= 0
+    end
 end
 
 """
@@ -108,76 +124,104 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     plotCurrentState(m, s, iImg)
     iImg += 1
 
+    # store previous buoyancy field for timestepping scheme
+    # nPrev = 1
+    nPrev = 3
+    bPrev = zeros(nPrev, m.nξ, m.nσ)
+
+    # get LHS matrices
+    LHS1 = getEvolutionLHS(m, s, 1, 1)
+    LHS2 = getEvolutionLHS(m, s, 3, 2)
+    LHS3 = getEvolutionLHS(m, s, 11/6, 1)
+    LHS  = getEvolutionLHS(m, s, 25/12, 1)
+
+    # if you want to check CFL
+    dξ = m.L/m.nξ
+    dσ = zeros(m.nξ, m.nσ)
+    σσ = repeat(m.σ', m.nξ, 1)
+    dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1]
+    dσ[:, end] = dσ[:, end-1]
+
     # main loop
     t = 0
     for i=1:nSteps
-        t += m.Δt
-
         # explicit timestep for advection
-        # χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl) # for speed
-        function adv_func(b, t)
-            χ, uξ, uη, uσ, U = invert(m, b; bl=bl) # for accuracy
+        function adv_func(b)
+            χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
             if m.ξVariation
                 return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
             else
                 return -uσ.*σDerivative(m, b)
             end
         end
-        advRHS = RK4(t, m.Δt, s.b, adv_func)
 
-        # implicit euler diffusion
-        diffRHS = s.b
-
-        # sum the two
-        evolutionRHS = diffRHS .+ advRHS
-
-        # boundary fluxes: dσ(b)/H at σ = -1, 0
-        if bl
-            evolutionRHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b, 1)./m.κ[:, 1]
-            evolutionRHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N^2
+        # if i == 1
+        #     first step: CNAB1
+        #     RHS = s.b + m.Δt*(adv_func(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
+        #     resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+        #     bPrev[1, :, :] = s.b # store previoius step for next time
+        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
+        #     s.i[1] = i + 1 # next step
+        # else
+        #     # other steps: CNAB2
+        #     RHS = s.b + m.Δt*(3/2*adv_func(s.b) - 1/2*adv_func(bPrev[1, :, :]) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
+        #     resetBCs!(m, s, RHS; bl=bl)
+        #     bPrev[1, :, :] = s.b 
+        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
+        #     s.i[1] = i + 1
+        # end
+        if i == 1
+            # first step: SBF1
+            RHS = s.b + m.Δt*adv_func(s.b) # right-hand-side
+            resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+            bPrev[1, :, :] = s.b # store previoius step for next time
+            s.b[:, :] = reshape(LHS1\RHS[:], m.nξ, m.nσ)  # solve
+            s.i[1] = i + 1 # next step
+        elseif i == 2
+            # second step: SBF2
+            RHS = 4*s.b - bPrev[1, :, :] + 2*m.Δt*(2*adv_func(s.b) - adv_func(bPrev[1, :, :]))
+            resetBCs!(m, s, RHS; bl=bl)
+            bPrev[2, :, :] = bPrev[1, :, :] # move previous step back one
+            bPrev[1, :, :] = s.b # store current step as previoius step
+            s.b[:, :] = reshape(LHS2\RHS[:], m.nξ, m.nσ)
+            s.i[1] = i + 1
+        elseif i == 3
+            # second step: SBF3
+            RHS = 3*s.b - 3/2*bPrev[1, :, :]  + 1/3*bPrev[2, :, :] + m.Δt*(3*adv_func(s.b) - 3*adv_func(bPrev[1, :, :]) + adv_func(bPrev[2, :, :]))
+            resetBCs!(m, s, RHS; bl=bl)
+            bPrev[3, :, :] = bPrev[2, :, :] 
+            bPrev[2, :, :] = bPrev[1, :, :] 
+            bPrev[1, :, :] = s.b 
+            s.b[:, :] = reshape(LHS3\RHS[:], m.nξ, m.nσ)
+            s.i[1] = i + 1
         else
-            evolutionRHS[:, 1] .= 0
-            evolutionRHS[:, m.nσ] .= m.N^2
-            # evolutionRHS[:, m.nσ] .= 0
+            # other steps: SBF4
+            RHS = 4*s.b - 3*bPrev[1, :, :]  + 4/3*bPrev[2, :, :] - 1/4*bPrev[3, :, :] + m.Δt*(4*adv_func(s.b) - 6*adv_func(bPrev[1, :, :]) + 4*adv_func(bPrev[2, :, :]) - adv_func(bPrev[3, :, :]))
+            resetBCs!(m, s, RHS; bl=bl)
+            bPrev[3, :, :] = bPrev[2, :, :] 
+            bPrev[2, :, :] = bPrev[1, :, :] 
+            bPrev[1, :, :] = s.b 
+            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
+            s.i[1] = i + 1
         end
+        t += m.Δt
 
-        # solve and update model state
-        s.b[:, :] = reshape(m.evolutionLHS\evolutionRHS[:], m.nξ, m.nσ)
-        s.i[1] = i + 1
         # println(trapz(s.b[1, :], m.z[1, :]))
         # Bi = -3.9199999965243717
         # Bf = -3.9071636677290256
         # println(abs((Bi - Bf)/Bi)) # about 0.3%
         # error()
 
-        # b1 = s.b
-        # k1 = adv_func(b1, t)
-        # b2 = s.b + m.Δt/2*k1
-        # k2 = adv_func(b2, t + m.Δt/2)
-        # b3 = s.b + m.Δt/2*k2
-        # k3 = adv_func(b3, t + m.Δt/2)
-        # b4 = reshape((I - m.Δt*m.D)\(s.b + m.Δt*k3)[:], m.nξ, m.nσ)
-        # k4 = adv_func(b4, t + m.Δt)
-        # s.b[:, :] = s.b + m.Δt*(1/6*k1 + 1/3*k2 + 1/3*k3 + 1/6*k4 + reshape(m.D*b4[:], m.nξ, m.nσ))
-        # if bl
-        #     s.b[:, 1] = s.b[:, 2] + s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]*(m.σ[1] - m.σ[2])
-        #     s.b[:, m.nσ] = s.b[:, m.nσ-1] .+ (s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N^2)*(m.σ[m.nσ] - m.σ[m.nσ-1])
-        # else
-        #     s.b[:, 1] = s.b[:, 2]
-        #     s.b[:, m.nσ] = s.b[:, m.nσ-1] .+ m.N^2*(m.σ[m.nσ] - m.σ[m.nσ-1])
-        # end
-        # s.i[1] = i + 1
-
         # invert buoyancy for flow and save to state
         invert!(m, s; bl=bl)
 
         # log
-        println(@sprintf("t = %.2f yr | i = %d | uₘₐₓ = %.2e m s-1", t/secsInYear, i, maximum(s.uξ)))
+        println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
 
-        # # CFL stuff
-        # uξCFL = minimum(abs.(dξ./uξ)) 
-        # uσCFL = minimum(abs.(dσ./uσ)) 
-        # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
+        # CFL stuff
+        uξCFL = minimum(abs.(dξ./s.uξ)) 
+        uσCFL = minimum(abs.(dσ./s.uσ)) 
+        println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
         
         if i % nStepsPlot == 0
             # plot flow

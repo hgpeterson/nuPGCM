@@ -23,9 +23,7 @@ function runRidge(; bl = false)
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    # L = 2e6
-    L = 1.2e5
-    # L = 1e5
+    L = 2e6
     nξ = 2^8 + 1 
     nσ = 2^8
     coords = "cartesian"
@@ -70,8 +68,7 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    # Δt = 10*secsInDay
-    Δt = 1*secsInDay
+    Δt = 10*secsInDay
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -86,11 +83,6 @@ function runRidge(; bl = false)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
-
-    # # debug: what's the max Burger number?
-    # S = @. m.N^2/m.f^2*m.Hx^2
-    # println(maximum(S))
-    # println(atan(m.Hx[argmin(abs.(m.ξ .- m.L/4))]))
 
     # solve
     evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
@@ -138,8 +130,9 @@ function runSeamount(; bl = false)
     
     # timestepping
     Δt = 1*secsInDay
-    tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    # Δt = 60
+    tPlot = 120*secsInDay
+    tSave = 1*secsInYear
     
     # create model struct
     m = ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, Δt)
@@ -158,15 +151,15 @@ function runSeamount(; bl = false)
     println(maximum(S))
 
     # solve
-    evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 1*tSave, tPlot, tSave; bl=bl) 
 
     return m, s
 end
 
-# m, s = runRidge(; bl=false)
+# m, s = runRidge()
 # m, s = runRidge(; bl=true)
-# m, s = runSeamount(; bl=false)
-m, s = runSeamount(; bl=true)
+m, s = runSeamount()
+# m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
@@ -176,3 +169,5 @@ m, s = runSeamount(; bl=true)
 # m = loadSetup2DPG(setupFile)
 # stateFiles = string.(outFolder, "state", 1:5, ".h5")
 # profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+
+println("Done.")

@@ -52,13 +52,10 @@ function ModelSetup2DPG(f::Float64, N::Float64, ξVariation::Bool, L::Float64, n
     for i=1:nξ 
         inversionLHSs[i] = getInversionLHS(ν[i, :], f, H[i], σ)
     end  
-
-    # evolution LHS
-    evolutionLHS = getEvolutionLHS(nξ, nσ, D, Δt)
     
     # U = 1 inversion solution  
     inversionRHS = getInversionRHS(f^2 ./ν, 1)
     χ_U = computeχ(inversionLHSs, inversionRHS) 
 
-    return ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, evolutionLHS, χ_U)
+    return ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, Δt, Dξ, Dσ, D, inversionLHSs, χ_U)
 end
