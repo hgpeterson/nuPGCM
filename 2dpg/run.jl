@@ -69,8 +69,10 @@ function runRidge(; bl = false)
     
     # timestepping
     Δt = 10*secsInDay
-    tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    # tPlot = 3*secsInYear
+    tPlot = 15*secsInYear
+    # tSave = 3*secsInYear
+    tSave = 60*secsInDay
     
     # create model struct
     m = ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, Δt)
@@ -85,7 +87,7 @@ function runRidge(; bl = false)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 5*tSave, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
@@ -95,10 +97,10 @@ function runSeamount(; bl = false)
     f = -5.5e-5
     N = 1e-3
     ξVariation = true
-    # L = 2e4
-    L = 2e5
-    nξ = 2^8 + 1 
-    nσ = 2^8
+    L = 2e4
+    # L = 2e5
+    nξ = 2^6 + 1 
+    nσ = 2^6
     coords = "cylindrical"
     periodic = false
 
@@ -129,8 +131,9 @@ function runSeamount(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
     
     # timestepping
-    Δt = 1*secsInDay
+    # Δt = 1*secsInDay
     # Δt = 60
+    Δt = 3600
     tPlot = 120*secsInDay
     tSave = 1*secsInYear
     
@@ -156,9 +159,9 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge()
+m, s = runRidge()
 # m, s = runRidge(; bl=true)
-m, s = runSeamount()
+# m, s = runSeamount()
 # m, s = runSeamount(; bl=true)
 
 ################################################################################

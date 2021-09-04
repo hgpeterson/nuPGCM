@@ -2,11 +2,10 @@
 Pr = 1e0
 f = -5.5e-5
 N = 1e-3
-# H = 2e3
-H = 3673.32793219601
-# θ = 2.5e-3
-# θ = 0.04186264798726017
-θ = -0.03637523599970141
+H = 2e3
+# H = 3673.32793219601
+θ = 2.5e-3
+# θ = -0.03637523599970141
 
 # z grid
 nẑ = 2^8
@@ -27,15 +26,16 @@ h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
-transportConstraint = true
-#= transportConstraint = false =#
+# transportConstraint = true
+transportConstraint = false
 U₀ = 0
 
 # timestepping
 secsInDay = 86400
 secsInYear = 360*secsInDay
 Δt = 10*secsInDay
-tSave = 3*secsInYear
+# tSave = 3*secsInYear
+tSave = 60*secsInDay
 
 """
     log(ofile, text)

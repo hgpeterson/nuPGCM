@@ -130,10 +130,11 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     bPrev = zeros(nPrev, m.nξ, m.nσ)
 
     # get LHS matrices
-    LHS1 = getEvolutionLHS(m, s, 1, 1)
-    LHS2 = getEvolutionLHS(m, s, 3, 2)
-    LHS3 = getEvolutionLHS(m, s, 11/6, 1)
-    LHS  = getEvolutionLHS(m, s, 25/12, 1)
+    # LHS1 = getEvolutionLHS(m, s, 1, 1)
+    # LHS2 = getEvolutionLHS(m, s, 3, 2)
+    # LHS3 = getEvolutionLHS(m, s, 11/6, 1)
+    # LHS  = getEvolutionLHS(m, s, 25/12, 1)
+    LHS  = getEvolutionLHS(m, s, 1, 1/2)
 
     # if you want to check CFL
     dξ = m.L/m.nξ
@@ -141,6 +142,8 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     σσ = repeat(m.σ', m.nξ, 1)
     dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1]
     dσ[:, end] = dσ[:, end-1]
+    println(dξ)
+    println(minimum(dσ))
 
     # main loop
     t = 0
@@ -155,55 +158,55 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
             end
         end
 
-        # if i == 1
-        #     first step: CNAB1
-        #     RHS = s.b + m.Δt*(adv_func(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
-        #     resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
-        #     bPrev[1, :, :] = s.b # store previoius step for next time
-        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
-        #     s.i[1] = i + 1 # next step
-        # else
-        #     # other steps: CNAB2
-        #     RHS = s.b + m.Δt*(3/2*adv_func(s.b) - 1/2*adv_func(bPrev[1, :, :]) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
-        #     resetBCs!(m, s, RHS; bl=bl)
-        #     bPrev[1, :, :] = s.b 
-        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
-        #     s.i[1] = i + 1
-        # end
         if i == 1
-            # first step: SBF1
-            RHS = s.b + m.Δt*adv_func(s.b) # right-hand-side
+            # first step: CNAB1
+            RHS = s.b + m.Δt*(adv_func(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
             resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
             bPrev[1, :, :] = s.b # store previoius step for next time
-            s.b[:, :] = reshape(LHS1\RHS[:], m.nξ, m.nσ)  # solve
+            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
             s.i[1] = i + 1 # next step
-        elseif i == 2
-            # second step: SBF2
-            RHS = 4*s.b - bPrev[1, :, :] + 2*m.Δt*(2*adv_func(s.b) - adv_func(bPrev[1, :, :]))
-            resetBCs!(m, s, RHS; bl=bl)
-            bPrev[2, :, :] = bPrev[1, :, :] # move previous step back one
-            bPrev[1, :, :] = s.b # store current step as previoius step
-            s.b[:, :] = reshape(LHS2\RHS[:], m.nξ, m.nσ)
-            s.i[1] = i + 1
-        elseif i == 3
-            # second step: SBF3
-            RHS = 3*s.b - 3/2*bPrev[1, :, :]  + 1/3*bPrev[2, :, :] + m.Δt*(3*adv_func(s.b) - 3*adv_func(bPrev[1, :, :]) + adv_func(bPrev[2, :, :]))
-            resetBCs!(m, s, RHS; bl=bl)
-            bPrev[3, :, :] = bPrev[2, :, :] 
-            bPrev[2, :, :] = bPrev[1, :, :] 
-            bPrev[1, :, :] = s.b 
-            s.b[:, :] = reshape(LHS3\RHS[:], m.nξ, m.nσ)
-            s.i[1] = i + 1
         else
-            # other steps: SBF4
-            RHS = 4*s.b - 3*bPrev[1, :, :]  + 4/3*bPrev[2, :, :] - 1/4*bPrev[3, :, :] + m.Δt*(4*adv_func(s.b) - 6*adv_func(bPrev[1, :, :]) + 4*adv_func(bPrev[2, :, :]) - adv_func(bPrev[3, :, :]))
+            # other steps: CNAB2
+            RHS = s.b + m.Δt*(3/2*adv_func(s.b) - 1/2*adv_func(bPrev[1, :, :]) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
             resetBCs!(m, s, RHS; bl=bl)
-            bPrev[3, :, :] = bPrev[2, :, :] 
-            bPrev[2, :, :] = bPrev[1, :, :] 
             bPrev[1, :, :] = s.b 
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
             s.i[1] = i + 1
         end
+        # if i == 1
+        #     # first step: SBDF1
+        #     RHS = s.b + m.Δt*adv_func(s.b) # right-hand-side
+        #     resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+        #     bPrev[1, :, :] = s.b # store previoius step for next time
+        #     s.b[:, :] = reshape(LHS1\RHS[:], m.nξ, m.nσ)  # solve
+        #     s.i[1] = i + 1 # next step
+        # elseif i == 2
+        #     # second step: SBDF2
+        #     RHS = 4*s.b - bPrev[1, :, :] + 2*m.Δt*(2*adv_func(s.b) - adv_func(bPrev[1, :, :]))
+        #     resetBCs!(m, s, RHS; bl=bl)
+        #     bPrev[2, :, :] = bPrev[1, :, :] # move previous step back one
+        #     bPrev[1, :, :] = s.b # store current step as previoius step
+        #     s.b[:, :] = reshape(LHS2\RHS[:], m.nξ, m.nσ)
+        #     s.i[1] = i + 1
+        # elseif i == 3
+        #     # second step: SBDF3
+        #     RHS = 3*s.b - 3/2*bPrev[1, :, :]  + 1/3*bPrev[2, :, :] + m.Δt*(3*adv_func(s.b) - 3*adv_func(bPrev[1, :, :]) + adv_func(bPrev[2, :, :]))
+        #     resetBCs!(m, s, RHS; bl=bl)
+        #     bPrev[3, :, :] = bPrev[2, :, :] 
+        #     bPrev[2, :, :] = bPrev[1, :, :] 
+        #     bPrev[1, :, :] = s.b 
+        #     s.b[:, :] = reshape(LHS3\RHS[:], m.nξ, m.nσ)
+        #     s.i[1] = i + 1
+        # else
+        #     # other steps: SBDF4
+        #     RHS = 4*s.b - 3*bPrev[1, :, :]  + 4/3*bPrev[2, :, :] - 1/4*bPrev[3, :, :] + m.Δt*(4*adv_func(s.b) - 6*adv_func(bPrev[1, :, :]) + 4*adv_func(bPrev[2, :, :]) - adv_func(bPrev[3, :, :]))
+        #     resetBCs!(m, s, RHS; bl=bl)
+        #     bPrev[3, :, :] = bPrev[2, :, :] 
+        #     bPrev[2, :, :] = bPrev[1, :, :] 
+        #     bPrev[1, :, :] = s.b 
+        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
+        #     s.i[1] = i + 1
+        # end
         t += m.Δt
 
         # println(trapz(s.b[1, :], m.z[1, :]))
@@ -218,10 +221,10 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         # log
         println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
 
-        # CFL stuff
-        uξCFL = minimum(abs.(dξ./s.uξ)) 
-        uσCFL = minimum(abs.(dσ./s.uσ)) 
-        println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
+        # # CFL stuff
+        # uξCFL = minimum(abs.(dξ./s.uξ)) 
+        # uσCFL = minimum(abs.(dσ./s.uσ)) 
+        # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
         
         if i % nStepsPlot == 0
             # plot flow

@@ -40,10 +40,8 @@ function ridge(folder)
     m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L2000km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    println(m.N^2/m.f^2*m.Hx[ix]^2)
-    error()
     ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
-    ridgePlot(m, s, s.uη, "", L"along-ridge flow $v$ (m s$^{-1}$)"; ax=ax[2])
+    ridgePlot(m, s, s.uη, "", L"along-ridge flow $u^\eta$ (m s$^{-1}$)"; ax=ax[2])
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -62,9 +60,9 @@ function ridgeFull2DvsBL1D(folder)
     fig, ax = subplots(1, 3, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
     ax[1].set_ylabel(L"$z$ (km)")
-    ax[1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"(m$^2$ s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"(m s$^{-1}$)"))
-    ax[3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"(s$^{-2}$)"))
+    ax[1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"along-ridge flow $u^\eta$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -75,6 +73,11 @@ function ridgeFull2DvsBL1D(folder)
     for a in ax
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
     end
+
+    # limits
+    ax[1].set_xlim([-0.05, 1.7])
+    ax[2].set_xlim([-2.5, 0.5])
+    ax[3].set_xlim([0, 1.5])
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
@@ -100,16 +103,16 @@ function ridgeFull2DvsBL1D(folder)
         Bz = c.N^2*cos(c.θ) .+ differentiate(b, ẑ*cos(c.θ))
         v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), ẑ)
         label = string(Int64(c.t/86400/360), " years")
-        ax[1].plot(χ,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
-        ax[2].plot(v,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
-        ax[3].plot(Bz,  ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[1].plot(1e3*χ,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[2].plot(1e2*v,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[3].plot(1e6*Bz,  ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
 
         # full 2D
         s = loadState2DPG(string(folder, "L2000km/full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
-        ax[1].plot(s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
-        ax[2].plot(s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
-        ax[3].plot(bz,           m.z[ix, :]/1e3, "k:")
+        ax[1].plot(1e3*s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
+        ax[2].plot(1e2*s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
+        ax[3].plot(1e6*bz,           m.z[ix, :]/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
@@ -130,10 +133,8 @@ function seamount(folder)
     m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    println(m.N^2/m.f^2*m.Hx[ix]^2)
-    error()
     ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
-    ridgePlot(m, s, s.uη, "", L"along-ridge flow $v$ (m s$^{-1}$)"; ax=ax[2])
+    ridgePlot(m, s, s.uη, "", L"along-ridge flow $u^\eta$ (m s$^{-1}$)"; ax=ax[2])
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -153,9 +154,9 @@ function seamountFull2DvsBL(folder)
 
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
-    ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"(m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"(m s$^{-1}$)"))
-    ax[2, 3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"(s$^{-2}$)"))
+    ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"along-ridge flow $u^\eta$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"))
+    ax[2, 3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -172,6 +173,14 @@ function seamountFull2DvsBL(folder)
     for a in ax
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
     end
+
+    # limits
+    ax[1, 1].set_xlim([-1.7, 0.05])
+    ax[1, 2].set_xlim([0, 2.6])
+    ax[1, 3].set_xlim([0, 1.2])
+    ax[2, 1].set_xlim([-1.7, 0.05])
+    ax[2, 2].set_xlim([0, 2.6])
+    ax[2, 3].set_xlim([0, 1.2])
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
@@ -200,16 +209,16 @@ function seamountFull2DvsBL(folder)
         Bz = c.N^2*cos(c.θ) .+ differentiate(b, ẑ*cos(c.θ))
         v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), ẑ)
         label = string(Int64(c.t/86400/360), " years")
-        ax[1, 1].plot(χ,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
-        ax[1, 2].plot(v,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
-        ax[1, 3].plot(Bz,  ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[1, 1].plot(1e2*χ,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[1, 2].plot(1e1*v,   ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
+        ax[1, 3].plot(1e6*Bz,  ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, c=color, label=label)
 
         # full 2D
         s = loadState2DPG(string(folder, "L200km/full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
-        ax[1, 1].plot(s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
-        ax[1, 2].plot(s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
-        ax[1, 3].plot(bz,           m.z[ix, :]/1e3, "k:")
+        ax[1, 1].plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
+        ax[1, 2].plot(1e1*s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
+        ax[1, 3].plot(1e6*bz,           m.z[ix, :]/1e3, "k:")
 
         # BL 2D
         s = loadState2DPG(string(folder, "L200km/bl2D/state$i.h5"))
@@ -222,16 +231,16 @@ function seamountFull2DvsBL(folder)
         χ = χI + χB
         b = bI + bB
         bz = differentiate(b, mBL.z[ixBL, :])
-        ax[2, 1].plot(χ,             mBL.z[ixBL, :]/1e3, c=color, label=label)
-        ax[2, 2].plot(s.uη[ixBL, :], mBL.z[ixBL, :]/1e3, c=color, label=label)
-        ax[2, 3].plot(bz,            mBL.z[ixBL, :]/1e3, c=color, label=label)
+        ax[2, 1].plot(1e2*χ,             mBL.z[ixBL, :]/1e3, c=color, label=label)
+        ax[2, 2].plot(1e1*s.uη[ixBL, :], mBL.z[ixBL, :]/1e3, c=color, label=label)
+        ax[2, 3].plot(1e6*bz,            mBL.z[ixBL, :]/1e3, c=color, label=label)
 
         # full 2D
         s = loadState2DPG(string(folder, "L200km/full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
-        ax[2, 1].plot(s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
-        ax[2, 2].plot(s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
-        ax[2, 3].plot(bz,            m.z[ix, :]/1e3, "k:")
+        ax[2, 1].plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k:")
+        ax[2, 2].plot(1e1*s.uη[ix, :],  m.z[ix, :]/1e3, "k:")
+        ax[2, 3].plot(1e6*bz,           m.z[ix, :]/1e3, "k:")
     end
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
@@ -250,4 +259,4 @@ path = "../sims/"
 # ridge(string(path, "sim034/"))
 # ridgeFull2DvsBL1D(string(path, "sim034/"))
 # seamount(string(path, "sim035/"))
-# seamountFull2DvsBL(string(path, "sim035/"))
+seamountFull2DvsBL(string(path, "sim035/"))
