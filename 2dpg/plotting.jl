@@ -51,8 +51,11 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
 
     # isopycnal contours
     nLevels = 20
-    lowerLevel = m.N^2*minimum(m.z)
-    upperLevel = 0
+    # lowerLevel = minimum(m.N.^2 .*m.z)
+    # upperLevel = 0
+    lowerLevel = 0
+    upperLevel = m.N[1, m.nσ]
+    println(upperLevel)
     levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
     ax.contour(xx, zz, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
 
@@ -101,7 +104,7 @@ function profilePlot(setupFile, stateFiles, iξ)
     end
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=5))
+    colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)))
 
     # plot data from `datafiles`
     for i=1:size(stateFiles, 1)

@@ -21,7 +21,6 @@ const outFolder = "out/"
 function runRidge(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
-    N = 1e-3
     ξVariation = true
     L = 2e6
     nξ = 2^8 + 1 
@@ -66,22 +65,27 @@ function runRidge(; bl = false)
     # viscosity
     Pr = 1e0
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
+
+    # stratification
+    N = 1.224744871391589e-3
+    # N_func(ξ, σ) = N
+    δ = 2000
+    N_func(ξ, σ) = N*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 10*secsInDay
-    # tPlot = 3*secsInYear
-    tPlot = 15*secsInYear
-    # tSave = 3*secsInYear
-    tSave = 60*secsInDay
+    tPlot = 3*secsInYear
+    tSave = 3*secsInYear
     
     # create model struct
-    m = ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, Δt)
+    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N_func, Δt)
 
     # save and log params
     saveSetup2DPG(m)
 
     # set initial state
-    b = N^2*m.z
+    # b = m.N.^2 .*m.z
+    b = δ/2 * m.N.^2
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
@@ -168,9 +172,9 @@ m, s = runRidge()
 # plots
 ################################################################################
 
-# setupFile = string(outFolder, "setup.h5")
-# m = loadSetup2DPG(setupFile)
-# stateFiles = string.(outFolder, "state", 1:5, ".h5")
-# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+setupFile = string(outFolder, "setup.h5")
+m = loadSetup2DPG(setupFile)
+stateFiles = string.(outFolder, "state", 0:5, ".h5")
+profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
 
 println("Done.")

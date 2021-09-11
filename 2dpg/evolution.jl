@@ -91,11 +91,10 @@ function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; 
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if bl
         RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b, 1)./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N^2
+        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N[:, m.nσ].^2
     else
         RHS[:, 1] .= 0
-        RHS[:, m.nσ] .= m.N^2
-        # evolutionRHS[:, m.nσ] .= 0
+        RHS[:, m.nσ] .= m.N[:, m.nσ].^2
     end
 end
 
@@ -125,8 +124,8 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     iImg += 1
 
     # store previous buoyancy field for timestepping scheme
-    # nPrev = 1
-    nPrev = 3
+    nPrev = 1
+    # nPrev = 3
     bPrev = zeros(nPrev, m.nξ, m.nσ)
 
     # get LHS matrices
@@ -142,8 +141,6 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     σσ = repeat(m.σ', m.nξ, 1)
     dσ[:, 1:end-1] = σσ[:, 2:end] - σσ[:, 1:end-1]
     dσ[:, end] = dσ[:, end-1]
-    println(dξ)
-    println(minimum(dσ))
 
     # main loop
     t = 0
