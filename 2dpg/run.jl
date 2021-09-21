@@ -67,10 +67,10 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
 
     # stratification
-    N = 1.224744871391589e-3
-    # N_func(ξ, σ) = N
-    δ = 2000
-    N_func(ξ, σ) = N*exp(H_func(ξ)*σ/δ)
+    N2 = 1.5e-6
+    # N2_func(ξ, σ) = N2
+    δ = 1000 # decay scale (m)
+    N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 10*secsInDay
@@ -78,14 +78,16 @@ function runRidge(; bl = false)
     tSave = 3*secsInYear
     
     # create model struct
-    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N_func, Δt)
+    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     saveSetup2DPG(m)
 
     # set initial state
-    # b = m.N.^2 .*m.z
-    b = δ/2 * m.N.^2
+    b = zeros(nξ, nσ)
+    for i=1:nξ
+        b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
+    end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
@@ -99,10 +101,9 @@ end
 function runSeamount(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
-    N = 1e-3
     ξVariation = true
-    L = 2e4
-    # L = 2e5
+    # L = 2e4
+    L = 2e5
     nξ = 2^6 + 1 
     nσ = 2^6
     coords = "cylindrical"
@@ -133,40 +134,47 @@ function runSeamount(; bl = false)
     # viscosity
     Pr = 1e0
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
+
+    # stratification
+    N2 = 1.5e-6
+    # N2_func(ξ, σ) = N2
+    δ = 1000 # decay scale (m)
+    N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    # Δt = 1*secsInDay
-    # Δt = 60
-    Δt = 3600
-    tPlot = 120*secsInDay
-    tSave = 1*secsInYear
+    Δt = 1*secsInDay
+    tPlot = 3*secsInYear
+    tSave = 3*secsInYear
     
     # create model struct
-    m = ModelSetup2DPG(f, N, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, Δt)
+    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     saveSetup2DPG(m)
 
     # set initial state
-    b = N^2*m.z
+    b = zeros(nξ, nσ)
+    for i=1:nξ
+        b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
+    end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # debug: what's the max Burger number?
-    S = @. m.N^2/m.f^2*m.Hx^2
+    S = @. m.N2/m.f^2*m.Hx^2
     println(maximum(S))
 
     # solve
-    evolve!(m, s, 1*tSave, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
 
-m, s = runRidge()
+# m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-# m, s = runSeamount(; bl=true)
+m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots

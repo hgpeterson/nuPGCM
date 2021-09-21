@@ -60,8 +60,8 @@ struct ModelSetup2DPG
     # turbulent diffusivity (m2 s-1)
 	κ::Array{Float64,2}
 
-    # buoyancy frequency (s-1)
-	N::Array{Float64,2}
+    # buoyancy frequency (s-2)
+	N2::Array{Float64,2}
 
     # timestep (s)
 	Δt::Float64

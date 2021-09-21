@@ -51,11 +51,8 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
 
     # isopycnal contours
     nLevels = 20
-    # lowerLevel = minimum(m.N.^2 .*m.z)
-    # upperLevel = 0
-    lowerLevel = 0
-    upperLevel = m.N[1, m.nσ]
-    println(upperLevel)
+    lowerLevel = -trapz(m.N2[1, :], m.z[1, :])
+    upperLevel = 0
     levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
     ax.contour(xx, zz, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
 

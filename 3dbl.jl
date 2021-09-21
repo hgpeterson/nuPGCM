@@ -68,7 +68,7 @@ function plot_pq()
     ϵ = 1e-3
     μ = 1
     Ss = 10. .^(-5:0.1:2)
-    Ts = 10. .^(-4:2)
+    Ts = -10. .^(-4:2)
     cs = pl.cm.viridis(range(1, 0, length=size(Ts, 1)))
     ls = ["-", "--", ":", "-.", ":", "--", "-"]
 

@@ -13,7 +13,7 @@ function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array
 
     # for finite difference on the top and bottom boundary
     fd_bot = mkfdstencil(σ[1:3], σ[1], 1)
-    fd_top = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+    # fd_top = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
     fd_top_σσ = mkfdstencil(σ[nσ-3:nσ], σ[nσ], 2)
 
     # Main loop, insert stencil in matrix for each node point
