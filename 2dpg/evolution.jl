@@ -90,8 +90,8 @@ Modify the right-hand side vector `RHS` to include boundary conditions at the to
 function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if bl
-        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b, 1)./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b, m.nσ)./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
+        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b; iσ=1)./m.κ[:, 1]
+        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b; iσ=m.nσ)./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
     else
         RHS[:, 1] .= 0
         RHS[:, m.nσ] .= m.N2[:, m.nσ]

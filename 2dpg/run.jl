@@ -67,7 +67,7 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1.5e-6
+    N2 = 1e-6
     # N2_func(ξ, σ) = N2
     δ = 1000 # decay scale (m)
     N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
@@ -136,7 +136,7 @@ function runSeamount(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1.5e-6
+    N2 = 1e-6
     # N2_func(ξ, σ) = N2
     δ = 1000 # decay scale (m)
     N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
@@ -163,7 +163,7 @@ function runSeamount(; bl = false)
 
     # debug: what's the max Burger number?
     S = @. m.N2/m.f^2*m.Hx^2
-    println(maximum(S))
+    println("Sₘₐₓ = ", maximum(S))
 
     # solve
     evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
@@ -171,10 +171,10 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge()
+m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-m, s = runSeamount(; bl=true)
+# m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots

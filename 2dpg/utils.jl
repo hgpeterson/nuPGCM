@@ -89,16 +89,17 @@ function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Fl
 end
 
 """
-    fξ = ξDerivative(m, field)
+    fξ = ξDerivative(m, field; iσ)
 
-Compute dξ(`field`) in terrian-following coordinates.
+Compute dξ(`field`) in terrian-following coordinates. If specified, only compute derivative at σ = σ[iσ].
 """
-function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
-    return reshape(m.Dξ*field[:], m.nξ, m.nσ)
-end
-function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2}, iσ::Int64)
-    umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
-    return m.Dξ[umap[:, iσ], umap[:, iσ]]field[:, iσ]
+function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2}; iσ=0)
+    if iσ == 0
+        return reshape(m.Dξ*field[:], m.nξ, m.nσ)
+    else
+        umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
+        return m.Dξ[umap[:, iσ], umap[:, iσ]]field[:, iσ]
+    end
 end
 
 """

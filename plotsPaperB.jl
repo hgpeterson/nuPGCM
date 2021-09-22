@@ -253,10 +253,51 @@ function seamountFull2DvsBL(folder)
     plt.close()
 end
 
+function ridgeExpStrat(folder)
+   fig, ax = subplots(1) 
+
+   ax.set_xlabel(L"$\xi$ (km)")
+   ax.set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+
+   m = loadSetup2DPG(string(folder, "/const/full2D/setup.h5"))
+   s = loadState2DPG(string(folder, "/const/full2D/state1.h5"))
+   ax.plot(m.ξ/1e3, 1e3*s.χ[argmax(abs.(s.χ), dims=2)], "tab:blue")
+   ax.plot(m.ξ/1e3, 1e3*BLtransport2D(m, s), "tab:blue", ls="--")
+
+   m = loadSetup2DPG(string(folder, "/exp/full2D/setup.h5"))
+   s = loadState2DPG(string(folder, "/exp/full2D/state1.h5"))
+   ax.plot(m.ξ/1e3, 1e3*s.χ[argmax(abs.(s.χ), dims=2)], "tab:orange")
+   ax.plot(m.ξ/1e3, 1e3*BLtransport2D(m, s), "tab:orange", ls="--")
+
+   ax.set_xlim([0, m.L/1e3])
+   ax.set_ylim([-2, 2])
+
+   custom_handles = [
+                    lines.Line2D([0], [0], c="k", ls="-"),
+                    lines.Line2D([0], [0], c="k", ls="--"),
+                    ]
+   custom_labels = ["full 2D", "BL theory (eq. 37)"]
+   ax.legend(custom_handles, custom_labels)
+
+   ax.annotate(string(L"$N^2 = $", "const."),      (700, -1.5), xycoords="data")
+   ax.annotate(L"$N^2 \sim \exp(\sigma/\delta$)",  (1200, 0), xycoords="data")
+
+   tight_layout()
+
+   savefig("ridgeExpStrat.pdf")
+   println("ridgeExpStrat.pdf")
+   plt.close()
+end
+function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
+    dbdξ = ξDerivative(m, s.b; iσ=1)
+    μ = m.ν[1, 1] / m.κ[1, 1]
+    return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
+end
 
 path = "../sims/"
 
 # ridge(string(path, "sim034/"))
 # ridgeFull2DvsBL1D(string(path, "sim034/"))
 # seamount(string(path, "sim035/"))
-seamountFull2DvsBL(string(path, "sim035/"))
+# seamountFull2DvsBL(string(path, "sim035/"))
+ridgeExpStrat(string(path, "sim037"))
