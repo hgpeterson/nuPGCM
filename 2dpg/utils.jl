@@ -7,99 +7,114 @@ using HDF5, Printf
 include("../myJuliaLib.jl")
 
 """
-    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L, periodic)
+    Dξ = getDξ(ξ, L, periodic)
 
-Compute the derivative matrices.
+Compute the ξ derivative matrix.
 """
-function getDerivativeMatrices(ξ::Array{Float64,1}, σ::Array{Float64,1}, L::Float64, periodic::Bool)
+function getDξ(ξ::Array{Float64,1}, L::Float64, periodic::Bool)
     nξ = size(ξ, 1)
-    nσ = size(σ, 1)
-    nPts = nξ*nσ
-
-    umap = reshape(1:nPts, nξ, nσ)    
+    
     Dξ = Tuple{Int64,Int64,Float64}[]
-    Dσ = Tuple{Int64,Int64,Float64}[]
 
     # Insert stencil in matrices for each node point
     for i=1:nξ
-        for j=1:nσ
-            row = umap[i, j] 
-
-            if j == 1 
-                # bottom 
-                fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
-                push!(Dσ, (row, umap[i, 1], fd_σ[1]))
-                push!(Dσ, (row, umap[i, 2], fd_σ[2]))
-                push!(Dσ, (row, umap[i, 3], fd_σ[3]))
-            elseif j == nσ
-                # top 
-                fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
-                push!(Dσ, (row, umap[i, nσ-2], fd_σ[1]))
-                push!(Dσ, (row, umap[i, nσ-1], fd_σ[2]))
-                push!(Dσ, (row, umap[i, nσ],   fd_σ[3]))
+        if i == 1
+            # left 
+            if periodic
+                fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) 
+                push!(Dξ, (i, nξ, fd_ξ[1]))
+                push!(Dξ, (i, 1,  fd_ξ[2]))
+                push!(Dξ, (i, 2,  fd_ξ[3]))
             else
-                # interior
-                fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
-                push!(Dσ, (row, umap[i, j-1], fd_σ[1]))
-                push!(Dσ, (row, umap[i, j],   fd_σ[2]))
-                push!(Dσ, (row, umap[i, j+1], fd_σ[3]))
-            end
+                # ghost point at ξ = 0 where derivative is zero:
+                #   fd_ξ0[1]*f[0] = -fd_ξ0[2]*f[1] - fd_ξ0[3]*f[2]
+                #   -> dξ(f) at ξ[1] = fd_ξ[1]*f[0] + fd_ξ[2]*f[1] + fd_ξ[3]*f[2]
+                #                    = -fd_ξ[1]*(fd_ξ0[2]*f[1] + fd_ξ0[3]*f[2])/fd_ξ0[1] + fd_ξ[2]*f[1] + fd_ξ[3]*f[2]
+                #                    = (fd_ξ[2] - fd_ξ[1]*fd_ξ0[2]/fd_ξ0[1]) * f[1] + (fd_ξ[3] - fd_ξ[1]fd_ξ0[3]/fd_ξ0[1]) * f[2]
+                fd_ξ0 = mkfdstencil([0, ξ[1], ξ[2]], 0.0, 1) 
+                fd_ξ = mkfdstencil([0, ξ[1], ξ[2]], ξ[1], 1) 
+                push!(Dξ, (i, 1, fd_ξ[2] - fd_ξ[1]*fd_ξ0[2]/fd_ξ0[1]))
+                push!(Dξ, (i, 2, fd_ξ[3] - fd_ξ[1]*fd_ξ0[3]/fd_ξ0[1]))
 
-            if i == 1
-                # left 
-                if periodic
-                    fd_ξ = mkfdstencil([ξ[nξ] - L, ξ[1], ξ[2]], ξ[1], 1) 
-                    push!(Dξ, (row, umap[nξ, j], fd_ξ[1]))
-                    push!(Dξ, (row, umap[1, j],  fd_ξ[2]))
-                    push!(Dξ, (row, umap[2, j],  fd_ξ[3]))
-                else
-                    fd_ξ = mkfdstencil(ξ[1:3], ξ[1], 1) 
-                    push!(Dξ, (row, umap[1, j], fd_ξ[1]))
-                    push!(Dξ, (row, umap[2, j], fd_ξ[2]))
-                    push!(Dξ, (row, umap[3, j], fd_ξ[3]))
-                end
-            elseif i == nξ
-                # right
-                if periodic
-                    fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1)
-                    push!(Dξ, (row, umap[nξ-1, j], fd_ξ[1]))
-                    push!(Dξ, (row, umap[nξ, j],   fd_ξ[2]))
-                    push!(Dξ, (row, umap[1, j],    fd_ξ[3]))
-                else
-                    fd_ξ = mkfdstencil(ξ[nξ-2:nξ], ξ[nξ], 1)
-                    push!(Dξ, (row, umap[nξ-2, j], fd_ξ[1]))
-                    push!(Dξ, (row, umap[nξ-1, j], fd_ξ[2]))
-                    push!(Dξ, (row, umap[nξ, j],   fd_ξ[3]))
-                end
-            else
-                # interior
-                fd_ξ = mkfdstencil(ξ[i-1:i+1], ξ[i], 1)
-                push!(Dξ, (row, umap[i-1, j], fd_ξ[1]))
-                push!(Dξ, (row, umap[i, j],   fd_ξ[2]))
-                push!(Dξ, (row, umap[i+1, j], fd_ξ[3]))
+                # fd_ξ = mkfdstencil(ξ[1:3], ξ[1], 1) 
+                # push!(Dξ, (i, 1, fd_ξ[1]))
+                # push!(Dξ, (i, 2, fd_ξ[2]))
+                # push!(Dξ, (i, 3, fd_ξ[3]))
             end
+        elseif i == nξ
+            # right
+            if periodic
+                fd_ξ = mkfdstencil([ξ[nξ-1], ξ[nξ], ξ[1] + L], ξ[nξ], 1)
+                push!(Dξ, (i, nξ-1, fd_ξ[1]))
+                push!(Dξ, (i, nξ,   fd_ξ[2]))
+                push!(Dξ, (i, 1,    fd_ξ[3]))
+            else
+                fd_ξ = mkfdstencil(ξ[nξ-2:nξ], ξ[nξ], 1)
+                push!(Dξ, (i, nξ-2, fd_ξ[1]))
+                push!(Dξ, (i, nξ-1, fd_ξ[2]))
+                push!(Dξ, (i, nξ,   fd_ξ[3]))
+            end
+        else
+            # interior
+            fd_ξ = mkfdstencil(ξ[i-1:i+1], ξ[i], 1)
+            push!(Dξ, (i, i-1, fd_ξ[1]))
+            push!(Dξ, (i, i,   fd_ξ[2]))
+            push!(Dξ, (i, i+1, fd_ξ[3]))
         end
     end
 
     # Create CSC sparse matrix from matrix elements
-    Dξ = sparse((x->x[1]).(Dξ), (x->x[2]).(Dξ), (x->x[3]).(Dξ), nPts, nPts)
-    Dσ = sparse((x->x[1]).(Dσ), (x->x[2]).(Dσ), (x->x[3]).(Dσ), nPts, nPts)
+    Dξ = sparse((x->x[1]).(Dξ), (x->x[2]).(Dξ), (x->x[3]).(Dξ), nξ, nξ)
 
-    return Dξ, Dσ
+    return Dξ
 end
 
 """
-    fξ = ξDerivative(m, field; iσ)
+    Dσ = getDσ(σ)
 
-Compute dξ(`field`) in terrian-following coordinates. If specified, only compute derivative at σ = σ[iσ].
+Compute the σ derivative matrix.
 """
-function ξDerivative(m::ModelSetup2DPG, field::Array{Float64,2}; iσ=0)
-    if iσ == 0
-        return reshape(m.Dξ*field[:], m.nξ, m.nσ)
-    else
-        umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
-        return m.Dξ[umap[:, iσ], umap[:, iσ]]field[:, iσ]
+function getDσ(σ::Array{Float64,1})
+    nσ = size(σ, 1)
+
+    Dσ = Tuple{Int64,Int64,Float64}[]
+
+    # Insert stencil in matrices for each node point
+    for j=1:nσ
+        if j == 1 
+            # bottom 
+            fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
+            push!(Dσ, (j, 1, fd_σ[1]))
+            push!(Dσ, (j, 2, fd_σ[2]))
+            push!(Dσ, (j, 3, fd_σ[3]))
+        elseif j == nσ
+            # top 
+            fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+            push!(Dσ, (j, nσ-2, fd_σ[1]))
+            push!(Dσ, (j, nσ-1, fd_σ[2]))
+            push!(Dσ, (j, nσ,   fd_σ[3]))
+        else
+            # interior
+            fd_σ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+            push!(Dσ, (j, j-1, fd_σ[1]))
+            push!(Dσ, (j, j,   fd_σ[2]))
+            push!(Dσ, (j, j+1, fd_σ[3]))
+        end
     end
+
+    # Create CSC sparse matrix from matrix elements
+    Dσ = sparse((x->x[1]).(Dσ), (x->x[2]).(Dσ), (x->x[3]).(Dσ), nσ, nσ)
+
+    return Dσ
+end
+
+"""
+    fξ = ξDerivative(m, field)
+
+Compute dξ(`field`) in terrian-following coordinates.
+"""
+function ξDerivative(m::ModelSetup2DPG, field::Array{Float64})
+    return m.Dξ*field
 end
 
 """
@@ -108,7 +123,7 @@ end
 Compute dσ(`field`) in terrian-following coordinates.
 """
 function σDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
-    return reshape(m.Dσ*field[:], m.nξ, m.nσ)
+    return (m.Dσ*field')'
 end
 
 """

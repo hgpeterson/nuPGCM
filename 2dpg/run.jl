@@ -67,9 +67,10 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1e-6
+    # N2 = 1e-6
     # N2_func(ξ, σ) = N2
     δ = 1000 # decay scale (m)
+    N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
     N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
@@ -104,8 +105,8 @@ function runSeamount(; bl = false)
     ξVariation = true
     # L = 2e4
     L = 2e5
-    nξ = 2^6 + 1 
-    nσ = 2^6
+    nξ = 2^8 + 1 
+    nσ = 2^7
     coords = "cylindrical"
     periodic = false
 
@@ -137,12 +138,14 @@ function runSeamount(; bl = false)
 
     # stratification
     N2 = 1e-6
-    # N2_func(ξ, σ) = N2
-    δ = 1000 # decay scale (m)
-    N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
+    N2_func(ξ, σ) = N2
+    # δ = 1000 # decay scale (m)
+    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of seamount flank
+    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 1*secsInDay
+    # Δt = 1*secsInDay
+    Δt = 3600
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -162,7 +165,7 @@ function runSeamount(; bl = false)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # debug: what's the max Burger number?
-    S = @. m.N2/m.f^2*m.Hx^2
+    S = @. m.N2[:, 1]/m.f^2*m.Hx^2
     println("Sₘₐₓ = ", maximum(S))
 
     # solve
@@ -171,10 +174,10 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-m, s = runRidge()
+# m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-# m, s = runSeamount(; bl=true)
+m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots

@@ -183,6 +183,9 @@ function postProcess(m::ModelSetup2DPG, χ::Array{Float64,2})
         elseif m.coords == "cylindrical"
             # uσ = -dρ(ρ*χ)/(H*ρ)
             uσ = -ξDerivative(m, repeat(m.ξ, 1, m.nσ).*χ)./repeat(m.H.*m.ξ, 1, m.nσ)
+            # assume χ = 0 at ρ = 0
+            fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
+            uσ[1, :] = @. -(fd_ξ[2]*m.ξ[1]*χ[1, :] + fd_ξ[3]*m.ξ[2]*χ[2, :])/(m.H[1]*m.ξ[1])
         end
     else
         uσ = zeros(m.nξ, m.nσ)
@@ -224,10 +227,10 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
         χ = χ_b + U*m.χ_U
     end
 
-    if m.coords == "cylindrical"
-        # b.c.: no flow at ρ = 0
-        χ[1, :] .= 0
-    end
+    # if m.coords == "cylindrical"
+    #     # b.c.: no flow at ρ = 0
+    #     χ[1, :] .= 0
+    # end
     uξ, uη, uσ, U = postProcess(m, χ)
 
     return χ, uξ, uη, uσ, U

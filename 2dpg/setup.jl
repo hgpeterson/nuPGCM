@@ -44,7 +44,8 @@ function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, n
                     periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, 
                     H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, N2::Array{Float64,2}, Δt::Real)
     # get derivative matrices
-    Dξ, Dσ = getDerivativeMatrices(ξ, σ, L, periodic)
+    Dξ = getDξ(ξ, L, periodic)
+    Dσ = getDσ(σ)
 
     # get diffusion matrix
     D = getDiffusionMatrix(ξ, σ, κ, H)

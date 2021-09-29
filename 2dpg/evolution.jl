@@ -62,11 +62,11 @@ function getDiffusionMatrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Arra
 end
 
 """
-    LHS = getEvolutionLHS(m, s)
+    LHS = getEvolutionLHS(m, a, b)
 
 Generate the left-hand side matrix for the evolution problem with flux boundary conditions on the boundaries.
 """
-function getEvolutionLHS(m::ModelSetup2DPG, s::ModelState2DPG, a::Real, b::Real)
+function getEvolutionLHS(m::ModelSetup2DPG, a::Real, b::Real)
     # bottom and top boundaries in 1D
     umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
     bottomBdy = umap[:, 1]
@@ -90,8 +90,8 @@ Modify the right-hand side vector `RHS` to include boundary conditions at the to
 function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if bl
-        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b; iσ=1)./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b; iσ=m.nσ)./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
+        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
+        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
     else
         RHS[:, 1] .= 0
         RHS[:, m.nσ] .= m.N2[:, m.nσ]
@@ -125,15 +125,10 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
 
     # store previous buoyancy field for timestepping scheme
     nPrev = 1
-    # nPrev = 3
     bPrev = zeros(nPrev, m.nξ, m.nσ)
 
-    # get LHS matrices
-    # LHS1 = getEvolutionLHS(m, s, 1, 1)
-    # LHS2 = getEvolutionLHS(m, s, 3, 2)
-    # LHS3 = getEvolutionLHS(m, s, 11/6, 1)
-    # LHS  = getEvolutionLHS(m, s, 25/12, 1)
-    LHS  = getEvolutionLHS(m, s, 1, 1/2)
+    # get LHS matrix for CNAB
+    LHS = getEvolutionLHS(m, 1, 1/2)
 
     # if you want to check CFL
     dξ = m.L/m.nξ
@@ -170,40 +165,6 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
             s.i[1] = i + 1
         end
-        # if i == 1
-        #     # first step: SBDF1
-        #     RHS = s.b + m.Δt*adv_func(s.b) # right-hand-side
-        #     resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
-        #     bPrev[1, :, :] = s.b # store previoius step for next time
-        #     s.b[:, :] = reshape(LHS1\RHS[:], m.nξ, m.nσ)  # solve
-        #     s.i[1] = i + 1 # next step
-        # elseif i == 2
-        #     # second step: SBDF2
-        #     RHS = 4*s.b - bPrev[1, :, :] + 2*m.Δt*(2*adv_func(s.b) - adv_func(bPrev[1, :, :]))
-        #     resetBCs!(m, s, RHS; bl=bl)
-        #     bPrev[2, :, :] = bPrev[1, :, :] # move previous step back one
-        #     bPrev[1, :, :] = s.b # store current step as previoius step
-        #     s.b[:, :] = reshape(LHS2\RHS[:], m.nξ, m.nσ)
-        #     s.i[1] = i + 1
-        # elseif i == 3
-        #     # second step: SBDF3
-        #     RHS = 3*s.b - 3/2*bPrev[1, :, :]  + 1/3*bPrev[2, :, :] + m.Δt*(3*adv_func(s.b) - 3*adv_func(bPrev[1, :, :]) + adv_func(bPrev[2, :, :]))
-        #     resetBCs!(m, s, RHS; bl=bl)
-        #     bPrev[3, :, :] = bPrev[2, :, :] 
-        #     bPrev[2, :, :] = bPrev[1, :, :] 
-        #     bPrev[1, :, :] = s.b 
-        #     s.b[:, :] = reshape(LHS3\RHS[:], m.nξ, m.nσ)
-        #     s.i[1] = i + 1
-        # else
-        #     # other steps: SBDF4
-        #     RHS = 4*s.b - 3*bPrev[1, :, :]  + 4/3*bPrev[2, :, :] - 1/4*bPrev[3, :, :] + m.Δt*(4*adv_func(s.b) - 6*adv_func(bPrev[1, :, :]) + 4*adv_func(bPrev[2, :, :]) - adv_func(bPrev[3, :, :]))
-        #     resetBCs!(m, s, RHS; bl=bl)
-        #     bPrev[3, :, :] = bPrev[2, :, :] 
-        #     bPrev[2, :, :] = bPrev[1, :, :] 
-        #     bPrev[1, :, :] = s.b 
-        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
-        #     s.i[1] = i + 1
-        # end
         t += m.Δt
 
         # println(trapz(s.b[1, :], m.z[1, :]))
@@ -216,12 +177,15 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         invert!(m, s; bl=bl)
 
         # log
-        println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
+        if i % 60 == 0
+            println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
 
-        # # CFL stuff
-        # uξCFL = minimum(abs.(dξ./s.uξ)) 
-        # uσCFL = minimum(abs.(dσ./s.uσ)) 
-        # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
+            # CFL stuff
+            uξCFL = minimum(abs.(dξ./s.uξ)) 
+            uσCFL = minimum(abs.(dσ./s.uσ)) 
+            println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
+        end
+
         
         if i % nStepsPlot == 0
             # plot flow
