@@ -67,15 +67,16 @@ function runRidge(; bl = false)
     ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
 
     # stratification
-    # N2 = 1e-6
-    # N2_func(ξ, σ) = N2
-    δ = 1000 # decay scale (m)
-    N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
-    N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
+    N2 = 1e-6
+    N2_func(ξ, σ) = N2
+    # δ = 1000 # decay scale (m)
+    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
+    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 10*secsInDay
     tPlot = 3*secsInYear
+    # tPlot = Δt
     tSave = 3*secsInYear
     
     # create model struct
@@ -174,10 +175,10 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge()
+m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-m, s = runSeamount(; bl=true)
+# m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
