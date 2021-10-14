@@ -1,7 +1,7 @@
 using PyPlot, PyCall, Printf, HDF5, Dierckx
 
 plt.style.use("plots.mplstyle")
-plt.close()("all")
+plt.close("all")
 pygui(false)
 
 include("myJuliaLib.jl")
@@ -71,26 +71,25 @@ function chiForSketch(folder)
     println("chiForSketch.svg")
 end
 
-function chi_v_ridge(folder)
+function spinupRidge(folder)
     # load
-    c = loadCheckpoint2DPG(string(folder, "2dpg/Pr1/checkpoint1.h5"))
-    v = c.uη
-    ix = argmin(abs.(c.x[:, 1] .- c.L/4))
+    m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
 
     # plot
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
-    ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1], x=c.x, z=c.z, N=c.N)
-    ridgePlot(v, c.b, "", L"along-ridge flow, $v$ (m s$^{-1}$)"; ax=ax[2], x=c.x, z=c.z, N=c.N)
-    ax[1].plot([c.L/1e3/4, c.L/1e3/4], [c.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
-    ax[2].plot([c.L/1e3/4, c.L/1e3/4], [c.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction, $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1], vext=1.75)
+    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow, $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], vext=1.4, style="pcolormesh")
+    ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
-    ax[1].set_xlim([0, c.L/1e3])
-    ax[2].set_xlim([0, c.L/1e3])
+    tight_layout()
     savefig("spinupRidge.pdf")
     println("spinupRidge.pdf")
-    plt.close()()
+    plt.close()
 end
 
 function spinupRidgeAsym(folder)
@@ -101,7 +100,7 @@ function spinupRidgeAsym(folder)
     ax = ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z, N=c.N)
     savefig("spinupRidgeAsym.pdf")
     println("spinupRidgeAsym.pdf")
-    plt.close()()
+    plt.close()
 
     println(@sprintf("U = %1.2e m2 s-1", c.χ[1, end]))
 end
@@ -201,7 +200,7 @@ function spinupProfiles(folder; σ=1)
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
     savefig(string("spinupProfilesPr", σ, ".pdf"))
     println(string("spinupProfilesPr", σ, ".pdf"))
-    plt.close()()
+    plt.close()
 end
 
 function spinupProfilesRayleigh(folder)
@@ -307,7 +306,7 @@ function spinupProfilesRayleigh(folder)
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
     savefig(string("spinupProfilesRayleigh.pdf"))
     println(string("spinupProfilesRayleigh.pdf"))
-    plt.close()()
+    plt.close()
 end
 
 function spindownProfiles(folder; ratio=nothing)
@@ -401,7 +400,7 @@ function spindownProfiles(folder; ratio=nothing)
         savefig("spindownProfiles.pdf")
         println("spindownProfiles.pdf")
     end
-    plt.close()()
+    plt.close()
 end
 
 function spindownGrid(folder)
@@ -412,7 +411,7 @@ function spindownGrid(folder)
     ṽ_0 = read(file, "ṽ_0")
     τ_Ss = read(file, "τ_Ss")
     τ_As = read(file, "τ_As")
-    plt.close()(file)
+    close(file)
 
     # text outline
     outline = [pe.withStroke(linewidth=0.6, foreground="k")]
@@ -522,7 +521,7 @@ function spinupProfilesPGvsFull(folder)
     subplots_adjust(left=0.1, right=0.95, bottom=0.28, top=0.9, wspace=0.1, hspace=0.6)
     savefig("spinupProfilesPGvsFull.pdf")
     println("spinupProfilesPGvsFull.pdf")
-    plt.close()()
+    plt.close()
 end
 
 path = "../sims/"
@@ -530,7 +529,7 @@ path = "../sims/"
 # sketchRidge() 
 # sketchSlope() 
 # chiForSketch(string(path, "sim023/")) 
-# chi_v_ridge(string(path, "sim026/"))
+spinupRidge(string(path, "sim037/"))
 # spinupProfiles(string(path, "sim026/"); σ=1)
 # spinupProfiles(string(path, "sim026/"); σ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 

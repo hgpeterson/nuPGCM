@@ -4,6 +4,7 @@
 
 # for colors
 pl = pyimport("matplotlib.pylab")
+mpl = pyimport("matplotlib")
 
 """
     ax = ridgePlot(m, s, field, titleString, cbarLabel; ax, vext, cmap)
@@ -17,7 +18,7 @@ Optional:
     - set the vmin/vmax manually with `vext`
     - set different colormap `cmap`
 """
-function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, titleString::AbstractString, cbarLabel::AbstractString; ax=nothing, vext=nothing, cmap="RdBu_r")
+function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, titleString::AbstractString, cbarLabel::AbstractString; ax=nothing, vext=nothing, cmap="RdBu_r", style="contour")
     # km
     xx = m.x/1000
     zz = m.z/1000
@@ -30,24 +31,35 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
     if vext === nothing
         vmax = maximum(abs.(field))
         vmin = -vmax
-        extend = "neither"
     else
         vmax = vext
         vmin = -vext
-        extend = "both"
     end
 
-    # regular min and max for viridis
-    if cmap == "viridis"
-        vmin = minimum(field)
-        vmax = maximum(field)
+    # set extend
+    if maximum(field) > vmax && minimum(field) < vmin
+        extend = "both"
+    elseif maximum(field) > vmax && minimum(field) > vmin
+        extend = "max"
+    elseif maximum(field) < vmax && minimum(field) < vmin
+        extend = "min"
+    else
         extend = "neither"
     end
 
     # 2D plot
-    img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
-    cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    if style == "contour"
+        levels = range(vmin, vmax, length=8)
+        img = ax.contourf(xx, zz, field, levels=levels, cmap=cmap)
+        ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+        cb = colorbar(img, ax=ax, label=cbarLabel)
+    elseif style == "pcolormesh"
+        img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
+        cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend)
+        cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    else
+        error("Unkown style: ", style)
+    end
 
     # isopycnal contours
     nLevels = 20
