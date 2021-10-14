@@ -237,17 +237,16 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
     plotCurrentState(m, s, iImg)
     iImg += 1
 
-    # # store previous buoyancy field for timestepping scheme
-    # nPrev = 1
-    # bPrev = zeros(nPrev, m.nξ, m.nσ)
+    # store previous buoyancy field for timestepping scheme
+    bPrev = zeros(m.nξ, m.nσ)
 
-    # # get LHS matrix for CNAB
-    # LHS = getEvolutionLHS(m, 1, 1/2)
+    # get LHS matrix for CNAB
+    LHS = getEvolutionLHS(m, 1/2)
 
     # stages, c, A_ex, A_im = RKTable("111")
-    stages, c, A_ex, A_im = RKTable("222")
+    # stages, c, A_ex, A_im = RKTable("222")
     # stages, c, A_ex, A_im = RKTable("443")
-    LHS = getEvolutionLHS(m, A_im[2, 2])
+    # LHS = getEvolutionLHS(m, A_im[2, 2])
 
     # if you want to check CFL
     dξ = m.L/m.nξ
@@ -269,23 +268,23 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
             end
         end
 
-        # if i == 1
-        #     # first step: CNAB1
-        #     RHS = s.b + m.Δt*(adv_func(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
-        #     resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
-        #     bPrev[1, :, :] = s.b # store previoius step for next time
-        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
-        #     s.i[1] = i + 1 # next step
-        # else
-        #     # other steps: CNAB2
-        #     RHS = s.b + m.Δt*(3/2*adv_func(s.b) - 1/2*adv_func(bPrev[1, :, :]) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
-        #     resetBCs!(m, s, RHS; bl=bl)
-        #     bPrev[1, :, :] = s.b 
-        #     s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
-        #     s.i[1] = i + 1
-        # end
-        RKStep!(m, s, stages, c, A_ex, A_im, advFunc, LHS; bl)
-        s.i[1] = i + 1
+        if i == 1
+            # first step: CNAB1
+            RHS = s.b + m.Δt*(advFunc(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
+            resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+            bPrev = s.b # store previoius step for next time
+            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
+            s.i[1] = i + 1 # next step
+        else
+            # other steps: CNAB2
+            RHS = s.b + m.Δt*(3/2*advFunc(s.b) - 1/2*advFunc(bPrev) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
+            resetBCs!(m, s, RHS; bl=bl)
+            bPrev = s.b 
+            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
+            s.i[1] = i + 1
+        end
+        # RKStep!(m, s, stages, c, A_ex, A_im, advFunc, LHS; bl)
+        # s.i[1] = i + 1
         t += m.Δt
 
         # println(trapz(s.b[1, :], m.z[1, :]))
@@ -298,8 +297,7 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         invert!(m, s; bl=bl)
 
         # log
-        # if i % 60 == 0
-        if true
+        if i % 60 == 0
             println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
 
             # # CFL stuff

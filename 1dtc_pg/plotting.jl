@@ -62,7 +62,7 @@ function profilePlot(datafiles)
         else
             label = string(Int64(round(c.t/secsInYear)), " years")
             if i==1
-                color = "k"
+                color = "r"
             else
                 color = colors[i-1, :]
             end

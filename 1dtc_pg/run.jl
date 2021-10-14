@@ -34,10 +34,9 @@ b = evolve(15*secsInYear)
 # plots
 ################################################################################
 
-# ii = [0, 1, 2, 3, 4, 5] 
-# profilePlot(string.("checkpoint", ii, ".h5")) 
+ii = [0, 1, 2, 3, 4, 5] 
 # ii = [0, 1, 2, 3, 4, 5, 999] 
-# profilePlot(string.("checkpoint", ii, ".h5")) 
+profilePlot(string.("checkpoint", ii, ".h5")) 
 
 # ii = [0, 1, 2, 3, 4, 5]
 # path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht2.5e-3/"

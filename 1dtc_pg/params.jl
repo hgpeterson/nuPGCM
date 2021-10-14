@@ -3,8 +3,8 @@ Pr = 1e0
 f = -5.5e-5
 N = 1e-3
 H = 2e3
-# H = 3673.32793219601
 θ = 2.5e-3
+# H = 3673.32793219601
 # θ = -0.03637523599970141
 
 # z grid
@@ -16,7 +16,8 @@ ẑ = z/cos(θ)
 
 # diffusivity
 # bottom enhanced: 
-κ0 = 6e-5 
+# κ0 = 6e-5 
+κ0 = 0 
 κ1 = 2e-3 
 h = 200 
 # # not bottom enhanced:
@@ -26,16 +27,15 @@ h = 200
 κ = @. κ0 + κ1*exp(-(z + H)/h)
 
 # set U = U₀ or compute U at each time step?
-# transportConstraint = true
-transportConstraint = false
+transportConstraint = true
+# transportConstraint = false
 U₀ = 0
 
 # timestepping
 secsInDay = 86400
 secsInYear = 360*secsInDay
 Δt = 10*secsInDay
-# tSave = 3*secsInYear
-tSave = 60*secsInDay
+tSave = 3*secsInYear
 
 """
     log(ofile, text)

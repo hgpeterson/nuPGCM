@@ -254,36 +254,6 @@ function seamountFull2DvsBL(folder)
 end
 
 function expStrat(folder)
-    # fig, ax = subplots(1)
-    
-    # ax.set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    # ax.set_ylabel(L"$z$ (km)")
-
-    # m = loadSetup2DPG(string(folder, "/exp/full2D/setup.h5"))
-    # s = loadState2DPG(string(folder, "/exp/full2D/state1.h5"))
-    # iξ = argmin(abs.(m.ξ .- m.L/4))
-
-    # mBL = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
-    # sBL = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
-    # χI = sBL.χ[iξ, :]
-    # bIξ = ξDerivative(mBL, sBL.b)
-    # q = (1/(4*mBL.ν[iξ, 1])*(mBL.f^2/mBL.ν[iξ, 1] - mBL.Hx[iξ]*bIξ[iξ, 1]/mBL.H[iξ]/mBL.κ[iξ, 1]))^(1/4)
-    # χB = boundaryCorrection(χI, mBL.z[iξ, :] .- mBL.z[iξ, 1], q)
-    # χ = χI + χB
-
-    # ax.plot(1e3*s.χ[iξ, :], m.z[iξ, :]/1e3, label=L"\chi")
-    # ax.plot(1e3*χ, mBL.z[iξ, :]/1e3, "--", label=L"$\chi_I + \chi_B$")
-    # ax.plot(1e3*χI, mBL.z[iξ, :]/1e3, "k:", label=L"\chi_I")
-
-    # ax.set_ylim([m.z[iξ, 1]/1e3, m.z[iξ, 1]/1e3 + 0.5])
-
-    # ax.legend()
-
-    # tight_layout()
-    # savefig("bl_check.pdf")
-    # println("bl_check.pdf")
-    # plt.close()
-
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2)) 
 
     ax[1].set_xlabel(L"$\xi$ (km)")

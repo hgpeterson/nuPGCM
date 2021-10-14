@@ -38,8 +38,10 @@ function runRidge(; bl = false)
     
     # topography: sine
     global symmetry = true
-    H0 = 2e3
-    amp =  0.4*H0
+    # H0 = 2e3
+    # amp = 0.4*H0
+    H0 = 4e3
+    amp = 800
     H_func(x) = H0 + amp*cos(2*π*x/L)
     Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
@@ -107,7 +109,7 @@ function runSeamount(; bl = false)
     # L = 2e4
     L = 2e5
     nξ = 2^8 + 1 
-    nσ = 2^7
+    nσ = 2^8
     coords = "cylindrical"
     periodic = false
 
@@ -145,8 +147,8 @@ function runSeamount(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    # Δt = 1*secsInDay
-    Δt = 3600
+    Δt = 1*secsInDay
+    # Δt = 3600
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
