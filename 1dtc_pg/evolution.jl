@@ -1,181 +1,113 @@
 """
-    matrices = getEvolutionMatrices()
+    matrices = getDiffusionMatrix()
 
-Compute the matrices needed for evolution equation integration.
+Compute the diffusion matrix needed for evolution equation integration.
 """
-function getEvolutionMatrices()
-    diffMat = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
-    diffVec = zeros(nẑ)                            # diffusion operator vector 
-    bdyFluxMat = Tuple{Int64,Int64,Float64}[]      # flux at boundary matrix
+function getDiffusionMatrix(z::Array{Float64,1}, κ::Array{Float64,1})
+    nz = size(z, 1)
+    D = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
 
-    # interior nodes only for operators
-    for j=2:nẑ-1
-        # dẑ stencil
-        fd_ẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 1)
-        κ_ẑ = sum(fd_ẑ.*κ[j-1:j+1])
+    # interior nodes 
+    for j=2:nz-1
+        # dz stencil
+        fd_z = mkfdstencil(z[j-1:j+1], z[j], 1)
+        κ_z = sum(fd_z.*κ[j-1:j+1])
 
-        # dẑẑ stencil
-        fd_ẑẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 2)
+        # dzz stencil
+        fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
 
-        # diffusion term: dẑ(κ(N^2*cos(θ) + dẑ(b))) = dẑ(κ)*N^2*cos(θ) + dẑ(κ)*dẑ(b) + κ*dẑẑ(b)
-        push!(diffMat, (j, j-1, (κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
-        push!(diffMat, (j, j,   (κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
-        push!(diffMat, (j, j+1, (κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
-        diffVec[j] = κ_ẑ*N^2*cos(θ)
+        # diffusion term: dz(κ(N^2*cos(θ) + dz(b))) = dz(κ)*N^2*cos(θ) + dz(κ)*dz(b) + κ*dzz(b)
+        push!(D, (j, j-1, (κ_z*fd_z[1] + κ[j]*fd_zz[1])))
+        push!(D, (j, j,   (κ_z*fd_z[2] + κ[j]*fd_zz[2])))
+        push!(D, (j, j+1, (κ_z*fd_z[3] + κ[j]*fd_zz[3])))
     end
 
     # flux at boundaries: bottom
-    # dẑ stencil
-    fd_ẑ = mkfdstencil(ẑ[1:3], ẑ[1], 1)
-    # flux term: dẑ(b) = -N^2*cos(θ)
-    push!(bdyFluxMat, (1, 1, fd_ẑ[1]))
-    push!(bdyFluxMat, (1, 2, fd_ẑ[2]))
-    push!(bdyFluxMat, (1, 3, fd_ẑ[3]))
+    # dz stencil
+    fd_z = mkfdstencil(z[1:3], z[1], 1)
+    # flux term: dz(b) = -N^2*cos(θ)
+    push!(D, (1, 1, fd_z[1]))
+    push!(D, (1, 2, fd_z[2]))
+    push!(D, (1, 3, fd_z[3]))
 
     # flux at boundaries: top
-    # dẑ stencil
-    fd_ẑ = mkfdstencil(ẑ[nẑ-2:nẑ], ẑ[nẑ], 1)
-    # flux term: dẑ(b) = 0
-    push!(bdyFluxMat, (nẑ, nẑ-2, fd_ẑ[1]))
-    push!(bdyFluxMat, (nẑ, nẑ-1, fd_ẑ[2]))
-    push!(bdyFluxMat, (nẑ, nẑ,   fd_ẑ[3]))
+    # dz stencil
+    fd_z = mkfdstencil(z[nz-2:nz], z[nz], 1)
+    # flux term: dz(b) = 0
+    push!(D, (nz, nz-2, fd_z[1]))
+    push!(D, (nz, nz-1, fd_z[2]))
+    push!(D, (nz, nz,   fd_z[3]))
 
     # Create CSC sparse matrix from matrix elements
-    diffMat = sparse((x->x[1]).(diffMat), (x->x[2]).(diffMat), (x->x[3]).(diffMat), nẑ, nẑ)
-    bdyFluxMat = sparse((x->x[1]).(bdyFluxMat), (x->x[2]).(bdyFluxMat), (x->x[3]).(bdyFluxMat), nẑ, nẑ)
+    D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), nz, nz)
 
-    return diffMat, diffVec, bdyFluxMat
+    return D
 end
 
 """
-    evolutionLHS = getEvolutionLHS(Δt, diffMat, bdyFluxMat)
+    evolutionLHS = getEvolutionLHS(m)
 
-Generate the left-hand side matrix for the evolution problem of the form `I - diffmat*Δt`
-and the not flux boundary condition applied to the boundaries
+Generate the left-hand side matrix for the evolution problem of the form `I - Δt/2*D`
+and the no flux boundary condition applied to the boundaries
 """
-function getEvolutionLHS(Δt, diffMat, bdyFluxMat)
+function getEvolutionLHS(m::ModelSetup1DPG)
     # implicit euler
-    evolutionLHS = I - diffMat*Δt 
+    evolutionLHS = I - m.Δt/2*m.D 
 
     # no flux boundaries
-    evolutionLHS[1, :] = bdyFluxMat[1, :]
-    evolutionLHS[nẑ, :] = bdyFluxMat[nẑ, :]
+    evolutionLHS[1, :] = m.D[1, :]
+    evolutionLHS[m.nz, :] = m.D[m.nz, :]
 
-    return evolutionLHS
+    return lu(evolutionLHS)
 end
 
 """
-    b = evolve(tFinal)
+    evolve!(m, s, tFinal, tSave; bl=bl)
 
 Solve equation for `b` for `tFinal` seconds.
 """
-function evolve(tFinal)
+function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real; bl=false)
     # timestep
-    nSteps = Int64(ceil(tFinal/Δt))
-    nStepsSave = Int64(floor(tSave/Δt))
+    nSteps = Int64(tFinal/m.Δt)
+    nStepsSave = Int64(tSave/m.Δt)
 
-    # get matrices and vectors
-    diffMat, diffVec, bdyFluxMat = getEvolutionMatrices()
-
-    # left-hand side for evolution equation (save LU decomposition for speed)
-    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat))
+    # left-hand side for evolution equation
+    LHS = getEvolutionLHS(m)
 
     # initial condition
-    t = 0
-    b = zeros(nẑ)
-    χ, û, v̂, U = invert(b)
     iSave = 0
-    saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
+    saveState1DPG(s, iSave)
     iSave += 1
 
     # main loop
     for i=1:nSteps
-        t += Δt
+        # right-hand side
+        RHS = s.b + m.Δt*(1/2*m.D*s.b + m.κ_z*m.N2 - s.u*m.N2*tan(m.θ))
 
-        # implicit euler diffusion
-        diffRHS = b + diffVec*Δt
-
-        # compute advection RHS
-        advRHS = @. -Δt*û*N^2*sin(θ)
-
-        # sum the two
-        evolutionRHS = diffRHS + advRHS
-
-        # boundary fluxes
-        evolutionRHS[1] = -N^2*cos(θ) 
-        #= evolutionRHS[nẑ] = -N^2*cos(θ) =# 
-        evolutionRHS[nẑ] = 0
+        # reset boundary conditions
+        if bl
+            RHS[1] = -m.N2/(1 + m.ν[1]/m.κ[1]*m.N2/m.f^2*tan(m.θ)^2)
+        else
+            RHS[1] = -m.N2
+        end
+        # RHS[m.nz] = 0
+        RHS[m.nz] = -m.N2
 
         # solve
-        b = evolutionLHS\evolutionRHS
+        s.b[:] = LHS\RHS
 
         # invert buoyancy for flow
-        χ, û, v̂, U = invert(b)
+        invert!(m, s; bl=bl)
+        s.i[1] = i + 1
+
 
         if i % nStepsSave == 0
             # log
-            println(@sprintf("t = %.2f years (i = %d)", t/secsInYear, i))
-            saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
+            println(@sprintf("t = %.2f years (i = %d)", m.Δt*i/secsInYear, i))
+            
+            # save
+            saveState1DPG(s, iSave)
             iSave += 1
         end
     end
-
-    return b
-end
-
-"""
-    b = evolveBL(tFinal)
-
-Solve BL equation for `b` for `tFinal` seconds.
-"""
-function evolveBL(tFinal)
-    # timestep
-    nSteps = Int64(ceil(tFinal/Δt))
-    nStepsSave = Int64(floor(tSave/Δt))
-
-    # get matrices and vectors
-    diffMat, diffVec, bdyFluxMat = getEvolutionMatrices()
-
-    # diffusion correction from BL theory
-    S = N^2*tan(θ)^2/f^2
-    println(@sprintf("1 + σS = %1.12f", 1 + Pr*S))
-    diffMat *= 1 + Pr*S
-
-    # left-hand side for evolution equation (save LU decomposition for speed)
-    evolutionLHS = lu(getEvolutionLHS(Δt, diffMat, bdyFluxMat))
-
-    # initial condition
-    t = 0
-    b = zeros(nẑ)
-    χ, û, v̂, U = invert(b)
-    iSave = 0
-    saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
-    iSave += 1
-
-    # main loop
-    for i=1:nSteps
-        t += Δt
-
-        # advection has been absorbed in 1 + σS term in BL theory
-        evolutionRHS = b + diffVec*Δt
-
-        # boundary fluxes
-        evolutionRHS[1] = -N^2*cos(θ)/(1 + Pr*S)
-        evolutionRHS[nẑ] = 0
-
-        # solve
-        b = evolutionLHS\evolutionRHS
-
-        # invert buoyancy for flow
-        χ, û, v̂, U = invert(b)
-
-        if i % nStepsSave == 0
-            # log
-            println(@sprintf("t = %.2f years (i = %d)", t/secsInYear, i))
-            saveCheckpoint1DTCPG(b, χ, û, v̂, U, t, iSave)
-            iSave += 1
-        end
-    end
-
-    return b
 end

@@ -1,54 +1,75 @@
-using SparseArrays, LinearAlgebra, Printf, HDF5, PyPlot, PyCall
-
-plt.style.use("../plots.mplstyle")
-close("all")
-pygui(false)
-
-include("../myJuliaLib.jl")
-include("params.jl")
-include("plotting.jl")
-include("utils.jl")
-include("inversion.jl")
-include("evolution.jl")
-include("steady.jl")
-
 ################################################################################
-# Setup matrices 
+# Run 1D PG Model
 ################################################################################
 
-print("Computing inversion matrix: ") 
-inversionLHS = lu(getInversionLHS()) 
-println("Done.") 
+# run setup
+include("setup.jl")
 
-################################################################################
-# run evolution integrations
-################################################################################
+function run(; bl = false)
+    # parameters (see `setup.jl`)
+    f = -5.5e-5
+    nz = 2^8
+    N2 = 1e-3
+    H = 2e3
+    θ = 2.5e-3
+    transportConstraint = true
+    # transportConstraint = false
+    U₀ = 0.0
 
-b = evolve(15*secsInYear) 
+    # grid: chebyshev unless bl
+    if bl
+        z = collect(-H:H/(nz-1):0) # uniform
+    else
+        z = @. -H*(cos(pi*(0:nz-1)/(nz-1)) + 1)/2 # chebyshev 
+    end
+    
+    # diffusivity
+    κ0 = 6e-5
+    κ1 = 2e-3
+    h = 200
+    κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
+    κ_z_func(z) = -κ1/h*exp(-(z + H)/h)
 
-# b = evolveBL(15*secsInYear) 
+    # viscosity
+    μ = 1e0
+    ν_func(z) = μ*κ_func(z)
 
-# b = steadyState()
+    # stratification
+    N2 = 1e-6
+    
+    # timestepping
+    Δt = 10*secsInDay
+    tSave = 3*secsInYear
+    
+    # create model struct
+    m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U₀)
+
+    # save and log params
+    saveSetup1DPG(m)
+
+    # set initial state
+    b = zeros(nz)
+    χ, u, v, U = invert(m, b)
+    U = [U]
+    i = [1]
+    s = ModelState1DPG(b, χ, u, v, U, i)
+
+    # solve
+    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
+
+    return m, s
+end
+
+m, s = run()
+# m, s = run(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-ii = [0, 1, 2, 3, 4, 5] 
-# ii = [0, 1, 2, 3, 4, 5, 999] 
-profilePlot(string.("checkpoint", ii, ".h5")) 
+setupFile = string(outFolder, "setup.h5")
+m = loadSetup1DPG(setupFile)
+stateFiles = string.(outFolder, "state", 0:5, ".h5")
+profilePlot(setupFile, stateFiles)
 
-# ii = [0, 1, 2, 3, 4, 5]
-# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht2.5e-3/"
-# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht2.5e-2/"
-# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/tht6e-2/"
-# path = "C:/Users/11/Documents/ResearchCallies/sims/sim028/Pr2e2/" 
-# datafilesFull = string.(path, "full/checkpoint", ii, ".h5") 
-# datafilesBL = string.(path, "bl/checkpoint", ii, ".h5") 
-# profilePlotBL(datafilesFull, datafilesBL) 
-
-# datafile = "/home/hpeter/Documents/ResearchCallies/rapid_adjustment/sims/sim028/tht6e-2/bl/checkpoint1.h5" 
-# datafile = "checkpoint5.h5" 
-# buoyancyFlux(datafile) 
-
-# qs, errors = convergence() 
+println("Done.")

@@ -49,8 +49,8 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
 
     # 2D plot
     if style == "contour"
+        img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         levels = range(vmin, vmax, length=8)
-        img = ax.contourf(xx, zz, field, levels=levels, cmap=cmap)
         ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
         cb = colorbar(img, ax=ax, label=cbarLabel)
     elseif style == "pcolormesh"

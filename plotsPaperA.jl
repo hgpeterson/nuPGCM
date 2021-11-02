@@ -79,8 +79,8 @@ function spinupRidge(folder)
 
     # plot
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction, $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1], vext=1.75)
-    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow, $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], vext=1.4, style="pcolormesh")
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction, $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow, $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -105,14 +105,14 @@ function spinupRidgeAsym(folder)
     println(@sprintf("U = %1.2e m2 s-1", c.χ[1, end]))
 end
 
-function spinupProfiles(folder; σ=1)
+function spinupProfiles(folder; μ=1)
     ii = 1:5
 
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
-    fig.text(0.05, 0.98, string("Canonical 1D (Pr = ", σ, "):"), ha="left", va="top")
-    fig.text(0.05, 0.52, string("Transport-Constrained 1D (Pr = ", σ, "):"), ha="left", va="top")
+    fig.text(0.05, 0.98, string(L"Canonical 1D ($\mu$ = ", μ, "):"), ha="left", va="top")
+    fig.text(0.05, 0.52, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), ha="left", va="top")
 
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
@@ -125,14 +125,14 @@ function spinupProfiles(folder; σ=1)
     colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
 
     # fixed x
-    if σ == 1
+    if μ == 1
         ax[1, 1].set_xlim([-5, 57])
         ax[2, 1].set_xlim([-0.1, 1.65])
         ax[1, 2].set_xlim([-2.7, 1.4])
         ax[2, 2].set_xlim([-2.7, 1.4])
         ax[1, 3].set_xlim([0, 1.3])
         ax[2, 3].set_xlim([0, 1.3])
-    elseif σ == 200
+    elseif μ == 200
         ax[1, 1].set_xlim([-10, 190])
         ax[2, 1].set_xlim([-5, 95])
         ax[1, 2].set_xlim([-2.0, 0.3])
@@ -141,44 +141,42 @@ function spinupProfiles(folder; σ=1)
         ax[2, 3].set_xlim([0, 1.3])
     end
 
+    # setup file
+    m = loadSetup2DPG(string(folder, "2dpg/mu", μ, "/setup.h5"))
+
     # plot data from folder
     for i=ii
         # canonical 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/mu", μ, "/checkpoint", i, ".h5"))
         label = string(Int64(c.t/86400/360), " years")
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :],     label=label)
+        ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         
         # 2D PG solution
-        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
-        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
-        v = c.uη
-        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
-        ax[1, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, "k:")
-        ax[1, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, "k:")
-        ax[1, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, "k:")
+        s = loadState2DPG(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
+        ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+        Bz2D = differentiate(s.b[ix, :], m.z[ix, :])
+        ax[1, 1].plot(1e3*s.χ[ix, :],  m.z[ix, :]/1e3, "k:")
+        ax[1, 2].plot(1e2*s.uη[ix, :], m.z[ix, :]/1e3, "k:")
+        ax[1, 3].plot(1e6*Bz2D,        m.z[ix, :]/1e3, "k:")
 
         # transport-constrained 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/tc/Pr", σ, "/checkpoint", i, ".h5"))
+        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/tc/mu", μ, "/checkpoint", i, ".h5"))
         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
         ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
         ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
 
         # 2D PG solution
-        c = loadCheckpoint2DPG(string(folder, "2dpg/Pr", σ, "/checkpoint", i, ".h5"))
-        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
-        v = c.uη
-        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
-        ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, "k:")
-        ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, "k:")
-        ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, "k:")
+        ax[2, 1].plot(1e3*s.χ[ix, :],  m.z[ix, :]/1e3, "k:")
+        ax[2, 2].plot(1e2*s.uη[ix, :], m.z[ix, :]/1e3, "k:")
+        ax[2, 3].plot(1e6*Bz2D,        m.z[ix, :]/1e3, "k:")
     end
 
     # steady state canonical
-    c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/Pr", σ, "/checkpoint999.h5"))
+    c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/mu", μ, "/checkpoint999.h5"))
     Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
     ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k")
     ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k")
@@ -198,8 +196,8 @@ function spinupProfiles(folder; σ=1)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
-    savefig(string("spinupProfilesPr", σ, ".pdf"))
-    println(string("spinupProfilesPr", σ, ".pdf"))
+    savefig(string("spinupProfilesMu", μ, ".pdf"))
+    println(string("spinupProfilesMu", μ, ".pdf"))
     plt.close()
 end
 
@@ -529,9 +527,9 @@ path = "../sims/"
 # sketchRidge() 
 # sketchSlope() 
 # chiForSketch(string(path, "sim023/")) 
-spinupRidge(string(path, "sim037/"))
-# spinupProfiles(string(path, "sim026/"); σ=1)
-# spinupProfiles(string(path, "sim026/"); σ=200)
+# spinupRidge(string(path, "sim037/"))
+spinupProfiles(string(path, "sim039/"); μ=1)
+spinupProfiles(string(path, "sim039/"); μ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")

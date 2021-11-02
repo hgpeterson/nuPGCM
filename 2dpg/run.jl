@@ -38,10 +38,8 @@ function runRidge(; bl = false)
     
     # topography: sine
     global symmetry = true
-    # H0 = 2e3
-    # amp = 0.4*H0
-    H0 = 4e3
-    amp = 800
+    H0 = 2e3
+    amp = 0.4*H0
     H_func(x) = H0 + amp*cos(2*π*x/L)
     Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
@@ -65,8 +63,8 @@ function runRidge(; bl = false)
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
-    Pr = 1e0
-    ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
+    μ = 2e2
+    ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
     N2 = 1e-6
@@ -78,7 +76,6 @@ function runRidge(; bl = false)
     # timestepping
     Δt = 10*secsInDay
     tPlot = 3*secsInYear
-    # tPlot = Δt
     tSave = 3*secsInYear
     
     # create model struct
@@ -136,8 +133,8 @@ function runSeamount(; bl = false)
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
-    Pr = 1e0
-    ν_func(ξ, σ) = Pr*κ_func(ξ, σ)
+    μ = 1e0
+    ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
     N2 = 1e-6
