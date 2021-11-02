@@ -4,18 +4,19 @@
 
 using PyPlot, PyCall, SpecialFunctions, HDF5, Printf
 
-# plotting stylesheet
-plt.style.use("../plots.mplstyle")
-close("all")
-pygui(false)
+# # plotting stylesheet
+# plt.style.use("../plots.mplstyle")
+# close("all")
+# pygui(false)
 
 # libraries
 include("../myJuliaLib.jl")
-include("plotting.jl")
 include("structs.jl")
+include("plotting.jl")
 include("utils.jl")
 include("inversion.jl")
 include("evolution.jl")
+include("steady.jl")
 
 # global constants
 const secsInDay = 86400

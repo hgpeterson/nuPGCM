@@ -41,7 +41,11 @@ function profilePlot(setupFile, stateFiles)
     axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0))
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)-1))
+    if string(outFolder, "state-1.h5") in stateFiles
+        colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)-2))
+    else
+        colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)-1))
+    end
 
     # zoomed z
     ax[2, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 2e2)/1e3])
@@ -61,10 +65,14 @@ function profilePlot(setupFile, stateFiles)
             color = "k"
         else
             label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
-            if i==1
+            if s.i[1] == 1
                 color = "r"
             else
-                color = colors[i-1, :]
+                if string(outFolder, "state-1.h5") in stateFiles
+                    color = colors[i-2, :]
+                else
+                    color = colors[i-1, :]
+                end
             end
         end
 
@@ -79,8 +87,8 @@ function profilePlot(setupFile, stateFiles)
 
     ax[1, 2].legend()
 
-    savefig("profiles.png")
-    println("profiles.png")
+    savefig(string(outFolder, "profiles.png"))
+    println(string(outFolder, "profiles.png"))
 end
 
 # """

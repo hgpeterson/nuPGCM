@@ -1,80 +1,87 @@
 """
-    A, rhs = getMatrices()   
+    A, rhs = getSteadySystem(m)   
 
-Compute matrices for 1D equations.
+Compute matrix `A` and right-hand side vector `rhs` for steady 1D equations.
 """
-function getMatrices()
+function getSteadySystem(m::ModelSetup1DPG)
     nVars = 3
-    nPts = nVars*nẑ
+    nPts = nVars*m.nz
 
-    umap = reshape(1:nPts, nVars, nẑ)    
+    umap = reshape(1:nPts, nVars, m.nz)    
     A = Tuple{Int64,Int64,Float64}[] # LHS matrix 
     rhs = zeros(nPts)                # RHS vector
 
     # Main loop, insert stencil in matrices for each node point
-    for j=2:nẑ-1
-        # dẑ stencil
-        fd_ẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 1)
-        κ_ẑ = sum(fd_ẑ.*κ[j-1:j+1])
+    for j=2:m.nz-1
+        # dz stencil
+        fd_z = mkfdstencil(m.z[j-1:j+1], m.z[j], 1)
+        ν_z = sum(fd_z.*m.ν[j-1:j+1])
+        κ_z = sum(fd_z.*m.κ[j-1:j+1])
 
-        # dẑẑ stencil
-        fd_ẑẑ = mkfdstencil(ẑ[j-1:j+1], ẑ[j], 2)
+        # dzz stencil
+        fd_zz = mkfdstencil(m.z[j-1:j+1], m.z[j], 2)
 
-        # eqtn 1: -f*v̂*cos(θ) - b*sin(θ) - dẑ(ν*dẑ(û)) = 0 
+        # eqtn 1: -f*v - b*tan(θ) - dz(ν*dz(u)) = 0 
         row = umap[1, j]
-        push!(A, (row, umap[2, j],   -f*cos(θ)))
-        push!(A, (row, umap[3, j],   -sin(θ)))
-        push!(A, (row, umap[1, j-1], -Pr*(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
-        push!(A, (row, umap[1, j],   -Pr*(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
-        push!(A, (row, umap[1, j+1], -Pr*(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
+        push!(A, (row, umap[2, j],   -m.f))
+        push!(A, (row, umap[3, j],   -tan(m.θ)))
+        push!(A, (row, umap[1, j-1], -(ν_z*fd_z[1] + m.ν[j]*fd_zz[1])))
+        push!(A, (row, umap[1, j],   -(ν_z*fd_z[2] + m.ν[j]*fd_zz[2])))
+        push!(A, (row, umap[1, j+1], -(ν_z*fd_z[3] + m.ν[j]*fd_zz[3])))
 
-        # eqtn 2: f*û*cos(θ) - dẑ(ν*dẑ(v̂)) = 0 
+        # eqtn 2: f*u - dz(ν*dz(v)) = 0 
         row = umap[2, j]
-        push!(A, (row, umap[1, j],   f*cos(θ)))
-        push!(A, (row, umap[2, j-1], -Pr*(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
-        push!(A, (row, umap[2, j],   -Pr*(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
-        push!(A, (row, umap[2, j+1], -Pr*(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
+        push!(A, (row, umap[1, j],   m.f))
+        push!(A, (row, umap[2, j-1], -(ν_z*fd_z[1] + m.ν[j]*fd_zz[1])))
+        push!(A, (row, umap[2, j],   -(ν_z*fd_z[2] + m.ν[j]*fd_zz[2])))
+        push!(A, (row, umap[2, j+1], -(ν_z*fd_z[3] + m.ν[j]*fd_zz[3])))
 
-        # eqtn 3: N^2*û*sin(θ) - dẑ(κ*dẑ(b)) = dẑ(κ)*N^2*cos(θ) 
+        # eqtn 3: N^2*u*tan(θ) - dz(κ*dz(b)) = dz(κ)*N^2 
         row = umap[3, j]
-        push!(A, (row, umap[1, j],   N^2*sin(θ)))
-        push!(A, (row, umap[3, j-1], -(κ_ẑ*fd_ẑ[1] + κ[j]*fd_ẑẑ[1])))
-        push!(A, (row, umap[3, j],   -(κ_ẑ*fd_ẑ[2] + κ[j]*fd_ẑẑ[2])))
-        push!(A, (row, umap[3, j+1], -(κ_ẑ*fd_ẑ[3] + κ[j]*fd_ẑẑ[3])))
-        rhs[row] = κ_ẑ*N^2*cos(θ)
+        push!(A, (row, umap[1, j],   m.N2*tan(m.θ)))
+        push!(A, (row, umap[3, j-1], -(κ_z*fd_z[1] + m.κ[j]*fd_zz[1])))
+        push!(A, (row, umap[3, j],   -(κ_z*fd_z[2] + m.κ[j]*fd_zz[2])))
+        push!(A, (row, umap[3, j+1], -(κ_z*fd_z[3] + m.κ[j]*fd_zz[3])))
+        rhs[row] = κ_z*m.N2
     end
 
     # Boundary Conditions: Bottom
-    # û = 0
+    # u = 0
     row = umap[1, 1] 
     push!(A, (row, row, 1.0))
-    # v̂ = 0
+    rhs[row] = 0
+    # v = 0
     row = umap[2, 1] 
     push!(A, (row, row, 1.0))
-    # dẑ(b) = -N^2*cos(θ)
+    rhs[row] = 0 
+    # dz(b) = -N^2
     row = umap[3, 1] 
-    fd_ẑ = mkfdstencil(ẑ[1:3], ẑ[1], 1)
-    push!(A, (row, umap[3, 1], fd_ẑ[1]))
-    push!(A, (row, umap[3, 2], fd_ẑ[2]))
-    push!(A, (row, umap[3, 3], fd_ẑ[3]))
+    fd_z = mkfdstencil(m.z[1:3], m.z[1], 1)
+    push!(A, (row, umap[3, 1], fd_z[1]))
+    push!(A, (row, umap[3, 2], fd_z[2]))
+    push!(A, (row, umap[3, 3], fd_z[3]))
+    rhs[row]  = -m.N2 
 
     # Boundary Conditions: Top
-    fd_ẑ = mkfdstencil(ẑ[nẑ-2:nẑ], ẑ[nẑ], 1)
-    # dẑ(û) = 0
-    row = umap[1, nẑ] 
-    push!(A, (row, umap[1, nẑ-2], fd_ẑ[1]))
-    push!(A, (row, umap[1, nẑ-1], fd_ẑ[2]))
-    push!(A, (row, umap[1, nẑ],   fd_ẑ[3]))
-    # dẑ(v̂) = 0
-    row = umap[2, nẑ] 
-    push!(A, (row, umap[2, nẑ-2], fd_ẑ[1]))
-    push!(A, (row, umap[2, nẑ-1], fd_ẑ[2]))
-    push!(A, (row, umap[2, nẑ],   fd_ẑ[3]))
-    # dẑ(b) = 0
-    row = umap[3, nẑ]
-    push!(A, (row, umap[3, nẑ-2], fd_ẑ[1]))
-    push!(A, (row, umap[3, nẑ-1], fd_ẑ[2]))
-    push!(A, (row, umap[3, nẑ],   fd_ẑ[3]))
+    fd_z = mkfdstencil(m.z[m.nz-2:m.nz], m.z[m.nz], 1)
+    # dz(u) = 0
+    row = umap[1, m.nz] 
+    push!(A, (row, umap[1, m.nz-2], fd_z[1]))
+    push!(A, (row, umap[1, m.nz-1], fd_z[2]))
+    push!(A, (row, umap[1, m.nz],   fd_z[3]))
+    rhs[row] = 0
+    # dz(v) = 0
+    row = umap[2, m.nz] 
+    push!(A, (row, umap[2, m.nz-2], fd_z[1]))
+    push!(A, (row, umap[2, m.nz-1], fd_z[2]))
+    push!(A, (row, umap[2, m.nz],   fd_z[3]))
+    rhs[row] = 0
+    # dz(b) = 0
+    row = umap[3, m.nz]
+    push!(A, (row, umap[3, m.nz-2], fd_z[1]))
+    push!(A, (row, umap[3, m.nz-1], fd_z[2]))
+    push!(A, (row, umap[3, m.nz],   fd_z[3]))
+    rhs[row] = 0
 
     # Create CSC sparse matrix from matrix elements
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nPts, nPts)
@@ -87,40 +94,30 @@ end
 
 Compute canonical steady state.
 """
-function steadyState()
+function steadyState(m::ModelSetup1DPG)
     # grid points
     nVars = 3
-    nPts = nVars*nẑ
+    nPts = nVars*m.nz
 
     # for flattening for matrix mult
-    umap = reshape(1:nPts, nVars, nẑ)
+    umap = reshape(1:nPts, nVars, m.nz)
 
-    # get matrices and vectors
-    A, rhs = getMatrices()
-
-    # boundaries
-    rhs[umap[1, 1]]  = 0 # u = 0 bot
-    rhs[umap[1, nẑ]] = 0 # u decay top
-    rhs[umap[2, 1]]  = 0 # v = 0 bot
-    rhs[umap[2, nẑ]] = 0 # v decay top
-    rhs[umap[3, 1]]  = -N^2*cos(θ) # b flux bot
-    rhs[umap[3, nẑ]] = 0 # b flux top
+    # get matrix and right-hand side vector
+    A, rhs = getSteadySystem(m)
 
     # solve
-    solVec = A\rhs
-
-    # gather solution and rotate
-    sol = reshape(solVec, 3, nẑ)
-    û = sol[1, :]
-    v̂ = sol[2, :]
+    sol = reshape(A\rhs, nVars, m.nz)
+    u = sol[1, :]
+    v = sol[2, :]
     b = sol[3, :]
 
     # compute χ and U
-    χ = cumtrapz(û, ẑ)
-    U = trapz(û, ẑ)
+    χ = cumtrapz(u, m.z)
+    U = trapz(u, m.z)
 
     # save data
-    saveCheckpoint1DTCPG(b, χ, û, v̂, U, -42, 999)
+    s = ModelState1DPG(b, χ, u, v, [U], [-1])
+    saveState1DPG(s, -1)
 
-    return b
+    return s
 end

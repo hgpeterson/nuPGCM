@@ -2,8 +2,6 @@
 # PG evolution functions
 ################################################################################
 
-using Printf
-
 """
     D = getDiffusionMatrix(ξ, σ, κ, H)
 

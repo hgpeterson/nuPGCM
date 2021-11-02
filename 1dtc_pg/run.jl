@@ -9,8 +9,8 @@ function run(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     nz = 2^8
-    N2 = 1e-3
-    H = 2e3
+    # H = 2e3
+    H = 1e3
     θ = 2.5e-3
     transportConstraint = true
     # transportConstraint = false
@@ -39,7 +39,8 @@ function run(; bl = false)
     
     # timestepping
     Δt = 10*secsInDay
-    tSave = 3*secsInYear
+    # tSave = 3*secsInYear
+    tSave = 1000*secsInDay
     
     # create model struct
     m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U₀)
@@ -54,8 +55,12 @@ function run(; bl = false)
     i = [1]
     s = ModelState1DPG(b, χ, u, v, U, i)
 
-    # solve
-    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
+    # solve transient
+    # evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
+    evolve!(m, s, 5000*secsInDay, tSave; bl=bl) 
+    
+    # # solve steady state
+    # steadyState(m)
 
     return m, s
 end
@@ -69,6 +74,7 @@ m, s = run()
 
 setupFile = string(outFolder, "setup.h5")
 m = loadSetup1DPG(setupFile)
+# stateFiles = string.(outFolder, "state", -1:5, ".h5")
 stateFiles = string.(outFolder, "state", 0:5, ".h5")
 profilePlot(setupFile, stateFiles)
 

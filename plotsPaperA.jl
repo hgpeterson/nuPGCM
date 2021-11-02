@@ -8,15 +8,11 @@ include("myJuliaLib.jl")
 
 # for loading data
 include("1dtc/utils.jl")
-include("1dtc_pg/utils.jl")
+include("1dtc_pg/setup.jl")
 include("1dtc_nondim/utils.jl")
 include("2dpg/setup.jl")
-include("2dpg/utils.jl")
 include("rayleigh/2dpg/utils.jl")
 include("rayleigh/1dtc_pg/utils.jl")
-
-# for ridgePlot
-include("2dpg/plotting.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
@@ -53,24 +49,6 @@ function sketchSlope()
     println("sketchSlope.svg")
 end
 
-function chiForSketch(folder)
-    iξ = argmin(abs.(ξ .- L/4))
-    fig, ax = subplots(1, figsize=(3.404/1.62, 3.404))
-    c = loadCheckpoint1DTCPG(string(folder, "1dcan/checkpoint1000.h5"))
-    ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
-    c = loadCheckpoint1DTCPG(string(folder, "1dtc/checkpoint1000.h5"))
-    ax.plot(c.chi[1, :]/maximum(c.chi[1, :]), z[iξ, :], "k")
-
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.spines["left"].set_visible(false)
-    ax.axvline(0, ls="-", lw=0.5, c="k")
-
-    tight_layout()
-    savefig("chiForSketch.svg", transparent=true)
-    println("chiForSketch.svg")
-end
-
 function spinupRidge(folder)
     # load
     m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
@@ -79,8 +57,8 @@ function spinupRidge(folder)
 
     # plot
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction, $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
-    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow, $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -94,15 +72,16 @@ end
 
 function spinupRidgeAsym(folder)
     # load
-    c = loadCheckpoint2DPG(string(folder, "checkpoint1.h5"))
+    m = loadSetup2DPG(string(folder, "setup.h5"))
+    s = loadState2DPG(string(folder, "state1.h5"))
 
     # plot
-    ax = ridgePlot(c.χ, c.b, "", L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)"; x=c.x, z=c.z, N=c.N)
+    ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
     savefig("spinupRidgeAsym.pdf")
     println("spinupRidgeAsym.pdf")
     plt.close()
 
-    println(@sprintf("U = %1.2e m2 s-1", c.χ[1, end]))
+    println(@sprintf("U = %1.2e m2 s-1", s.χ[1, end]))
 end
 
 function spinupProfiles(folder; μ=1)
@@ -117,9 +96,9 @@ function spinupProfiles(folder; μ=1)
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
 
-    ax[2, 1].set_xlabel(string(L"streamfunction, $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-    ax[2, 3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+    ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[2, 3].set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
@@ -142,45 +121,48 @@ function spinupProfiles(folder; μ=1)
     end
 
     # setup file
-    m = loadSetup2DPG(string(folder, "2dpg/mu", μ, "/setup.h5"))
+    m2D = loadSetup2DPG(string(folder, "2dpg/mu", μ, "/setup.h5"))
 
     # plot data from folder
     for i=ii
         # canonical 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/mu", μ, "/checkpoint", i, ".h5"))
-        label = string(Int64(c.t/86400/360), " years")
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        m = loadSetup1DPG(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+        s = loadState1DPG(string(folder, "1dtc_pg/can/mu", μ, "/state", i, ".h5"))
+        label = string(Int64(m.Δt*(s.i[1] - 1)/secsInYear), " years")
+        Bz = m.N2 .+ differentiate(s.b, m.z)
+        ax[1, 1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label)
+        ax[1, 2].plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label)
+        ax[1, 3].plot(1e6*Bz,  m.z/1e3, c=colors[i, :], label=label)
         
         # 2D PG solution
-        s = loadState2DPG(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
-        ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-        Bz2D = differentiate(s.b[ix, :], m.z[ix, :])
-        ax[1, 1].plot(1e3*s.χ[ix, :],  m.z[ix, :]/1e3, "k:")
-        ax[1, 2].plot(1e2*s.uη[ix, :], m.z[ix, :]/1e3, "k:")
-        ax[1, 3].plot(1e6*Bz2D,        m.z[ix, :]/1e3, "k:")
+        s2D = loadState2DPG(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
+        ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
+        Bz2D = differentiate(s2D.b[ix, :], m2D.z[ix, :])
+        ax[1, 1].plot(1e3*s2D.χ[ix, :],  m2D.z[ix, :]/1e3, "k:")
+        ax[1, 2].plot(1e2*s2D.uη[ix, :], m2D.z[ix, :]/1e3, "k:")
+        ax[1, 3].plot(1e6*Bz2D,          m2D.z[ix, :]/1e3, "k:")
 
         # transport-constrained 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/tc/mu", μ, "/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+        m = loadSetup1DPG(string(folder, "1dtc_pg/tc/mu", μ, "/setup.h5"))
+        s = loadState1DPG(string(folder, "1dtc_pg/tc/mu", μ, "/state", i, ".h5"))
+        Bz = m.N2 .+ differentiate(s.b, m.z)
+        ax[2, 1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label)
+        ax[2, 2].plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label)
+        ax[2, 3].plot(1e6*Bz,  m.z/1e3, c=colors[i, :], label=label)
 
         # 2D PG solution
-        ax[2, 1].plot(1e3*s.χ[ix, :],  m.z[ix, :]/1e3, "k:")
-        ax[2, 2].plot(1e2*s.uη[ix, :], m.z[ix, :]/1e3, "k:")
-        ax[2, 3].plot(1e6*Bz2D,        m.z[ix, :]/1e3, "k:")
+        ax[2, 1].plot(1e3*s2D.χ[ix, :],  m2D.z[ix, :]/1e3, "k:")
+        ax[2, 2].plot(1e2*s2D.uη[ix, :], m2D.z[ix, :]/1e3, "k:")
+        ax[2, 3].plot(1e6*Bz2D,          m2D.z[ix, :]/1e3, "k:")
     end
 
     # steady state canonical
-    c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/can/mu", μ, "/checkpoint999.h5"))
-    Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-    ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k")
-    ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k")
-    ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k")
+    m = loadSetup1DPG(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+    s = loadState1DPG(string(folder, "1dtc_pg/can/mu", μ, "/state-1.h5"))
+    Bz = m.N2 .+ differentiate(s.b, m.z)
+    ax[1, 1].plot(1e3*s.χ,  m.z/1e3, c="k")
+    ax[1, 2].plot(1e2*s.v,  m.z/1e3, c="k")
+    ax[1, 3].plot(1e6*Bz,   m.z/1e3, c="k")
 
     ax[2, 3].legend(loc=(0.05, 0.3))
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
@@ -201,111 +183,111 @@ function spinupProfiles(folder; μ=1)
     plt.close()
 end
 
-function spinupProfilesRayleigh(folder)
-    ii = 1:5
+# function spinupProfilesRayleigh(folder)
+#     ii = 1:5
 
-    # init plot
-    fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
+#     # init plot
+#     fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
 
-    fig.text(0.05, 0.98, "Canonical 1D:", ha="left", va="top")
-    fig.text(0.05, 0.52, "Transport-constrained 1D:", ha="left", va="top")
+#     fig.text(0.05, 0.98, "Canonical 1D:", ha="left", va="top")
+#     fig.text(0.05, 0.52, "Transport-constrained 1D:", ha="left", va="top")
 
-    ax[1, 1].set_ylabel(L"$z$ (km)")
-    ax[2, 1].set_ylabel(L"$z$ (km)")
+#     ax[1, 1].set_ylabel(L"$z$ (km)")
+#     ax[2, 1].set_ylabel(L"$z$ (km)")
 
-    ax[2, 1].set_xlabel(string(L"streamfunction, $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-    ax[2, 3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+#     ax[2, 1].set_xlabel(string(L"streamfunction, $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
+#     ax[2, 2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+#     ax[2, 3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
-    axins12 = inset_locator.inset_axes(ax[1, 2], width="40%", height="40%")
-    axins22 = inset_locator.inset_axes(ax[2, 2], width="40%", height="40%")
+#     axins12 = inset_locator.inset_axes(ax[1, 2], width="40%", height="40%")
+#     axins22 = inset_locator.inset_axes(ax[2, 2], width="40%", height="40%")
 
-    # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
+#     # color map
+#     colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
 
-    # fixed x
-    ax[1, 1].set_xlim([0, 8.1])
-    ax[2, 1].set_xlim([0, 8.1])
-    ax[1, 2].set_xlim([-0.01, 0.24])
-    ax[2, 2].set_xlim([-0.01, 0.24])
-    ax[1, 3].set_xlim([0, 1.05])
-    ax[2, 3].set_xlim([0, 1.05])
-    axins12.set_xlim([-0.01, 0.005])
-    axins22.set_xlim([-0.01, 0.005])
-    # ax[1, 1].set_xlim([-0.7, 5])
-    # ax[2, 1].set_xlim([-0.7, 5])
-    # ax[1, 2].set_xlim([-0.03, 0.2])
-    # ax[2, 2].set_xlim([-0.03, 0.2])
-    # ax[1, 3].set_xlim([0, 1.08])
-    # ax[2, 3].set_xlim([0, 1.08])
-    # axins12.set_xlim([-0.022, 0.005])
-    # axins22.set_xlim([-0.022, 0.005])
+#     # fixed x
+#     ax[1, 1].set_xlim([0, 8.1])
+#     ax[2, 1].set_xlim([0, 8.1])
+#     ax[1, 2].set_xlim([-0.01, 0.24])
+#     ax[2, 2].set_xlim([-0.01, 0.24])
+#     ax[1, 3].set_xlim([0, 1.05])
+#     ax[2, 3].set_xlim([0, 1.05])
+#     axins12.set_xlim([-0.01, 0.005])
+#     axins22.set_xlim([-0.01, 0.005])
+#     # ax[1, 1].set_xlim([-0.7, 5])
+#     # ax[2, 1].set_xlim([-0.7, 5])
+#     # ax[1, 2].set_xlim([-0.03, 0.2])
+#     # ax[2, 2].set_xlim([-0.03, 0.2])
+#     # ax[1, 3].set_xlim([0, 1.08])
+#     # ax[2, 3].set_xlim([0, 1.08])
+#     # axins12.set_xlim([-0.022, 0.005])
+#     # axins22.set_xlim([-0.022, 0.005])
 
-    # plot data from folder
-    for i=ii
-        # canonical 1D solution
-        c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dcan_pg/checkpoint", i, ".h5"))
-        label = string(Int64(c.t/86400/360), " years")
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :],     label=label)
-        ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        axins12.plot( 1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#     # plot data from folder
+#     for i=ii
+#         # canonical 1D solution
+#         c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dcan_pg/checkpoint", i, ".h5"))
+#         label = string(Int64(c.t/86400/360), " years")
+#         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+#         ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :],     label=label)
+#         ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         axins12.plot( 1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
 
-        # 2D PG solution
-        c = loadCheckpoint2DPGRayleigh(string(folder, "2dpg/checkpoint", i, ".h5"))
-        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
-        v = c.uη
-        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
-        ax[1, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c="k", ls=":")
-        ax[1, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
-        axins12.plot( 1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
-        ax[1, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c="k", ls=":")
+#         # 2D PG solution
+#         c = loadCheckpoint2DPGRayleigh(string(folder, "2dpg/checkpoint", i, ".h5"))
+#         ix = argmin(abs.(c.x[:, 1] .- c.L/4))
+#         v = c.uη
+#         Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
+#         ax[1, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c="k", ls=":")
+#         ax[1, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
+#         axins12.plot( 1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
+#         ax[1, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c="k", ls=":")
 
-        # transport-constrained 1D solution
-        c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        axins22.plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
-        ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         # transport-constrained 1D solution
+#         c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
+#         Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+#         ax[2, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         ax[2, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         axins22.plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
+#         ax[2, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
 
-        # 2D PG solution
-        c = loadCheckpoint2DPGRayleigh(string(folder, "2dpg/checkpoint", i, ".h5"))
-        ix = argmin(abs.(c.x[:, 1] .- c.L/4))
-        v = c.uη
-        Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
-        ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c="k", ls=":")
-        ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
-        axins22.plot( 1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
-        ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c="k", ls=":")
-    end
+#         # 2D PG solution
+#         c = loadCheckpoint2DPGRayleigh(string(folder, "2dpg/checkpoint", i, ".h5"))
+#         ix = argmin(abs.(c.x[:, 1] .- c.L/4))
+#         v = c.uη
+#         Bz = c.N^2 .+ differentiate(c.b[ix, :], c.z[ix, :])
+#         ax[2, 1].plot(1e3*c.χ[ix, :], c.z[ix, :]/1e3, c="k", ls=":")
+#         ax[2, 2].plot(1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
+#         axins22.plot( 1e2*v[ix, :],   c.z[ix, :]/1e3, c="k", ls=":")
+#         ax[2, 3].plot(1e6*Bz,         c.z[ix, :]/1e3, c="k", ls=":")
+#     end
 
-    # steady state canonical
-    c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dcan_pg/checkpoint999.h5"))
-    Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-    ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
-    ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
-    ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
+#     # steady state canonical
+#     c = loadCheckpoint1DTCPGRayleigh(string(folder, "1dcan_pg/checkpoint999.h5"))
+#     Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
+#     ax[1, 1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
+#     ax[1, 2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
+#     ax[1, 3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c="k", label="steady state")
 
-    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
-                      lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["steady state", "2D PG"]
-    ax[1, 3].legend(custom_handles, custom_labels, loc=(0.1, 0.6))
-    ax[2, 3].legend(loc=(0.12, 0.3))
+#     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
+#                       lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+#     custom_labels = ["steady state", "2D PG"]
+#     ax[1, 3].legend(custom_handles, custom_labels, loc=(0.1, 0.6))
+#     ax[2, 3].legend(loc=(0.12, 0.3))
 
-    ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[1, 3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2, 1].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[1, 3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[2, 1].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
-    savefig(string("spinupProfilesRayleigh.pdf"))
-    println(string("spinupProfilesRayleigh.pdf"))
-    plt.close()
-end
+#     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+#     savefig(string("spinupProfilesRayleigh.pdf"))
+#     println(string("spinupProfilesRayleigh.pdf"))
+#     plt.close()
+# end
 
 function spindownProfiles(folder; ratio=nothing)
     # init plot
@@ -318,9 +300,9 @@ function spindownProfiles(folder; ratio=nothing)
     ax[1, 1].set_ylabel(L"$\tilde{z}$")
     ax[2, 1].set_ylabel(L"$\tilde{z}$")
 
-    ax[2, 1].set_xlabel(L"cross-ridge flow, $\tilde{u}$ ($\times10^{-1}$)")
-    ax[2, 2].set_xlabel(L"along-ridge flow, $\tilde{v}$")
-    ax[2, 3].set_xlabel(L"stratification, $\partial_{\tilde z} \tilde b$ ($\times10$)")
+    ax[2, 1].set_xlabel(L"cross-ridge flow $\tilde{u}$ ($\times10^{-1}$)")
+    ax[2, 2].set_xlabel(L"along-ridge flow $\tilde{v}$")
+    ax[2, 3].set_xlabel(L"stratification $\partial_{\tilde z} \tilde b$ ($\times10$)")
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=5))
@@ -420,14 +402,14 @@ function spindownGrid(folder)
     # plot grid
     fig, ax = subplots(1, 2, figsize=(3.404, 3), sharey=true)
     ax[1].set_box_aspect(aspect)
-    ax[1].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
-    ax[1].set_ylabel(L"arrest time, $\tilde{\tau}_A$")
+    ax[1].set_xlabel(L"spin-down time $\tilde{\tau}_S$")
+    ax[1].set_ylabel(L"arrest time $\tilde{\tau}_A$")
     ax[1].spines["left"].set_visible(false)
     ax[1].spines["bottom"].set_visible(false)
     ax[1].set_xlim([τ_Ss[1], τ_Ss[end]])
     ax[1].set_ylim([τ_As[1], τ_As[end]])
     img = ax[1].pcolormesh(τ_Ss, τ_As, vs_5A'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
-    cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"far-field along-slope flow, $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
+    cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"far-field along-slope flow $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
     ax[1].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
     ax[1].annotate(L"$\tilde{\tau}_A/\tilde{\tau}_S = 1$", xy=(0.7, 0.8), xytext=(0.05, 0.9), 
                 xycoords="axes fraction", c="w", path_effects=outline, arrowprops=Dict("arrowstyle" => "->", "color" => "w"))
@@ -437,7 +419,7 @@ function spindownGrid(folder)
     ax[1].annotate("Fig. 7", xy=(1.5e2, 0.9e2), xycoords="data", c="w", path_effects=outline)
 
     ax[2].set_box_aspect(aspect)
-    ax[2].set_xlabel(L"spin-down time, $\tilde{\tau}_S$")
+    ax[2].set_xlabel(L"spin-down time $\tilde{\tau}_S$")
     ax[2].spines["left"].set_visible(false)
     ax[2].spines["bottom"].set_visible(false)
     ax[2].set_xlim([τ_Ss[1], τ_Ss[end]])
@@ -466,9 +448,9 @@ function spinupProfilesPGvsFull(folder)
 
     ax[1].set_ylabel(L"$z$ (km)")
 
-    ax[1].set_xlabel(string(L"cross-slope flow, $u$", "\n", L"($\times10^{-4}$ m s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-    ax[3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+    ax[1].set_xlabel(string(L"cross-slope flow $u$", "\n", L"($\times10^{-4}$ m s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[3].set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=size(tDays, 1)))
@@ -497,13 +479,13 @@ function spinupProfilesPGvsFull(folder)
         ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, c=colors[i, :], label=label)
 
         # 1D PG
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc_pg/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        u = c.û*cos(c.θ)
-        ax[1].plot(1e4*u,   c.ẑ*cos(c.θ)/1e3, "k:")
-        axins1.plot(1e4*u,  c.ẑ*cos(c.θ)/1e3, "k:")
-        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, "k:")
-        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, "k:")
+        m = loadSetup1DPG(string(folder, "1dtc_pg/setup.h5"))
+        s = loadState1DPG(string(folder, "1dtc_pg/state", i, ".h5"))
+        Bz = m.N2 .+ differentiate(s.b, m.z)
+        ax[1].plot(1e4*s.u,   m.z/1e3, "k:")
+        axins1.plot(1e4*s.u,  m.z/1e3, "k:")
+        ax[2].plot(1e2*s.v,   m.z/1e3, "k:")
+        ax[3].plot(1e6*Bz,    m.z/1e3, "k:")
     end
 
     ax[2].legend(loc="upper right")
@@ -526,15 +508,13 @@ path = "../sims/"
 
 # sketchRidge() 
 # sketchSlope() 
-# chiForSketch(string(path, "sim023/")) 
 # spinupRidge(string(path, "sim037/"))
-spinupProfiles(string(path, "sim039/"); μ=1)
-spinupProfiles(string(path, "sim039/"); μ=200)
+# spinupProfiles(string(path, "sim039/"); μ=1)
+# spinupProfiles(string(path, "sim039/"); μ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
 # spindownGrid(string(path, "sim033/")) 
 # spinupRidgeAsym(string(path, "sim031/")) 
-# spinupProfilesPGvsFull(string(path, "sim025/"))
-# compareChapman02Fig5a(string(path, "sim024/"))
+spinupProfilesPGvsFull(string(path, "sim025/"))

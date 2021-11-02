@@ -2,10 +2,25 @@
 # Model setup
 ################################################################################
 
+using PyPlot, PyCall, SpecialFunctions, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5
+
+# # plotting stylesheet
+# plt.style.use("../plots.mplstyle")
+# close("all")
+# pygui(false)
+
+# libraries
+include("../myJuliaLib.jl")
 include("structs.jl")
+include("plotting.jl")
 include("utils.jl")
 include("inversion.jl")
 include("evolution.jl")
+
+# global constants
+const secsInDay = 86400
+const secsInYear = 360*86400
+const outFolder = "out/"
 
 """
     m = ModelSetup(f, ξVariation, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)

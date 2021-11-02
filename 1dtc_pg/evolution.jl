@@ -90,8 +90,8 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
         else
             RHS[1] = -m.N2
         end
-        # RHS[m.nz] = 0
-        RHS[m.nz] = -m.N2
+        RHS[m.nz] = 0
+        # RHS[m.nz] = -m.N2
 
         # solve
         s.b[:] = LHS\RHS

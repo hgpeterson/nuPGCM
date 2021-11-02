@@ -4,8 +4,6 @@
 #   (2) Setup/Params
 ################################################################################
 
-using SparseArrays, SuiteSparse, LinearAlgebra
-
 struct ModelState2DPG
     # buoyancy (m s-2)
 	b::Array{Float64,2}

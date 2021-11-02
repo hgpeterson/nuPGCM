@@ -2,10 +2,6 @@
 # General utility functions
 ################################################################################
 
-using HDF5, Printf
-
-include("../myJuliaLib.jl")
-
 """
     Dξ = getDξ(ξ, L, periodic)
 

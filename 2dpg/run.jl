@@ -2,21 +2,8 @@
 # Run 2D νPGCM
 ################################################################################
 
-using PyPlot, PyCall, SpecialFunctions
-
-# plotting stylesheet
-plt.style.use("../plots.mplstyle")
-close("all")
-pygui(false)
-
-# libraries
+# run setup
 include("setup.jl")
-include("plotting.jl")
-
-# global constants
-const secsInDay = 86400
-const secsInYear = 360*86400
-const outFolder = "out/"
 
 function runRidge(; bl = false)
     # parameters (see `setup.jl`)
@@ -36,25 +23,24 @@ function runRidge(; bl = false)
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
     
-    # topography: sine
-    global symmetry = true
-    H0 = 2e3
-    amp = 0.4*H0
-    H_func(x) = H0 + amp*cos(2*π*x/L)
-    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    # # topography: sine
+    # global symmetry = true
+    # H0 = 2e3
+    # amp = 0.4*H0
+    # H_func(x) = H0 + amp*cos(2*π*x/L)
+    # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
-    # # topography: skew gaussian
-    # global symmetry = false
-    # L = 2e6 
-    # H0 = 2.5e3 
-    # amp = 0.65*H0 
-    # ϕ(s) = exp(-s^2/2) 
-    # Φ(s) = 1/2*(1 + erf(s/√2)) 
-    # α = 3 
-    # μ = L/3 
-    # ω = L/5 
-    # H_func(x) = H0 - amp*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω) 
-    # Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - μ)/ω)*ϕ((x - μ)/ω) - (x - μ)/ω*ϕ((x - μ)/ω)*Φ(α*(x - μ)/ω)) 
+    # topography: skew gaussian
+    global symmetry = false
+    H0 = 2.5e3 
+    amp = 0.65*H0 
+    ϕ(s) = exp(-s^2/2) 
+    Φ(s) = 1/2*(1 + erf(s/√2)) 
+    α = 3 
+    m = L/3 
+    ω = L/5 
+    H_func(x) = H0 - amp*ϕ((x - m)/ω)*Φ(α*(x - m)/ω) 
+    Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - m)/ω)*ϕ((x - m)/ω) - (x - m)/ω*ϕ((x - m)/ω)*Φ(α*(x - m)/ω)) 
     
     # diffusivity
     κ0 = 6e-5
@@ -63,7 +49,7 @@ function runRidge(; bl = false)
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
-    μ = 2e2
+    μ = 1e0
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
@@ -74,7 +60,8 @@ function runRidge(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 10*secsInDay
+    # Δt = 10*secsInDay
+    Δt = 1*secsInDay
     tPlot = 3*secsInYear
     tSave = 3*secsInYear
     
@@ -94,7 +81,8 @@ function runRidge(; bl = false)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
+    # evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 3*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
@@ -183,9 +171,9 @@ m, s = runRidge()
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
-profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+# setupFile = string(outFolder, "setup.h5")
+# m = loadSetup2DPG(setupFile)
+# stateFiles = string.(outFolder, "state", 0:5, ".h5")
+# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
 
 println("Done.")

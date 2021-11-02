@@ -18,7 +18,9 @@ Optional:
     - set the vmin/vmax manually with `vext`
     - set different colormap `cmap`
 """
-function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, titleString::AbstractString, cbarLabel::AbstractString; ax=nothing, vext=nothing, cmap="RdBu_r", style="contour")
+function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
+                titleString::AbstractString, cbarLabel::AbstractString; 
+                ax=nothing, vext=nothing, cmap="RdBu_r", style="contour")
     # km
     xx = m.x/1000
     zz = m.z/1000
@@ -99,12 +101,12 @@ function profilePlot(setupFile, stateFiles, iξ)
     # init plot
     fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
 
-    ax[1].set_xlabel(string("streamfunction,\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
+    ax[1].set_xlabel(string("streamfunction\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
     ax[1].set_ylabel(L"$z$ (km)")
 
-    ax[2].set_xlabel(string("along-ridge vel.,\n", L"$v$ (m s$^{-1}$)"))
+    ax[2].set_xlabel(string("along-ridge flow\n", L"$v$ (m s$^{-1}$)"))
 
-    ax[3].set_xlabel(string("stratification,\n", L"$\partial_z b$ (s$^{-2}$)"))
+    ax[3].set_xlabel(string("stratification\n", L"$\partial_z b$ (s$^{-2}$)"))
 
     subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
 
@@ -150,15 +152,15 @@ function plotCurrentState(m::ModelSetup2DPG, s::ModelState2DPG, iImg::Int64)
     u, v, w = transformFromTF(m, s)
 
     # plots
-    ridgePlot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"streamfunction, $\chi$ (m$^2$ s$^{-1}$)")
+    ridgePlot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"streamfunction $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("%schi%03d.png", outFolder, iImg))
     close()
 
-    ridgePlot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"buoyancy, $b$ (m s$^{-2}$)")
+    ridgePlot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"buoyancy $b$ (m s$^{-2}$)"; style="pcolormesh")
     savefig(@sprintf("%sb%03d.png", outFolder, iImg))
     close()
 
-    ridgePlot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"along-ridge velocity, $v$ (m s$^{-1}$)")
+    ridgePlot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"along-ridge flow $v$ (m s$^{-1}$)"; style="pcolormesh")
     savefig(@sprintf("%sv%03d.png", outFolder, iImg))
     close()
 end
