@@ -2,6 +2,12 @@
 # Run 2D νPGCM
 ################################################################################
 
+# plotting stylesheet
+using PyPlot
+plt.style.use("../plots.mplstyle")
+close("all")
+pygui(false)
+
 # run setup
 include("setup.jl")
 
@@ -22,6 +28,9 @@ function runRidge(; bl = false)
     else
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
+
+    # println(maximum(σ[2:end] - σ[1:end-1]))
+    # error()
     
     # # topography: sine
     # global symmetry = true
@@ -30,18 +39,36 @@ function runRidge(; bl = false)
     # H_func(x) = H0 + amp*cos(2*π*x/L)
     # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
-    # topography: skew gaussian
+    # # topography: skew gaussian
+    # global symmetry = false
+    # H0 = 2.5e3 
+    # amp = 0.65*H0 
+    # ϕ(s) = exp(-s^2/2) 
+    # Φ(s) = 1/2*(1 + erf(s/√2)) 
+    # α = 3 
+    # m = L/3 
+    # ω = L/5 
+    # H_func(x) = H0 - amp*ϕ((x - m)/ω)*Φ(α*(x - m)/ω) 
+    # Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*(x - m)/ω)*ϕ((x - m)/ω) - (x - m)/ω*ϕ((x - m)/ω)*Φ(α*(x - m)/ω)) 
+
+    # topography: bump
     global symmetry = false
     H0 = 2.5e3 
-    amp = 0.65*H0 
-    ϕ(s) = exp(-s^2/2) 
-    Φ(s) = 1/2*(1 + erf(s/√2)) 
-    α = 3 
-    m = L/3 
-    ω = L/5 
-    H_func(x) = H0 - amp*ϕ((x - m)/ω)*Φ(α*(x - m)/ω) 
-    Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*√2*(x - m)/ω)*ϕ((x - m)/ω) - (x - m)/ω*ϕ((x - m)/ω)*Φ(α*(x - m)/ω)) 
-    
+    amp = 1e3
+    wid = L/2.1
+    function bump(s)
+        if abs(s) >= 1
+            return 0
+        else
+            return exp(1 - 1/(1 - s^2)) 
+        end
+    end
+    ∂bump(s) = -2*s/(1 - s^2)^2*bump(s)
+    skewBump(s) = (s + 1)*bump(s)
+    ∂skewBump(s) = bump(s) + (s + 1)*∂bump(s)
+    H_func(x) = H0 - amp*skewBump((x - L/2)/wid)
+    Hx_func(x) = -amp/wid*∂skewBump((x - L/2)/wid)
+
     # diffusivity
     κ0 = 6e-5
     κ1 = 2e-3

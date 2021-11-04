@@ -4,11 +4,6 @@
 
 using PyPlot, PyCall, SpecialFunctions, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5
 
-# # plotting stylesheet
-# plt.style.use("../plots.mplstyle")
-# close("all")
-# pygui(false)
-
 # libraries
 include("../myJuliaLib.jl")
 include("structs.jl")

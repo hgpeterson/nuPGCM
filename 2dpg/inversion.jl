@@ -216,6 +216,13 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
         inversionRHS = getInversionRHS(rhs, 0)
         χ_b = computeχ(m, inversionRHS)
 
+        # # plot(χ_b[32, :], m.z[32, :])
+        # plot(rhs[32, :], m.z[32, :])
+        # tight_layout()
+        # savefig("debug.png")
+        # plt.close()
+        # readline()
+
         # compute U such that "island rule" is satisfied
         if symmetry
             U = 0

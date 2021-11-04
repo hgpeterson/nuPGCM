@@ -5,12 +5,17 @@
 # run setup
 include("setup.jl")
 
+# plotting stylesheet
+using PyPlot
+plt.style.use("../plots.mplstyle")
+close("all")
+pygui(false)
+
 function run(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     nz = 2^8
-    # H = 2e3
-    H = 1e3
+    H = 2e3
     θ = 2.5e-3
     transportConstraint = true
     # transportConstraint = false
@@ -24,7 +29,8 @@ function run(; bl = false)
     end
     
     # diffusivity
-    κ0 = 6e-5
+    # κ0 = 6e-5
+    κ0 = 0
     κ1 = 2e-3
     h = 200
     κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
@@ -39,8 +45,7 @@ function run(; bl = false)
     
     # timestepping
     Δt = 10*secsInDay
-    # tSave = 3*secsInYear
-    tSave = 1000*secsInDay
+    tSave = 3*secsInYear
     
     # create model struct
     m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U₀)
@@ -56,11 +61,10 @@ function run(; bl = false)
     s = ModelState1DPG(b, χ, u, v, U, i)
 
     # solve transient
-    # evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
-    evolve!(m, s, 5000*secsInDay, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
     
-    # # solve steady state
-    # steadyState(m)
+    # solve steady state
+    steadyState(m)
 
     return m, s
 end
@@ -74,8 +78,8 @@ m, s = run()
 
 setupFile = string(outFolder, "setup.h5")
 m = loadSetup1DPG(setupFile)
-# stateFiles = string.(outFolder, "state", -1:5, ".h5")
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
+stateFiles = string.(outFolder, "state", -1:5, ".h5")
+# stateFiles = string.(outFolder, "state", 0:5, ".h5")
 profilePlot(setupFile, stateFiles)
 
 println("Done.")
