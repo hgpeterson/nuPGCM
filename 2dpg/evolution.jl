@@ -295,8 +295,9 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         invert!(m, s; bl=bl)
 
         # log
-        if i % 60 == 0
+        if i % 10 == 0
             println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
+            # println(@sprintf("t = %.2f yr | i = %d | U = %.2e m2 s-1", t/secsInYear, i, s.χ[1, end]))
 
             # # CFL stuff
             # uξCFL = minimum(abs.(dξ./s.uξ)) 

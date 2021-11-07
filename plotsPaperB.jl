@@ -1,4 +1,3 @@
-
 using PyPlot, PyCall, Printf, HDF5, Dierckx
 
 plt.style.use("plots.mplstyle")
@@ -8,16 +7,8 @@ pygui(false)
 include("myJuliaLib.jl")
 
 # for loading data
-include("1dtc/utils.jl")
-include("1dtc_pg/utils.jl")
-include("1dtc_nondim/utils.jl")
+include("1dtc_pg/setup.jl")
 include("2dpg/setup.jl")
-include("2dpg/utils.jl")
-include("rayleigh/2dpg/utils.jl")
-include("rayleigh/1dtc_pg/utils.jl")
-
-# for ridgePlot
-include("2dpg/plotting.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
@@ -37,11 +28,13 @@ end
 function ridge(folder)
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
-    m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "L2000km/full2D/state1.h5"))
+    # m = loadSetup2DPG(string(folder, "L2000km/full2D/setup.h5"))
+    # s = loadState2DPG(string(folder, "L2000km/full2D/state1.h5"))
+    m = loadSetup2DPG(string(folder, "2dpg/mu1/setup.h5"))
+    s = loadState2DPG(string(folder, "2dpg/mu1/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
-    ridgePlot(m, s, s.uη, "", L"along-ridge flow $u^\eta$ (m s$^{-1}$)"; ax=ax[2])
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow $u^\eta$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -253,56 +246,123 @@ function seamountFull2DvsBL(folder)
     plt.close()
 end
 
-function expStrat(folder)
+function ridgeN2exp(folder)
+    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+
+    m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+
+    m = loadSetup2DPG(string(folder, "exp/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "exp/full2D/state1.h5"))
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[2])
+
+    # ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    # ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    ax[1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].annotate(L"(b) $N^2 \sim \exp(z/\delta)$", (0.0, 1.05), xycoords="axes fraction")
+    ax[2].set_ylabel("")
+
+    subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
+
+    savefig("ridgeN2exp.pdf")
+    println("ridgeN2exp.pdf")
+    plt.close()
+end
+# function expStrat(folder)
+#     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2)) 
+
+#     ax[1].set_xlabel(L"$\xi$ (km)")
+#     ax[1].set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+
+#     ax[2].set_xlabel(L"$\xi$ (km)")
+#     ax[2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-6}$ m s$^{-1}$)"))
+
+#     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+#     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+
+#     # color map
+#     colors = pl.cm.viridis(range(1, 0, length=5))
+
+#     mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
+#     mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
+#     for i=0:5
+#         if i == 0
+#             c = "tab:red"
+#         else
+#             c = colors[i, :]
+#         end
+#         s = loadState2DPG(string(folder, "/const/bl2D/state$i.h5"))
+#         χtheory = BLtransport2D(mConst, s)
+#         W = exchangeVel2D(mConst, χtheory)
+#         label = string(Int64((s.i[1] - 1)*mConst.Δt/86400/360), " years")
+#         ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, c=c, label=string(L"$N^2 = $", "const."))
+#         ax[2].plot(mConst.ξ/1e3, 1e6*W, c=c, label=label)
+
+#         s = loadState2DPG(string(folder, "/exp/bl2D/state$i.h5"))
+#         χtheory = BLtransport2D(mExp, s)
+#         W = exchangeVel2D(mExp, χtheory)
+#         ax[1].plot(mExp.ξ/1e3, 1e3*χtheory, c=c, ls="--", label=L"$N^2 \sim \exp(z/\delta)$")
+#         ax[2].plot(mExp.ξ/1e3, 1e6*W, c=c, ls="--")
+#     end
+
+#     ax[1].set_xlim([0, mConst.L/1e3])
+#     # ax[1].set_ylim([-20, 0])
+
+#     ax[2].set_xlim([0, mConst.L/1e3])
+#     # ax[2].set_ylim([-1, 20])
+
+#     # ax[1].legend()
+#     ax[2].legend()
+
+#     tight_layout()
+
+#     savefig("expStrat.pdf")
+#     println("expStrat.pdf")
+#     plt.close()
+# end
+function transportAndExchange(folder)
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2)) 
 
-    ax[1].set_xlabel(L"$\xi$ (km)")
+    ax[1].set_xlabel(L"$x$ (km)")
     ax[1].set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
 
-    ax[2].set_xlabel(L"$\xi$ (km)")
-    ax[2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-6}$ m s$^{-1}$)"))
+    ax[2].set_xlabel(L"$x$ (km)")
+    ax[2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
 
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
 
-    # color map
-    colors = pl.cm.viridis(range(1, 0, length=5))
-
     mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
     mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
-    for i=0:5
-        if i == 0
-            c = "tab:red"
-        else
-            c = colors[i, :]
-        end
-        s = loadState2DPG(string(folder, "/const/bl2D/state$i.h5"))
-        χtheory = BLtransport2D(mConst, s)
-        W = exchangeVel2D(mConst, χtheory)
-        label = string(Int64((s.i[1] - 1)*mConst.Δt/86400/360), " years")
-        ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, c=c, label=string(L"$N^2 = $", "const."))
-        ax[2].plot(mConst.ξ/1e3, 1e6*W, c=c, label=label)
 
-        s = loadState2DPG(string(folder, "/exp/bl2D/state$i.h5"))
-        χtheory = BLtransport2D(mExp, s)
-        W = exchangeVel2D(mExp, χtheory)
-        ax[1].plot(mExp.ξ/1e3, 1e3*χtheory, c=c, ls="--", label=L"$N^2 \sim \exp(z/\delta)$")
-        ax[2].plot(mExp.ξ/1e3, 1e6*W, c=c, ls="--")
-    end
+    s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
+    χtheory = BLtransport2D(mConst, s)
+    W = exchangeVel2D(mConst, χtheory)
+    ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "const."))
+    ax[2].plot(mConst.ξ/1e3, 1e9*W)
+
+    s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
+    χtheory = BLtransport2D(mExp, s)
+    W = exchangeVel2D(mExp, χtheory)
+    ax[1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/\delta)$")
+    ax[2].plot(mExp.ξ/1e3, 1e9*W)
+    
 
     ax[1].set_xlim([0, mConst.L/1e3])
-    # ax[1].set_ylim([-20, 0])
+    ax[1].set_ylim([-3, 3])
 
     ax[2].set_xlim([0, mConst.L/1e3])
-    # ax[2].set_ylim([-1, 20])
+    ax[2].set_ylim([-8, 18])
 
-    # ax[1].legend()
-    ax[2].legend()
+    ax[1].legend()
 
     tight_layout()
 
-    savefig("expStrat.pdf")
-    println("expStrat.pdf")
+    savefig("transportAndExchange.pdf")
+    println("transportAndExchange.pdf")
     plt.close()
 end
 function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
@@ -311,7 +371,24 @@ function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
 end
 function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
-    χ = χ[2:end]
+    if m.coords == "cartesian"
+        # uσ = -dξ(χ)/H
+        uσ = -ξDerivative(m, χ)./m.H
+    elseif m.coords == "cylindrical"
+        # uσ = -dρ(ρ*χ)/(H*ρ)
+        uσ = -ξDerivative(m, m.ξ.*χ)./m.H./m.ξ
+        # assume χ = 0 at ρ = 0
+        fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
+        uσ[1] = -(fd_ξ[2]*m.ξ[1]*χ[1] + fd_ξ[3]*m.ξ[2]*χ[2])/(m.H[1]*m.ξ[1])
+    end
+    return m.H.*uσ
+end
+function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
+    dbdξ = ξDerivative(m, s.b[:, 1])
+    μ = m.ν[1, 1] / m.κ[1, 1]
+    return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
+end
+function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
         uσ = -ξDerivative(m, χ)./m.H
@@ -327,9 +404,9 @@ end
 
 path = "../sims/"
 
-# ridge(string(path, "sim034/"))
+# ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim034/"))
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim035/"))
-# expStrat(string(path, "sim037"))
-expStrat(string(path, "sim038"))
+ridgeN2exp(string(path, "sim037/"))
+transportAndExchange(string(path, "sim037/"))

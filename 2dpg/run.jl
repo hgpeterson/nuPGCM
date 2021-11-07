@@ -28,16 +28,13 @@ function runRidge(; bl = false)
     else
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
-
-    # println(maximum(σ[2:end] - σ[1:end-1]))
-    # error()
     
-    # # topography: sine
-    # global symmetry = true
-    # H0 = 2e3
-    # amp = 0.4*H0
-    # H_func(x) = H0 + amp*cos(2*π*x/L)
-    # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    # topography: sine
+    global symmetry = true
+    H0 = 2e3
+    amp = 0.4*H0
+    H_func(x) = H0 + amp*cos(2*π*x/L)
+    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
     # # topography: skew gaussian
     # global symmetry = false
@@ -46,28 +43,28 @@ function runRidge(; bl = false)
     # ϕ(s) = exp(-s^2/2) 
     # Φ(s) = 1/2*(1 + erf(s/√2)) 
     # α = 3 
-    # m = L/3 
-    # ω = L/5 
+    # m = 2e6/3 
+    # ω = 2e6/5 
     # H_func(x) = H0 - amp*ϕ((x - m)/ω)*Φ(α*(x - m)/ω) 
     # Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*(x - m)/ω)*ϕ((x - m)/ω) - (x - m)/ω*ϕ((x - m)/ω)*Φ(α*(x - m)/ω)) 
 
-    # topography: bump
-    global symmetry = false
-    H0 = 2.5e3 
-    amp = 1e3
-    wid = L/2.1
-    function bump(s)
-        if abs(s) >= 1
-            return 0
-        else
-            return exp(1 - 1/(1 - s^2)) 
-        end
-    end
-    ∂bump(s) = -2*s/(1 - s^2)^2*bump(s)
-    skewBump(s) = (s + 1)*bump(s)
-    ∂skewBump(s) = bump(s) + (s + 1)*∂bump(s)
-    H_func(x) = H0 - amp*skewBump((x - L/2)/wid)
-    Hx_func(x) = -amp/wid*∂skewBump((x - L/2)/wid)
+    # # topography: bump
+    # global symmetry = false
+    # H0 = 2.5e3 
+    # amp = 1.5e3
+    # wid = L/4
+    # function bump(s)
+    #     if abs(s) >= 1
+    #         return 0
+    #     else
+    #         return exp(1 - 1/(1 - s^2)) 
+    #     end
+    # end
+    # ∂bump(s) = -2*s/(1 - s^2)^2*bump(s)
+    # skewBump(s) = (s + 1)*bump(s)
+    # ∂skewBump(s) = bump(s) + (s + 1)*∂bump(s)
+    # H_func(x) = H0 - amp*skewBump((x - L/2)/wid)
+    # Hx_func(x) = -amp/wid*∂skewBump((x - L/2)/wid)
 
     # diffusivity
     κ0 = 6e-5
@@ -87,10 +84,10 @@ function runRidge(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    # Δt = 10*secsInDay
-    Δt = 1*secsInDay
+    Δt = 10*secsInDay
     tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    # tSave = 3*secsInYear
+    tSave = 60*secsInDay
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -103,13 +100,12 @@ function runRidge(; bl = false)
     for i=1:nξ
         b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
     end
-    χ, uξ, uη, uσ, U = invert(m, b)
+    χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    # evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
-    evolve!(m, s, 3*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
@@ -160,9 +156,10 @@ function runSeamount(; bl = false)
     
     # timestepping
     Δt = 1*secsInDay
-    # Δt = 3600
-    tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    # tPlot = 3*secsInYear
+    # tSave = 3*secsInYear
+    tPlot = 20*secsInYear
+    tSave = 20*secsInYear
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -175,7 +172,7 @@ function runSeamount(; bl = false)
     for i=1:nξ
         b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
     end
-    χ, uξ, uη, uσ, U = invert(m, b)
+    χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
@@ -184,23 +181,24 @@ function runSeamount(; bl = false)
     println("Sₘₐₓ = ", maximum(S))
 
     # solve
-    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 100*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
 
-m, s = runRidge()
+# m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-# m, s = runSeamount(; bl=true)
+m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-# setupFile = string(outFolder, "setup.h5")
-# m = loadSetup2DPG(setupFile)
-# stateFiles = string.(outFolder, "state", 0:5, ".h5")
-# profilePlot(setupFile, stateFiles, argmin(abs.(m.ξ .- m.L/4))) 
+setupFile = string(outFolder, "setup.h5")
+m = loadSetup2DPG(setupFile)
+stateFiles = string.(outFolder, "state", 0:5, ".h5")
+iξ = argmin(abs.(m.ξ .- m.L/4))
+profilePlot(setupFile, stateFiles, iξ) 
 
 println("Done.")

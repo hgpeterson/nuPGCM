@@ -75,13 +75,14 @@ function spinupRidgeAsym(folder)
     m = loadSetup2DPG(string(folder, "setup.h5"))
     s = loadState2DPG(string(folder, "state1.h5"))
 
+    U = s.χ[1, end]
+
     # plot
     ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax.annotate(string(L"$U =$", @sprintf("%1.1f", 1e4*U), L"$\times 10^{-4}$ m$^2$ s$^{1}$"), (0.05, 0.9), xycoords="axes fraction")
     savefig("spinupRidgeAsym.pdf")
     println("spinupRidgeAsym.pdf")
     plt.close()
-
-    println(@sprintf("U = %1.2e m2 s-1", s.χ[1, end]))
 end
 
 function spinupProfiles(folder; μ=1)
@@ -516,5 +517,5 @@ path = "../sims/"
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
 # spindownGrid(string(path, "sim033/")) 
-# spinupRidgeAsym(string(path, "sim031/")) 
-spinupProfilesPGvsFull(string(path, "sim025/"))
+spinupRidgeAsym(string(path, "sim040/")) 
+# spinupProfilesPGvsFull(string(path, "sim025/"))

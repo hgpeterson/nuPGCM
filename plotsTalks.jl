@@ -7,13 +7,8 @@ pygui(false)
 include("myJuliaLib.jl")
 
 # for loading data
-include("1dtc/utils.jl")
-include("1dtc_pg/utils.jl")
-include("1dtc_nondim/utils.jl")
+include("1dtc_pg/setup.jl")
 include("2dpg/setup.jl")
-include("2dpg/utils.jl")
-include("rayleigh/2dpg/utils.jl")
-include("rayleigh/1dtc_pg/utils.jl")
 
 # for ridgePlot
 include("2dpg/plotting.jl")
@@ -103,11 +98,12 @@ function chiProfile(folder)
     fig, ax = subplots(1, figsize=(3.404/1.62, 3.404))
     
     ax.set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax.set_ylabel(L"$\hat z$ (km)")
+    ax.set_ylabel(L"$z$ (km)")
 
-    c = loadCheckpoint1DTCPG(string(folder, "/1dtc_pg/tc/Pr1/checkpoint5.h5"))
+    m = loadSetup1DPG(string(folder, "/1dtc_pg/tc/mu1/setup.h5"))
+    s = loadState1DPG(string(folder, "/1dtc_pg/tc/mu1/state1.h5"))
 
-    ax.plot(1e3*c.χ,  (c.ẑ .- c.ẑ[1])/1e3, lw=2)
+    ax.plot(1e3*s.χ,  (m.z .- m.z[1])/1e3, lw=2)
 
     # ax.set_xlim([0, 2.0])
     # ax.set_ylim([0, 0.5])
@@ -163,33 +159,30 @@ function seamountBL1DFail(folder)
     ax.set_ylabel(L"$z$ (km)")
     ax.set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
-    # model setups
-    m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
-    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    m2D = loadSetup2DPG(string(folder, "full2D/setup.h5"))
+    ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
 
     # limits
-    ax.set_xlim([0, 1.2])
-    ax.set_ylim([m.z[ix, 1]/1e3, m.z[ix, 1]/1e3 + 2])
+    ax.set_xlim([0, 1.6])
 
-    # plot data
     # BL 1D
-    c = loadCheckpoint1DTCPG(string(folder, "L200km/bl1D/checkpoint5.h5"))
-    ẑ = c.ẑ .- c.ẑ[1]
-    q = (1/(4*c.Pr*c.κ[1])*(c.f^2*cos(c.θ)^2/(c.Pr*c.κ[1]) + c.N^2*sin(c.θ)^2/c.κ[1]))^(1/4)
-    bI = c.b
-    χI = -differentiate(bI, c.ẑ)*sin(c.θ)*c.Pr.*c.κ/(c.f^2*cos(c.θ)^2)
-    χB = boundaryCorrection(χI, ẑ, q)
-    bB = cumtrapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ) .- trapz(χB*c.N^2*sin(c.θ)/c.κ[1], ẑ)
+    m = loadSetup1DPG(string(folder, "bl1D/setup.h5"))
+    s = loadState1DPG(string(folder, "bl1D/state5.h5"))
+    z = m.z .- m.z[1]
+    q = (1/(4*m.ν[1])*(m.f^2/m.ν[1] + m.N2*tan(m.θ)^2/m.κ[1]))^(1/4)
+    bI = s.b
+    χI = -differentiate(bI, m.z)*tan(m.θ).*m.ν/m.f^2
+    χB = boundaryCorrection(χI, z, q)
+    bB = cumtrapz(χB*m.N2*tan(m.θ)/m.κ[1], z) .- trapz(χB*m.N2*tan(m.θ)/m.κ[1], z)
     χ = χI + χB
     b = bI + bB
-    Bz = c.N^2*cos(c.θ) .+ differentiate(b, ẑ*cos(c.θ))
-    v = cumtrapz(c.f*cos(c.θ)*(χ .- c.U)./(c.Pr*c.κ), ẑ)
-    ax.plot(1e6*Bz, ẑ*cos(c.θ)/1e3 .+ m.z[ix, 1]/1e3, label="BL 1D")
+    Bz = m.N2 .+ differentiate(b, z)
+    ax.plot(1e6*Bz, z/1e3 .+ m2D.z[ix, 1]/1e3, label="BL 1D")
 
     # full 2D
-    s = loadState2DPG(string(folder, "L200km/full2D/state5.h5"))
-    bz = differentiate(s.b[ix, :], m.z[ix, :])
-    ax.plot(1e6*bz, m.z[ix, :]/1e3, "--", label="full 2D")
+    s = loadState2DPG(string(folder, "full2D/state5.h5"))
+    bz = differentiate(s.b[ix, :], m2D.z[ix, :])
+    ax.plot(1e6*bz, m2D.z[ix, :]/1e3, "--", label="full 2D")
 
     ax.legend()
     
@@ -208,18 +201,17 @@ function seamountBL2DSuccess(folder)
     ax.set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     # model setups
-    m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
-    mBL = loadSetup2DPG(string(folder, "L200km/bl2D/setup.h5"))
+    m = loadSetup2DPG(string(folder, "full2D/setup.h5"))
+    mBL = loadSetup2DPG(string(folder, "bl2D/setup.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ixBL = argmin(abs.(mBL.x[:, 1] .- mBL.L/4))
 
     # limits
-    ax.set_xlim([0, 1.2])
-    ax.set_ylim([m.z[ix, 1]/1e3, m.z[ix, 1]/1e3 + 2])
+    ax.set_xlim([0, 1.6])
 
     # plot data
     # BL 2D
-    s = loadState2DPG(string(folder, "L200km/bl2D/state5.h5"))
+    s = loadState2DPG(string(folder, "bl2D/state5.h5"))
     bI = s.b[ixBL, :]
     χI = s.χ[ixBL, :]
     bIξ = ξDerivative(mBL, s.b)
@@ -232,7 +224,7 @@ function seamountBL2DSuccess(folder)
     ax.plot(1e6*bz, mBL.z[ixBL, :]/1e3, label="BL 2D")
 
     # full 2D
-    s = loadState2DPG(string(folder, "L200km/full2D/state5.h5"))
+    s = loadState2DPG(string(folder, "full2D/state5.h5"))
     bz = differentiate(s.b[ix, :], m.z[ix, :])
     ax.plot(1e6*bz, m.z[ix, :]/1e3, "--", label="full 2D")
 
@@ -335,13 +327,27 @@ function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
     end
     return m.H.*uσ
 end
+
+function ridgeAnimation(folder)
+    m = loadSetup2DPG(string(folder, "setup.h5"))
+    for i=0:90
+        s = loadState2DPG(string(folder, "state$i.h5"))
+        ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); vext=1.5)
+        ax.set_title(string(L"$t = $", @sprintf("%1.1f years", m.Δt*s.i[1]/secsInYear)))
+        tight_layout()
+        savefig(@sprintf("ridgeAnimation%03d.png", i))
+        println(@sprintf("ridgeAnimation%03d.png", i))
+        plt.close()
+    end
+end
 path = "../sims/"
 
 # spinupProfilesAnimation(string(path, "sim036/"))
-# chiProfile(string(path, "sim026"))
-px3yr(string(path, "sim037"))
+# chiProfile(string(path, "sim039"))
+# px3yr(string(path, "sim037"))
 # chiI_and_chiB(string(path, "sim037"))
-# seamountBL1DFail(string(path, "sim035/"))
-# seamountBL2DSuccess(string(path, "sim035/"))
+# seamountBL1DFail(string(path, "sim042/"))
+seamountBL2DSuccess(string(path, "sim042/"))
 # chi3yrN2exp(string(path, "sim037"))
 # transportAndExchange(string(path, "sim037"))
+# ridgeAnimation(string(path, "sim041/"))
