@@ -18,7 +18,7 @@ function run(; bl = false)
     # H = 2e3
     # θ = 2.5e-3
     H = 3673.32793219601
-    θ = 0.03639128788776821
+    θ = -0.03639128788776821
     transportConstraint = true
     # transportConstraint = false
     U₀ = 0.0
@@ -31,8 +31,7 @@ function run(; bl = false)
     end
     
     # diffusivity
-    # κ0 = 6e-5
-    κ0 = 0
+    κ0 = 6e-5
     κ1 = 2e-3
     h = 200
     κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
@@ -47,8 +46,8 @@ function run(; bl = false)
     
     # timestepping
     # Δt = 10*secsInDay
-    Δt = secsInDay
     # tSave = 3*secsInYear
+    Δt = secsInDay
     tSave = 20*secsInYear
     
     # create model struct

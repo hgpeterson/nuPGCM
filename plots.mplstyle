@@ -55,3 +55,4 @@ figure.subplot.top:    0.9
 savefig.format:        pdf
 savefig.dpi: 		   400
 savefig.transparent:   False
+savefig.bbox:          tight

@@ -86,8 +86,7 @@ function runRidge(; bl = false)
     # timestepping
     Δt = 10*secsInDay
     tPlot = 3*secsInYear
-    # tSave = 3*secsInYear
-    tSave = 60*secsInDay
+    tSave = 3*secsInYear
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -186,19 +185,19 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge()
+m, s = runRidge()
 # m, s = runRidge(; bl=true)
 # m, s = runSeamount()
-m, s = runSeamount(; bl=true)
+# m, s = runSeamount(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
-iξ = argmin(abs.(m.ξ .- m.L/4))
-profilePlot(setupFile, stateFiles, iξ) 
+# setupFile = string(outFolder, "setup.h5")
+# m = loadSetup2DPG(setupFile)
+# stateFiles = string.(outFolder, "state", 0:5, ".h5")
+# iξ = argmin(abs.(m.ξ .- m.L/4))
+# profilePlot(setupFile, stateFiles, iξ) 
 
 println("Done.")
