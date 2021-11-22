@@ -91,7 +91,7 @@ function px3yr(folder)
     ridgePlot(m, s, px, "", L"pressure gradient $\partial_x p$ (m s$^{-2}$)")
     savefig("px3yr.pdf")
     println("px3yr.pdf")
-    close()
+    plt.close()
 end
 
 function chiProfile(folder)

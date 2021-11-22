@@ -74,6 +74,47 @@ function get_pq(S, T, ε, μ)
 end
 
 # plotting functions
+function TFcoords()
+    # params for ridge
+    nξ = 2^8
+    nσ = 2^8
+    H0 = 2e3
+    L = 2e6
+
+    # TF grid
+    ξ = collect(0:L/(nξ - 1):L)
+    σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+    ξξ = repeat(ξ, 1, nσ)
+    σσ = repeat(σ', nξ, 1)
+
+    # depth
+    H = @. H0*(1 + 0.4*cos(2*π*ξ/L))
+
+    # physical grid
+    x = repeat(ξ, 1, nσ)
+    z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
+
+    # level sets 
+    σlevels = -1.0:0.1:0.0
+    ξlevels = 0:L/9:L
+
+    # plot ξ and σ surfaces
+    fig, ax = subplots()
+    ax.fill_between(ξ, -H, -H0*1.4, color="k", alpha=0.3, lw=0.0)
+    ax.contour(x, z, σσ, σlevels, colors="k", linestyles="-")
+    ax.contour(x, z, ξξ, ξlevels, colors="k", linestyles="-")
+    ax.axhline(0, lw=1, ls="-", c="k")
+    ax.axvline(L, lw=1, ls="-", c="k")
+    ax.set_xticks([])
+    ax.set_yticks([])
+	ax.spines["left"].set_visible(false)
+	ax.spines["bottom"].set_visible(false)
+    ax.set_ylim([-H0*1.4, 0])
+    tight_layout()
+    savefig("TFcoords.svg")
+    println("TFcoords.svg")
+end
+
 function ridge(folder)
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
@@ -459,10 +500,11 @@ end
 
 path = "../sims/"
 
+TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
 # transportAndExchange(string(path, "sim037/"))
-pq()
+# pq()
