@@ -1,17 +1,16 @@
 using PyPlot, PyCall, Printf, HDF5, Dierckx
 
 plt.style.use("plots.mplstyle")
-plt.close()("all")
+plt.close("all")
 pygui(false)
 
 include("myJuliaLib.jl")
 
 # for loading data
 include("1dtc/utils.jl")
-include("1dtc_pg/utils.jl")
+include("1dtc_pg/setup.jl")
 include("1dtc_nondim/utils.jl")
 include("2dpg/setup.jl")
-include("2dpg/utils.jl")
 include("rayleigh/2dpg/utils.jl")
 include("rayleigh/1dtc_pg/utils.jl")
 
@@ -94,10 +93,9 @@ function RayleighVsFickian(datafileR, datafileF)
     ax[2].plot(1e2*cF.v̂, (cF.ẑ*cos(cF.θ) .+ cF.H)/1e3, label="Fickian friction")
     # ax[2].legend()
 
-    tight_layout()
-
     savefig("RayleighVsFickian.pdf")
     println("RayleighVsFickian.pdf")
+    plt.close()
 end
 
 function TCRidge(folder)
@@ -198,7 +196,7 @@ function TCRidge(folder)
     subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
     savefig(string("TCRidge.pdf"))
     println(string("TCRidge.pdf"))
-    plt.close()()
+    plt.close()
 end
 
 function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
@@ -268,6 +266,138 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
 
     savefig("full2DvsBL1D.pdf")
     println("full2DvsBL1D.pdf")
+    plt.close()
+end
+
+# include("meshutils.jl")
+import Gmsh: gmsh
+
+function mesh3d()
+    # # init
+    # gmsh.initialize()
+    
+    # # log
+    # gmsh.option.setNumber("General.Terminal", 1)
+    
+    # # model
+    # gmsh.model.add("circleMesh")
+
+    # # R = 10
+    # # gmsh.model.geo.addPoint(-R, 0, 0, 1)
+    # # gmsh.model.geo.addPoint(0, R, 0, 2)
+    # # gmsh.model.geo.addPoint(R, 0, 0, 3)
+    # # gmsh.model.geo.addPoint(0, -R, 0, 4)
+    # # gmsh.model.geo.addPoint(0, 0, 0, 5)
+
+    # # # gmsh.model.geo.addCircleArc(1, 5, 2, 1)
+    # # gmsh.model.geo.addCircleArc(2, 5, 3, 2)
+    # # gmsh.model.geo.addCircleArc(3, 5, 4, 3)
+    # # gmsh.model.geo.addCircleArc(4, 5, 1, 4)
+    # # gmsh.model.geo.addLine(1, 2, 1)
+    # # # gmsh.model.geo.addLine(2, 3, 2)
+    # # # gmsh.model.geo.addLine(3, 4, 3)
+    # # # gmsh.model.geo.addLine(4, 1, 4)
+
+    # # gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
+    # # gmsh.model.geo.addPlaneSurface([1], 1)
+    
+    # # edge points
+    # pts = []
+    # N = 50
+    # R = 1e6
+    # for i=1:N+1
+    #     θ = 2*π * (i - 1)/N
+    #     x = R*cos(θ)
+    #     y = R*sin(θ)
+    #     push!(pts, gmsh.model.geo.addPoint(x, y, 0))
+    # end
+    
+    # # connect edge points by lines
+    # curves = []
+    # for i=1:size(pts, 1)-1
+    #     push!(curves, gmsh.model.geo.addLine(pts[i], pts[i+1]))
+    # end
+    # push!(curves, gmsh.model.geo.addLine(pts[end], pts[1]))
+    
+    # # loop curves together and define surface
+    # gmsh.model.geo.addCurveLoop(curves, 1)
+    # gmsh.model.geo.addPlaneSurface([1], 1)
+    
+    # # sync
+    # gmsh.model.geo.synchronize()
+    
+    # # generate
+    # gmsh.model.mesh.generate(2)
+    
+    # # find triangle nodes from the elements in the type-2 surface with tag 1
+    # tri_nodes = gmsh.model.mesh.getElements(2, 1)[3][1]
+    # nTri = Int64(size(tri_nodes, 1)/3)
+    # t = zeros(nTri, 3)
+    # for i=1:nTri
+    #     t[i, :] = [tri_nodes[3*i-2] tri_nodes[3*i-1] tri_nodes[3*i]]
+    # end
+    # t = Int64.(t)
+
+    # # find node positions by looping through indices
+    # nPts = Int64(maximum(t))
+    # p = zeros(nPts, 2)
+    # for i=1:nPts
+    #     p[i, :] = gmsh.model.mesh.getNode(i)[1][1:2]
+    # end
+
+    # load mesh from DistMesh
+    file = h5open("../sims/sim043/mesh.h5", "r")
+    p = read(file, "p")
+    t = read(file, "t")
+    R = 1e6
+    p *= R
+
+    # plot
+    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2))
+
+    ax[1].set_xlabel(L"$x$ (km)")
+    ax[1].set_ylabel(L"$y$ (km)")
+    ax[1].tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, 0*t[:,1], cmap="Greys", edgecolors="k", linewidths=0.5)
+    ax[1].axis("equal")
+
+    # terrain-following coords
+    nξ = 2^8
+    nσ = 2^8
+    H0 = 4e3
+    s = R/5
+
+    ξ = collect(-R:2*R/(nξ - 1):R)
+    σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+    ξξ = repeat(ξ, 1, nσ)
+    σσ = repeat(σ', nξ, 1)
+
+    H = @. H0 - H0*(exp(-(ξ + R)^2/(2*s^2)) + exp(-(ξ - R)^2/(2*s^2)))
+
+    x = repeat(ξ, 1, nσ)
+    z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
+
+    σlevels = -1.0:0.1:0.0
+    ξlevels = -R:2*R/13:R
+
+    # plot ξ and σ surfaces
+    ax[2].fill_between(ξ/1e3, -H0/1e3, -H/1e3, color="k", alpha=0.3, lw=0.0)
+    ax[2].contour(x/1e3, z/1e3, σσ, σlevels, colors="k", linestyles="-")
+    ax[2].contour(x/1e3, z/1e3, ξξ, ξlevels, colors="k", linestyles="-")
+    ax[2].axhline(0, lw=1, ls="-", c="k")
+    ax[2].axhline(-R/1e3, lw=1, ls="-", c="k")
+    ax[2].axvline(R/1e3, lw=1, ls="-", c="k")
+    ax[2].axvline(R/1e3, lw=1, ls="-", c="k")
+    ax[2].set_ylim([-H0/1e3, 0])
+
+    ax[2].set_xlabel("radial distance (km)")
+    ax[2].set_ylabel(L"$z$ (km)")
+
+    ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+
+    savefig("mesh3d.pdf")
+    println("mesh3d.pdf")
+    plt.close()
 end
 
 path = "../sims/"
@@ -279,3 +409,4 @@ path = "../sims/"
 # datafilesBL1D = string.(path, "sim028/tht", θ, "/bl/checkpoint", ii, ".h5")
 # datafilesFull2D = string.(path, "sim026/2dpg/Pr1/checkpoint", ii, ".h5")
 # full2DvsBL1D(datafilesFull2D, datafilesBL1D)
+mesh3d()
