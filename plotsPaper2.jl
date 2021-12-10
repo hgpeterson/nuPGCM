@@ -24,26 +24,47 @@ function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float
     χB = @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
     return χB
 end
-function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG)
-    z = m.z .- m.z[1]
+function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Array{Float64,1})
+    # BL thickness
     q = (1/(4*m.ν[1])*(m.f^2/m.ν[1] + m.N2*tan(m.θ)^2/m.κ[1]))^(1/4)
+    
+    # interior vars
     bI = s.b
     χI = -differentiate(bI, m.z)*tan(m.θ).*m.ν/m.f^2
-    χB = boundaryCorrection(χI, z, q)
+
+    # interpolate onto new grid 
+    χI_fine = Spline1D(m.z .- m.z[1], χI)(z)
+    bI_fine = Spline1D(m.z .- m.z[1], bI)(z)
+
+    # BL correction
+    χB = boundaryCorrection(χI_fine, z, q)
     bB = cumtrapz(χB*m.N2*tan(m.θ)/m.κ[1], z) .- trapz(χB*m.N2*tan(m.θ)/m.κ[1], z)
-    χ = χI + χB
-    b = bI + bB
+
+    # full sol
+    χ = χI_fine + χB
+    b = bI_fine + bB
     return χ, b
 end
-function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, ix::Int64)
+function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Array{Float64,1}, ix::Int64)
+    # interior vars
     bI = s.b[ix, :]
     χI = s.χ[ix, :]
+
+    # BL thickness 
     bIξ = ξDerivative(m, s.b)
     q = (1/(4*m.ν[ix, 1])*(m.f^2/m.ν[ix, 1] - m.Hx[ix]*bIξ[ix, 1]/m.H[ix]/m.κ[ix, 1]))^(1/4)
-    χB = boundaryCorrection(χI, m.z[ix, :] .- m.z[ix, 1], q)
-    bB = cumtrapz(χB*bIξ[ix, 1]/m.κ[ix, 1], m.z[ix, :]) .- trapz(χB.*bIξ[ix, 1]/m.κ[ix, 1], m.z[ix, :]) 
-    χ = χI + χB
-    b = bI + bB
+
+    # interpolate onto new grid 
+    χI_fine = Spline1D(m.z[ix, :] .- m.z[ix, 1], χI)(z)
+    bI_fine = Spline1D(m.z[ix, :] .- m.z[ix, 1], bI)(z)
+
+    # BL correction
+    χB = boundaryCorrection(χI_fine, z, q)
+    bB = cumtrapz(χB*bIξ[ix, 1]/m.κ[ix, 1], z) .- trapz(χB*bIξ[ix, 1]/m.κ[ix, 1], z) 
+
+    # full sol
+    χ = χI_fine + χB
+    b = bI_fine + bB
     return χ, b
 end
 function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
@@ -64,16 +85,127 @@ function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
     end
     return m.H.*uσ
 end
-function get_pq(S, T, ε, μ)
+function get_pq(S, T, δ, μ)
     r = (-1 + im*sqrt(3))/2
     c = sqrt(μ^2*T^2/4 + (1 + μ*S)^3/27)
-    λ = 1/ε * sqrt(r*cbrt(-μ*T/2 + c) + conj(r)*cbrt(-μ*T/2 - c))
+    λ = sqrt(2)/δ * sqrt(r*cbrt(-μ*T/2 + c) + conj(r)*cbrt(-μ*T/2 - c))
     q = real(λ)
     p = imag(λ)
     return p, q
 end
 
 # plotting functions
+function slopeFull1DvsBL1D(folder)
+    # init plot
+    fig, ax = subplots(2, 3, figsize=(6.5, 6.5/1.62), sharey=true)
+
+    axins11 = inset_locator.inset_axes(ax[1, 1], width="50%", height="50%")
+    axins21 = inset_locator.inset_axes(ax[2, 1], width="50%", height="50%")
+
+    ax[1, 1].set_ylabel(L"$z$ (km)")
+    ax[2, 1].set_ylabel(L"$z$ (km)")
+    ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"along-ridge flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2, 3].set_xlabel(string(L"stratification $N^2 + \partial_z b$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
+
+    ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[1, 3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 1].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
+
+    fig.text(0.05, 0.98, L"$S = O(10^{-3})$:", ha="left", va="top")
+    fig.text(0.05, 0.50, L"$S = O(10^{-1})$:", ha="left", va="top")
+
+    subplots_adjust(hspace=0.5)
+
+    # limits
+    ax[1, 1].set_xlim([-0.05, 1.7])
+    ax[2, 1].set_xlim([-0.5, 14])
+    ax[1, 2].set_xlim([-2.5, 0.5])
+    ax[2, 2].set_xlim([-22, 4])
+    ax[1, 3].set_xlim([0, 1.3])
+    ax[2, 3].set_xlim([0, 1.3])
+    ax[1, 1].set_ylim([0, 2])
+    ax[1, 2].set_ylim([0, 2])
+    ax[1, 3].set_ylim([0, 2])
+    ax[2, 1].set_ylim([0, 2])
+    ax[2, 2].set_ylim([0, 2])
+    ax[2, 3].set_ylim([0, 2])
+    axins11.set_ylim([0, 0.1])
+    axins21.set_ylim([0, 0.1])
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=5))
+
+    # plot data
+    for i=1:5
+        # line color
+        color = colors[i, :]
+
+        # BL 1D small S
+        m = loadSetup1DPG(string(folder, "S_small/bl/setup.h5"))
+        mFull = loadSetup1DPG(string(folder, "S_small/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S_small/bl/state$i.h5"))
+        z = mFull.z .- mFull.z[1]
+        χ, b = constructFullSolution(m, s, z)
+        v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
+        Bz = m.N2 .+ differentiate(b, z)
+        label = string(Int64(m.Δt*(s.i[1] - 1)/secsInYear), " years")
+        ax[1, 1].plot(1e3*χ,   z/1e3, c=color, label=label)
+        axins11.plot(1e3*χ,   z/1e3, c=color, label=label)
+        ax[1, 2].plot(1e2*v,   z/1e3, c=color, label=label)
+        ax[1, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
+
+        # full 1D small S
+        m = loadSetup1DPG(string(folder, "S_small/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S_small/full/state$i.h5"))
+        z = m.z .- m.z[1]
+        v = s.v
+        Bz = m.N2 .+ differentiate(b, z)
+        ax[1, 1].plot(1e3*χ,   z/1e3, "k:")
+        axins11.plot(1e3*χ,   z/1e3, "k:")
+        ax[1, 2].plot(1e2*v,   z/1e3, "k:")
+        ax[1, 3].plot(1e6*Bz,  z/1e3, "k:")
+
+        # BL 1D big S
+        m = loadSetup1DPG(string(folder, "S_big/bl/setup.h5"))
+        mFull = loadSetup1DPG(string(folder, "S_big/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S_big/bl/state$i.h5"))
+        z = mFull.z .- mFull.z[1]
+        χ, b = constructFullSolution(m, s, z)
+        v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
+        Bz = m.N2 .+ differentiate(b, z)
+        label = string(Int64(m.Δt*(s.i[1] - 1)/secsInYear), " years")
+        ax[2, 1].plot(1e3*χ,   z/1e3, c=color, label=label)
+        axins21.plot(1e3*χ,   z/1e3, c=color, label=label)
+        ax[2, 2].plot(1e2*v,   z/1e3, c=color, label=label)
+        ax[2, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
+
+        # full 1D big S
+        m = loadSetup1DPG(string(folder, "S_big/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S_big/full/state$i.h5"))
+        z = m.z .- m.z[1]
+        v = s.v
+        Bz = m.N2 .+ differentiate(b, z)
+        ax[2, 1].plot(1e3*χ,   z/1e3, "k:")
+        axins21.plot(1e3*χ,   z/1e3, "k:")
+        ax[2, 2].plot(1e2*v,   z/1e3, "k:")
+        ax[2, 3].plot(1e6*Bz,  z/1e3, "k:")
+    end
+
+    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
+                      lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = ["BL 1D", "full 1D"]
+    ax[1, 2].legend(custom_handles, custom_labels, loc=(0.5, 0.4))
+    ax[1, 3].legend(loc="upper left")
+    
+    savefig("slopeFull1DvsBL1D.pdf")
+    println("slopeFull1DvsBL1D.pdf")
+    plt.close()
+end
+
 function TFcoords()
     # params for ridge
     nξ = 2^8
@@ -179,9 +311,9 @@ function ridgeFull2DvsBL1D(folder)
 
         # BL 1D
         s = loadState1DPG(string(folder, "bl1d/mu1/state$i.h5"))
-        z = m1D.z .- m1D.z[1]
-        χ, b = constructFullSolution(m1D, s)
-        v = cumtrapz(m1D.f*(χ .- χ[end])./m1D.ν, z)
+        z = m2D.z[ix, :] .- m2D.z[ix, 1]
+        χ, b = constructFullSolution(m1D, s, z)
+        v = cumtrapz(m1D.f*(χ .- χ[end])./m2D.ν[ix, :], z)
         Bz = m1D.N2 .+ differentiate(b, z)
         label = string(Int64(m1D.Δt*(s.i[1] - 1)/secsInYear), " years")
         ax[1].plot(1e3*χ,   z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
@@ -215,15 +347,15 @@ function seamount(folder)
     m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax[1])
-    ridgePlot(m, s, s.uη, "", L"along-ridge flow $u^y$ (m s$^{-1}$)"; ax=ax[2])
+    ridgePlot(m, s, 1e2*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e1*s.uη, "", string(L"along-slope flow $u^y$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
 
-    subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
+    # subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
 
     savefig("seamount.pdf")
     println("seamount.pdf")
@@ -253,13 +385,9 @@ function seamountFull2DvsBL(folder)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     fig.text(0.05, 0.98, "BL 1D:", ha="left", va="top")
-    fig.text(0.05, 0.52, "BL 2D:", ha="left", va="top")
+    fig.text(0.05, 0.50, "BL 2D:", ha="left", va="top")
 
-    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
-
-    for a in ax
-        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-    end
+    subplots_adjust(hspace=0.5)
 
     # model setups
     m1DBL = loadSetup1DPG(string(folder, "bl1D/setup.h5"))
@@ -273,10 +401,16 @@ function seamountFull2DvsBL(folder)
     ax[2, 1].set_xlim([-1.7, 0.05])
     axins11.set_xlim([-1.7, 0.05])
     axins21.set_xlim([-1.7, 0.05])
-    ax[1, 2].set_xlim([0, 4.0])
-    ax[2, 2].set_xlim([0, 4.0])
+    ax[1, 2].set_xlim([-1.0, 4.0])
+    ax[2, 2].set_xlim([-1.0, 4.0])
     ax[1, 3].set_xlim([0, 1.3])
     ax[2, 3].set_xlim([0, 1.3])
+    ax[1, 1].set_ylim([m2D.z[ix, 1]/1e3, 0])
+    ax[1, 2].set_ylim([m2D.z[ix, 1]/1e3, 0])
+    ax[1, 3].set_ylim([m2D.z[ix, 1]/1e3, 0])
+    ax[2, 1].set_ylim([m2D.z[ix, 1]/1e3, 0])
+    ax[2, 2].set_ylim([m2D.z[ix, 1]/1e3, 0])
+    ax[2, 3].set_ylim([m2D.z[ix, 1]/1e3, 0])
     axins11.set_ylim([m2D.z[ix, 1]/1e3, (m2D.z[ix, 1] + 55)/1e3])
     axins21.set_ylim([m2D.z[ix, 1]/1e3, (m2D.z[ix, 1] + 55)/1e3])
 
@@ -291,9 +425,9 @@ function seamountFull2DvsBL(folder)
         # BL 1D
         m = m1DBL
         s = loadState1DPG(string(folder, "bl1D/state$i.h5"))
-        z = m.z .- m.z[1]
-        χ, b = constructFullSolution(m, s)
-        v = cumtrapz(m.f*(χ .- χ[end])./m.ν, z)
+        z = m2D.z[ix, :] .- m2D.z[ix, 1]
+        χ, b = constructFullSolution(m, s, z)
+        v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
         Bz = m.N2 .+ differentiate(b, z)
         label = string(Int64(m.Δt*(s.i[1] - 1)/secsInYear), " years")
         ax[1, 1].plot(1e2*χ,   z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
@@ -313,12 +447,14 @@ function seamountFull2DvsBL(folder)
         # BL 2D
         m = m2DBL
         s = loadState2DPG(string(folder, "bl2D/state$i.h5"))
-        χ, b = constructFullSolution(m, s, ixBL)
-        bz = differentiate(b, m.z[ixBL, :])
-        ax[2, 1].plot(1e2*χ,             m.z[ixBL, :]/1e3, c=color, label=label)
-        axins21.plot(1e2*χ,             m.z[ixBL, :]/1e3, c=color, label=label)
-        ax[2, 2].plot(1e1*s.uη[ixBL, :], m.z[ixBL, :]/1e3, c=color, label=label)
-        ax[2, 3].plot(1e6*bz,            m.z[ixBL, :]/1e3, c=color, label=label)
+        z = m2D.z[ix, :] .- m2D.z[ix, 1]
+        χ, b = constructFullSolution(m, s, z, ixBL)
+        v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
+        bz = differentiate(b, z)
+        ax[2, 1].plot(1e2*χ,  z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
+        axins21.plot(1e2*χ,   z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
+        ax[2, 2].plot(1e1*v,  z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
+        ax[2, 3].plot(1e6*bz, z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
 
         # full 2D
         m = m2D
@@ -353,13 +489,9 @@ function ridgeN2exp(folder)
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[2])
 
-    # ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
-    # ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate(L"(b) $N^2 \sim \exp(z/\delta)$", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
-
-    subplots_adjust(left=0.1, right=0.95, bottom=0.25, top=0.9, wspace=0.1, hspace=0.6)
 
     savefig("ridgeN2exp.pdf")
     println("ridgeN2exp.pdf")
@@ -443,7 +575,6 @@ function transportAndExchange(folder)
     W = exchangeVel2D(mExp, χtheory)
     ax[1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/\delta)$")
     ax[2].plot(mExp.ξ/1e3, 1e9*W)
-    
 
     ax[1].set_xlim([0, mConst.L/1e3])
     ax[1].set_ylim([-3, 3])
@@ -453,7 +584,7 @@ function transportAndExchange(folder)
 
     ax[1].legend()
 
-    tight_layout()
+    subplots_adjust(wspace=0.3)
 
     savefig("transportAndExchange.pdf")
     println("transportAndExchange.pdf")
@@ -461,50 +592,54 @@ function transportAndExchange(folder)
 end
 
 function pq()
-    ε = 1e-3
+    δ = 10
     μ = 1
     Ss = 10. .^(-3:0.1:1)
-    Ts = [0, 1e-2, 1e-1, 1e0, 1e1, 1e2]
+    Ts = [1e-2, 1e-1, 1e0, 1e1, 1e2]
     cs = pl.cm.viridis(range(1, 0, length=size(Ts, 1)))
 
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
     ax[1].set_xlim([Ss[1], Ss[end]])
     ax[2].set_xlim([Ss[1], Ss[end]])
-    ax[1].set_ylim([0.5, 2.5])
+    ax[1].set_ylim([0.5, 3.0])
 
     for i=1:size(Ts, 1)
         T = Ts[i]
         c = cs[i, :] 
-        if T == 0
-            label = L"$T = 0$"
-        else
-            label = latexstring("\$T = 10^", @sprintf("{%.0f}\$", log10(T)))
-        end
-        pq = get_pq.(Ss, T, ε, μ)
-        ax[1].semilogx(Ss, ε*last.(pq),  c=c, ls="-", label=label)
-        ax[2].semilogx(Ss, ε*first.(pq), c=c, ls="-", label=label)
+        label = latexstring("\$T = 10^", @sprintf("{%.0f}\$", log10(T)))
+        pq = get_pq.(Ss, T, δ, μ)
+        ax[1].semilogx(Ss, δ*last.(pq),  c=c, ls="-", label=label)
+        ax[2].semilogx(Ss, δ*first.(pq), c=c, ls="-", label=label)
     end
 
-    ax[2].legend(loc="upper left")
+    # T = 0 
+    ax[1].semilogx(Ss, (1 .+ μ.*Ss).^(1/4), "k:")
+    ax[2].semilogx(Ss, (1 .+ μ.*Ss).^(1/4), "k:")
+
+    custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
+    custom_labels = [L"1D and 2D theory ($T = 0$)"]
+    ax[1].legend(custom_handles, custom_labels)
+    ax[2].legend(loc=(0.05, 0.45))
     ax[1].set_xlabel(L"slope Burger number $S$")
     ax[2].set_xlabel(L"slope Burger number $S$")
-    ax[1].set_ylabel(L"decay scale $\varepsilon q$")
-    ax[2].set_ylabel(L"oscillation scale $\varepsilon p$")
+    ax[1].set_ylabel(L"decay scale $\delta q$")
+    ax[2].set_ylabel(L"oscillation scale $\delta p$")
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
-    ax[1].annotate(L"$\mu = 1$, $\varepsilon = 10^{-3}$", (0.05, 0.9), xycoords="axes fraction")
+    # ax[2].annotate(L"$\mu = 1$", (0.8, 0.9), xycoords="axes fraction")
     savefig("pq.pdf")
     println("pq.pdf")
 end
 
 path = "../sims/"
 
-TFcoords()
+# slopeFull1DvsBL1D(string(path, "sim044/"))
+# TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
 # transportAndExchange(string(path, "sim037/"))
-# pq()
+pq()

@@ -15,10 +15,10 @@ function run(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     nz = 2^8
-    # H = 2e3
-    # θ = 2.5e-3
-    H = 3673.32793219601
-    θ = -0.03639128788776821
+    H = 2e3
+    θ = 2.5e-3
+    # H = 3673.32793219601
+    # θ = -0.03639128788776821
     transportConstraint = true
     # transportConstraint = false
     U₀ = 0.0
@@ -45,10 +45,10 @@ function run(; bl = false)
     N2 = 1e-6
     
     # timestepping
-    # Δt = 10*secsInDay
-    # tSave = 3*secsInYear
-    Δt = secsInDay
-    tSave = 20*secsInYear
+    Δt = 1*secsInDay
+    tSave = 3*secsInYear
+    # Δt = secsInDay
+    # tSave = 20*secsInYear
     
     # create model struct
     m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U₀)
@@ -64,8 +64,8 @@ function run(; bl = false)
     s = ModelState1DPG(b, χ, u, v, U, i)
 
     # solve transient
-    # evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
-    evolve!(m, s, 100*secsInYear, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
+    # evolve!(m, s, 100*secsInYear, tSave; bl=bl) 
     
     # solve steady state
     # steadyState(m)
