@@ -627,7 +627,6 @@ function pq()
     ax[2].set_ylabel(L"oscillation scale $\delta p$")
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
-    # ax[2].annotate(L"$\mu = 1$", (0.8, 0.9), xycoords="axes fraction")
     savefig("pq.pdf")
     println("pq.pdf")
 end
@@ -642,4 +641,4 @@ path = "../sims/"
 # seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
 # transportAndExchange(string(path, "sim037/"))
-pq()
+# pq()
