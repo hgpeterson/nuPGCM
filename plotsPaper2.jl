@@ -18,11 +18,7 @@ lines = pyimport("matplotlib.lines")
 
 # utility functions
 function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float64)
-    A = -χI[1]
-    χIz0 = differentiate_pointwise(χI[1:3], z[1:3], z[1], 1)
-    B = -χIz0/q + A
-    χB = @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
-    return χB
+    return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
 end
 function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Array{Float64,1})
     # BL thickness
@@ -633,7 +629,7 @@ end
 
 path = "../sims/"
 
-# slopeFull1DvsBL1D(string(path, "sim044/"))
+slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
