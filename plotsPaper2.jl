@@ -473,89 +473,32 @@ function seamountFull2DvsBL(folder)
 end
 
 function ridgeN2exp(folder)
-    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+    fig, ax = subplots(2, 2, figsize=(6.5, 6.5/1.62))
+
+    # top row: ridges
+    ax[1, 1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
+    ax[1, 2].annotate(L"(b) $N^2 \sim \exp(z/d)$", (0.0, 1.05), xycoords="axes fraction")
 
     m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1, 1])
 
     m = loadSetup2DPG(string(folder, "exp/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "exp/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[2])
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1, 2])
+    ax[1, 2].set_ylabel("")
 
-    ax[1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
-    ax[2].annotate(L"(b) $N^2 \sim \exp(z/\delta)$", (0.0, 1.05), xycoords="axes fraction")
-    ax[2].set_ylabel("")
+    # bottom row: transport and exchange
+    ax[2, 1].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 2].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
 
-    savefig("ridgeN2exp.pdf")
-    println("ridgeN2exp.pdf")
-    plt.close()
-end
-# function expStrat(folder)
-#     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2)) 
+    ax[2, 1].set_xlabel(L"$x$ (km)")
+    ax[2, 1].set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
 
-#     ax[1].set_xlabel(L"$\xi$ (km)")
-#     ax[1].set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-
-#     ax[2].set_xlabel(L"$\xi$ (km)")
-#     ax[2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-6}$ m s$^{-1}$)"))
-
-#     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
-#     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
-
-#     # color map
-#     colors = pl.cm.viridis(range(1, 0, length=5))
-
-#     mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
-#     mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
-#     for i=0:5
-#         if i == 0
-#             c = "tab:red"
-#         else
-#             c = colors[i, :]
-#         end
-#         s = loadState2DPG(string(folder, "/const/bl2D/state$i.h5"))
-#         χtheory = BLtransport2D(mConst, s)
-#         W = exchangeVel2D(mConst, χtheory)
-#         label = string(Int64((s.i[1] - 1)*mConst.Δt/86400/360), " years")
-#         ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, c=c, label=string(L"$N^2 = $", "const."))
-#         ax[2].plot(mConst.ξ/1e3, 1e6*W, c=c, label=label)
-
-#         s = loadState2DPG(string(folder, "/exp/bl2D/state$i.h5"))
-#         χtheory = BLtransport2D(mExp, s)
-#         W = exchangeVel2D(mExp, χtheory)
-#         ax[1].plot(mExp.ξ/1e3, 1e3*χtheory, c=c, ls="--", label=L"$N^2 \sim \exp(z/\delta)$")
-#         ax[2].plot(mExp.ξ/1e3, 1e6*W, c=c, ls="--")
-#     end
-
-#     ax[1].set_xlim([0, mConst.L/1e3])
-#     # ax[1].set_ylim([-20, 0])
-
-#     ax[2].set_xlim([0, mConst.L/1e3])
-#     # ax[2].set_ylim([-1, 20])
-
-#     # ax[1].legend()
-#     ax[2].legend()
-
-#     tight_layout()
-
-#     savefig("expStrat.pdf")
-#     println("expStrat.pdf")
-#     plt.close()
-# end
-function transportAndExchange(folder)
-    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2)) 
-
-    ax[1].set_xlabel(L"$x$ (km)")
-    ax[1].set_ylabel(string("BL transport\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-
-    ax[2].set_xlabel(L"$x$ (km)")
-    ax[2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
-
-    ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 2].set_xlabel(L"$x$ (km)")
+    ax[2, 2].set_ylabel(string(L"exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
 
     mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
     mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
@@ -563,27 +506,25 @@ function transportAndExchange(folder)
     s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
     χtheory = BLtransport2D(mConst, s)
     W = exchangeVel2D(mConst, χtheory)
-    ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "const."))
-    ax[2].plot(mConst.ξ/1e3, 1e9*W)
+    ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "const."))
+    ax[2, 2].plot(mConst.ξ/1e3, 1e9*W)
 
     s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
     χtheory = BLtransport2D(mExp, s)
     W = exchangeVel2D(mExp, χtheory)
-    ax[1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/\delta)$")
-    ax[2].plot(mExp.ξ/1e3, 1e9*W)
+    ax[2, 1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/d)$")
+    ax[2, 2].plot(mExp.ξ/1e3, 1e9*W)
 
-    ax[1].set_xlim([0, mConst.L/1e3])
-    ax[1].set_ylim([-3, 3])
+    ax[2, 1].set_xlim([0, mConst.L/1e3])
+    ax[2, 1].set_ylim([-3, 3])
 
-    ax[2].set_xlim([0, mConst.L/1e3])
-    ax[2].set_ylim([-8, 18])
+    ax[2, 2].set_xlim([0, mConst.L/1e3])
+    ax[2, 2].set_ylim([-8, 18])
 
-    ax[1].legend()
+    ax[2, 1].legend()
 
-    subplots_adjust(wspace=0.3)
-
-    savefig("transportAndExchange.pdf")
-    println("transportAndExchange.pdf")
+    savefig("ridgeN2exp.pdf")
+    println("ridgeN2exp.pdf")
     plt.close()
 end
 
@@ -629,12 +570,11 @@ end
 
 path = "../sims/"
 
-slopeFull1DvsBL1D(string(path, "sim044/"))
+# slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
-# ridgeN2exp(string(path, "sim037/"))
-# transportAndExchange(string(path, "sim037/"))
+ridgeN2exp(string(path, "sim037/"))
 # pq()
