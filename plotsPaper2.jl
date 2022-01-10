@@ -544,22 +544,22 @@ function pq()
     for i=1:size(Ts, 1)
         T = Ts[i]
         c = cs[i, :] 
-        label = latexstring("\$T = 10^", @sprintf("{%.0f}\$", log10(T)))
+        label = latexstring("\$\\mu T = 10^", @sprintf("{%.0f}\$", log10(μ*T)))
         pq = get_pq.(Ss, T, δ, μ)
-        ax[1].semilogx(Ss, δ*last.(pq),  c=c, ls="-", label=label)
-        ax[2].semilogx(Ss, δ*first.(pq), c=c, ls="-", label=label)
+        ax[1].semilogx(μ*Ss, δ*last.(pq),  c=c, ls="-", label=label)
+        ax[2].semilogx(μ*Ss, δ*first.(pq), c=c, ls="-", label=label)
     end
 
     # T = 0 
-    ax[1].semilogx(Ss, (1 .+ μ.*Ss).^(1/4), "k:")
-    ax[2].semilogx(Ss, (1 .+ μ.*Ss).^(1/4), "k:")
+    ax[1].semilogx(μ*Ss, (1 .+ μ.*Ss).^(1/4), "k:")
+    ax[2].semilogx(μ*Ss, (1 .+ μ.*Ss).^(1/4), "k:")
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = [L"1D and 2D theory ($T = 0$)"]
+    custom_labels = [L"1D and 2D theory ($\mu T = 0$)"]
     ax[1].legend(custom_handles, custom_labels)
     ax[2].legend(loc=(0.05, 0.45))
-    ax[1].set_xlabel(L"slope Burger number $S$")
-    ax[2].set_xlabel(L"slope Burger number $S$")
+    ax[1].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
+    ax[2].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
     ax[1].set_ylabel(L"decay scale $\delta q$")
     ax[2].set_ylabel(L"oscillation scale $\delta p$")
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -576,5 +576,5 @@ path = "../sims/"
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
-ridgeN2exp(string(path, "sim037/"))
-# pq()
+# ridgeN2exp(string(path, "sim037/"))
+pq()
