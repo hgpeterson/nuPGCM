@@ -125,12 +125,11 @@ function getInversionRHS(m::ModelSetup1DPG, b::Array{Float64,1})
     rhs[[1, 2, m.nz-1, m.nz]] .= 0
 
     # if dx(p) ~ 0 then 
-    #   (1) U = U₀
-    #       for transport-constrained 1D solution
+    #   (1) set U for transport-constrained 1D solution
     #   (2) dz(nu*dzz(χ)) = b*tan(θ) at bottom
     #       for canonical 1D solution
     if m.transportConstraint
-        rhs[iU] = m.U₀
+        rhs[iU] = m.U[1]
     else
         rhs[iU] = -b[1]*tan(m.θ) 
     end
@@ -147,7 +146,7 @@ from definition of χ.
 function postProcess(m, sol)
     iU = m.nz + 1
 
-    # χ at top is vertical integral of u
+    # transport at iU
     U = sol[iU] 
 
     # rest of solution is χ
@@ -159,11 +158,11 @@ function postProcess(m, sol)
     # compute v = int_-H^0 f*(χ - U)/nu dz
     v = cumtrapz(m.f*(χ .- U)./m.ν, m.z)
 
-    return χ, u, v, U
+    return χ, u, v
 end
 
 """
-    χ, u, v, U = invert(m, b; bl=bl)
+    χ, u, v = invert(m, b; bl=bl)
 
 Wrapper function that inverts for flow given buoyancy perturbation `b`.
 """
@@ -181,14 +180,13 @@ function invert(m::ModelSetup1DPG, b::Array{Float64,1}; bl=false)
     end
 
     # compute flow from sol
-    χ, u, v, U = postProcess(m, sol)
+    χ, u, v = postProcess(m, sol)
 
-    return χ, u, v, U
+    return χ, u, v
 end
 function invert!(m::ModelSetup1DPG, s::ModelState1DPG; bl=false)
-    χ, u, v, U = invert(m, s.b; bl)
+    χ, u, v = invert(m, s.b; bl)
     s.χ[:] = χ
     s.u[:] = u
     s.v[:] = v
-    s.U[1] = U
 end

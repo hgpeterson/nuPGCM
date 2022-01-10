@@ -16,12 +16,17 @@ function run(; bl = false)
     f = -5.5e-5
     nz = 2^8
     H = 2e3
-    θ = 2.5e-3
+    # H = 4e3
+    # θ = 2.5e-3
+    θ = 2.5e-2
     # H = 3673.32793219601
     # θ = -0.03639128788776821
     transportConstraint = true
     # transportConstraint = false
-    U₀ = 0.0
+    U = [0.0]
+    # Uamp = 1e-3
+    Uamp = 1e-2
+    Uper = secsInDay/2
 
     # grid: chebyshev unless bl
     if bl
@@ -45,27 +50,31 @@ function run(; bl = false)
     N2 = 1e-6
     
     # timestepping
-    Δt = 1*secsInDay
-    tSave = 3*secsInYear
-    # Δt = secsInDay
-    # tSave = 20*secsInYear
+    # Δt = 1*secsInDay
+    # tSave = 3*secsInYear
+    Δt = secsInDay/24
+    tSave = Δt
+    # Δt = secsInDay/8
+    # tSave = 3*secsInYear
     
     # create model struct
-    m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U₀)
+    m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
 
     # save and log params
     saveSetup1DPG(m)
 
     # set initial state
-    b = zeros(nz)
-    χ, u, v, U = invert(m, b)
-    U = [U]
-    i = [1]
-    s = ModelState1DPG(b, χ, u, v, U, i)
+    s = loadState1DPG(string(outFolder, "fullSim/state4.h5"))
+    s.i[1] = 1
+    # i = s.i
+    # b = zeros(nz)
+    # χ, u, v = invert(m, b)
+    # i = [1]
+    # s = ModelState1DPG(b, χ, u, v, i)
 
     # solve transient
-    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
-    # evolve!(m, s, 100*secsInYear, tSave; bl=bl) 
+    # evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
+    evolve!(m, s, 4*secsInDay, tSave; bl=bl) 
     
     # solve steady state
     # steadyState(m)
@@ -73,17 +82,28 @@ function run(; bl = false)
     return m, s
 end
 
+################################################################################
+# run
+################################################################################
+
 # m, s = run()
-m, s = run(; bl=true)
+# m, s = run(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
+# setupFile = string(outFolder, "setup.h5")
+# # stateFiles = string.(outFolder, "state", -1:5, ".h5")
+# stateFiles = string.(outFolder, "state", 0:5, ".h5")
+# profilePlot(setupFile, stateFiles)
+
 setupFile = string(outFolder, "setup.h5")
 m = loadSetup1DPG(setupFile)
-# stateFiles = string.(outFolder, "state", -1:5, ".h5")
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
-profilePlot(setupFile, stateFiles)
+for i=1:96
+    stateFile = @sprintf("%sstate%d.h5", outFolder, i)
+    imgFile = @sprintf("%sprofiles_%03d.png", outFolder, i)
+    profilePlot(m, stateFile, imgFile)
+end
 
 println("Done.")

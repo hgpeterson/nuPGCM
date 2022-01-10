@@ -8,20 +8,17 @@ using SparseArrays, SuiteSparse, LinearAlgebra
 
 struct ModelState1DPG
     # buoyancy (m s-2)
-	b::Array{Float64,1}
+	b::Vector{Float64}
 
     # streamfunction (m2 s-1)
-    χ::Array{Float64,1}
+    χ::Vector{Float64}
 
     # velocities (m s-1)
-	u::Array{Float64,1}
-	v::Array{Float64,1}
-
-    # transport (m2 s-1)
-    U::Array{Float64,1}
+	u::Vector{Float64}
+	v::Vector{Float64}
 
     # iteration
-    i::Array{Int64,1}
+    i::Vector{Int64}
 end
 
 struct ModelSetup1DPG
@@ -32,7 +29,7 @@ struct ModelSetup1DPG
 	nz::Int64
 
 	# grid coordinates
-	z::Array{Float64,1}
+	z::Vector{Float64}
 
     # depth (m)
     H::Float64
@@ -41,13 +38,13 @@ struct ModelSetup1DPG
     θ::Float64
 
     # turbulent viscosity (m2 s-1)
-	ν::Array{Float64,1}
+	ν::Vector{Float64}
 
     # turbulent diffusivity (m2 s-1)
-	κ::Array{Float64,1}
+	κ::Vector{Float64}
 
     # derivative of κ (m s-1)
-	κ_z::Array{Float64,1}
+	κ_z::Vector{Float64}
 
     # buoyancy frequency (s-2)
 	N2::Float64
@@ -64,6 +61,12 @@ struct ModelSetup1DPG
     # transport constraint (boolean)
     transportConstraint::Bool
 
-    # transport
-    U₀::Float64
+    # imposed transport (if transportConstraint == true)
+    U::Vector{Float64}
+
+    # amplitude of tidal oscillations (can be zero for no tides)
+    Uamp::Float64
+
+    # period of tidal oscillations
+    Uper::Float64
 end
