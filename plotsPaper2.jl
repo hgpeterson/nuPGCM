@@ -16,14 +16,36 @@ pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 
-# utility functions
-function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float64)
+### utility functions
+
+"""
+    χB = boundaryCorrection(χI, z, q)
+
+Compute BL correction to `χI` on grid `z`.
+"""
+function boundaryCorrection(χI::Vector{Float64}, z::Vector{Float64}, q::Float64)
     return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
 end
-function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Array{Float64,1})
-    # BL thickness
-    q = (1/(4*m.ν[1])*(m.f^2/m.ν[1] + m.N2*tan(m.θ)^2/m.κ[1]))^(1/4)
-    
+
+"""
+    q = get_q(m)
+
+Compute BL thickness `q`.
+"""
+function get_q(m::ModelSetup1DPG)
+    S = m.N2/m.f^2*tan(m.θ)^2
+    δ = sqrt(2*m.ν[1]/abs(m.f))
+    μ = m.ν[1]/m.κ[1]
+    return (1 + μ*S)^(1/4)/δ
+end
+
+"""
+    χ, b = constructFullSolution(m, s, z)
+
+Construct full solutions `χ` = χI + χB and `b` = bI + bB from BL theory.
+The full solutions exist on the new grid `z`.
+"""
+function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{Float64})
     # interior vars
     bI = s.b
     χI = -differentiate(bI, m.z)*tan(m.θ).*m.ν/m.f^2
@@ -33,6 +55,7 @@ function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Array{Fl
     bI_fine = Spline1D(m.z .- m.z[1], bI)(z)
 
     # BL correction
+    q = get_q(m)
     χB = boundaryCorrection(χI_fine, z, q)
     bB = cumtrapz(χB*m.N2*tan(m.θ)/m.κ[1], z) .- trapz(χB*m.N2*tan(m.θ)/m.κ[1], z)
 
@@ -41,7 +64,7 @@ function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Array{Fl
     b = bI_fine + bB
     return χ, b
 end
-function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Array{Float64,1}, ix::Int64)
+function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64}, ix::Int64)
     # interior vars
     bI = s.b[ix, :]
     χI = s.χ[ix, :]
@@ -63,12 +86,24 @@ function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Array{Fl
     b = bI_fine + bB
     return χ, b
 end
+
+"""
+    U = BLtransport2D(m, s)
+
+Compute BL tranport from 2D BL theory.
+"""
 function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
     dbdξ = ξDerivative(m, s.b[:, 1])
     μ = m.ν[1, 1] / m.κ[1, 1]
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
 end
-function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
+
+"""
+    H*uσ = exchangeVel2D(m, χ)
+
+Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction at σ = -1).
+""" 
+function exchangeVel2D(m::ModelSetup2DPG, χ::Vector{Float64})
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
         uσ = -ξDerivative(m, χ)./m.H
@@ -81,6 +116,12 @@ function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
     end
     return m.H.*uσ
 end
+
+"""
+    p, q = get_pq(S, T, δ, μ)
+
+Get oscillation and decay scales `p` and `q` from 3D BL theory.
+"""
 function get_pq(S, T, δ, μ)
     r = (-1 + im*sqrt(3))/2
     c = sqrt(μ^2*T^2/4 + (1 + μ*S)^3/27)
@@ -90,7 +131,37 @@ function get_pq(S, T, δ, μ)
     return p, q
 end
 
-# plotting functions
+### plotting functions
+
+function BLCorrection(folder)
+    fig, ax = subplots(1)
+    
+    ax.set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax.set_ylabel(L"$z$ (m)")
+
+    m = loadSetup1DPG(string(folder, "/S_small/bl/setup.h5"))
+    mFull = loadSetup1DPG(string(folder, "/S_small/full/setup.h5"))
+    s = loadState1DPG(string(folder, "/S_small/bl/state1.h5"))
+
+    # compute full solution on finer grid
+    z = mFull.z .- mFull.z[1]
+    χ, b = constructFullSolution(m, s, z)
+    χI = s.χ
+
+    # plot
+    ax.plot(1e3*χ,  z, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
+    ax.plot(1e3*χI, (m.z .- m.z[1]), "--", lw=2, label=L"\chi_\mathrm{I}")
+
+    ax.set_xlim([0, 1.8])
+    ax.set_ylim([0, 300])
+
+    ax.legend()
+
+    savefig("BLTheorySketch.pdf")
+    println("BLTheorySketch.pdf")
+    plt.close()
+end
+
 function slopeFull1DvsBL1D(folder)
     # init plot
     fig, ax = subplots(2, 3, figsize=(6.5, 6.5/1.62), sharey=true)
@@ -338,13 +409,14 @@ function ridgeFull2DvsBL1D(folder)
 end
 
 function seamount(folder)
-    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+    # fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
+    fig, ax = subplots(1, 2, figsize=(3.404, 2.8), sharey=true)
 
     m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e2*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); ax=ax[1])
-    ridgePlot(m, s, 1e1*s.uη, "", string(L"along-slope flow $u^y$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
+    ridgePlot(m, s, 1e2*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); ax=ax[1], cb_orientation="horizontal")
+    ridgePlot(m, s, 1e1*s.uη, "", string(L"along-slope flow $u^y$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh", cb_orientation="horizontal")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -537,8 +609,8 @@ function pq()
 
     fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
-    ax[1].set_xlim([Ss[1], Ss[end]])
-    ax[2].set_xlim([Ss[1], Ss[end]])
+    ax[1].set_xlim([μ*Ss[1], μ*Ss[end]])
+    ax[2].set_xlim([μ*Ss[1], μ*Ss[end]])
     ax[1].set_ylim([0.5, 3.0])
 
     for i=1:size(Ts, 1)
@@ -570,11 +642,12 @@ end
 
 path = "../sims/"
 
+# BLCorrection(string(path, "sim044"))
 # slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
-# seamount(string(path, "sim035/"))
+seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
-pq()
+# pq()

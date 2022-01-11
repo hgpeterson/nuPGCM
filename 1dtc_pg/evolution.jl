@@ -109,11 +109,11 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
             # save
             saveState1DPG(s, iSave)
 
-            # plot
-            setupFile = string(outFolder, "setup.h5")
-            stateFile = @sprintf("%sstate%d.h5", outFolder, iSave)
-            imgFile = @sprintf("%sprofiles_%03d.png", outFolder, iSave)
-            profilePlot(setupFile, stateFile, imgFile)
+            # # plot
+            # setupFile = string(outFolder, "setup.h5")
+            # stateFile = @sprintf("%sstate%d.h5", outFolder, iSave)
+            # imgFile = @sprintf("%sprofiles_%03d.png", outFolder, iSave)
+            # profilePlot(setupFile, stateFile, imgFile)
 
             # next
             iSave += 1

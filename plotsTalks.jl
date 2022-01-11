@@ -19,6 +19,49 @@ pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 
+### utility functions
+
+"""
+    χB = boundaryCorrection(χI, z, q)
+
+Compute BL correction to `χI` on grid `z`.
+"""
+function boundaryCorrection(χI::Vector{Float64}, z::Vector{Float64}, q::Float64)
+    return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
+end
+
+"""
+    U = BLtransport2D(m, s)
+
+Compute BL tranport from 2D BL theory.
+"""
+function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
+    dbdξ = ξDerivative(m, s.b[:, 1])
+    μ = m.ν[1, 1] / m.κ[1, 1]
+    return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
+end
+
+"""
+    H*uσ = exchangeVel2D(m, χ)
+
+Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction at σ = -1).
+""" 
+function exchangeVel2D(m::ModelSetup2DPG, χ::Vector{Float64})
+    if m.coords == "cartesian"
+        # uσ = -dξ(χ)/H
+        uσ = -ξDerivative(m, χ)./m.H
+    elseif m.coords == "cylindrical"
+        # uσ = -dρ(ρ*χ)/(H*ρ)
+        uσ = -ξDerivative(m, m.ξ.*χ)./m.H./m.ξ
+        # assume χ = 0 at ρ = 0
+        fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
+        uσ[1] = -(fd_ξ[2]*m.ξ[1]*χ[1] + fd_ξ[3]*m.ξ[2]*χ[2])/(m.H[1]*m.ξ[1])
+    end
+    return m.H.*uσ
+end
+
+### plots
+
 function spinupProfilesAnimation(folder)
     # plot data from folder
     for i=0:90
@@ -143,13 +186,6 @@ function chiI_and_chiB(folder)
     savefig("chiI_and_chiB.pdf")
     println("chiI_and_chiB.pdf")
     plt.close()
-end
-function boundaryCorrection(χI::Array{Float64,1}, z::Array{Float64,1}, q::Float64)
-    A = -χI[1]
-    χIz0 = differentiate_pointwise(χI[1:3], z[1:3], z[1], 1)
-    B = -χIz0/q + A
-    χB = @. exp(-q*z)*(A*cos(q*z) + B*sin(q*z))
-    return χB
 end
 
 function seamountBL1DFail(folder)
@@ -308,24 +344,6 @@ function transportAndExchange(folder)
     savefig("transportAndExchange.pdf")
     println("transportAndExchange.pdf")
     plt.close()
-end
-function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
-    dbdξ = ξDerivative(m, s.b[:, 1])
-    μ = m.ν[1, 1] / m.κ[1, 1]
-    return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
-end
-function exchangeVel2D(m::ModelSetup2DPG, χ::Array{Float64,1})
-    if m.coords == "cartesian"
-        # uσ = -dξ(χ)/H
-        uσ = -ξDerivative(m, χ)./m.H
-    elseif m.coords == "cylindrical"
-        # uσ = -dρ(ρ*χ)/(H*ρ)
-        uσ = -ξDerivative(m, m.ξ.*χ)./m.H./m.ξ
-        # assume χ = 0 at ρ = 0
-        fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
-        uσ[1] = -(fd_ξ[2]*m.ξ[1]*χ[1] + fd_ξ[3]*m.ξ[2]*χ[2])/(m.H[1]*m.ξ[1])
-    end
-    return m.H.*uσ
 end
 
 function ridgeAnimation(folder)
