@@ -36,7 +36,7 @@ function get_q(m::ModelSetup1DPG)
     S = m.N2/m.f^2*tan(m.θ)^2
     δ = sqrt(2*m.ν[1]/abs(m.f))
     μ = m.ν[1]/m.κ[1]
-    return (1 + μ*S)^(1/4)/δ
+    return 1/δ * (1 + μ*S)^(1/4)
 end
 
 """
@@ -71,7 +71,10 @@ function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{F
 
     # BL thickness 
     bIξ = ξDerivative(m, s.b)
-    q = (1/(4*m.ν[ix, 1])*(m.f^2/m.ν[ix, 1] - m.Hx[ix]*bIξ[ix, 1]/m.H[ix]/m.κ[ix, 1]))^(1/4)
+    δ = sqrt(2*m.ν[ix, 1]/abs(m.f))
+    μ = m.ν[ix, 1]/m.κ[ix, 1]
+    S = -1/m.f^2 * m.Hx[ix]*bIξ[ix, 1]
+    q = 1/δ * (1 + μ*S)^(1/4)
 
     # interpolate onto new grid 
     χI_fine = Spline1D(m.z[ix, :] .- m.z[ix, 1], χI)(z)
@@ -134,10 +137,11 @@ end
 ### plotting functions
 
 function BLCorrection(folder)
-    fig, ax = subplots(1)
+    fig, ax = subplots(1, 2)
     
-    ax.set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax.set_ylabel(L"$z$ (m)")
+    ax[1].set_xlabel(L"streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
+    ax[1].xaxis.set_label_coords(1.0, -0.15)
+    ax[1].set_ylabel(L"$z$ (km)")
 
     m = loadSetup1DPG(string(folder, "/S_small/bl/setup.h5"))
     mFull = loadSetup1DPG(string(folder, "/S_small/full/setup.h5"))
@@ -149,16 +153,29 @@ function BLCorrection(folder)
     χI = s.χ
 
     # plot
-    ax.plot(1e3*χ,  z, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
-    ax.plot(1e3*χI, (m.z .- m.z[1]), "--", lw=2, label=L"\chi_\mathrm{I}")
+    ax[1].plot(1e3*χ,  z/1e3, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
+    ax[1].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=2, label=L"\chi_\mathrm{I}")
+    ax[2].plot(1e3*χ,  z/1e3, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
+    ax[2].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=2, label=L"\chi_\mathrm{I}")
+    ax[1].fill_between([-0.1, 1.8], 0, 0.1, color="k", alpha=0.3, lw=0)
 
-    ax.set_xlim([0, 1.8])
-    ax.set_ylim([0, 300])
+    # lims
+    ax[1].set_xlim([-0.1, 1.8])
+    ax[2].set_xlim([-0.1, 1.8])
+    ax[1].set_ylim([0, 2.0])
+    ax[2].set_ylim([0, 0.1])
 
-    ax.legend()
+    # labels
+    ax[1].legend()
+    ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("interior", (0.2, 0.8), xycoords="axes fraction")
+    ax[2].annotate("BL",       (0.1, 0.1), xycoords="axes fraction")
 
-    savefig("BLTheorySketch.pdf")
-    println("BLTheorySketch.pdf")
+    subplots_adjust(wspace=0.3)
+
+    savefig("BLCorrection.pdf")
+    println("BLCorrection.pdf")
     plt.close()
 end
 
@@ -642,12 +659,12 @@ end
 
 path = "../sims/"
 
-# BLCorrection(string(path, "sim044"))
+BLCorrection(string(path, "sim044"))
 # slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
-seamount(string(path, "sim035/"))
+# seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
 # pq()
