@@ -17,7 +17,6 @@ function run(; bl = false)
     nz = 2^8
     H = 2e3
     θ = 2.5e-3
-    # θ = 2.5e-2
     # H = 3673.32793219601
     # θ = -0.03639128788776821
     transportConstraint = true
@@ -51,10 +50,7 @@ function run(; bl = false)
     # timestepping
     Δt = 1*secsInDay
     tSave = 3*secsInYear
-    # Δt = secsInDay/24
-    # tSave = Δt
-    # Δt = secsInDay/8
-    # tSave = 3*secsInYear
+    # tSave = 20*secsInYear
     
     # create model struct
     m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
@@ -72,7 +68,7 @@ function run(; bl = false)
 
     # solve transient
     evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
-    # evolve!(m, s, 4*secsInDay, tSave; bl=bl) 
+    # evolve!(m, s, 100*secsInYear, tSave; bl=bl) 
     
     # solve steady state
     # steadyState(m)
@@ -84,17 +80,17 @@ end
 # run
 ################################################################################
 
-m, s = run()
-# m, s = run(; bl=true)
+# m, s = run()
+m, s = run(bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-# setupFile = string(outFolder, "setup.h5")
-# # stateFiles = string.(outFolder, "state", -1:5, ".h5")
-# stateFiles = string.(outFolder, "state", 0:5, ".h5")
-# profilePlot(setupFile, stateFiles)
+setupFile = string(outFolder, "setup.h5")
+# stateFiles = string.(outFolder, "state", -1:5, ".h5")
+stateFiles = string.(outFolder, "state", 0:5, ".h5")
+profilePlot(setupFile, stateFiles)
 
 # setupFile = string(outFolder, "setup.h5")
 # m = loadSetup1DPG(setupFile)

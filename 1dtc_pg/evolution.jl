@@ -83,7 +83,9 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
     t = m.Δt
     for i=1:nSteps
         # impose tidally varying U
-        m.U[1] = m.Uamp*sin(2*π*t/m.Uper)
+        if m.Uamp > 0
+            m.U[1] = m.Uamp*sin(2*π*t/m.Uper)
+        end
 
         # right-hand side
         RHS = s.b + m.Δt*(1/2*m.D*s.b + m.κ_z*m.N2 - s.u*m.N2*tan(m.θ))

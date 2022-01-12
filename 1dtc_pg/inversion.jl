@@ -169,7 +169,7 @@ Wrapper function that inverts for flow given buoyancy perturbation `b`.
 function invert(m::ModelSetup1DPG, b::Array{Float64,1}; bl=false)
     if bl # BL Solution
         bz = differentiate(b, m.z)
-        sol = @. -m.ν/m.f^2*bz*tan(m.θ)
+        sol = @. m.U - m.ν/m.f^2*bz*tan(m.θ) 
         push!(sol, sol[end])
     else # full solution
         # compute RHS
