@@ -14,11 +14,14 @@ pygui(false)
 function run(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
+    N2 = 1e-6
     nz = 2^8
     H = 2e3
-    θ = 2.5e-3
-    # H = 3673.32793219601
-    # θ = -0.03639128788776821
+    # θ = 2.5e-3                 # ridge
+    # θ = atan(sqrt(0.1*f^2/N2))   # S = 0.1
+    θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
+    # H = 3673.32793219601       # seamount
+    # θ = -0.03639128788776821   # seamount
     transportConstraint = true
     # transportConstraint = false
     U = [0.0]
@@ -43,9 +46,6 @@ function run(; bl = false)
     # viscosity
     μ = 1e0
     ν_func(z) = μ*κ_func(z)
-
-    # stratification
-    N2 = 1e-6
     
     # timestepping
     Δt = 1*secsInDay
