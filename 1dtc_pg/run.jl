@@ -18,8 +18,10 @@ function run(; bl = false)
     nz = 2^8
     H = 2e3
     # θ = 2.5e-3                 # ridge
+    # θ = atan(sqrt(1*f^2/N2))   # S = 1
+    θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.1*f^2/N2))   # S = 0.1
-    θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
+    # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
     transportConstraint = true
@@ -80,8 +82,8 @@ end
 # run
 ################################################################################
 
-# m, s = run()
-m, s = run(bl=true)
+m, s = run()
+# m, s = run(bl=true)
 
 ################################################################################
 # plots

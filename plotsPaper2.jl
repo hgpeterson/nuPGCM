@@ -200,15 +200,15 @@ function slopeFull1DvsBL1D(folder)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     fig.text(0.05, 0.98, L"$S = 10^{-3}$:", ha="left", va="top")
-    fig.text(0.05, 0.50, L"$S = 10^{-1}$:", ha="left", va="top")
+    fig.text(0.05, 0.50, L"$S = 0.5$:", ha="left", va="top")
 
     subplots_adjust(hspace=0.5)
 
     # limits
     ax[1, 1].set_xlim([-0.05, 1.2])
-    ax[2, 1].set_xlim([-0.5, 11])
+    ax[2, 1].set_xlim([-0.7, 18])
     ax[1, 2].set_xlim([-1.6, 0.1])
-    ax[2, 2].set_xlim([-15, 1])
+    ax[2, 2].set_xlim([-26.5, 2])
     ax[1, 3].set_xlim([0, 1.3])
     ax[2, 3].set_xlim([0, 1.3])
     ax[1, 1].set_ylim([0, 2])
@@ -229,9 +229,9 @@ function slopeFull1DvsBL1D(folder)
         color = colors[i, :]
 
         # BL 1D small S
-        m = loadSetup1DPG(string(folder, "S_small/bl/setup.h5"))
-        mFull = loadSetup1DPG(string(folder, "S_small/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S_small/bl/state$i.h5"))
+        m = loadSetup1DPG(string(folder,     "S1e-3/bl/setup.h5"))
+        mFull = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
+        s = loadState1DPG(string(folder,     "S1e-3/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = constructFullSolution(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
@@ -243,8 +243,8 @@ function slopeFull1DvsBL1D(folder)
         ax[1, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
 
         # full 1D small S
-        m = loadSetup1DPG(string(folder, "S_small/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S_small/full/state$i.h5"))
+        m = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S1e-3/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
@@ -254,9 +254,9 @@ function slopeFull1DvsBL1D(folder)
         ax[1, 3].plot(1e6*Bz,  z/1e3, "k:")
 
         # BL 1D big S
-        m = loadSetup1DPG(string(folder, "S_big/bl/setup.h5"))
-        mFull = loadSetup1DPG(string(folder, "S_big/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S_big/bl/state$i.h5"))
+        m = loadSetup1DPG(string(folder,     "S5e-1/bl/setup.h5"))
+        mFull = loadSetup1DPG(string(folder, "S5e-1/full/setup.h5"))
+        s = loadState1DPG(string(folder,     "S5e-1/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = constructFullSolution(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
@@ -268,8 +268,8 @@ function slopeFull1DvsBL1D(folder)
         ax[2, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
 
         # full 1D big S
-        m = loadSetup1DPG(string(folder, "S_big/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S_big/full/state$i.h5"))
+        m = loadSetup1DPG(string(folder, "S5e-1/full/setup.h5"))
+        s = loadState1DPG(string(folder, "S5e-1/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
