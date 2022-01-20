@@ -18,11 +18,12 @@ Optional:
     - set the vmin/vmax manually with `vext`
     - set different colormap `cmap`
     - set colorbar orientation with `cb_orientation`
+    - set xlabel with `xlabel`
 """
 function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
                 titleString::AbstractString, cbarLabel::AbstractString; 
                 ax=nothing, vext=nothing, cmap="RdBu_r", style="contour",
-                cb_orientation="vertical")
+                cb_orientation="vertical", xlabel=nothing)
     # km
     xx = m.x/1000
     zz = m.z/1000
@@ -79,7 +80,11 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
 
     # labels
     ax.set_title(titleString)
-    ax.set_xlabel(L"$x$ (km)")
+    if xlabel === nothing
+        ax.set_xlabel(L"$x$ (km)")
+    else
+        ax.set_xlabel(xlabel)
+    end
     ax.set_ylabel(L"$z$ (km)")
     ax.set_xlim([0, m.L/1e3])
 
