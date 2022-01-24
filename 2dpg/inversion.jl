@@ -7,7 +7,7 @@
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(ν::Array{Float64,1}, f::Float64, H::Float64, σ::Array{Float64,1})
+function getInversionLHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector{Float64})
     nσ = size(σ, 1)
     A = Tuple{Int64,Int64,Float64}[]  
 
@@ -84,7 +84,7 @@ end
 
 Setup right hand side of linear system for problem.
 """
-function getInversionRHS(rhs::Array{Float64,2}, U::Real)
+function getInversionRHS(rhs::Matrix{Float64}, U::Real)
     # boundary conditions
     rhs[:, [1, 2, end]] .= 0 # χ = 0, dσ(χ) = 0 at σ = -1, dσσ(χ) = 0 at σ = 0
     rhs[:, end-1] .= U       # χ = U at σ = 0
@@ -96,15 +96,10 @@ end
 
 Compute inversion solution given right hand side `inversionRHS`.
 """
-function computeχ(m::ModelSetup2DPG, inversionRHS::Array{Float64,2})
-    # solve
-    χ = zeros(m.nξ, m.nσ)
-    for i=1:m.nξ
-        χ[i, :] = m.inversionLHSs[i]\inversionRHS[i, :]
-    end
-    return χ
+function computeχ(m::ModelSetup2DPG, inversionRHS::Matrix{Float64})
+    return computeχ(m.inversionLHSs, inversionRHS)
 end
-function computeχ(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Array{Float64,2})
+function computeχ(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Matrix{Float64})
     # solve
     χ = zeros(size(inversionRHS))
     for i=1:size(χ, 1)
@@ -119,7 +114,7 @@ end
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(m::ModelSetup2DPG, χ_b::Array{Float64,2})
+function computeU(m::ModelSetup2DPG, χ_b::Matrix{Float64})
     # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
     term1 = zeros(m.nξ)
     for i=1:m.nξ
@@ -156,6 +151,60 @@ function computeU(m::ModelSetup2DPG, χ_b::Array{Float64,2})
 
     return -(term1 + term2)/(term3 + term4)
 end
+function computeU_BL(m::ModelSetup2DPG, b::Matrix{Float64})
+    # bx
+    bx = xDerivative(m, b)
+
+    term1 = zeros(m.nξ)
+    for i=1:m.nξ
+        term1[i] = trapz(bx[i, :], m.σ)*m.H[i]
+    end
+    term1 = sum(term1)/m.nξ
+
+    # # BL thickness 
+    # bIξ = ξDerivative(m, b)[:, 1]
+    # δ = @. sqrt(2*m.ν[:, 1]/abs(m.f))
+    # μ = @. m.ν[:, 1]/m.κ[:, 1]
+    # S = @. -1/m.f^2 * m.Hx*bIξ
+    # q = @. 1/δ * (1 + μ*S)^(1/4)
+
+    δ = @. sqrt(2*m.ν[:, 1]/abs(m.f))
+    q = @. 1/δ
+    
+    # approx
+    term2 = -m.f^2/q./m.ν[1, :]
+    term2 = sum(term2)/m.nξ
+    println(term2)
+
+    # less approx
+    χ_U_B = @. -exp(-q*m.H*(m.σ' + 1))*(cos(-q*m.H*(m.σ' + 1)) + sin(-q*m.H*(m.σ' + 1)))
+    integrand = @. m.f^2/m.ν*χ_U_B
+    term2 = zeros(m.nξ)
+    for i=1:m.nξ
+        # term2[i] = trapz(integrand[i, :], m.σ)*m.H[i]
+        term2[i] = trapz(m.f^2 ./(m.ν[i, :]).*χ_U_B[i, :], m.σ)*m.H[i]
+    end
+    term2 = sum(term2)/m.nξ
+    println(term2)
+
+    # truth
+    term2 = zeros(m.nξ)
+    for i=1:m.nξ
+        term2[i] = trapz(m.f^2 ./(m.ν[i, :]).*(m.χ_U[i, :] .- 1), m.σ)*m.H[i]
+    end
+    term2 = sum(term2)/m.nξ
+    println(term2)
+
+    ix = 32
+    plot(m.χ_U[ix, :], m.σ)
+    plot(1 .+ χ_U_B[ix, :], m.σ, "--")
+    ylim([-1, -0.9])
+    savefig("debug.png")
+
+    error()
+
+    return term1/term2
+end
 
 """
     uξ, uη, uσ, U = postProcess(m, χ)
@@ -163,7 +212,7 @@ end
 Take streamfunction `χ` and compute `uξ`, `uη`, `uσ`, and `U`
 from its definition. Computation is different depending on choice of coordinates.
 """
-function postProcess(m::ModelSetup2DPG, χ::Array{Float64,2})
+function postProcess(m::ModelSetup2DPG, χ::Matrix{Float64})
     # χ at σ = 0 is vertical integral of uξ
     U = χ[1, end] # just take first one since they all must be the same
 
@@ -199,7 +248,7 @@ end
 
 Invert for flow given current model state buoyancy perturbation.
 """
-function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
+function invert(m::ModelSetup2DPG, b::Matrix{Float64}; bl=false)
     # buoyancy solution: rhs = dx(b), U = 0;
     # (U = 1 solution `sol_U` is stored in ModelSetup2DPG struct)
     if m.ξVariation
@@ -209,19 +258,22 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
     end
 
     if bl # BL Solution
-        # no need for dzzzz anymore!
-        χ = @. m.ν/m.f^2*rhs
+        # bl inversion
+        χ_b = @. m.ν/m.f^2*rhs
+
+        # get U
+        if symmetry
+            U = 0
+        else
+            U = computeU_BL(m, b)
+        end
+
+        # χ_U = 1 in interior
+        χ = χ_b .+ U
     else # Full Inversion
         # buoyancy solution
         inversionRHS = getInversionRHS(rhs, 0)
         χ_b = computeχ(m, inversionRHS)
-
-        # # plot(χ_b[32, :], m.z[32, :])
-        # plot(rhs[32, :], m.z[32, :])
-        # tight_layout()
-        # savefig("debug.png")
-        # plt.close()
-        # readline()
 
         # compute U such that "island rule" is satisfied
         if symmetry
@@ -234,10 +286,6 @@ function invert(m::ModelSetup2DPG, b::Array{Float64,2}; bl=false)
         χ = χ_b + U*m.χ_U
     end
 
-    # if m.coords == "cylindrical"
-    #     # b.c.: no flow at ρ = 0
-    #     χ[1, :] .= 0
-    # end
     uξ, uη, uσ, U = postProcess(m, χ)
 
     return χ, uξ, uη, uσ, U

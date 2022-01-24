@@ -111,7 +111,7 @@ function profilePlot(setupFile, stateFiles, iξ)
     ax[1].set_xlabel(string("streamfunction\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
     ax[1].set_ylabel(L"$z$ (km)")
 
-    ax[2].set_xlabel(string("along-ridge flow\n", L"$v$ (m s$^{-1}$)"))
+    ax[2].set_xlabel(string("along-slope flow\n", L"$u^y$ (m s$^{-1}$)"))
 
     ax[3].set_xlabel(string("stratification\n", L"$\partial_z b$ (s$^{-2}$)"))
 
@@ -122,7 +122,7 @@ function profilePlot(setupFile, stateFiles, iξ)
     end
 
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)))
+    colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)-1))
 
     # plot data from `datafiles`
     for i=1:size(stateFiles, 1)
@@ -135,7 +135,11 @@ function profilePlot(setupFile, stateFiles, iξ)
 
         # colors and labels
         label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
-        color = colors[i, :]
+        if i==1
+            color = "tab:red"
+        else
+            color = colors[i-1, :]
+        end
 
         # plot
         ax[1].plot(s.χ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)

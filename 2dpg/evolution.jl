@@ -285,19 +285,13 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
         # s.i[1] = i + 1
         t += m.Δt
 
-        # println(trapz(s.b[1, :], m.z[1, :]))
-        # Bi = -3.9199999965243717
-        # Bf = -3.9071636677290256
-        # println(abs((Bi - Bf)/Bi)) # about 0.3%
-        # error()
-
         # invert buoyancy for flow and save to state
         invert!(m, s; bl=bl)
 
         # log
         if i % 10 == 0
-            println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
-            # println(@sprintf("t = %.2f yr | i = %d | U = %.2e m2 s-1", t/secsInYear, i, s.χ[1, end]))
+            # println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
+            println(@sprintf("t = %.2f yr | i = %d | U = %.2e m2 s-1", t/secsInYear, i, s.χ[1, end]))
 
             # # CFL stuff
             # uξCFL = minimum(abs.(dξ./s.uξ)) 

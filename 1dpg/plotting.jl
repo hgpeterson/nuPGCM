@@ -5,7 +5,7 @@ lines = pyimport("matplotlib.lines")
 """
     profilePlot(setupFile, stateFiles)
 
-Plot profiles of b, χ, û, and v̂ from HDF5 snapshot files of buoyancy in the `datafiles` list.
+Plot profiles of b, χ, u, and v from HDF5 snapshot files.
 """
 function profilePlot(setupFile::String, stateFiles::Vector{String})
     # ModelSetup 

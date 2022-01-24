@@ -143,9 +143,9 @@ function BLCorrection(folder)
     ax[1].xaxis.set_label_coords(1.0, -0.15)
     ax[1].set_ylabel(L"$z$ (km)")
 
-    m = loadSetup1DPG(string(folder, "/S_small/bl/setup.h5"))
-    mFull = loadSetup1DPG(string(folder, "/S_small/full/setup.h5"))
-    s = loadState1DPG(string(folder, "/S_small/bl/state1.h5"))
+    m = loadSetup1DPG(string(folder,     "/S1e-3/bl/setup.h5"))
+    mFull = loadSetup1DPG(string(folder, "/S1e-3/full/setup.h5"))
+    s = loadState1DPG(string(folder,     "/S1e-3/bl/state1.h5"))
 
     # compute full solution on finer grid
     z = mFull.z .- mFull.z[1]
@@ -160,8 +160,8 @@ function BLCorrection(folder)
     ax[1].fill_between([-0.1, 1.8], 0, 0.1, color="k", alpha=0.3, lw=0)
 
     # lims
-    ax[1].set_xlim([-0.1, 1.8])
-    ax[2].set_xlim([-0.1, 1.8])
+    ax[1].set_xlim([-0.1, 1.3])
+    ax[2].set_xlim([-0.1, 1.3])
     ax[1].set_ylim([0, 2.0])
     ax[2].set_ylim([0, 0.1])
 
@@ -189,7 +189,7 @@ function slopeFull1DvsBL1D(folder)
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-ridge flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"along-slope flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
     ax[2, 3].set_xlabel(string(L"stratification $N^2 + \partial_z b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -461,7 +461,7 @@ function seamountFull2DvsBL(folder)
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-ridge flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"along-slope flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"))
     ax[2, 3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -662,11 +662,11 @@ end
 path = "../sims/"
 
 # BLCorrection(string(path, "sim044"))
-slopeFull1DvsBL1D(string(path, "sim044/"))
+# slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # ridge(string(path, "sim039/"))
 # ridgeFull2DvsBL1D(string(path, "sim039/"))
 # seamount(string(path, "sim035/"))
-# seamountFull2DvsBL(string(path, "sim042/"))
+seamountFull2DvsBL(string(path, "sim042/"))
 # ridgeN2exp(string(path, "sim037/"))
 # pq()
