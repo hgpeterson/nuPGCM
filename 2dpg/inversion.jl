@@ -155,55 +155,27 @@ function computeU_BL(m::ModelSetup2DPG, b::Matrix{Float64})
     # bx
     bx = xDerivative(m, b)
 
+    # first term: ⟨ ∫ ∂ₓb dσ ⟩ 
     term1 = zeros(m.nξ)
     for i=1:m.nξ
-        term1[i] = trapz(bx[i, :], m.σ)*m.H[i]
+        term1[i] = m.H[i]*trapz(bx[i, :], m.σ)
     end
     term1 = sum(term1)/m.nξ
 
-    # # BL thickness 
-    # bIξ = ξDerivative(m, b)[:, 1]
-    # δ = @. sqrt(2*m.ν[:, 1]/abs(m.f))
-    # μ = @. m.ν[:, 1]/m.κ[:, 1]
-    # S = @. -1/m.f^2 * m.Hx*bIξ
-    # q = @. 1/δ * (1 + μ*S)^(1/4)
-
+    # second term: ⟨ 1/q * 1/(1 + μS) * ∂ξ(b)(-1) ⟩
+    dbdξ = ξDerivative(m, b)[:, 1]
     δ = @. sqrt(2*m.ν[:, 1]/abs(m.f))
-    q = @. 1/δ
-    
-    # approx
-    term2 = -m.f^2/q./m.ν[1, :]
+    μ = @. m.ν[:, 1]/m.κ[:, 1]
+    S = @. -1/m.f^2 * m.Hx*dbdξ
+    q = @. 1/δ * (1 + μ*S)^(1/4)
+    term2 = @. 1/q * 1/(1 + μ*S) * dbdξ
     term2 = sum(term2)/m.nξ
-    println(term2)
 
-    # less approx
-    χ_U_B = @. -exp(-q*m.H*(m.σ' + 1))*(cos(-q*m.H*(m.σ' + 1)) + sin(-q*m.H*(m.σ' + 1)))
-    integrand = @. m.f^2/m.ν*χ_U_B
-    term2 = zeros(m.nξ)
-    for i=1:m.nξ
-        # term2[i] = trapz(integrand[i, :], m.σ)*m.H[i]
-        term2[i] = trapz(m.f^2 ./(m.ν[i, :]).*χ_U_B[i, :], m.σ)*m.H[i]
-    end
-    term2 = sum(term2)/m.nξ
-    println(term2)
+    # third term: ⟨ f^2/q/ν(-1) * 1/(1 + μS) ⟩
+    term3 = @. m.f^2/q/m.ν[:, 1] * 1/(1 + μ*S)
+    term3 = sum(term3)/m.nξ
 
-    # truth
-    term2 = zeros(m.nξ)
-    for i=1:m.nξ
-        term2[i] = trapz(m.f^2 ./(m.ν[i, :]).*(m.χ_U[i, :] .- 1), m.σ)*m.H[i]
-    end
-    term2 = sum(term2)/m.nξ
-    println(term2)
-
-    ix = 32
-    plot(m.χ_U[ix, :], m.σ)
-    plot(1 .+ χ_U_B[ix, :], m.σ, "--")
-    ylim([-1, -0.9])
-    savefig("debug.png")
-
-    error()
-
-    return term1/term2
+    return (term1 + term2)/term3
 end
 
 """

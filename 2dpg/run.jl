@@ -24,8 +24,7 @@ function runRidge(; bl = false)
     # grids: even spacing in ξ and chebyshev in σ (unless bl)
     ξ = collect(0:L/nξ:(L - L/nξ))
     if bl
-        # σ = collect(-1:1/(nσ-1):0)
-        σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+        σ = collect(-1:1/(nσ-1):0)
     else
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
@@ -105,8 +104,7 @@ function runRidge(; bl = false)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    # evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
-    evolve!(m, s, 3*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
 
     return m, s
 end
