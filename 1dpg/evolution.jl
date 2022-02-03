@@ -62,11 +62,11 @@ function getEvolutionLHS(m::ModelSetup1DPG)
 end
 
 """
-    evolve!(m, s, tFinal, tSave; bl=bl)
+    evolve!(m, s, tFinal, tSave)
 
 Solve equation for `b` for `tFinal` seconds.
 """
-function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real; bl=false)
+function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real)
     # timestep
     nSteps = Int64(tFinal/m.Δt)
     nStepsSave = Int64(tSave/m.Δt)
@@ -82,17 +82,12 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
     # main loop
     t = m.Δt
     for i=1:nSteps
-        # impose tidally varying U
-        if m.Uamp > 0
-            m.U[1] = m.Uamp*sin(2*π*t/m.Uper)
-        end
-
         # right-hand side
         RHS = s.b + m.Δt*(1/2*m.D*s.b + m.κ_z*m.N2 - s.u*m.N2*tan(m.θ))
 
         # reset boundary conditions
-        if bl
-            RHS[1] = -m.N2/(1 + m.ν[1]/m.κ[1]*m.N2/m.f^2*tan(m.θ)^2)
+        if m.bl
+            RHS[1] = (m.U[1]*m.N2*tan(m.θ)/m.κ[1] - m.N2)/(1 + m.ν[1]/m.κ[1]*m.N2/m.f^2*tan(m.θ)^2)
         else
             RHS[1] = -m.N2
         end
@@ -102,7 +97,7 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
         s.b[:] = LHS\RHS
 
         # invert buoyancy for flow
-        invert!(m, s; bl=bl)
+        invert!(m, s)
 
         if i % nStepsSave == 0
             # log
@@ -110,12 +105,6 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
             
             # save
             saveState1DPG(s, iSave)
-
-            # # plot
-            # setupFile = string(outFolder, "setup.h5")
-            # stateFile = @sprintf("%sstate%d.h5", outFolder, iSave)
-            # imgFile = @sprintf("%sprofiles_%03d.png", outFolder, iSave)
-            # profilePlot(setupFile, stateFile, imgFile)
 
             # next
             iSave += 1

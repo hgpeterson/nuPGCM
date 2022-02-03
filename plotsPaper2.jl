@@ -7,7 +7,7 @@ pygui(false)
 include("myJuliaLib.jl")
 
 # for loading data
-include("1dtc_pg/setup.jl")
+include("1dpg/setup.jl")
 include("2dpg/setup.jl")
 
 # matplotlib

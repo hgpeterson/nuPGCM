@@ -11,25 +11,21 @@ plt.style.use("../plots.mplstyle")
 close("all")
 pygui(false)
 
-function run(; bl = false)
+function run(; bl=false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     N2 = 1e-6
     nz = 2^8
     H = 2e3
     # θ = 2.5e-3                 # ridge
-    # θ = atan(sqrt(1*f^2/N2))   # S = 1
     θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
-    # θ = atan(sqrt(0.1*f^2/N2))   # S = 0.1
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
     transportConstraint = true
     # transportConstraint = false
-    U = [0.0]
-    Uamp = 0.0
-    # Uamp = 1e-2
-    Uper = secsInDay/2
+    # U = [0.0]
+    U = [1e-2]
 
     # grid: chebyshev unless bl
     if bl
@@ -55,7 +51,7 @@ function run(; bl = false)
     # tSave = 20*secsInYear
     
     # create model struct
-    m = ModelSetup1DPG(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
+    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U)
 
     # save and log params
     saveSetup1DPG(m)
@@ -65,12 +61,10 @@ function run(; bl = false)
     χ, u, v = invert(m, b)
     i = [1]
     s = ModelState1DPG(b, χ, u, v, i)
-    # s = loadState1DPG(string(outFolder, "fullSim/state4.h5"))
-    # s.i[1] = 1
 
     # solve transient
-    evolve!(m, s, 15*secsInYear, tSave; bl=bl) 
-    # evolve!(m, s, 100*secsInYear, tSave; bl=bl) 
+    evolve!(m, s, 15*secsInYear, tSave) 
+    # evolve!(m, s, 100*secsInYear, tSave) 
     
     # solve steady state
     # steadyState(m)
@@ -82,7 +76,7 @@ end
 # run
 ################################################################################
 
-m, s = run()
+# m, s = run()
 # m, s = run(bl=true)
 
 ################################################################################
@@ -93,13 +87,5 @@ setupFile = string(outFolder, "setup.h5")
 # stateFiles = string.(outFolder, "state", -1:5, ".h5")
 stateFiles = string.(outFolder, "state", 0:5, ".h5")
 profilePlot(setupFile, stateFiles)
-
-# setupFile = string(outFolder, "setup.h5")
-# m = loadSetup1DPG(setupFile)
-# for i=1:96
-#     stateFile = @sprintf("%sstate%d.h5", outFolder, i)
-#     imgFile = @sprintf("%sprofiles_%03d.png", outFolder, i)
-#     profilePlot(m, stateFile, imgFile)
-# end
 
 println("Done.")

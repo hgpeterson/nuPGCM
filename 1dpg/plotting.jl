@@ -17,7 +17,7 @@ function profilePlot(setupFile::String, stateFiles::Vector{String})
     # insets
     axins21 = inset_locator.inset_axes(ax[2, 1], width="40%", height="40%")
 
-    ax[1, 1].set_xlabel(latexstring(L"stratification $\partial_z b$", "\n", L"(s$^{-2}$)"))
+    ax[1, 1].set_xlabel(latexstring(L"stratification $\partial_z b'$", "\n", L"(s$^{-2}$)"))
     ax[1, 1].set_ylabel(L"$z$ (km)")
 
     ax[1, 2].set_xlabel(latexstring(L"streamfunction $\chi$", "\n", L"(m$^2$ s$^{-1}$)"))
@@ -55,9 +55,6 @@ function profilePlot(setupFile::String, stateFiles::Vector{String})
         # load
         s = loadState1DPG(stateFiles[i])
 
-        # stratification
-        Bz = m.N2 .+ differentiate(s.b, m.z)
-
         # colors and labels
         if s.i[1] == -1
             # steady state
@@ -76,17 +73,34 @@ function profilePlot(setupFile::String, stateFiles::Vector{String})
             end
         end
 
-        # plot
-        ax[1, 1].plot(Bz,  m.z/1e3, c=color, label=label)
-        ax[1, 2].plot(s.χ, m.z/1e3, c=color, label=label)
-        ax[2, 1].plot(s.u, m.z/1e3, c=color, label=label)
-        ax[2, 2].plot(s.v, m.z/1e3, c=color, label=label)
-        axins21.plot(s.u,  m.z/1e3, c=color, label=label)
-    end
+        if m.bl
+            # compute bl correction
+            z = @. m.H*(1 - cos(pi*(0:m.nz-1)/(m.nz-1)))/2
+            χ, b = constructFullSolution(m, s, z)
 
-    # show tidal oscillation amplitude
-    if m.Uamp != 0.0
-        ax[1, 2].fill_betweenx([m.z[1]/1e3, 0], -m.Uamp, m.Uamp, color="k", alpha=0.2, lw=0)
+            # compute u, v, Bz
+            u = differentiate(χ, z)
+            q = get_q(m)
+            v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1])
+            Bz = m.N2 .+ differentiate(b, z)
+
+            # plot
+            ax[1, 1].plot(Bz, (z .- z[end])/1e3, c=color, label=label)
+            ax[1, 2].plot(χ,  (z .- z[end])/1e3, c=color, label=label)
+            ax[2, 1].plot(u,  (z .- z[end])/1e3, c=color, label=label)
+            ax[2, 2].plot(v,  (z .- z[end])/1e3, c=color, label=label)
+            axins21.plot(u,   (z .- z[end])/1e3, c=color, label=label)
+        else
+            # compute stratification
+            Bz = m.N2 .+ differentiate(s.b, m.z)
+
+            # plot
+            ax[1, 1].plot(Bz,  m.z/1e3, c=color, label=label)
+            ax[1, 2].plot(s.χ, m.z/1e3, c=color, label=label)
+            ax[2, 1].plot(s.u, m.z/1e3, c=color, label=label)
+            ax[2, 2].plot(s.v, m.z/1e3, c=color, label=label)
+            axins21.plot(s.u,  m.z/1e3, c=color, label=label)
+        end
     end
 
     ax[1, 2].legend()
@@ -122,19 +136,11 @@ function profilePlot(m::ModelSetup1DPG, stateFile::String, imgFile::String)
     axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
 
     # lims
-    # ax[1, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 4e2)/1e3]) # zoomed
     ax[1, 1].set_ylim([m.z[1]/1e3, 0])
     ax[1, 2].set_ylim([m.z[1]/1e3, 0])
     axins21.set_ylim([m.z[1]/1e3, 0])
     ax[2, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 2e2)/1e3]) # zoomed
     ax[2, 2].set_ylim([m.z[1]/1e3, 0])
-
-    # ax[1, 1].set_xlim([-0.1e-6, 0.5e-6])
-    ax[1, 1].set_xlim([-0.1e-6, 1.5e-6])
-    ax[1, 2].set_xlim([-1.1e-2, 3e-2])
-    ax[2, 1].set_xlim([-1.2e-3, 1.8e-3])
-    ax[2, 2].set_xlim([-2e-1, 1e-1])
-    axins21.set_xlim([-1e-4, 1e-4])
 
     # plot data from `stateFile`
     s = loadState1DPG(stateFile)
@@ -152,9 +158,6 @@ function profilePlot(m::ModelSetup1DPG, stateFile::String, imgFile::String)
     ax[2, 1].plot(s.u, m.z/1e3, c="k", label=label)
     ax[2, 2].plot(s.v, m.z/1e3, c="k", label=label)
     axins21.plot(s.u,  m.z/1e3, c="k", label=label)
-
-    # show tidal oscillation amplitude
-    ax[1, 2].fill_betweenx([m.z[1]/1e3, 0], -m.Uamp, m.Uamp, color="k", alpha=0.2, lw=0)
     
     ax[1, 1].legend()
 

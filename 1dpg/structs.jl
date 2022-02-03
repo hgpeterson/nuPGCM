@@ -22,6 +22,9 @@ struct ModelState1DPG
 end
 
 struct ModelSetup1DPG
+    # use BL model or full?
+    bl::Bool 
+
 	# Coriolis parameter (s-1)
 	f::Float64
 
@@ -63,10 +66,4 @@ struct ModelSetup1DPG
 
     # imposed transport (if transportConstraint == true)
     U::Vector{Float64}
-
-    # amplitude of tidal oscillations (can be zero for no tides)
-    Uamp::Float64
-
-    # period of tidal oscillations
-    Uper::Float64
 end

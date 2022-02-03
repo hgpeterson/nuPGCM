@@ -162,12 +162,12 @@ function postProcess(m, sol)
 end
 
 """
-    χ, u, v = invert(m, b; bl=bl)
+    χ, u, v = invert(m, b)
 
 Wrapper function that inverts for flow given buoyancy perturbation `b`.
 """
-function invert(m::ModelSetup1DPG, b::Array{Float64,1}; bl=false)
-    if bl # BL Solution
+function invert(m::ModelSetup1DPG, b::Array{Float64,1})
+    if m.bl # BL Solution
         bz = differentiate(b, m.z)
         sol = @. m.U - m.ν/m.f^2*bz*tan(m.θ) 
         push!(sol, sol[end])
@@ -184,8 +184,8 @@ function invert(m::ModelSetup1DPG, b::Array{Float64,1}; bl=false)
 
     return χ, u, v
 end
-function invert!(m::ModelSetup1DPG, s::ModelState1DPG; bl=false)
-    χ, u, v = invert(m, s.b; bl)
+function invert!(m::ModelSetup1DPG, s::ModelState1DPG)
+    χ, u, v = invert(m, s.b)
     s.χ[:] = χ
     s.u[:] = u
     s.v[:] = v
