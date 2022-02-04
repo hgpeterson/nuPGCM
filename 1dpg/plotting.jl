@@ -47,11 +47,13 @@ function profilePlot(setupFile::String, stateFiles::Vector{String})
     ax[1, 1].set_ylim([m.z[1]/1e3, 0])
     ax[1, 2].set_ylim([m.z[1]/1e3, 0])
     axins21.set_ylim([m.z[1]/1e3, 0])
-    ax[2, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 2e2)/1e3]) # zoomed
+    ax[2, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 1e2)/1e3]) # zoomed
     ax[2, 2].set_ylim([m.z[1]/1e3, 0])
+    # ax[2, 2].set_ylim([m.z[1]/1e3, (m.z[1] + 1e2)/1e3]) # zoomed
 
     # plot data from `stateFiles`
-    for i=1:size(stateFiles, 1)
+    # for i=1:size(stateFiles, 1)
+    for i=2:size(stateFiles, 1) # don't plot init cond
         # load
         s = loadState1DPG(stateFiles[i])
 
@@ -80,7 +82,7 @@ function profilePlot(setupFile::String, stateFiles::Vector{String})
 
             # compute u, v, Bz
             u = differentiate(χ, z)
-            q = get_q(m)
+            δ, μ, S, q = get_BL_params(m)
             v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1])
             Bz = m.N2 .+ differentiate(b, z)
 

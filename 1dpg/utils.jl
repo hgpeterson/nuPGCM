@@ -113,24 +113,30 @@ function loadState1DPG(filename::String)
 end
 
 """
-    χB = boundaryCorrection(χI, z, q)
+    χB = boundaryCorrection(m, χI, z)
 
 Compute BL correction to `χI` on grid `z`.
 """
-function boundaryCorrection(χI::Vector{Float64}, z::Vector{Float64}, q::Float64)
-    return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
+function boundaryCorrection(m::ModelSetup1DPG, χI::Vector{Float64}, z::Vector{Float64})
+    δ, μ, S, q = get_BL_params(m)
+    c1 = -m.U[1]/(1 + μ*S) - χI[1]
+    dχIdz = differentiate_pointwise(χI[1:3], z[1:3], z[1], 1)
+    c2 = c1 - dχIdz/q
+    return @. m.U[1]/(1 + μ*S) + exp(-q*z)*(c1*cos(q*z) + c2*sin(q*z))
 end
 
 """
-    q = get_q(m)
+    δ, μ, S, q = get_BL_params(m)
 
-Compute BL thickness `q`.
+Compute classical flat-bottom Ekman layer thickness `δ`,
+Prandtl number `μ`, slope Burger number `S`, and BL thickness `q`.
 """
-function get_q(m::ModelSetup1DPG)
-    S = m.N2/m.f^2*tan(m.θ)^2
+function get_BL_params(m::ModelSetup1DPG)
     δ = sqrt(2*m.ν[1]/abs(m.f))
     μ = m.ν[1]/m.κ[1]
-    return 1/δ * (1 + μ*S)^(1/4)
+    S = m.N2/m.f^2*tan(m.θ)^2
+    q = 1/δ * (1 + μ*S)^(1/4)
+    return δ, μ, S, q
 end
 
 """
@@ -149,8 +155,7 @@ function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{F
     bI_fine = Spline1D(m.z .- m.z[1], bI)(z)
 
     # BL correction
-    q = get_q(m)
-    χB = boundaryCorrection(χI_fine, z, q)
+    χB = boundaryCorrection(m, χI_fine, z)
     bB = cumtrapz(χB*m.N2*tan(m.θ)/m.κ[1], z) .- trapz(χB*m.N2*tan(m.θ)/m.κ[1], z)
 
     # full sol
