@@ -7,7 +7,7 @@ pygui(false)
 include("myJuliaLib.jl")
 
 # for loading data
-include("1dtc_pg/setup.jl")
+include("1dpg/setup.jl")
 include("2dpg/setup.jl")
 
 # for ridgePlot
@@ -20,15 +20,6 @@ inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 
 ### utility functions
-
-"""
-    χB = boundaryCorrection(χI, z, q)
-
-Compute BL correction to `χI` on grid `z`.
-"""
-function boundaryCorrection(χI::Vector{Float64}, z::Vector{Float64}, q::Float64)
-    return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
-end
 
 """
     U = BLtransport2D(m, s)

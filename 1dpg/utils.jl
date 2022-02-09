@@ -119,10 +119,7 @@ Compute BL correction to `χI` on grid `z`.
 """
 function boundaryCorrection(m::ModelSetup1DPG, χI::Vector{Float64}, z::Vector{Float64})
     δ, μ, S, q = get_BL_params(m)
-    c1 = -m.U[1]/(1 + μ*S) - χI[1]
-    dχIdz = differentiate_pointwise(χI[1:3], z[1:3], z[1], 1)
-    c2 = c1 - dχIdz/q
-    return @. m.U[1]/(1 + μ*S) + exp(-q*z)*(c1*cos(q*z) + c2*sin(q*z))
+    return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
 end
 
 """
