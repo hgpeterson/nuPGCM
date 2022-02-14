@@ -55,45 +55,50 @@ end
 
 function spinupProfilesAnimation(folder)
     # plot data from folder
+    m1dcan = loadSetup1DPG(string(folder, "1dcan/setup.h5"))
+    m1dtc = loadSetup1DPG(string(folder, "1dtc/setup.h5"))
+    m2d = loadSetup2DPG(string(folder, "2dpg/setup.h5"))
     for i=0:90
         # init plot
         fig, ax = subplots(1, 3, figsize=(6.5, 6.5/1.62/2), sharey=true)
 
         ax[1].set_ylabel(L"$z$ (km)")
 
-        ax[1].set_xlabel(string(L"streamfunction, $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-        ax[2].set_xlabel(string(L"along-ridge flow, $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-        ax[3].set_xlabel(string(L"stratification, $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+        ax[1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
+        ax[2].set_xlabel(string(L"along-slope flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+        ax[3].set_xlabel(string(L"stratification $\partial_z b$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
         ax[1].set_xlim([-5, 57])
         ax[2].set_xlim([-2.7, 1.4])
         ax[3].set_xlim([0, 1.3])
+        ax[1].set_ylim([-2, 0])
+        ax[2].set_ylim([-2, 0])
+        ax[3].set_ylim([-2, 0])
 
         # canonical 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dcan/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, label="canonical 1D")
-        ax[2].plot(1e2*c.v̂, c.ẑ*cos(c.θ)/1e3, label="canonical 1D")
-        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, label="canonical 1D")
+        s = loadState1DPG(string(folder, "1dcan/state", i, ".h5"))
+        bz = m1dcan.N2 .+ differentiate(s.b, m1dcan.z)
+        ax[1].plot(1e3*s.χ, m1dcan.z/1e3, label="canonical 1D")
+        ax[2].plot(1e2*s.v, m1dcan.z/1e3, label="canonical 1D")
+        ax[3].plot(1e6*bz,  m1dcan.z/1e3, label="canonical 1D")
 
         # transport-constrained 1D solution
-        c = loadCheckpoint1DTCPG(string(folder, "1dtc/checkpoint", i, ".h5"))
-        Bz = c.N^2*cos(c.θ) .+ differentiate(c.b, c.ẑ.*cos(c.θ))
-        ax[1].plot(1e3*c.χ, c.ẑ*cos(c.θ)/1e3, label="transport-\nconstrained 1D")
-        ax[2].plot(1e2*c.v̂,c.ẑ*cos(c.θ)/1e3, label="transport-\nconstrained 1D")
-        ax[3].plot(1e6*Bz,  c.ẑ*cos(c.θ)/1e3, label="transport-\nconstrained 1D")
+        s = loadState1DPG(string(folder, "1dtc/state", i, ".h5"))
+        bz = m1dtc.N2 .+ differentiate(s.b, m1dtc.z)
+        ax[1].plot(1e3*s.χ, m1dtc.z/1e3, label="transport-\nconstrained 1D")
+        ax[2].plot(1e2*s.v, m1dtc.z/1e3, label="transport-\nconstrained 1D")
+        ax[3].plot(1e6*bz,  m1dtc.z/1e3, label="transport-\nconstrained 1D")
         
         # 2D PG solution
-        m = loadSetup2DPG(string(folder, "2dpg/setup.h5"))
         s = loadState2DPG(string(folder, "2dpg/state", i, ".h5"))
-        ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+        ix = argmin(abs.(m2d.x[:, 1] .- m2d.L/4))
         v = s.uη
-        Bz = differentiate(s.b[ix, :], m.z[ix, :])
-        ax[1].plot(1e3*s.χ[ix, :], m.z[ix, :]/1e3, "k:", label="2D")
-        ax[2].plot(1e2*v[ix, :],   m.z[ix, :]/1e3, "k:", label="2D")
-        ax[3].plot(1e6*Bz,         m.z[ix, :]/1e3, "k:", label="2D")
+        bz = differentiate(s.b[ix, :], m2d.z[ix, :])
+        ax[1].plot(1e3*s.χ[ix, :], m2d.z[ix, :]/1e3, "k:", label="2D")
+        ax[2].plot(1e2*v[ix, :],   m2d.z[ix, :]/1e3, "k:", label="2D")
+        ax[3].plot(1e6*bz,         m2d.z[ix, :]/1e3, "k:", label="2D")
         
-        title = string(L"$t = $", Int64(round(c.t/86400/360)), " years")
+        title = string(L"$t = $", Int64(round(s.i[1]*m2d.Δt/secsInYear)), " years")
         ax[2].set_title(title)
         ax[3].legend(loc="upper left")
 
@@ -103,7 +108,21 @@ function spinupProfilesAnimation(folder)
         println(@sprintf("spinupProfiles%03d.png", i))
         plt.close()
     end
+end
 
+function v3yr(folder)
+    m = loadSetup2DPG(string(folder, "/const/full2D/setup.h5"))
+    s = loadState2DPG(string(folder, "/const/full2D/state1.h5"))
+
+    # compute v
+    u, v, w = transformFromTF(m, s)
+
+    ax = ridgePlot(m, s, 1e2*v, "", latexstring(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-2}$)"); style="pcolormesh")
+    ix = argmin(abs.(m.x[:, 1] .- m.L/4))
+    ax.plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
+    savefig("v3yr.pdf")
+    println("v3yr.pdf")
+    plt.close()
 end
 
 function px3yr(folder)
@@ -353,9 +372,10 @@ path = "../sims/"
 
 # spinupProfilesAnimation(string(path, "sim036/"))
 # chiProfile(string(path, "sim039"))
+v3yr(string(path, "sim037"))
 # px3yr(string(path, "sim037"))
 # chiI_and_chiB(string(path, "sim037"))
-seamountBL1DFail(string(path, "sim042/"))
+# seamountBL1DFail(string(path, "sim042/"))
 # seamountBL2DSuccess(string(path, "sim042/"))
 # chi3yrN2exp(string(path, "sim037"))
 # transportAndExchange(string(path, "sim037"))
