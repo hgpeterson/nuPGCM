@@ -33,7 +33,7 @@ U₀ = 0
 secsInDay = 86400
 secsInYear = 360*secsInDay
 Δt = secsInDay
-tSave = 10*secsInYear
+tSave = secsInYear
 
 """
     log(ofile, text)
