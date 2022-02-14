@@ -4,11 +4,11 @@ lines.markersize:      4.0
 
 hatch.linewidth:       0.5
 
-font.size:             8.0
+font.size:             6.0
 mathtext.cal:          sans
 mathtext.it:           sans: italic
 font.family:           sans-serif
-font.sans-serif:       TeX Gyre Heros, DejaVu Sans
+font.sans-serif:       DejaVu Sans
 
 axes.facecolor:        white
 axes.edgecolor:        black
@@ -44,7 +44,7 @@ grid.linestyle:        --
 
 legend.frameon:        false
 
-figure.figsize:        3.404, 2.101
+figure.figsize:        3.167, 1.955
 figure.facecolor:      white
 
 figure.subplot.left:   0.1

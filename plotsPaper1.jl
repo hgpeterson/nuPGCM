@@ -7,9 +7,8 @@ pygui(false)
 include("myJuliaLib.jl")
 
 # for loading data
-include("1dtc/utils.jl")
-include("1dtc_pg/setup.jl")
-include("1dtc_nondim/utils.jl")
+include("1d_nondim/utils.jl")
+include("1dpg/setup.jl")
 include("2dpg/setup.jl")
 include("rayleigh/2dpg/utils.jl")
 include("rayleigh/1dtc_pg/utils.jl")
