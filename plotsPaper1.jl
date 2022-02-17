@@ -75,8 +75,8 @@ function spinupRidgeAsym(folder)
     U = s.χ[1, end]
 
     # plot
-    ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax.annotate(string(L"$U =$", @sprintf("%1.1f", 1e4*U), L"$\times 10^{-4}$ m$^2$ s$^{1}$"), (0.05, 0.9), xycoords="axes fraction")
+    ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax.annotate(string(L"$U =$", @sprintf("%1.1f", 1e4*U), L"$\times 10^{-4}$ m$^2$ s$^{1}$"), (0.05, 0.9), size=7, xycoords="axes fraction")
     savefig("spinupRidgeAsym.pdf")
     println("spinupRidgeAsym.pdf")
     plt.close()
@@ -86,10 +86,10 @@ function spinupProfiles(folder; μ=1)
     ii = 1:5
 
     # init plot
-    fig, ax = subplots(2, 3, figsize=(27*pc, 27*pc), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
-    fig.text(0.05, 0.98, string(L"Canonical 1D ($\mu$ = ", μ, "):"),             size=7, ha="left", va="top")
-    fig.text(0.05, 0.52, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=7, ha="left", va="top")
+    fig.text(0.05, 0.97, string(L"Canonical 1D ($\mu$ = ", μ, "):"),             size=7, ha="left", va="top")
+    fig.text(0.05, 0.51, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=7, ha="left", va="top")
 
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
@@ -117,6 +117,10 @@ function spinupProfiles(folder; μ=1)
         ax[1, 3].set_xlim([0, 1.3])
         ax[2, 3].set_xlim([0, 1.3])
     end
+
+    # fixed y
+    ax[1, 1].set_ylim([-2, 0])
+    ax[2, 1].set_ylim([-2, 0])
 
     # setup file
     m2D = loadSetup2DPG(string(folder, "2dpg/mu", μ, "/setup.h5"))
@@ -162,11 +166,11 @@ function spinupProfiles(folder; μ=1)
     ax[1, 2].plot(1e2*s.v,  m.z/1e3, c="k")
     ax[1, 3].plot(1e6*Bz,   m.z/1e3, c="k")
 
-    ax[2, 3].legend(loc=(0.05, 0.3))
+    ax[2, 3].legend(loc="upper left")
     custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
                       lines.Line2D([0], [0], c="k", ls=":", lw="1")]
     custom_labels = ["steady state", L"2D $\nu$PGCM"]
-    ax[1, 3].legend(custom_handles, custom_labels, loc=(0.05, 0.72))
+    ax[1, 3].legend(custom_handles, custom_labels, loc="upper left")
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -175,7 +179,7 @@ function spinupProfiles(folder; μ=1)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+    subplots_adjust(hspace=0.4)
     savefig(string("spinupProfilesMu", μ, ".pdf"))
     println(string("spinupProfilesMu", μ, ".pdf"))
     plt.close()
@@ -183,11 +187,11 @@ end
 
 function spindownProfiles(folder; ratio=nothing)
     # init plot
-    fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
     c = loadCheckpoint1DTCNondim(string(folder, "/tc/checkpoint1.h5"))
-    fig.text(0.05, 0.98, string(L"Canonical 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
-    fig.text(0.05, 0.52, string(L"Transport-Constrained 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top")
+    fig.text(0.05, 0.97, string(L"Canonical 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"),             ha="left", va="top", size=7)
+    fig.text(0.05, 0.51, string(L"Transport-Constrained 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top", size=7)
 
     ax[1, 1].set_ylabel(L"$\tilde{z}$")
     ax[2, 1].set_ylabel(L"$\tilde{z}$")
@@ -249,7 +253,7 @@ function spindownProfiles(folder; ratio=nothing)
         end
     end
 
-    ax[2, 3].legend(loc=(0.05, 0.05))
+    ax[1, 3].legend(loc="upper left")
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -264,7 +268,7 @@ function spindownProfiles(folder; ratio=nothing)
         ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.48, 0.1), xytext=(0.2, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     end
 
-    subplots_adjust(left=0.1, right=0.95, bottom=0.15, top=0.9, wspace=0.1, hspace=0.6)
+    subplots_adjust(hspace=0.4)
     if ratio !== nothing
         savefig(string("spindownProfilesRatio", ratio, ".pdf"))
         println(string("spindownProfilesRatio", ratio, ".pdf"))
@@ -292,7 +296,7 @@ function spindownGrid(folder)
     aspect = log(τ_As[end]/τ_As[1])/log(τ_Ss[end]/τ_Ss[1])
 
     # plot grid
-    fig, ax = subplots(1, 2, figsize=(3.404, 3), sharey=true)
+    fig, ax = subplots(1, 2, figsize=(19*pc, 14*pc), sharey=true)
     ax[1].set_box_aspect(aspect)
     ax[1].set_xlabel(L"spin-down time $\tilde{\tau}_S$")
     ax[1].set_ylabel(L"arrest time $\tilde{\tau}_A$")
@@ -324,17 +328,18 @@ function spindownGrid(folder)
     ax[1].annotate(L"(a) $\tilde t = 5\tilde\tau_A$", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate(L"(b) $\tilde t = 5\tilde\tau_S$", (-0.04, 1.05), xycoords="axes fraction")
     
-    subplots_adjust(left=0.15, right=0.85, bottom=0.35, top=0.9, wspace=0.2, hspace=0.6)
+    subplots_adjust(bottom=0.35, wspace=-0.2)
 
     savefig("spindownGrid.pdf")
     println("spindownGrid.pdf")
+    plt.close()
 end
 
 function spinupProfilesPGvsFull(folder)
     tDays = 1000:1000:5000
     
     # init plot
-    fig, ax = subplots(1, 3, figsize=(6.5, 1.9), sharey=true)
+    fig, ax = subplots(1, 3, figsize=(27*pc, 13*pc), sharey=true)
 
     axins1 = inset_locator.inset_axes(ax[1], width="60%", height="60%")
 
@@ -355,6 +360,10 @@ function spinupProfilesPGvsFull(folder)
 
     # fixed y
     axins1.set_ylim([-1, -0.9])
+    ax[1].set_ylim([-1, 0.0])
+
+    # yticks
+    axins1.set_yticks([-1, -0.95, -0.9])
 
     # plot data from folder
     for i=1:size(tDays, 1)
@@ -401,10 +410,10 @@ path = "../sims/"
 # sketchRidge() 
 # sketchSlope() 
 # spinupRidge(string(path, "sim037/"))
+# spinupRidgeAsym(string(path, "sim040/")) 
 # spinupProfiles(string(path, "sim039/"); μ=1)
 # spinupProfiles(string(path, "sim039/"); μ=200)
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
 # spindownGrid(string(path, "sim033/")) 
-# spinupRidgeAsym(string(path, "sim040/")) 
 spinupProfilesPGvsFull(string(path, "sim025/"))
