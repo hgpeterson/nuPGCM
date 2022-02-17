@@ -279,3 +279,49 @@ function loadState2DPG(filename::String)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
     return s
 end
+
+"""
+    δ, μ, S, q = get_BL_params(m)
+
+Compute classical flat-bottom Ekman layer thickness `δ`,
+Prandtl number `μ`, slope Burger number `S`, and BL thickness `q`.
+"""
+function get_BL_params(m::ModelSetup1DPG)
+    δ = sqrt(2*m.ν[1]/abs(m.f))
+    μ = m.ν[1]/m.κ[1]
+    S = m.N2/m.f^2*tan(m.θ)^2
+    q = 1/δ * (1 + μ*S)^(1/4)
+    return δ, μ, S, q
+end
+
+"""
+    χ, b = constructFullSolution(m, s, z, ix)
+
+Construct full solutions `χ` = χI + χB and `b` = bI + bB at ξ = ξ[ix] from BL theory.
+The full solutions exist on the new grid `z`.
+"""
+function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64}, ix::Int64)
+    # interior vars
+    bI = s.b[ix, :]
+    χI = s.χ[ix, :]
+
+    # BL thickness 
+    bIξ = ξDerivative(m, s.b)
+    δ = sqrt(2*m.ν[ix, 1]/abs(m.f))
+    μ = m.ν[ix, 1]/m.κ[ix, 1]
+    S = -1/m.f^2 * m.Hx[ix]*bIξ[ix, 1]
+    q = 1/δ * (1 + μ*S)^(1/4)
+
+    # interpolate onto new grid 
+    χI_fine = Spline1D(m.z[ix, :] .- m.z[ix, 1], χI)(z)
+    bI_fine = Spline1D(m.z[ix, :] .- m.z[ix, 1], bI)(z)
+
+    # BL correction
+    χB = @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
+    bB = cumtrapz(χB*bIξ[ix, 1]/m.κ[ix, 1], z) .- trapz(χB*bIξ[ix, 1]/m.κ[ix, 1], z) 
+
+    # full sol
+    χ = χI_fine + χB
+    b = bI_fine + bB
+    return χ, b
+end
