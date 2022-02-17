@@ -29,12 +29,12 @@ function runRidge(; bl = false)
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
     
-    # # topography: sine
-    # global symmetry = true
-    # H0 = 2e3
-    # amp = 0.4*H0
-    # H_func(x) = H0 + amp*cos(2*π*x/L)
-    # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    # topography: sine
+    global symmetry = true
+    H0 = 2e3
+    amp = 0.4*H0
+    H_func(x) = H0 + amp*cos(2*π*x/L)
+    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
 
     # # topography: skew gaussian
     # global symmetry = false
@@ -48,23 +48,23 @@ function runRidge(; bl = false)
     # H_func(x) = H0 - amp*ϕ((x - m)/ω)*Φ(α*(x - m)/ω) 
     # Hx_func(x) = -amp/ω*(α/sqrt(2π)*ϕ(α*(x - m)/ω)*ϕ((x - m)/ω) - (x - m)/ω*ϕ((x - m)/ω)*Φ(α*(x - m)/ω)) 
 
-    # topography: bump
-    global symmetry = false
-    H0 = 2.5e3 
-    amp = 1.5e3
-    wid = L/4
-    function bump(s)
-        if abs(s) >= 1
-            return 0
-        else
-            return exp(1 - 1/(1 - s^2)) 
-        end
-    end
-    ∂bump(s) = -2*s/(1 - s^2)^2*bump(s)
-    skewBump(s) = (s + 1)*bump(s)
-    ∂skewBump(s) = bump(s) + (s + 1)*∂bump(s)
-    H_func(x) = H0 - amp*skewBump((x - L/2)/wid)
-    Hx_func(x) = -amp/wid*∂skewBump((x - L/2)/wid)
+    # # topography: bump
+    # global symmetry = false
+    # H0 = 2.5e3 
+    # amp = 1.5e3
+    # wid = L/4
+    # function bump(s)
+    #     if abs(s) >= 1
+    #         return 0
+    #     else
+    #         return exp(1 - 1/(1 - s^2)) 
+    #     end
+    # end
+    # ∂bump(s) = -2*s/(1 - s^2)^2*bump(s)
+    # skewBump(s) = (s + 1)*bump(s)
+    # ∂skewBump(s) = bump(s) + (s + 1)*∂bump(s)
+    # H_func(x) = H0 - amp*skewBump((x - L/2)/wid)
+    # Hx_func(x) = -amp/wid*∂skewBump((x - L/2)/wid)
 
     # diffusivity
     κ0 = 6e-5
@@ -86,7 +86,8 @@ function runRidge(; bl = false)
     # timestepping
     Δt = 10*secsInDay
     tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    # tSave = 3*secsInYear
+    tSave = 60*secsInDay
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -183,8 +184,8 @@ function runSeamount(; bl = false)
     return m, s
 end
 
-# m, s = runRidge()
-m, s = runRidge(; bl=true)
+m, s = runRidge()
+# m, s = runRidge(; bl=true)
 # m, s = runSeamount()
 # m, s = runSeamount(; bl=true)
 
