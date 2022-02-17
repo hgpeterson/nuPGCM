@@ -116,7 +116,7 @@ function steadyState(m::ModelSetup1DPG)
     U = trapz(u, m.z)
 
     # save data
-    s = ModelState1DPG(b, χ, u, v, [U], [-1])
+    s = ModelState1DPG(b, χ, u, v, [-1])
     saveState1DPG(s, -1)
 
     return s

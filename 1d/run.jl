@@ -16,13 +16,15 @@ function run()
     f = -5.5e-5
     N2 = 1e-6
     nz = 2^8
-    H = 2e3
-    θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
+    # H = 2e3
+    H = 1e3
+    θ = 2.5e-3
+    # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     transportConstraint = true
     U = [0.0]
-    # Uamp = 0.0
-    Uamp = 1e0
+    Uamp = 0.0
+    # Uamp = 1e0
     Uper = secsInDay/2
 
     # grid: chebyshev
@@ -40,9 +42,11 @@ function run()
     ν_func(z) = μ*κ_func(z)
     
     # timestepping
-    Δt = secsInDay/8
+    # Δt = secsInDay/8
+    Δt = 1*secsInDay
+    tSave = 1000*secsInDay
     # tSave = 3*secsInYear
-    tSave = Δt
+    # tSave = Δt
     
     # create model struct
     m = ModelSetup1D(f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
@@ -59,8 +63,9 @@ function run()
     s = ModelState1D(b, u, v, ∂ₓP, i)
 
     # solve transient
+    evolve!(m, s, 5000*secsInDay, tSave)
     # evolve!(m, s, 15*secsInYear, tSave)
-    evolve!(m, s, 100*Δt, tSave)
+    # evolve!(m, s, 100*Δt, tSave)
     
     # solve steady state
     # steadyState(m)
@@ -82,13 +87,5 @@ m, s = run()
 # # stateFiles = string.(outFolder, "state", -1:5, ".h5")
 # stateFiles = string.(outFolder, "state", 0:5, ".h5")
 # profilePlot(setupFile, stateFiles)
-
-# setupFile = string(outFolder, "setup.h5")
-# m = loadSetup1DPG(setupFile)
-# for i=1:96
-#     stateFile = @sprintf("%sstate%d.h5", outFolder, i)
-#     imgFile = @sprintf("%sprofiles_%03d.png", outFolder, i)
-#     profilePlot(m, stateFile, imgFile)
-# end
 
 println("Done.")

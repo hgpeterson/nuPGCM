@@ -16,12 +16,13 @@ function run(; bl=false)
     f = -5.5e-5
     N2 = 1e-6
     nz = 2^8
-    H = 2e3
-    # θ = 2.5e-3                 # ridge
+    # H = 2e3
+    H = 1e3
+    θ = 2.5e-3                 # ridge
     # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
-    H = 3673.32793219601       # seamount
-    θ = -0.03639128788776821   # seamount
+    # H = 3673.32793219601       # seamount
+    # θ = -0.03639128788776821   # seamount
     transportConstraint = true
     # transportConstraint = false
     U = [0.0]
@@ -46,9 +47,11 @@ function run(; bl=false)
     ν_func(z) = μ*κ_func(z)
     
     # timestepping
-    Δt = 1*secsInDay
+    # Δt = 1*secsInDay
+    Δt = 10*secsInDay
+    tSave = 1000*secsInDay
     # tSave = 3*secsInYear
-    tSave = 20*secsInYear
+    # tSave = 20*secsInYear
     
     # create model struct
     m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U)
@@ -63,8 +66,9 @@ function run(; bl=false)
     s = ModelState1DPG(b, χ, u, v, i)
 
     # solve transient
+    evolve!(m, s, 5000*secsInDay, tSave) 
     # evolve!(m, s, 15*secsInYear, tSave) 
-    evolve!(m, s, 100*secsInYear, tSave) 
+    # evolve!(m, s, 100*secsInYear, tSave) 
     
     # solve steady state
     # steadyState(m)
@@ -76,8 +80,8 @@ end
 # run
 ################################################################################
 
-# m, s = run()
-m, s = run(bl=true)
+m, s = run()
+# m, s = run(bl=true)
 
 ################################################################################
 # plots
