@@ -17,6 +17,7 @@ Optional:
     - provide `ax`
     - set the vmin/vmax manually with `vext`
     - set different colormap `cmap`
+    - set `style` as either "contour" or "pcolormesh"
     - set colorbar orientation with `cb_orientation`
     - set xlabel with `xlabel`
 """
