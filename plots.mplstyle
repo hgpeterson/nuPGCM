@@ -5,10 +5,9 @@ lines.markersize:      4.0
 hatch.linewidth:       0.5
 
 font.size:             6.0
-mathtext.cal:          sans
-mathtext.it:           sans: italic
 font.family:           sans-serif
-font.sans-serif:       DejaVu Sans
+font.sans-serif:       TeX Gyre Heros
+mathtext.fontset:      stixsans
 
 axes.facecolor:        white
 axes.edgecolor:        black

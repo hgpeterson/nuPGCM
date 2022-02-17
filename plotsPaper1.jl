@@ -16,6 +16,7 @@ pl = pyimport("matplotlib.pylab")
 pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
+pc = 1/6 # a pica is 1/6th of an inch
 
 function sketchRidge()
     fig, ax = subplots(1)
@@ -25,7 +26,6 @@ function sketchRidge()
     ax.set_ylim([minimum(z)/1000, 0])
     ax.set_xticks([])
     ax.set_yticks([])
-    tight_layout()
     savefig("sketchRidge.svg")
     println("sketchRidge.svg")
 end
@@ -41,7 +41,6 @@ function sketchSlope()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([])
     ax.set_yticks([])
-    tight_layout()
     savefig("sketchSlope.svg")
     println("sketchSlope.svg")
 end
@@ -53,15 +52,15 @@ function spinupRidge(folder)
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
 
     # plot
-    fig, ax = subplots(1, 2, figsize=(6.5, 6.5/1.62/2), sharey=true)
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
-    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
+    fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
+    ridgePlot(m, s, 1e3*s.χ,  "", string(L"streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1])
+    ridgePlot(m, s, 1e2*s.uη, "", string(L"along-ridge flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh")
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
-    tight_layout()
+
     savefig("spinupRidge.pdf")
     println("spinupRidge.pdf")
     plt.close()
@@ -86,10 +85,10 @@ function spinupProfiles(folder; μ=1)
     ii = 1:5
 
     # init plot
-    fig, ax = subplots(2, 3, figsize=(6.5, 4), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(27*pc, 27*pc), sharey=true)
 
-    fig.text(0.05, 0.98, string(L"Canonical 1D ($\mu$ = ", μ, "):"), ha="left", va="top")
-    fig.text(0.05, 0.52, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), ha="left", va="top")
+    fig.text(0.05, 0.98, string(L"Canonical 1D ($\mu$ = ", μ, "):"),             size=7, ha="left", va="top")
+    fig.text(0.05, 0.52, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=7, ha="left", va="top")
 
     ax[1, 1].set_ylabel(L"$z$ (km)")
     ax[2, 1].set_ylabel(L"$z$ (km)")
@@ -400,9 +399,9 @@ path = "../sims/"
 
 # sketchRidge() 
 # sketchSlope() 
-spinupRidge(string(path, "sim037/"))
-# spinupProfiles(string(path, "sim039/"); μ=1)
-# spinupProfiles(string(path, "sim039/"); μ=200)
+# spinupRidge(string(path, "sim037/"))
+spinupProfiles(string(path, "sim039/"); μ=1)
+spinupProfiles(string(path, "sim039/"); μ=200)
 # spinupProfilesRayleigh(string(path, "sim027/const/")) 
 # spinupProfilesRayleigh(string(path, "sim027/bi/"))
 # spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
