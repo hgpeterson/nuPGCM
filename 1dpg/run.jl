@@ -18,14 +18,14 @@ function run(; bl=false)
     nz = 2^8
     H = 2e3
     # θ = 2.5e-3                 # ridge
-    θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
+    # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
-    # H = 3673.32793219601       # seamount
-    # θ = -0.03639128788776821   # seamount
+    H = 3673.32793219601       # seamount
+    θ = -0.03639128788776821   # seamount
     transportConstraint = true
     # transportConstraint = false
-    # U = [0.0]
-    U = [1e-2]
+    U = [0.0]
+    # U = [1e-2]
 
     # grid: chebyshev unless bl
     if bl
@@ -47,8 +47,8 @@ function run(; bl=false)
     
     # timestepping
     Δt = 1*secsInDay
-    tSave = 3*secsInYear
-    # tSave = 20*secsInYear
+    # tSave = 3*secsInYear
+    tSave = 20*secsInYear
     
     # create model struct
     m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U)
@@ -63,8 +63,8 @@ function run(; bl=false)
     s = ModelState1DPG(b, χ, u, v, i)
 
     # solve transient
-    evolve!(m, s, 15*secsInYear, tSave) 
-    # evolve!(m, s, 100*secsInYear, tSave) 
+    # evolve!(m, s, 15*secsInYear, tSave) 
+    evolve!(m, s, 100*secsInYear, tSave) 
     
     # solve steady state
     # steadyState(m)
@@ -83,9 +83,9 @@ m, s = run(bl=true)
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-# stateFiles = string.(outFolder, "state", -1:5, ".h5")
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
-profilePlot(setupFile, stateFiles)
+# setupFile = string(outFolder, "setup.h5")
+# # stateFiles = string.(outFolder, "state", -1:5, ".h5")
+# stateFiles = string.(outFolder, "state", 0:5, ".h5")
+# profilePlot(setupFile, stateFiles)
 
 println("Done.")
