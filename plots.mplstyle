@@ -4,10 +4,10 @@ lines.markersize:      4.0
 
 hatch.linewidth:       0.5
 
-font.size:             6.0
-font.family:           sans-serif
-font.sans-serif:       TeX Gyre Heros
-mathtext.fontset:      stixsans
+font.size:             7.0
+font.family: serif
+font.serif: stix
+mathtext.fontset: stix
 
 axes.facecolor:        white
 axes.edgecolor:        black
@@ -27,7 +27,7 @@ xtick.major.size:      3.0
 xtick.minor.size:      1.5
 xtick.major.width:     0.5
 xtick.minor.width:     0.5
-xtick.direction:       in
+xtick.direction:       out
 
 ytick.color:           black
 ytick.left:            True
@@ -35,7 +35,7 @@ ytick.major.size:      3.0
 ytick.minor.size:      1.5
 ytick.major.width:     0.5
 ytick.minor.width:     0.5
-ytick.direction:       in
+ytick.direction:       out
 
 grid.color:            0.7
 grid.linewidth:        0.5

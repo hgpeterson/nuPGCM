@@ -59,7 +59,7 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         levels = range(vmin, vmax, length=8)
         ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-        cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation)
+        cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend)
     elseif style == "pcolormesh"
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation)
@@ -82,11 +82,11 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
     # labels
     ax.set_title(titleString)
     if xlabel === nothing
-        ax.set_xlabel(L"$x$ (km)")
+        ax.set_xlabel(L"Horizontal Coordinate $x$ (km)")
     else
         ax.set_xlabel(xlabel)
     end
-    ax.set_ylabel(L"$z$ (km)")
+    ax.set_ylabel(L"Vertical Coordinate $z$ (km)")
     ax.set_xlim([0, m.L/1e3])
 
     # no spines
