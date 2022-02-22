@@ -20,11 +20,12 @@ Optional:
     - set `style` as either "contour" or "pcolormesh"
     - set colorbar orientation with `cb_orientation`
     - set xlabel with `xlabel`
+    - set colorbar pad with `pad`
 """
 function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
                 titleString::AbstractString, cbarLabel::AbstractString; 
                 ax=nothing, vext=nothing, cmap="RdBu_r", style="contour",
-                cb_orientation="vertical", xlabel=nothing)
+                cb_orientation="vertical", xlabel=nothing, pad=nothing)
     # km
     xx = m.x/1000
     zz = m.z/1000
@@ -59,10 +60,18 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         levels = range(vmin, vmax, length=8)
         ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-        cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend)
+        if pad === nothing
+            cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend)
+        else
+            cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend, pad=pad)
+        end
     elseif style == "pcolormesh"
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
-        cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation)
+        if pad === nothing
+            cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation)
+        else
+            cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation, pad=pad)
+        end
         cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     else
         error("Unkown style: ", style)
