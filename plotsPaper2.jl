@@ -16,6 +16,7 @@ pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 gridspec = pyimport("matplotlib.gridspec")
+pc = 1/6 # a pica is 1/6th of an inch
 
 ### utility functions
 
@@ -68,9 +69,9 @@ end
 function BLCorrection(folder)
     fig, ax = subplots(1, 2)
     
-    ax[1].set_xlabel(L"streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
+    ax[1].set_xlabel(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
     ax[1].xaxis.set_label_coords(1.0, -0.15)
-    ax[1].set_ylabel(L"$z$ (km)")
+    ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
 
     m = loadSetup1DPG(string(folder,     "S1e-3/bl/setup.h5"))
     mFull = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
@@ -83,14 +84,15 @@ function BLCorrection(folder)
 
     # plot
     ax[1].plot(1e3*χ,  z/1e3, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
-    ax[1].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=2, label=L"\chi_\mathrm{I}")
+    ax[1].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=1.5, label=L"\chi_\mathrm{I}")
     ax[2].plot(1e3*χ,  z/1e3, "-",  lw=2, label=L"$\chi_\mathrm{I} + \chi_\mathrm{B}$")
-    ax[2].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=2, label=L"\chi_\mathrm{I}")
-    ax[1].fill_between([-0.1, 1.8], 0, 0.1, color="k", alpha=0.3, lw=0)
+    ax[2].plot(1e3*χI, (m.z .- m.z[1])/1e3, "--", lw=1.5, label=L"\chi_\mathrm{I}")
+    ax[1].fill_between([-10, 10], 0, 0.1, color="k", alpha=0.3, lw=0)
 
     # lims
-    ax[1].set_xlim([-0.1, 1.3])
-    ax[2].set_xlim([-0.1, 1.3])
+    ax[1].set_xlim([-0.5, 1.3])
+    ax[1].set_xticks(-0.5:0.5:1)
+    ax[2].set_xlim([0, 1.3])
     ax[1].set_ylim([0, 2.0])
     ax[2].set_ylim([0, 0.1])
     ax[1].set_yticks(0:0.5:2)
@@ -99,7 +101,7 @@ function BLCorrection(folder)
     ax[1].legend()
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2].annotate("interior", (0.2, 0.8), xycoords="axes fraction")
+    ax[2].annotate("Interior", (0.2, 0.8), xycoords="axes fraction")
     ax[2].annotate("BL",       (0.1, 0.1), xycoords="axes fraction")
 
     subplots_adjust(wspace=0.3)
@@ -111,16 +113,16 @@ end
 
 function slopeFull1DvsBL1D(folder)
     # init plot
-    fig, ax = subplots(2, 3, figsize=(4, 4), sharey=true)
+    fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
     axins11 = inset_locator.inset_axes(ax[1, 1], width="50%", height="50%")
     axins21 = inset_locator.inset_axes(ax[2, 1], width="50%", height="50%")
 
-    ax[1, 1].set_ylabel(L"$z$ (km)")
-    ax[2, 1].set_ylabel(L"$z$ (km)")
-    ax[2, 1].set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"along-slope flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
-    ax[2, 3].set_xlabel(string(L"stratification $N^2 + \partial_z b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
+    ax[1, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[2, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[2, 1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"Along-Slope Flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2, 3].set_xlabel(string(L"Stratification $N^2 + \partial_z b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
@@ -129,16 +131,20 @@ function slopeFull1DvsBL1D(folder)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    fig.text(0.05, 0.98, L"$S = 10^{-3}$:", ha="left", va="top", size=7)
-    fig.text(0.05, 0.50, L"$S = 0.5$:",     ha="left", va="top", size=7)
+    fig.text(0.05, 0.97, L"$S = 10^{-3}$:", ha="left", va="top", size=8)
+    fig.text(0.05, 0.51, L"$S = 0.5$:",     ha="left", va="top", size=8)
 
     subplots_adjust(hspace=0.5)
 
     # limits
     ax[1, 1].set_xlim([-0.05, 1.2])
+    axins11.set_xlim([0, 1.2])
     ax[2, 1].set_xlim([-0.7, 18])
-    ax[1, 2].set_xlim([-1.6, 0.1])
-    ax[2, 2].set_xlim([-26.5, 2])
+    axins21.set_xlim([0, 18])
+    ax[1, 2].set_xlim([-2, 0.5])
+    ax[1, 2].set_xticks(-2:1:0)
+    ax[2, 2].set_xlim([-30, 5])
+    ax[2, 2].set_xticks(-30:10:0)
     ax[1, 3].set_xlim([0, 1.3])
     ax[2, 3].set_xlim([0, 1.3])
     ax[1, 1].set_ylim([0, 2])
@@ -167,10 +173,10 @@ function slopeFull1DvsBL1D(folder)
         v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
         Bz = m.N2 .+ differentiate(b, z)
         label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
-        ax[1, 1].plot(1e3*χ,   z/1e3, c=color, label=label)
+        ax[1, 1].plot(1e3*χ,  z/1e3, c=color, label=label)
         axins11.plot(1e3*χ,   z/1e3, c=color, label=label)
-        ax[1, 2].plot(1e2*v,   z/1e3, c=color, label=label)
-        ax[1, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
+        ax[1, 2].plot(1e2*v,  z/1e3, c=color, label=label)
+        ax[1, 3].plot(1e6*Bz, z/1e3, c=color, label=label)
 
         # full 1D small S
         m = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
@@ -178,10 +184,10 @@ function slopeFull1DvsBL1D(folder)
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
-        ax[1, 1].plot(1e3*χ,   z/1e3, "k:")
-        axins11.plot(1e3*χ,   z/1e3, "k:")
-        ax[1, 2].plot(1e2*v,   z/1e3, "k:")
-        ax[1, 3].plot(1e6*Bz,  z/1e3, "k:")
+        ax[1, 1].plot(1e3*χ,  z/1e3, "k--", lw=0.5)
+        axins11.plot(1e3*χ,   z/1e3, "k--", lw=0.5)
+        ax[1, 2].plot(1e2*v,  z/1e3, "k--", lw=0.5)
+        ax[1, 3].plot(1e6*Bz, z/1e3, "k--", lw=0.5)
 
         # BL 1D big S
         m = loadSetup1DPG(string(folder,     "S5e-1/bl/setup.h5"))
@@ -203,15 +209,15 @@ function slopeFull1DvsBL1D(folder)
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
-        ax[2, 1].plot(1e3*χ,   z/1e3, "k:")
-        axins21.plot(1e3*χ,   z/1e3, "k:")
-        ax[2, 2].plot(1e2*v,   z/1e3, "k:")
-        ax[2, 3].plot(1e6*Bz,  z/1e3, "k:")
+        ax[2, 1].plot(1e3*χ,  z/1e3, "k--", lw=0.5)
+        axins21.plot(1e3*χ,   z/1e3, "k--", lw=0.5)
+        ax[2, 2].plot(1e2*v,  z/1e3, "k--", lw=0.5)
+        ax[2, 3].plot(1e6*Bz, z/1e3, "k--", lw=0.5)
     end
 
-    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw="1"),
-                      lines.Line2D([0], [0], c="k", ls=":", lw="1")]
-    custom_labels = ["BL 1D", "full 1D"]
+    custom_handles = [lines.Line2D([0], [0], c="k", ls="-", lw=1),
+                      lines.Line2D([0], [0], c="k", ls="--", lw=0.5)]
+    custom_labels = ["BL 1D", "Full 1D"]
     ax[1, 2].legend(custom_handles, custom_labels, loc=(0.55, 0.72))
     ax[1, 3].legend(loc="upper left")
     
@@ -304,8 +310,8 @@ function seamountFull2DvsBL(folder)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    fig.text(0.05, 0.98, "BL 1D:", ha="left", va="top", size=7)
-    fig.text(0.05, 0.50, "BL 2D:", ha="left", va="top", size=7)
+    fig.text(0.05, 0.98, "BL 1D:", ha="left", va="top", size=8)
+    fig.text(0.05, 0.50, "BL 2D:", ha="left", va="top", size=8)
 
     subplots_adjust(hspace=0.5)
 
@@ -500,9 +506,9 @@ end
 path = "../sims/"
 
 # BLCorrection(string(path, "sim044/"))
-# slopeFull1DvsBL1D(string(path, "sim044/"))
+slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
 # seamount(string(path, "sim035/"))
 # seamountFull2DvsBL(string(path, "sim042/"))
-ridgeN2exp(string(path, "sim037/"))
+# ridgeN2exp(string(path, "sim037/"))
 # pq()

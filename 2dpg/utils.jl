@@ -281,20 +281,6 @@ function loadState2DPG(filename::String)
 end
 
 """
-    δ, μ, S, q = get_BL_params(m)
-
-Compute classical flat-bottom Ekman layer thickness `δ`,
-Prandtl number `μ`, slope Burger number `S`, and BL thickness `q`.
-"""
-function get_BL_params(m::ModelSetup1DPG)
-    δ = sqrt(2*m.ν[1]/abs(m.f))
-    μ = m.ν[1]/m.κ[1]
-    S = m.N2/m.f^2*tan(m.θ)^2
-    q = 1/δ * (1 + μ*S)^(1/4)
-    return δ, μ, S, q
-end
-
-"""
     χ, b = constructFullSolution(m, s, z, ix)
 
 Construct full solutions `χ` = χI + χB and `b` = bI + bB at ξ = ξ[ix] from BL theory.
