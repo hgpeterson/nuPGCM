@@ -71,7 +71,7 @@ function BLCorrection(folder)
     
     ax[1].set_xlabel(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
     ax[1].xaxis.set_label_coords(1.0, -0.15)
-    ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     m = loadSetup1DPG(string(folder,     "S1e-3/bl/setup.h5"))
     mFull = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
@@ -118,10 +118,10 @@ function slopeFull1DvsBL1D(folder)
     axins11 = inset_locator.inset_axes(ax[1, 1], width="50%", height="50%")
     axins21 = inset_locator.inset_axes(ax[2, 1], width="50%", height="50%")
 
-    ax[1, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-    ax[2, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
     ax[2, 1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"Along-Slope Flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"Along-slope flow $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
     ax[2, 3].set_xlabel(string(L"Stratification $N^2 + \partial_z b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -274,9 +274,9 @@ function seamount(folder)
     s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, 1e2*s.χ, "", string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); 
-        ax=ax[1], cb_orientation="horizontal", xlabel=L"Horizontal Coordinate $r$ (km)", pad=0.2, vext=2.0)
-    ridgePlot(m, s, 1e1*s.uη, "", string(L"Along-Slope Flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); 
-        ax=ax[2], style="pcolormesh", cb_orientation="horizontal", xlabel=L"Horizontal Coordinate $r$ (km)", pad=0.2, vext=2.0)
+        ax=ax[1], cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.0)
+    ridgePlot(m, s, 1e1*s.uη, "", string(L"Along-slope flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); 
+        ax=ax[2], style="pcolormesh", cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.0)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.7)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.7)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -297,10 +297,10 @@ function seamountFull2DvsBL(folder)
     axins21 = inset_locator.inset_axes(ax[2, 1], width="100%", height="100%", 
                                         bbox_to_anchor=(0.3, 0.4, .5, .5), bbox_transform=ax[2, 1].transAxes, loc=3)
 
-    ax[1, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-    ax[2, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
     ax[2, 1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"Along-Slope Flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"Along-slope flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"))
     ax[2, 3].set_xlabel(string(L"Stratification $\partial_z b$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     ax[1, 1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
@@ -411,7 +411,7 @@ function ridgeN2exp(folder)
           fig.add_subplot(gs[3]) fig.add_subplot(gs[4])]
 
     # top row: ridges
-    ax[1, 1].annotate(L"(a) $N^2 =$ Constant", (0.0, 1.05), xycoords="axes fraction")
+    ax[1, 1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate(L"(b) $N^2 \sim \exp(z/d)$", (0.0, 1.05), xycoords="axes fraction")
 
     m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
@@ -431,11 +431,11 @@ function ridgeN2exp(folder)
     ax[2, 1].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 2].annotate("(d)", (-0.04, 1.05), xycoords="axes fraction")
 
-    ax[2, 1].set_xlabel(L"Horizontal Coordinate $x$ (km)")
-    ax[2, 1].set_ylabel(L"BL Transport ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
+    ax[2, 1].set_xlabel(L"Horizontal coordinate $x$ (km)")
+    ax[2, 1].set_ylabel(L"BL transport ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
 
-    ax[2, 2].set_xlabel(L"Horizontal Coordinate $x$ (km)")
-    ax[2, 2].set_ylabel(string(L"Exchange Velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(L"Horizontal coordinate $x$ (km)")
+    ax[2, 2].set_ylabel(string(L"Exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
 
     mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
     mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
@@ -443,7 +443,7 @@ function ridgeN2exp(folder)
     s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
     χtheory = BLtransport2D(mConst, s)
     W = exchangeVel2D(mConst, χtheory)
-    ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "Constant"))
+    ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "constant"))
     ax[2, 2].plot(mConst.ξ/1e3, 1e9*W)
 
     s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
@@ -494,13 +494,13 @@ function pq()
     ax[2].semilogx(μ*Ss, (1 .+ μ.*Ss).^(1/4), "k--", lw=0.5)
 
     custom_handles = [lines.Line2D([0], [0], c="k", ls="--", lw=0.5)]
-    custom_labels = [L"1D and 2D Theory ($\mu T = 0$)"]
+    custom_labels = [L"1D and 2D theory ($\mu T = 0$)"]
     ax[1].legend(custom_handles, custom_labels)
     ax[2].legend(loc=(0.05, 0.45))
-    ax[1].set_xlabel(L"Prandtl $\times$ Slope Burger Number $\mu S$")
-    ax[2].set_xlabel(L"Prandtl $\times$ Slope Burger Number $\mu S$")
+    ax[1].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
+    ax[2].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
     ax[1].set_ylabel(L"Decay Scale $\delta q$")
-    ax[2].set_ylabel(L"Oscillation Scale $\delta p$")
+    ax[2].set_ylabel(L"Oscillation scale $\delta p$")
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     savefig("pq.pdf")
@@ -509,10 +509,10 @@ end
 
 path = "../sims/"
 
-# BLCorrection(string(path, "sim044/"))
-# slopeFull1DvsBL1D(string(path, "sim044/"))
+BLCorrection(string(path, "sim044/"))
+slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
-# seamount(string(path, "sim035/"))
-# seamountFull2DvsBL(string(path, "sim042/"))
-# ridgeN2exp(string(path, "sim037/"))
+seamount(string(path, "sim035/"))
+seamountFull2DvsBL(string(path, "sim042/"))
+ridgeN2exp(string(path, "sim037/"))
 pq()
