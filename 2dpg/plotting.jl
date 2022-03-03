@@ -82,11 +82,11 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
     # labels
     ax.set_title(titleString)
     if xlabel === nothing
-        ax.set_xlabel(L"Horizontal Coordinate $x$ (km)")
+        ax.set_xlabel(L"Horizontal coordinate $x$ (km)")
     else
         ax.set_xlabel(xlabel)
     end
-    ax.set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
     ax.set_xlim([0, m.L/1e3])
 
     # no spines

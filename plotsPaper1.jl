@@ -54,8 +54,8 @@ function spinupRidge(folder)
 
     # plot
     fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
-    ridgePlot(m, s, 1e3*s.χ,  "", string(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"); ax=ax[1], vext=1.5)
-    ridgePlot(m, s, 1e2*s.uη, "", string(L"Along-Ridge Flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"); ax=ax[2], style="pcolormesh", vext=1.5)
+    ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; ax=ax[1], vext=1.5)
+    ridgePlot(m, s, 1e2*s.uη, "", L"Along-ridge flow $\varv$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -91,11 +91,11 @@ function spinupProfiles(folder; μ=1)
     fig.text(0.05, 0.97, string(L"Canonical 1D ($\mu$ = ", μ, "):"),             size=8, ha="left", va="top")
     fig.text(0.05, 0.51, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=8, ha="left", va="top")
 
-    ax[1, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-    ax[2, 1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     ax[2, 1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2, 2].set_xlabel(string(L"Along-Ridge Flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(string(L"Along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
     ax[2, 3].set_xlabel(string(L"Stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
@@ -185,9 +185,9 @@ function spinupProfiles(folder; μ=1)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     if μ == 1
-        ax[1, 3].annotate("Steady State", xy=(0.4, 0.35), xytext=(0.05, 0.6), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[1, 3].annotate("Steady state", xy=(0.4, 0.35), xytext=(0.05, 0.6), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     elseif μ == 200
-        ax[1, 3].annotate("Steady State", xy=(0.5, 0.35), xytext=(0.05, 0.6), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[1, 3].annotate("Steady state", xy=(0.5, 0.35), xytext=(0.05, 0.6), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     end
 
     subplots_adjust(hspace=0.4)
@@ -204,11 +204,11 @@ function spindownProfiles(folder; ratio=nothing)
     fig.text(0.05, 0.97, string(L"Canonical 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"),             ha="left", va="top", size=8)
     fig.text(0.05, 0.51, string(L"Transport-Constrained 1D $(\tilde{\tau}_A/\tilde{\tau}_S = $", @sprintf("%1.2f", 1/c.H/c.S), "):"), ha="left", va="top", size=8)
 
-    ax[1, 1].set_ylabel(L"Vertical Coordinate $\tilde{z}$")
-    ax[2, 1].set_ylabel(L"Vertical Coordinate $\tilde{z}$")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $\tilde{z}$")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $\tilde{z}$")
 
-    ax[2, 1].set_xlabel(L"Cross-Slope Flow $\tilde{u}$ ($\times10^{-1}$)")
-    ax[2, 2].set_xlabel(L"Along-Slope Flow $\tilde{v}$")
+    ax[2, 1].set_xlabel(L"Cross-slope flow $\tilde{u}$ ($\times10^{-1}$)")
+    ax[2, 2].set_xlabel(L"Along-slope flow $\tilde{v}$")
     ax[2, 3].set_xlabel(L"Stratification $\partial_{\tilde z} \tilde b$ ($\times10$)")
 
     # color map
@@ -282,9 +282,9 @@ function spindownProfiles(folder; ratio=nothing)
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
     if ratio == "Small"
-        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.38, 0.8), xytext=(0.55, 0.78), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.38, 0.8), xytext=(0.6, 0.8), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     elseif ratio == "Big"
-        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.63, 0.1), xytext=(0.35, 0.08), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
+        ax[2, 2].annotate(L"$\partial_{\tilde x} \tilde P$", xy=(0.6, 0.1), xytext=(0.05, 0.1), xycoords="axes fraction", arrowprops=Dict("arrowstyle" => "->"))
     end
 
     subplots_adjust(hspace=0.4)
@@ -317,14 +317,14 @@ function spindownGrid(folder)
     # plot grid
     fig, ax = subplots(1, 2, figsize=(19*pc, 16*pc), sharey=true)
     ax[1].set_box_aspect(aspect)
-    ax[1].set_xlabel(L"Spin-Down Time $\tilde{\tau}_S$")
-    ax[1].set_ylabel(L"Arrest Time $\tilde{\tau}_A$")
+    ax[1].set_xlabel(L"Spin-down time $\tilde{\tau}_S$")
+    ax[1].set_ylabel(L"Arrest time $\tilde{\tau}_A$")
     ax[1].spines["left"].set_visible(false)
     ax[1].spines["bottom"].set_visible(false)
     ax[1].set_xlim([τ_Ss[1], τ_Ss[end]])
     ax[1].set_ylim([τ_As[1], τ_As[end]])
     img = ax[1].pcolormesh(τ_Ss, τ_As, vs_5A'/ṽ_0, rasterized=true, shading="auto", vmin=0, vmax=1)
-    cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"Far-Field Along-Slope Flow $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
+    cb = colorbar(img, ax=ax[:], shrink=0.63, label=L"Far-field along-slope flow $\tilde{v}/\tilde{v}_0$", orientation="horizontal")
     ax[1].loglog([1e1, 1e4], [1e1, 1e4], "w--", lw=0.5)
     ax[1].annotate(L"$\tilde{\tau}_A/\tilde{\tau}_S = 1$", xy=(0.7, 0.8), xytext=(0.05, 0.9), 
                 xycoords="axes fraction", c="w", path_effects=outline, arrowprops=Dict("arrowstyle" => "->", "color" => "w"))
@@ -334,7 +334,7 @@ function spindownGrid(folder)
     ax[1].annotate("Fig. 7", xy=(1.5e2, 0.9e2), xycoords="data", c="w", path_effects=outline)
 
     ax[2].set_box_aspect(aspect)
-    ax[2].set_xlabel(L"Spin-Down Time $\tilde{\tau}_S$")
+    ax[2].set_xlabel(L"Spin-down time $\tilde{\tau}_S$")
     ax[2].spines["left"].set_visible(false)
     ax[2].spines["bottom"].set_visible(false)
     ax[2].set_xlim([τ_Ss[1], τ_Ss[end]])
@@ -362,10 +362,10 @@ function spinupProfilesPGvsFull(folder)
 
     axins1 = inset_locator.inset_axes(ax[1], width="60%", height="60%")
 
-    ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
-    ax[1].set_xlabel(string(L"Cross-Ridge Flow $u$", "\n", L"($\times10^{-4}$ m s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"Along-Ridge Flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[1].set_xlabel(string(L"Cross-ridge flow $u$", "\n", L"($\times10^{-4}$ m s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"Along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
     ax[3].set_xlabel(string(L"Stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
@@ -436,7 +436,7 @@ path = "../sims/"
 # spinupRidgeAsym(string(path, "sim040/")) 
 # spinupProfiles(string(path, "sim039/"); μ=1)
 # spinupProfiles(string(path, "sim039/"); μ=200)
-# spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
-# spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
-spindownGrid(string(path, "sim033/")) 
+spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
+spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
+# spindownGrid(string(path, "sim033/")) 
 # spinupProfilesPGvsFull(string(path, "sim025/"))
