@@ -131,8 +131,8 @@ function slopeFull1DvsBL1D(folder)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    fig.text(0.05, 0.97, L"$S = 10^{-3}$:", ha="left", va="top", size=8)
-    fig.text(0.05, 0.51, L"$S = 0.5$:",     ha="left", va="top", size=8)
+    fig.text(0.05, 0.97, L"$\varrho = 10^{-3}$:", ha="left", va="top", size=8)
+    fig.text(0.05, 0.51, L"$\varrho = 0.5$:",     ha="left", va="top", size=8)
 
     subplots_adjust(hspace=0.5)
 
@@ -509,10 +509,10 @@ end
 
 path = "../sims/"
 
-BLCorrection(string(path, "sim044/"))
+# BLCorrection(string(path, "sim044/"))
 slopeFull1DvsBL1D(string(path, "sim044/"))
 # TFcoords()
-seamount(string(path, "sim035/"))
-seamountFull2DvsBL(string(path, "sim042/"))
-ridgeN2exp(string(path, "sim037/"))
-pq()
+# seamount(string(path, "sim035/"))
+# seamountFull2DvsBL(string(path, "sim042/"))
+# ridgeN2exp(string(path, "sim037/"))
+# pq()
