@@ -21,6 +21,9 @@ struct ModelState2DPG
 end
 
 struct ModelSetup2DPG
+    # use BL model or full?
+    bl::Bool 
+
 	# Coriolis parameter (s-1)
 	f::Float64
 

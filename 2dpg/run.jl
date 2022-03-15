@@ -89,7 +89,7 @@ function run_ridge(; bl = false)
     t_save = 3*secs_in_year
     
     # create model struct
-    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup2DPG(bl, f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     save_setup_2DPG(m)
@@ -99,25 +99,24 @@ function run_ridge(; bl = false)
     for i=1:nξ
         b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
     end
-    χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
+    χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 15*secs_in_year, t_plot, t_save; bl=bl) 
+    evolve!(m, s, 15*secs_in_year, t_plot, t_save) 
 
     return m, s
 end
 
-function run_seamount(; bl = false)
+function run_seamount(; bl=false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     ξVariation = true
-    # L = 2e4
     L = 2e5
     nξ = 2^8 + 1 
     nσ = 2^8
-    coords = "cylindrical"
+    coords = "axisymmetric"
     periodic = false
 
     # grids: even spacing in ξ and chebyshev in σ (unless bl)
@@ -159,7 +158,7 @@ function run_seamount(; bl = false)
     t_save = 20*secs_in_year
     
     # create model struct
-    m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup2DPG(bl, f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     save_setup_2DPG(m)
@@ -169,7 +168,7 @@ function run_seamount(; bl = false)
     for i=1:nξ
         b[i, :] = cumtrapz(m.N2[i, :], m.z[i, :]) .- trapz(m.N2[i, :], m.z[i, :])
     end
-    χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
+    χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
@@ -178,15 +177,15 @@ function run_seamount(; bl = false)
     println("ϱₘₐₓ = ", maximum(ϱ))
 
     # solve
-    evolve!(m, s, 100*secs_in_year, t_plot, t_save; bl=bl) 
+    evolve!(m, s, 100*secs_in_year, t_plot, t_save) 
 
     return m, s
 end
 
 # m, s = run_ridge()
 # m, s = run_ridge(; bl=true)
-m, s = run_seamount()
-# m, s = run_seamount(; bl=true)
+# m, s = run_seamount()
+m, s = run_seamount(; bl=true)
 
 ################################################################################
 # plots

@@ -195,13 +195,13 @@ function take_RK_step!(m::ModelSetup2DPG, s::ModelState2DPG, stages::Int64, c::A
 end
 
 """
-    reset_BCs!(m, s, RHS; bl)
+    reset_BCs!(m, s, RHS)
 
 Modify the right-hand side vector `RHS` to include boundary conditions at the top and bottom.
 """
-function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
+function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2})
     # boundary fluxes: dσ(b)/H at σ = -1, 0
-    if bl
+    if m.bl
         RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
         RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
     else
@@ -211,12 +211,11 @@ function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2};
 end
 
 """
-    evolve!(m, s, t_final, t_plot, t_save; bl=false)
+    evolve!(m, s, t_final, t_plot, t_save)
 
 Solve evoluion equation for `b` and update model state.
-If `bl` set to `true`, use boundary layer theory inversion and boundary conditions. 
 """
-function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Real, t_save::Real; bl=false)
+function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Real, t_save::Real)
     # grid points
     n_pts = m.nξ*m.nσ
 
@@ -258,7 +257,7 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
     for i=1:n_steps
         # explicit timestep for advection
         function advection_RHS(b)
-            χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
+            χ, uξ, uη, uσ, U = invert(m, b)
             if m.ξVariation
                 return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
             else
@@ -269,14 +268,14 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
         if i == 1
             # first step: CNAB1
             RHS = s.b + m.Δt*(advection_RHS(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
-            reset_BCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+            reset_BCs!(m, s, RHS) # modify RHS to implement boundary conditions
             b_prev = s.b # store previoius step for next time
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
             s.i[1] = i + 1 # next step
         else
             # other steps: CNAB2
             RHS = s.b + m.Δt*(3/2*advection_RHS(s.b) - 1/2*advection_RHS(b_prev) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
-            reset_BCs!(m, s, RHS; bl=bl)
+            reset_BCs!(m, s, RHS)
             b_prev = s.b 
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
             s.i[1] = i + 1
@@ -286,7 +285,7 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
         t += m.Δt
 
         # invert buoyancy for flow and save to state
-        invert!(m, s; bl=bl)
+        invert!(m, s)
 
         # log
         if i % 10 == 0

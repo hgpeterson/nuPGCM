@@ -18,11 +18,11 @@ const secs_in_year = 360*86400
 const out_folder = "out/"
 
 """
-    m = ModelSetup(f, ξVariation, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup(bl, f, ξVariation, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
 Construct a ModelSetup struct using analytical functions of H, Hx, ν, κ, and N.
 """
-function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
+function ModelSetup2DPG(bl::Bool, f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
                     periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, H_func::Function, Hx_func::Function, 
                     ν_func::Function, κ_func::Function, N2_func::Function, Δt::Real)
     # evaluate functions 
@@ -42,15 +42,15 @@ function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, n
     z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
 
     # pass to setup for arrays
-    return ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
+    return ModelSetup2DPG(bl, f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
 end
 
 """
-    m = ModelSetup(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2 Δt)
+    m = ModelSetup(bl, f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2 Δt)
 
 Construct a ModelSetup struct using arrays of H, Hx, ν, and κ.
 """
-function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
+function ModelSetup2DPG(bl::Bool, f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
                     periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, 
                     H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, N2::Array{Float64,2}, Δt::Real)
     # get derivative matrices
@@ -70,5 +70,5 @@ function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, n
     inversion_RHS = get_inversion_RHS(f^2 ./ν, 1)
     χ_U = get_χ(inversion_LHSs, inversion_RHS) 
 
-    return ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversion_LHSs, χ_U)
+    return ModelSetup2DPG(bl, f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversion_LHSs, χ_U)
 end

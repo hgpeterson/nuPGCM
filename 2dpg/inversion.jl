@@ -201,7 +201,7 @@ function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
         if m.coords == "cartesian"
             # uσ = -dξ(χ)/H
             uσ = -ξDerivative(m, χ)./repeat(m.H, 1, m.nσ)
-        elseif m.coords == "cylindrical"
+        elseif m.coords == "axisymmetric"
             # uσ = -dρ(ρ*χ)/(H*ρ)
             uσ = -ξDerivative(m, repeat(m.ξ, 1, m.nσ).*χ)./repeat(m.H.*m.ξ, 1, m.nσ)
             # assume χ = 0 at ρ = 0
@@ -216,11 +216,11 @@ function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
 end
 
 """
-    χ, uξ, uη, uσ, U = invert(m, b; bl=false)
+    χ, uξ, uη, uσ, U = invert(m, b)
 
 Invert for flow given current model state buoyancy perturbation.
 """
-function invert(m::ModelSetup2DPG, b::Matrix{Float64}; bl=false)
+function invert(m::ModelSetup2DPG, b::Matrix{Float64})
     # buoyancy solution: rhs = dx(b), U = 0;
     # (U = 1 solution `sol_U` is stored in ModelSetup2DPG struct)
     if m.ξVariation
@@ -229,7 +229,7 @@ function invert(m::ModelSetup2DPG, b::Matrix{Float64}; bl=false)
         rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivative(m, b)
     end
 
-    if bl # BL Solution
+    if m.bl # BL Solution
         # bl inversion
         χ_b = @. m.ν/m.f^2*rhs
 
@@ -262,8 +262,8 @@ function invert(m::ModelSetup2DPG, b::Matrix{Float64}; bl=false)
 
     return χ, uξ, uη, uσ, U
 end
-function invert!(m::ModelSetup2DPG, s::ModelState2DPG; bl=false)
-    χ, uξ, uη, uσ, U = invert(m, s.b; bl=bl)
+function invert!(m::ModelSetup2DPG, s::ModelState2DPG)
+    χ, uξ, uη, uσ, U = invert(m, s.b)
     s.χ[:, :] = χ
     s.uξ[:, :] = uξ
     s.uη[:, :] = uη
