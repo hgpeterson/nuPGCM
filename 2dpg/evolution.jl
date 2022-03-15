@@ -3,16 +3,16 @@
 ################################################################################
 
 """
-    D = getDiffusionMatrix(ξ, σ, κ, H)
+    D = get_diffusion_matrix(ξ, σ, κ, H)
 
 Compute the matrices needed for evolution equation integration.
 """
-function getDiffusionMatrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Array{Float64,2},  H::Array{Float64,1})
+function get_diffusion_matrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Array{Float64,2},  H::Array{Float64,1})
     nξ = size(ξ, 1)
     nσ = size(σ, 1)
-    nPts = nξ*nσ
+    n_pts = nξ*nσ
 
-    umap = reshape(1:nPts, nξ, nσ)    
+    umap = reshape(1:n_pts, nξ, nσ)    
     D = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix (with boundary flux conditions)
 
     # Main loop, insert stencil in matrices for each node point
@@ -54,17 +54,17 @@ function getDiffusionMatrix(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Arra
     end
 
     # Create CSC sparse matrix from matrix elements
-    D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), nPts, nPts)
+    D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), n_pts, n_pts)
 
     return D
 end
 
 """
-    LHS = getEvolutionLHS(m, a)
+    LHS = get_evolution_LHS(m, a)
 
 Generate the left-hand side matrix for the evolution problem with flux boundary conditions on the boundaries.
 """
-function getEvolutionLHS(m::ModelSetup2DPG, a::Real)
+function get_evolution_LHS(m::ModelSetup2DPG, a::Real)
     # bottom and top boundaries in 1D
     umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
     bottomBdy = umap[:, 1]
@@ -81,7 +81,7 @@ function getEvolutionLHS(m::ModelSetup2DPG, a::Real)
 end
 
 """
-    stages, c, A_ex, A_im = RKTable(order) 
+    stages, c, A_ex, A_im = get_RK_table(order) 
 
 Returns number of `stages`, fractional time steps `c`, explicity coefficients `A_ex`,
 and implicit coefficients `A_im` for Runge-Kutta scheme of order `order`. Implemented
@@ -93,7 +93,7 @@ options:
     222     2nd-order 2-stage DIRK+ERK scheme [Ascher 1997 sec 2.6]
     443     3rd-order 4-stage DIRK+ERK scheme [Ascher 1997 sec 2.8]
 """
-function RKTable(order::String)
+function get_RK_table(order::String)
     if order == "111"
         # number of stages
         stages = 1
@@ -157,7 +157,7 @@ function RKTable(order::String)
 end
 
     
-function RKStep!(m::ModelSetup2DPG, s::ModelState2DPG, stages::Int64, c::Array{Float64,1}, A_ex::Array{Float64,2}, A_im::Array{Float64,2}, advFunc::Function, LHS::SuiteSparse.UMFPACK.UmfpackLU{Float64, Int64}; bl=false)
+function take_RK_step!(m::ModelSetup2DPG, s::ModelState2DPG, stages::Int64, c::Array{Float64,1}, A_ex::Array{Float64,2}, A_im::Array{Float64,2}, advFunc::Function, LHS::SuiteSparse.UMFPACK.UmfpackLU{Float64, Int64}; bl=false)
     # timestep 
     k = m.Δt
 
@@ -177,7 +177,7 @@ function RKStep!(m::ModelSetup2DPG, s::ModelState2DPG, stages::Int64, c::Array{F
         for j=1:i-1
             RHS += k*(A_im[i+1, j+1]*K_im[j, :, :] + A_ex[i+1, j]*K_ex[j, :, :])
         end
-        resetBCs!(m, s, RHS; bl)
+        reset_BCs!(m, s, RHS; bl)
         bi = reshape(LHS\RHS[:], m.nξ, m.nσ)
         K_im[i, :, :] = reshape(m.D*bi[:], m.nξ, m.nσ)
         K_ex[i+1, :, :] = advFunc(bi)
@@ -195,11 +195,11 @@ function RKStep!(m::ModelSetup2DPG, s::ModelState2DPG, stages::Int64, c::Array{F
 end
 
 """
-    resetBCs!(m, s, RHS; bl)
+    reset_BCs!(m, s, RHS; bl)
 
 Modify the right-hand side vector `RHS` to include boundary conditions at the top and bottom.
 """
-function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
+function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; bl=false)
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if bl
         RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
@@ -211,40 +211,40 @@ function resetBCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2}; 
 end
 
 """
-    evolve!(m, s, tFinal, tPlot, tSave; bl=false)
+    evolve!(m, s, t_final, t_plot, t_save; bl=false)
 
 Solve evoluion equation for `b` and update model state.
 If `bl` set to `true`, use boundary layer theory inversion and boundary conditions. 
 """
-function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real, tSave::Real; bl=false)
+function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Real, t_save::Real; bl=false)
     # grid points
-    nPts = m.nξ*m.nσ
+    n_pts = m.nξ*m.nσ
 
     # timestep
-    nSteps = Int64(tFinal/m.Δt)
-    nStepsPlot = Int64(tPlot/m.Δt)
-    nStepsSave = Int64(tSave/m.Δt)
+    n_steps = Int64(t_final/m.Δt)
+    n_steps_plot = Int64(t_plot/m.Δt)
+    n_steps_save = Int64(t_save/m.Δt)
 
     # save initial state
-    iSave = 0
-    saveState2DPG(s, iSave)
-    iSave += 1
+    i_save = 0
+    save_state_2DPG(s, i_save)
+    i_save += 1
     
     # plot initial state
-    iImg = 0
-    plotCurrentState(m, s, iImg)
-    iImg += 1
+    i_img = 0
+    plot_state_2DPG(m, s, i_img)
+    i_img += 1
 
     # store previous buoyancy field for timestepping scheme
-    bPrev = zeros(m.nξ, m.nσ)
+    b_prev = zeros(m.nξ, m.nσ)
 
     # get LHS matrix for CNAB
-    LHS = getEvolutionLHS(m, 1/2)
+    LHS = get_evolution_LHS(m, 1/2)
 
-    # stages, c, A_ex, A_im = RKTable("111")
-    # stages, c, A_ex, A_im = RKTable("222")
-    # stages, c, A_ex, A_im = RKTable("443")
-    # LHS = getEvolutionLHS(m, A_im[2, 2])
+    # stages, c, A_ex, A_im = get_RK_table("111")
+    # stages, c, A_ex, A_im = get_RK_table("222")
+    # stages, c, A_ex, A_im = get_RK_table("443")
+    # LHS = get_evolution_LHS(m, A_im[2, 2])
 
     # if you want to check CFL
     dξ = m.L/m.nξ
@@ -255,9 +255,9 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
 
     # main loop
     t = 0
-    for i=1:nSteps
+    for i=1:n_steps
         # explicit timestep for advection
-        function advFunc(b)
+        function advection_RHS(b)
             χ, uξ, uη, uσ, U = invert(m, b; bl=bl)
             if m.ξVariation
                 return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
@@ -268,20 +268,20 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
 
         if i == 1
             # first step: CNAB1
-            RHS = s.b + m.Δt*(advFunc(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
-            resetBCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
-            bPrev = s.b # store previoius step for next time
+            RHS = s.b + m.Δt*(advection_RHS(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
+            reset_BCs!(m, s, RHS; bl=bl) # modify RHS to implement boundary conditions
+            b_prev = s.b # store previoius step for next time
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
             s.i[1] = i + 1 # next step
         else
             # other steps: CNAB2
-            RHS = s.b + m.Δt*(3/2*advFunc(s.b) - 1/2*advFunc(bPrev) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
-            resetBCs!(m, s, RHS; bl=bl)
-            bPrev = s.b 
+            RHS = s.b + m.Δt*(3/2*advection_RHS(s.b) - 1/2*advection_RHS(b_prev) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
+            reset_BCs!(m, s, RHS; bl=bl)
+            b_prev = s.b 
             s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
             s.i[1] = i + 1
         end
-        # RKStep!(m, s, stages, c, A_ex, A_im, advFunc, LHS; bl)
+        # take_RK_step!(m, s, stages, c, A_ex, A_im, advFunc, LHS; bl)
         # s.i[1] = i + 1
         t += m.Δt
 
@@ -290,23 +290,23 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, tFinal::Real, tPlot::Real
 
         # log
         if i % 10 == 0
-            # println(@sprintf("t = %.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secsInYear, i, maximum(abs.(s.χ))))
-            println(@sprintf("t = %.2f yr | i = %d | U = %.2e m2 s-1", t/secsInYear, i, s.χ[1, end]))
+            println(@sprintf("t = %2.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secs_in_year, i, maximum(abs.(s.χ))))
+            # println(@sprintf("t = %2.2f yr | i = %d | U = %.2e m2 s-1", t/secs_in_year, i, s.χ[1, end]))
 
             # # CFL stuff
             # uξCFL = minimum(abs.(dξ./s.uξ)) 
             # uσCFL = minimum(abs.(dσ./s.uσ)) 
-            # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secsInDay, uσCFL/secsInDay)) 
+            # println(@sprintf("CFL: uξ=%.2f days, uσ=%.2f days", uξCFL/secs_in_day, uσCFL/secs_in_day)) 
         end
         
-        if i % nStepsPlot == 0
+        if i % n_steps_plot == 0
             # plot flow
-            plotCurrentState(m, s, iImg)
-            iImg += 1
+            plot_state_2DPG(m, s, i_img)
+            i_img += 1
         end
-        if i % nStepsSave == 0
-            saveState2DPG(s, iSave)
-            iSave += 1
+        if i % n_steps_save == 0
+            save_state_2DPG(s, i_save)
+            i_save += 1
         end
     end
 end

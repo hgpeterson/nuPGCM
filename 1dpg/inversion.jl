@@ -1,9 +1,9 @@
 """
-    LHS = getInversionLHS(ν, z, f, θ)
+    LHS = get_inversion_LHS(ν, z, f, θ)
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64, θ::Float64, transportConstraint::Bool)
+function get_inversion_LHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64, θ::Float64, transport_constraint::Bool)
     nz = size(z, 1)
     iU = nz + 1
     A = Tuple{Int64,Int64,Float64}[]  
@@ -76,7 +76,7 @@ function getInversionLHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64, 
     #   (2) dz(nu*dzz(χ)) = Hx*b at bottom
     #       for canonical 1D solution
     row = iU
-    if transportConstraint
+    if transport_constraint
         push!(A, (row, row, 1.0))
     else
         # dz stencil
@@ -109,11 +109,11 @@ function getInversionLHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64, 
 end
 
 """
-    RHS = getInversionRHS(m, b)
+    RHS = get_inversion_RHS(m, b)
 
 Setup right hand side of linear system for problem.
 """
-function getInversionRHS(m::ModelSetup1DPG, b::Array{Float64,1})
+function get_inversion_RHS(m::ModelSetup1DPG, b::Array{Float64,1})
     # last row is for U
     rhs = zeros(m.nz+1)
     iU = m.nz + 1
@@ -128,7 +128,7 @@ function getInversionRHS(m::ModelSetup1DPG, b::Array{Float64,1})
     #   (1) set U for transport-constrained 1D solution
     #   (2) dz(nu*dzz(χ)) = b*tan(θ) at bottom
     #       for canonical 1D solution
-    if m.transportConstraint
+    if m.transport_constraint
         rhs[iU] = m.U[1]
     else
         rhs[iU] = -b[1]*tan(m.θ) 
@@ -138,12 +138,12 @@ function getInversionRHS(m::ModelSetup1DPG, b::Array{Float64,1})
 end
 
 """
-    χ, u, v, U = postProcess(m, sol)
+    χ, u, v, U = post_process(m, sol)
 
 Take solution `sol` and extract reshaped `χ`. Compute `u`, `v`
 from definition of χ.
 """
-function postProcess(m, sol)
+function post_process(m, sol)
     iU = m.nz + 1
 
     # transport at iU
@@ -173,14 +173,14 @@ function invert(m::ModelSetup1DPG, b::Array{Float64,1})
         push!(sol, sol[end])
     else # full solution
         # compute RHS
-        rhs = getInversionRHS(m, b)
+        rhs = get_inversion_RHS(m, b)
 
         # solve full inversion
-        sol = m.inversionLHS\rhs
+        sol = m.inversion_LHS\rhs
     end
 
     # compute flow from sol
-    χ, u, v = postProcess(m, sol)
+    χ, u, v = post_process(m, sol)
 
     return χ, u, v
 end

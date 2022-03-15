@@ -3,11 +3,11 @@
 ################################################################################
 
 """
-    inversionLHS = getInversionLHS(ν, f, H, σ)
+    inversion_LHS = getInversionLHS(ν, f, H, σ)
 
 Setup left hand side of linear system for problem.
 """
-function getInversionLHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector{Float64})
+function get_inversion_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector{Float64})
     nσ = size(σ, 1)
     A = Tuple{Int64,Int64,Float64}[]  
 
@@ -74,9 +74,9 @@ function getInversionLHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector
     end
 
     # Create CSC sparse matrix from matrix elements
-    inversionLHS = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nσ, nσ)
+    inversion_LHS = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), nσ, nσ)
 
-    return lu(inversionLHS)
+    return lu(inversion_LHS)
 end
 
 """
@@ -84,7 +84,7 @@ end
 
 Setup right hand side of linear system for problem.
 """
-function getInversionRHS(rhs::Matrix{Float64}, U::Real)
+function get_inversion_RHS(rhs::Matrix{Float64}, U::Real)
     # boundary conditions
     rhs[:, [1, 2, end]] .= 0 # χ = 0, dσ(χ) = 0 at σ = -1, dσσ(χ) = 0 at σ = 0
     rhs[:, end-1] .= U       # χ = U at σ = 0
@@ -92,29 +92,29 @@ function getInversionRHS(rhs::Matrix{Float64}, U::Real)
 end
 
 """
-    χ = computeχ(m, inversionRHS)
+    χ = get_χ(m, inversionRHS)
 
-Compute inversion solution given right hand side `inversionRHS`.
+Compute inversion solution given right hand side `inversion_RHS`.
 """
-function computeχ(m::ModelSetup2DPG, inversionRHS::Matrix{Float64})
-    return computeχ(m.inversionLHSs, inversionRHS)
+function get_χ(m::ModelSetup2DPG, inversion_RHS::Matrix{Float64})
+    return get_χ(m.inversion_LHSs, inversion_RHS)
 end
-function computeχ(inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversionRHS::Matrix{Float64})
+function get_χ(inversion_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversion_RHS::Matrix{Float64})
     # solve
-    χ = zeros(size(inversionRHS))
+    χ = zeros(size(inversion_RHS))
     for i=1:size(χ, 1)
-        χ[i, :] = inversionLHSs[i]\inversionRHS[i, :]
+        χ[i, :] = inversion_LHSs[i]\inversion_RHS[i, :]
     end
     return χ
 end
 
 """
-    U = computeU(m, χ_b)
+    U = get_U(m, χ_b)
 
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function computeU(m::ModelSetup2DPG, χ_b::Matrix{Float64})
+function get_U(m::ModelSetup2DPG, χ_b::Matrix{Float64})
     # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
     term1 = zeros(m.nξ)
     for i=1:m.nξ
@@ -151,7 +151,7 @@ function computeU(m::ModelSetup2DPG, χ_b::Matrix{Float64})
 
     return -(term1 + term2)/(term3 + term4)
 end
-function computeU_BL(m::ModelSetup2DPG, b::Matrix{Float64})
+function get_U_BL(m::ModelSetup2DPG, b::Matrix{Float64})
     # bx
     bx = xDerivative(m, b)
 
@@ -179,12 +179,12 @@ function computeU_BL(m::ModelSetup2DPG, b::Matrix{Float64})
 end
 
 """
-    uξ, uη, uσ, U = postProcess(m, χ)
+    uξ, uη, uσ, U = post_process(m, χ)
 
 Take streamfunction `χ` and compute `uξ`, `uη`, `uσ`, and `U`
 from its definition. Computation is different depending on choice of coordinates.
 """
-function postProcess(m::ModelSetup2DPG, χ::Matrix{Float64})
+function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
     # χ at σ = 0 is vertical integral of uξ
     U = χ[1, end] # just take first one since they all must be the same
 
@@ -237,28 +237,28 @@ function invert(m::ModelSetup2DPG, b::Matrix{Float64}; bl=false)
         if symmetry
             U = 0
         else
-            U = computeU_BL(m, b)
+            U = get_U_BL(m, b)
         end
 
         # χ_U = 1 in interior
         χ = χ_b .+ U
     else # Full Inversion
         # buoyancy solution
-        inversionRHS = getInversionRHS(rhs, 0)
-        χ_b = computeχ(m, inversionRHS)
+        inversionRHS = get_inversion_RHS(rhs, 0)
+        χ_b = get_χ(m, inversionRHS)
 
         # compute U such that "island rule" is satisfied
         if symmetry
             U = 0
         else
-            U = computeU(m, χ_b)
+            U = get_U(m, χ_b)
         end
 
         # linearity: solution = χ_b + U*χ_U
         χ = χ_b + U*m.χ_U
     end
 
-    uξ, uη, uσ, U = postProcess(m, χ)
+    uξ, uη, uσ, U = post_process(m, χ)
 
     return χ, uξ, uη, uσ, U
 end

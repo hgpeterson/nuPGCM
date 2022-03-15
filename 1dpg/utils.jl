@@ -3,23 +3,23 @@
 ################################################################################
 
 """
-    logParams(ofile, text)
+    log_params(ofile, text)
 
 Write `text` to `ofile` and print it.
 """
-function logParams(ofile::IOStream, text::String)
+function log_params(ofile::IOStream, text::String)
     write(ofile, string(text, "\n"))
     println(text)
 end
 
 """
-    saveSetup1DPG(m)
+    save_setup_1DPG(m)
 
 Save .h5 file for parameters.
 """
-function saveSetup1DPG(m::ModelSetup1DPG)
-    savefile = string(outFolder, "setup.h5")
-    file = h5open(savefile, "w")
+function save_setup_1DPG(m::ModelSetup1DPG)
+    save_file = string(out_folder, "setup.h5")
+    file = h5open(save_file, "w")
     write(file, "bl", m.bl)
     write(file, "f", m.f)
     write(file, "nz", m.nz)
@@ -31,36 +31,36 @@ function saveSetup1DPG(m::ModelSetup1DPG)
     write(file, "κ_z", m.κ_z)
     write(file, "N2", m.N2)
     write(file, "Δt", m.Δt)
-    write(file, "transportConstraint", m.transportConstraint)
+    write(file, "transport_constraint", m.transport_constraint)
     write(file, "U", m.U)
     close(file)
-    println(savefile)
+    println(save_file)
 
     # log 
-    ofile = open(string(outFolder, "out.txt"), "w")
+    ofile = open(string(out_folder, "out.txt"), "w")
     if m.bl
-        logParams(ofile, "\n1D BL PG Model with Parameters\n")
+        log_params(ofile, "\n1D BL PG Model with Parameters\n")
     else
-        logParams(ofile, "\n1D PG Model with Parameters\n")
+        log_params(ofile, "\n1D PG Model with Parameters\n")
     end
-    logParams(ofile, @sprintf("nz    = %d", m.nz))
-    logParams(ofile, @sprintf("H     = %d km", m.H/1000))
-    logParams(ofile, @sprintf("θ     = %1.1e rad", m.θ))
-    logParams(ofile, @sprintf("f     = %1.1e s-1", m.f))
-    logParams(ofile, @sprintf("N     = %1.1e s-1", sqrt(m.N2)))
-    logParams(ofile, @sprintf("S     = %1.1e", m.N2/m.f^2*tan(m.θ)^2))
-    logParams(ofile, @sprintf("Δt    = %.2f days", m.Δt/secsInDay))
-    logParams(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1]/abs(m.f))))
-    logParams(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[2] - m.z[1]))
+    log_params(ofile, @sprintf("nz    = %d", m.nz))
+    log_params(ofile, @sprintf("H     = %d km", m.H/1000))
+    log_params(ofile, @sprintf("θ     = %1.1e rad", m.θ))
+    log_params(ofile, @sprintf("f     = %1.1e s-1", m.f))
+    log_params(ofile, @sprintf("N     = %1.1e s-1", sqrt(m.N2)))
+    log_params(ofile, @sprintf("S     = %1.1e", m.N2/m.f^2*tan(m.θ)^2))
+    log_params(ofile, @sprintf("Δt    = %.2f days", m.Δt/secs_in_day))
+    log_params(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1]/abs(m.f))))
+    log_params(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[2] - m.z[1]))
     close(ofile)
 end
 
 """
-    m = loadSetup1DPG(filename)
+    m = load_setup_1DPG(filename)
 
 Load .h5 setup file given by `filename`.
 """
-function loadSetup1DPG(filename::String)
+function load_setup_1DPG(filename::String)
     file = h5open(filename, "r")
     bl = read(file, "bl")
     f = read(file, "f")
@@ -73,35 +73,35 @@ function loadSetup1DPG(filename::String)
     κ_z = read(file, "κ_z")
     N2 = read(file, "N2")
     Δt = read(file, "Δt")
-    transportConstraint = read(file, "transportConstraint")
+    transport_constraint = read(file, "transport_constraint")
     U = read(file, "U")
     close(file)
-    return ModelSetup1DPG(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transportConstraint, U)
+    return ModelSetup1DPG(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transport_constraint, U)
 end
 
 """
-    saveState1DPG(s, iSave)
+    saveState1DPG(s, i_save)
 
 Save .h5 checkpoint file for state.
 """
-function saveState1DPG(s::ModelState1DPG, iSave::Int64)
-    savefile = @sprintf("%sstate%d.h5", outFolder, iSave)
-    file = h5open(savefile, "w")
+function save_state_1DPG(s::ModelState1DPG, i_save::Int64)
+    save_file = @sprintf("%sstate%d.h5", out_folder, i_save)
+    file = h5open(save_file, "w")
     write(file, "b", s.b)
     write(file, "χ", s.χ)
     write(file, "u", s.u)
     write(file, "v", s.v)
     write(file, "i", s.i)
     close(file)
-    println(savefile)
+    println(save_file)
 end
 
 """
-    s = loadState1DPG(filename)
+    s = load_state_1DPG(filename)
 
 Load .h5 state file given by `filename`.
 """
-function loadState1DPG(filename::String)
+function load_state_1DPG(filename::String)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")
@@ -113,11 +113,11 @@ function loadState1DPG(filename::String)
 end
 
 """
-    χB = boundaryCorrection(m, χI, z)
+    χB = get_BL_correction(m, χI, z)
 
 Compute BL correction to `χI` on grid `z`.
 """
-function boundaryCorrection(m::ModelSetup1DPG, χI::Vector{Float64}, z::Vector{Float64})
+function get_BL_correction(m::ModelSetup1DPG, χI::Vector{Float64}, z::Vector{Float64})
     δ, μ, S, q = get_BL_params(m)
     return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
 end
@@ -137,12 +137,12 @@ function get_BL_params(m::ModelSetup1DPG)
 end
 
 """
-    χ, b = constructFullSolution(m, s, z)
+    χ, b = get_full_soln(m, s, z)
 
 Construct full solutions `χ` = χI + χB and `b` = bI + bB from BL theory.
 The full solutions exist on the new grid `z`.
 """
-function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{Float64})
+function get_full_soln(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{Float64})
     # interior vars
     bI = s.b
     χI = m.U .- differentiate(bI, m.z)*tan(m.θ).*m.ν/m.f^2
@@ -152,7 +152,7 @@ function constructFullSolution(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{F
     bI_fine = Spline1D(m.z .- m.z[1], bI)(z)
 
     # BL correction
-    χB = boundaryCorrection(m, χI_fine, z)
+    χB = get_BL_correction(m, χI_fine, z)
     bB = cumtrapz(χB*m.N2*tan(m.θ)/m.κ[1], z) .- trapz(χB*m.N2*tan(m.θ)/m.κ[1], z)
 
     # full sol

@@ -16,15 +16,14 @@ function run(; bl=false)
     f = -5.5e-5
     N2 = 1e-6
     nz = 2^8
-    # H = 2e3
-    H = 1e3
+    H = 2e3
     θ = 2.5e-3                 # ridge
     # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
-    transportConstraint = true
-    # transportConstraint = false
+    transport_constraint = true
+    # transport_constraint = false
     U = [0.0]
     # U = [1e-2]
 
@@ -47,17 +46,14 @@ function run(; bl=false)
     ν_func(z) = μ*κ_func(z)
     
     # timestepping
-    # Δt = 1*secsInDay
-    Δt = 10*secsInDay
-    tSave = 1000*secsInDay
-    # tSave = 3*secsInYear
-    # tSave = 20*secsInYear
+    Δt = 10*secs_in_day
+    t_save = 3*secs_in_year
     
     # create model struct
-    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U)
+    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transport_constraint, U)
 
     # save and log params
-    saveSetup1DPG(m)
+    save_setup_1DPG(m)
 
     # set initial state
     b = zeros(nz)
@@ -66,12 +62,10 @@ function run(; bl=false)
     s = ModelState1DPG(b, χ, u, v, i)
 
     # solve transient
-    evolve!(m, s, 5000*secsInDay, tSave) 
-    # evolve!(m, s, 15*secsInYear, tSave) 
-    # evolve!(m, s, 100*secsInYear, tSave) 
+    evolve!(m, s, 15*secs_in_year, t_save) 
     
     # solve steady state
-    # steadyState(m)
+    # steady_state(m)
 
     return m, s
 end
@@ -80,16 +74,16 @@ end
 # run
 ################################################################################
 
-m, s = run()
-# m, s = run(bl=true)
+# m, s = run()
+m, s = run(bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-# setupFile = string(outFolder, "setup.h5")
-# # stateFiles = string.(outFolder, "state", -1:5, ".h5")
-# stateFiles = string.(outFolder, "state", 0:5, ".h5")
-# profilePlot(setupFile, stateFiles)
+setup_file = string(out_folder, "setup.h5")
+# state_files = string.(out_folder, "state", -1:5, ".h5")
+state_files = string.(out_folder, "state", 0:5, ".h5")
+profile_plot(setup_file, state_files)
 
 println("Done.")

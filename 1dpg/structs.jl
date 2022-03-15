@@ -56,13 +56,13 @@ struct ModelSetup1DPG
 	Δt::Float64
 
     # inversion LHS
-    inversionLHS::SuiteSparse.UMFPACK.UmfpackLU
+    inversion_LHS::SuiteSparse.UMFPACK.UmfpackLU
 
     # diffusion matrix
     D::SparseMatrixCSC{Float64,Int64}
 
     # transport constraint (boolean)
-    transportConstraint::Bool
+    transport_constraint::Bool
 
     # imposed transport (if transportConstraint == true)
     U::Vector{Float64}

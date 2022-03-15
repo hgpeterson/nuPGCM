@@ -4,7 +4,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-include("myJuliaLib.jl")
+include("my_julia_lib.jl")
 
 # for loading data
 include("1dtc/utils.jl")

@@ -5,7 +5,7 @@
 using PyPlot, PyCall, SpecialFunctions, Printf, SparseArrays, SuiteSparse, LinearAlgebra, HDF5
 
 # libraries
-include("../myJuliaLib.jl")
+include("../my_julia_lib.jl")
 include("structs.jl")
 include("plotting.jl")
 include("utils.jl")
@@ -13,9 +13,9 @@ include("inversion.jl")
 include("evolution.jl")
 
 # global constants
-const secsInDay = 86400
-const secsInYear = 360*86400
-const outFolder = "out/"
+const secs_in_day = 86400
+const secs_in_year = 360*86400
+const out_folder = "out/"
 
 """
     m = ModelSetup(f, ξVariation, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -54,21 +54,21 @@ function ModelSetup2DPG(f::Float64, ξVariation::Bool, L::Float64, nξ::Int64, n
                     periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, 
                     H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, N2::Array{Float64,2}, Δt::Real)
     # get derivative matrices
-    Dξ = getDξ(ξ, L, periodic)
-    Dσ = getDσ(σ)
+    Dξ = get_Dξ(ξ, L, periodic)
+    Dσ = get_Dσ(σ)
 
     # get diffusion matrix
-    D = getDiffusionMatrix(ξ, σ, κ, H)
+    D = get_diffusion_matrix(ξ, σ, κ, H)
 
     # inversion LHSs
-    inversionLHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
+    inversion_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
     for i=1:nξ 
-        inversionLHSs[i] = getInversionLHS(ν[i, :], f, H[i], σ)
+        inversion_LHSs[i] = get_inversion_LHS(ν[i, :], f, H[i], σ)
     end  
     
     # U = 1 inversion solution  
-    inversionRHS = getInversionRHS(f^2 ./ν, 1)
-    χ_U = computeχ(inversionLHSs, inversionRHS) 
+    inversion_RHS = get_inversion_RHS(f^2 ./ν, 1)
+    χ_U = get_χ(inversion_LHSs, inversion_RHS) 
 
-    return ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversionLHSs, χ_U)
+    return ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversion_LHSs, χ_U)
 end

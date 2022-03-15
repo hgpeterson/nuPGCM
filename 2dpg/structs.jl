@@ -72,7 +72,7 @@ struct ModelSetup2DPG
     D::SparseMatrixCSC{Float64,Int64}
 
     # inversion LHSs
-    inversionLHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
+    inversion_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
 
     # U = 1 solution
     χ_U::Array{Float64,2}

@@ -3,11 +3,11 @@
 ################################################################################
 
 """
-    Dξ = getDξ(ξ, L, periodic)
+    Dξ = get_Dξ(ξ, L, periodic)
 
 Compute the ξ derivative matrix.
 """
-function getDξ(ξ::Array{Float64,1}, L::Float64, periodic::Bool)
+function get_Dξ(ξ::Array{Float64,1}, L::Float64, periodic::Bool)
     nξ = size(ξ, 1)
     
     Dξ = Tuple{Int64,Int64,Float64}[]
@@ -66,11 +66,11 @@ function getDξ(ξ::Array{Float64,1}, L::Float64, periodic::Bool)
 end
 
 """
-    Dσ = getDσ(σ)
+    Dσ = get_Dσ(σ)
 
 Compute the σ derivative matrix.
 """
-function getDσ(σ::Array{Float64,1})
+function get_Dσ(σ::Array{Float64,1})
     nσ = size(σ, 1)
 
     Dσ = Tuple{Int64,Int64,Float64}[]
@@ -151,11 +151,11 @@ function zDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
 end
 
 """
-    u, v, w = transformFromTF(m, s)
+    u, v, w = transform_from_TF(m, s)
 
 Transform from terrain-following coordinates to cartesian coordinates.
 """
-function transformFromTF(m::ModelSetup2DPG, s::ModelState2DPG)
+function transform_from_TF(m::ModelSetup2DPG, s::ModelState2DPG)
     u = s.uξ
     v = s.uη
     w = s.uσ.*repeat(m.H, 1, m.nσ) + repeat(m.σ', m.nξ, 1).*repeat(m.Hx, 1, m.nσ).*s.uξ
@@ -163,23 +163,23 @@ function transformFromTF(m::ModelSetup2DPG, s::ModelState2DPG)
 end
 
 """
-    logParams(ofile, text)
+    log_params(ofile, text)
 
 Write `text` to `ofile` and print it.
 """
-function logParams(ofile::IOStream, text::String)
+function log_params(ofile::IOStream, text::String)
     write(ofile, string(text, "\n"))
     println(text)
 end
 
 """
-    saveSetup2DPG(m)
+    save_setup_2DPG(m)
 
 Save .h5 file for parameters.
 """
-function saveSetup2DPG(m::ModelSetup2DPG)
-    savefile = string(outFolder, "setup.h5")
-    file = h5open(savefile, "w")
+function save_setup_2DPG(m::ModelSetup2DPG)
+    save_file = string(out_folder, "setup.h5")
+    file = h5open(save_file, "w")
     write(file, "f", m.f)
     write(file, "ξVariation", m.ξVariation)
     write(file, "L", m.L)
@@ -198,31 +198,31 @@ function saveSetup2DPG(m::ModelSetup2DPG)
     write(file, "N2", m.N2)
     write(file, "Δt", m.Δt)
     close(file)
-    println(savefile)
+    println(save_file)
 
     # log 
-    ofile = open(string(outFolder, "out.txt"), "w")
-    logParams(ofile, "\n2D νPGCM with Parameters\n")
-    logParams(ofile, @sprintf("nξ    = %d", m.nξ))
-    logParams(ofile, @sprintf("nσ    = %d\n", m.nσ))
-    logParams(ofile, @sprintf("L     = %d km", m.L/1000))
-    logParams(ofile, @sprintf("f     = %1.1e s-1", m.f))
-    logParams(ofile, @sprintf("Nₘₐₓ  = %1.1e s-1", sqrt(maximum(m.N2))))
-    logParams(ofile, @sprintf("Δt    = %.2f days", m.Δt/secsInDay))
-    logParams(ofile, string("\nVariations in ξ: ", m.ξVariation))
-    logParams(ofile, string("Coordinates:     ", m.coords))
-    logParams(ofile, string("Periodic:        ", m.periodic))
-    logParams(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1, 1]/abs(m.f))))
-    logParams(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
+    ofile = open(string(out_folder, "out.txt"), "w")
+    log_params(ofile, "\n2D νPGCM with Parameters\n")
+    log_params(ofile, @sprintf("nξ    = %d", m.nξ))
+    log_params(ofile, @sprintf("nσ    = %d\n", m.nσ))
+    log_params(ofile, @sprintf("L     = %d km", m.L/1000))
+    log_params(ofile, @sprintf("f     = %1.1e s-1", m.f))
+    log_params(ofile, @sprintf("Nₘₐₓ  = %1.1e s-1", sqrt(maximum(m.N2))))
+    log_params(ofile, @sprintf("Δt    = %.2f days", m.Δt/secs_in_day))
+    log_params(ofile, string("\nVariations in ξ: ", m.ξVariation))
+    log_params(ofile, string("Coordinates:     ", m.coords))
+    log_params(ofile, string("Periodic:        ", m.periodic))
+    log_params(ofile, @sprintf("\nEkman layer thickness ~ %1.2f m", sqrt(2*m.ν[1, 1]/abs(m.f))))
+    log_params(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
     close(ofile)
 end
 
 """
-    m = loadSetup2DPG(filename)
+    m = load_setup_2DPG(filename)
 
 Load .h5 setup file given by `filename`.
 """
-function loadSetup2DPG(filename::String)
+function load_setup_2DPG(filename::String)
     file = h5open(filename, "r")
     f = read(file, "f")
     ξVariation = read(file, "ξVariation")
@@ -245,13 +245,13 @@ function loadSetup2DPG(filename::String)
 end
 
 """
-    saveState2DPG(s, iSave)
+    save_state_2DPG(s, iSave)
 
 Save .h5 state file.
 """
-function saveState2DPG(s::ModelState2DPG, iSave::Int64)
-    savefile = @sprintf("%sstate%d.h5", outFolder, iSave)
-    file = h5open(savefile, "w")
+function save_state_2DPG(s::ModelState2DPG, iSave::Int64)
+    save_file = @sprintf("%sstate%d.h5", out_folder, iSave)
+    file = h5open(save_file, "w")
     write(file, "b", s.b)
     write(file, "χ", s.χ)
     write(file, "uξ", s.uξ)
@@ -259,15 +259,15 @@ function saveState2DPG(s::ModelState2DPG, iSave::Int64)
     write(file, "uσ", s.uσ)
     write(file, "i", s.i)
     close(file)
-    println(savefile)
+    println(save_file)
 end
 
 """
-    s = loadState2DPG(filename)
+    s = load_state_2DPG(filename)
 
 Load .h5 state file given by `filename`.
 """
-function loadState2DPG(filename::String)
+function load_state_2DPG(filename::String)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")
@@ -286,7 +286,7 @@ end
 Construct full solutions `χ` = χI + χB and `b` = bI + bB at ξ = ξ[ix] from BL theory.
 The full solutions exist on the new grid `z`.
 """
-function constructFullSolution(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64}, ix::Int64)
+function get_full_soln(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64}, ix::Int64)
     # interior vars
     bI = s.b[ix, :]
     χI = s.χ[ix, :]

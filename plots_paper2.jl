@@ -4,7 +4,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-include("myJuliaLib.jl")
+include("my_julia_lib.jl")
 
 # for loading data
 include("1dpg/setup.jl")
@@ -21,22 +21,22 @@ pc = 1/6 # a pica is 1/6th of an inch
 ### utility functions
 
 """
-    U = BLtransport2D(m, s)
+    U = BL_transport_2D(m, s)
 
 Compute BL tranport from 2D BL theory.
 """
-function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
+function BL_transport_2D(m::ModelSetup2DPG, s::ModelState2DPG)
     dbdξ = ξDerivative(m, s.b[:, 1])
     μ = m.ν[1, 1] / m.κ[1, 1]
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
 end
 
 """
-    H*uσ = exchangeVel2D(m, χ)
+    H*uσ = exchange_vel_2D(m, χ)
 
 Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction at σ = -1).
 """ 
-function exchangeVel2D(m::ModelSetup2DPG, χ::Vector{Float64})
+function exchange_vel_2D(m::ModelSetup2DPG, χ::Vector{Float64})
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
         uσ = -ξDerivative(m, χ)./m.H
@@ -66,20 +66,20 @@ end
 
 ### plotting functions
 
-function BLCorrection(folder)
+function BL_correction(folder)
     fig, ax = subplots(1, 2)
     
     ax[1].set_xlabel(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)")
     ax[1].xaxis.set_label_coords(1.0, -0.15)
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
-    m = loadSetup1DPG(string(folder,     "S1e-3/bl/setup.h5"))
-    mFull = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
-    s = loadState1DPG(string(folder,     "S1e-3/bl/state1.h5"))
+    m = load_setup_1DPG(string(folder,     "S1e-3/bl/setup.h5"))
+    mFull = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
+    s = load_state_1DPG(string(folder,     "S1e-3/bl/state1.h5"))
 
     # compute full solution on finer grid
     z = mFull.z .- mFull.z[1]
-    χ, b = constructFullSolution(m, s, z)
+    χ, b = get_full_soln(m, s, z)
     χI = s.χ
 
     # plot
@@ -106,12 +106,12 @@ function BLCorrection(folder)
 
     subplots_adjust(wspace=0.3)
 
-    savefig("BLCorrection.pdf")
-    println("BLCorrection.pdf")
+    savefig("BL_correction.pdf")
+    println("BL_correction.pdf")
     plt.close()
 end
 
-function slopeFull1DvsBL1D(folder)
+function slope_profiles(folder)
     # init plot
     fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
@@ -165,11 +165,11 @@ function slopeFull1DvsBL1D(folder)
         color = colors[i, :]
 
         # BL 1D small S
-        m = loadSetup1DPG(string(folder,     "S1e-3/bl/setup.h5"))
-        mFull = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
-        s = loadState1DPG(string(folder,     "S1e-3/bl/state$i.h5"))
+        m = load_setup_1DPG(string(folder,     "S1e-3/bl/setup.h5"))
+        mFull = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
+        s = load_state_1DPG(string(folder,     "S1e-3/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
-        χ, b = constructFullSolution(m, s, z)
+        χ, b = get_full_soln(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
         Bz = m.N2 .+ differentiate(b, z)
         label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
@@ -179,8 +179,8 @@ function slopeFull1DvsBL1D(folder)
         ax[1, 3].plot(1e6*Bz, z/1e3, c=color, label=label)
 
         # full 1D small S
-        m = loadSetup1DPG(string(folder, "S1e-3/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S1e-3/full/state$i.h5"))
+        m = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
+        s = load_state_1DPG(string(folder, "S1e-3/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
@@ -190,11 +190,11 @@ function slopeFull1DvsBL1D(folder)
         ax[1, 3].plot(1e6*Bz, z/1e3, "k--", lw=0.5)
 
         # BL 1D big S
-        m = loadSetup1DPG(string(folder,     "S5e-1/bl/setup.h5"))
-        mFull = loadSetup1DPG(string(folder, "S5e-1/full/setup.h5"))
-        s = loadState1DPG(string(folder,     "S5e-1/bl/state$i.h5"))
+        m = load_setup_1DPG(string(folder,     "S5e-1/bl/setup.h5"))
+        mFull = load_setup_1DPG(string(folder, "S5e-1/full/setup.h5"))
+        s = load_state_1DPG(string(folder,     "S5e-1/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
-        χ, b = constructFullSolution(m, s, z)
+        χ, b = get_full_soln(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
         Bz = m.N2 .+ differentiate(b, z)
         label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
@@ -204,8 +204,8 @@ function slopeFull1DvsBL1D(folder)
         ax[2, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
 
         # full 1D big S
-        m = loadSetup1DPG(string(folder, "S5e-1/full/setup.h5"))
-        s = loadState1DPG(string(folder, "S5e-1/full/state$i.h5"))
+        m = load_setup_1DPG(string(folder, "S5e-1/full/setup.h5"))
+        s = load_state_1DPG(string(folder, "S5e-1/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
@@ -221,12 +221,12 @@ function slopeFull1DvsBL1D(folder)
     ax[1, 2].legend(custom_handles, custom_labels, loc=(0.55, 0.72))
     ax[1, 3].legend(loc="upper left")
     
-    savefig("slopeFull1DvsBL1D.pdf")
-    println("slopeFull1DvsBL1D.pdf")
+    savefig("slope_profiles.pdf")
+    println("slope_profiles.pdf")
     plt.close()
 end
 
-function TFcoords()
+function TF_coords()
     # params for ridge
     nξ = 2^8
     nσ = 2^8
@@ -263,14 +263,14 @@ function TFcoords()
 	ax.spines["bottom"].set_visible(false)
     ax.set_ylim([-H0*1.4, 0])
     tight_layout()
-    savefig("TFcoords.svg")
-    println("TFcoords.svg")
+    savefig("TF_coords.svg")
+    println("TF_coords.svg")
 end
 
 function seamount(folder)
     fig, ax = subplots(1, 2, figsize=(19*pc, 17*pc), sharey=true)
 
-    m = loadSetup2DPG(string(folder, "L200km/full2D/setup.h5"))
+    m = load_setup_2DPG(string(folder, "L200km/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, 1e2*s.χ, "", string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); 
@@ -288,7 +288,7 @@ function seamount(folder)
     plt.close()
 end
 
-function seamountFull2DvsBL(folder)
+function seamount_profiles(folder)
     # init plot
     fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
@@ -316,10 +316,10 @@ function seamountFull2DvsBL(folder)
     subplots_adjust(hspace=0.5)
 
     # model setups
-    m1DBL = loadSetup1DPG(string(folder, "bl1D/setup.h5"))
-    m2D = loadSetup2DPG(string(folder, "full2D/setup.h5"))
+    m1DBL = load_setup_1DPG(string(folder, "bl1D/setup.h5"))
+    m2D = load_setup_2DPG(string(folder, "full2D/setup.h5"))
     ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
-    m2DBL = loadSetup2DPG(string(folder, "bl2D/setup.h5"))
+    m2DBL = load_setup_2DPG(string(folder, "bl2D/setup.h5"))
     ixBL = argmin(abs.(m2DBL.x[:, 1] .- m2DBL.L/4))
 
     # limits
@@ -352,9 +352,9 @@ function seamountFull2DvsBL(folder)
 
         # BL 1D
         m = m1DBL
-        s = loadState1DPG(string(folder, "bl1D/state$i.h5"))
+        s = load_state_1DPG(string(folder, "bl1D/state$i.h5"))
         z = m2D.z[ix, :] .- m2D.z[ix, 1]
-        χ, b = constructFullSolution(m, s, z)
+        χ, b = get_full_soln(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
         Bz = m.N2 .+ differentiate(b, z)
         label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
@@ -376,7 +376,7 @@ function seamountFull2DvsBL(folder)
         m = m2DBL
         s = loadState2DPG(string(folder, "bl2D/state$i.h5"))
         z = m2D.z[ix, :] .- m2D.z[ix, 1]
-        χ, b = constructFullSolution(m, s, z, ixBL)
+        χ, b = get_full_soln(m, s, z, ixBL)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
         bz = differentiate(b, z)
         ax[2, 1].plot(1e2*χ,  z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
@@ -399,12 +399,12 @@ function seamountFull2DvsBL(folder)
     ax[1, 2].legend(custom_handles, custom_labels, loc="upper left")
     ax[1, 3].legend(loc="upper left")
     
-    savefig("seamountFull2DvsBL.pdf")
-    println("seamountFull2DvsBL.pdf")
+    savefig("seamount_profiles.pdf")
+    println("seamount_profiles.pdf")
     plt.close()
 end
 
-function ridgeN2exp(folder)
+function ridge_exp_strat(folder)
     fig = figure(figsize=(33*pc, 28*pc))
     gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1], height_ratios=[1.5, 1])
     ax = [fig.add_subplot(gs[1]) fig.add_subplot(gs[2]);
@@ -414,13 +414,13 @@ function ridgeN2exp(folder)
     ax[1, 1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate(L"(b) $N^2 \sim \exp(z/d)$", (0.0, 1.05), xycoords="axes fraction")
 
-    m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
+    m = load_setup_2DPG(string(folder, "const/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
         ax=ax[1, 1], cb_orientation="horizontal", pad=0.2, vext=2)
 
-    m = loadSetup2DPG(string(folder, "exp/full2D/setup.h5"))
+    m = load_setup_2DPG(string(folder, "exp/full2D/setup.h5"))
     s = loadState2DPG(string(folder, "exp/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
@@ -437,18 +437,18 @@ function ridgeN2exp(folder)
     ax[2, 2].set_xlabel(L"Horizontal coordinate $x$ (km)")
     ax[2, 2].set_ylabel(string(L"Exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
 
-    mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
-    mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
+    mConst = load_setup_2DPG(string(folder, "/const/bl2D/setup.h5"))
+    mExp   = load_setup_2DPG(string(folder, "/exp/bl2D/setup.h5"))
 
     s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
-    χtheory = BLtransport2D(mConst, s)
-    W = exchangeVel2D(mConst, χtheory)
+    χtheory = BL_transport_2D(mConst, s)
+    W = exchange_vel_2D(mConst, χtheory)
     ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "constant"))
     ax[2, 2].plot(mConst.ξ/1e3, 1e9*W)
 
     s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
-    χtheory = BLtransport2D(mExp, s)
-    W = exchangeVel2D(mExp, χtheory)
+    χtheory = BL_transport_2D(mExp, s)
+    W = exchange_vel_2D(mExp, χtheory)
     ax[2, 1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/d)$")
     ax[2, 2].plot(mExp.ξ/1e3, 1e9*W)
 
@@ -462,8 +462,8 @@ function ridgeN2exp(folder)
 
     subplots_adjust(hspace=0.3, wspace=0.4)
 
-    savefig("ridgeN2exp.pdf")
-    println("ridgeN2exp.pdf")
+    savefig("ridge_exp_strat.pdf")
+    println("ridge_exp_strat.pdf")
     plt.close()
 end
 
@@ -509,10 +509,10 @@ end
 
 path = "../sims/"
 
-# BLCorrection(string(path, "sim044/"))
-slopeFull1DvsBL1D(string(path, "sim044/"))
-# TFcoords()
+# BL_correction(string(path, "sim044/"))
+slope_profiles(string(path, "sim044/"))
+# TF_coords()
 # seamount(string(path, "sim035/"))
-# seamountFull2DvsBL(string(path, "sim042/"))
-# ridgeN2exp(string(path, "sim037/"))
+# seamount_profiles(string(path, "sim042/"))
+# ridge_exp_strat(string(path, "sim037/"))
 # pq()

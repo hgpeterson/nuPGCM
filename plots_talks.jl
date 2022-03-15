@@ -4,7 +4,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-include("myJuliaLib.jl")
+include("my_julia_lib.jl")
 
 # for loading data
 include("1dpg/setup.jl")
@@ -57,7 +57,7 @@ function spinupProfilesAnimation(folder)
     # plot data from folder
     m1dcan = loadSetup1DPG(string(folder, "1dcan/setup.h5"))
     m1dtc = loadSetup1DPG(string(folder, "1dtc/setup.h5"))
-    m2d = loadSetup2DPG(string(folder, "2dpg/setup.h5"))
+    m2d = load_setup_2DPG(string(folder, "2dpg/setup.h5"))
     for i=0:90
         # init plot
         fig, ax = subplots(1, 3, figsize=(6.5, 6.5/1.62/2), sharey=true)
@@ -90,7 +90,7 @@ function spinupProfilesAnimation(folder)
         ax[3].plot(1e6*bz,  m1dtc.z/1e3, label="transport-\nconstrained 1D")
         
         # 2D PG solution
-        s = loadState2DPG(string(folder, "2dpg/state", i, ".h5"))
+        s = load_state_2DPG(string(folder, "2dpg/state", i, ".h5"))
         ix = argmin(abs.(m2d.x[:, 1] .- m2d.L/4))
         v = s.uη
         bz = differentiate(s.b[ix, :], m2d.z[ix, :])
@@ -111,13 +111,13 @@ function spinupProfilesAnimation(folder)
 end
 
 function v3yr(folder)
-    m = loadSetup2DPG(string(folder, "/const/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "/const/full2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "/const/full2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "/const/full2D/state1.h5"))
 
     # compute v
-    u, v, w = transformFromTF(m, s)
+    u, v, w = transform_from_TF(m, s)
 
-    ax = ridgePlot(m, s, 1e2*v, "", latexstring(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-2}$)"); style="pcolormesh")
+    ax = ridge_plot(m, s, 1e2*v, "", latexstring(L"along-ridge flow $v$", "\n", L"($\times 10^{-2}$ m s$^{-2}$)"); style="pcolormesh")
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ax.plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     savefig("v3yr.pdf")
@@ -126,11 +126,11 @@ function v3yr(folder)
 end
 
 function px3yr(folder)
-    m = loadSetup2DPG(string(folder, "/const/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "/const/full2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "/const/full2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "/const/full2D/state1.h5"))
 
     # compute p_x
-    u, v, w = transformFromTF(m, s)
+    u, v, w = transform_from_TF(m, s)
     px = m.f*v + zDerivative(m, m.ν.*zDerivative(m, u)) 
 
     # # compute p
@@ -141,7 +141,7 @@ function px3yr(folder)
     #     p[i, :] = hydrostatic .+ (p[i, end] - hydrostatic[end]) # integration constant from int(px)
     # end
 
-    ridgePlot(m, s, px, "", L"pressure gradient $\partial_x p$ (m s$^{-2}$)")
+    ridge_plot(m, s, px, "", L"pressure gradient $\partial_x p$ (m s$^{-2}$)")
     savefig("px3yr.pdf")
     println("px3yr.pdf")
     plt.close()
@@ -174,8 +174,8 @@ function chiI_and_chiB(folder)
     ax.set_xlabel(string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
     ax.set_ylabel(L"$z$ (km)")
 
-    m = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
-    s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "/const/bl2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "/const/bl2D/state1.h5"))
     iξ = argmin(abs.(m.ξ .- m.L/4))
 
     χI = s.χ[iξ, :]
@@ -205,7 +205,7 @@ function seamountBL1DFail(folder)
     ax.set_ylabel(L"$z$ (km)")
     ax.set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
-    m2D = loadSetup2DPG(string(folder, "full2D/setup.h5"))
+    m2D = load_setup_2DPG(string(folder, "full2D/setup.h5"))
     ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
 
     # limits
@@ -226,7 +226,7 @@ function seamountBL1DFail(folder)
     ax.plot(1e6*Bz, z/1e3 .+ m2D.z[ix, 1]/1e3, label="BL 1D")
 
     # full 2D
-    s = loadState2DPG(string(folder, "full2D/state5.h5"))
+    s = load_state_2DPG(string(folder, "full2D/state5.h5"))
     bz = differentiate(s.b[ix, :], m2D.z[ix, :])
     ax.plot(1e6*bz, m2D.z[ix, :]/1e3, "--", label="full 2D")
 
@@ -247,8 +247,8 @@ function seamountBL2DSuccess(folder)
     ax.set_xlabel(string(L"stratification $\partial_z B$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
 
     # model setups
-    m = loadSetup2DPG(string(folder, "full2D/setup.h5"))
-    mBL = loadSetup2DPG(string(folder, "bl2D/setup.h5"))
+    m = load_setup_2DPG(string(folder, "full2D/setup.h5"))
+    mBL = load_setup_2DPG(string(folder, "bl2D/setup.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ixBL = argmin(abs.(mBL.x[:, 1] .- mBL.L/4))
 
@@ -257,7 +257,7 @@ function seamountBL2DSuccess(folder)
 
     # plot data
     # BL 2D
-    s = loadState2DPG(string(folder, "bl2D/state5.h5"))
+    s = load_state_2DPG(string(folder, "bl2D/state5.h5"))
     bI = s.b[ixBL, :]
     χI = s.χ[ixBL, :]
     bIξ = ξDerivative(mBL, s.b)
@@ -270,7 +270,7 @@ function seamountBL2DSuccess(folder)
     ax.plot(1e6*bz, mBL.z[ixBL, :]/1e3, label="BL 2D")
 
     # full 2D
-    s = loadState2DPG(string(folder, "full2D/state5.h5"))
+    s = load_state_2DPG(string(folder, "full2D/state5.h5"))
     bz = differentiate(s.b[ix, :], m.z[ix, :])
     ax.plot(1e6*bz, m.z[ix, :]/1e3, "--", label="full 2D")
 
@@ -286,10 +286,10 @@ end
 function chi3yrN2exp(folder)
     fig, ax = subplots(1)
 
-    m = loadSetup2DPG(string(folder, "/const/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "/const/full2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "/const/full2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "/const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax)
+    ridge_plot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax)
     ax.plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
 
     tight_layout()
@@ -300,10 +300,10 @@ function chi3yrN2exp(folder)
 
     fig, ax = subplots(1)
 
-    m = loadSetup2DPG(string(folder, "/exp/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "/exp/full2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "/exp/full2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "/exp/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax)
+    ridge_plot(m, s, s.χ, "", L"streamfunction $\chi$ (m$^2$ s$^{-1}$)"; ax=ax)
     ax.plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
 
     tight_layout()
@@ -325,16 +325,16 @@ function transportAndExchange(folder)
     ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
 
-    mConst = loadSetup2DPG(string(folder, "/const/bl2D/setup.h5"))
-    mExp   = loadSetup2DPG(string(folder, "/exp/bl2D/setup.h5"))
+    mConst = load_setup_2DPG(string(folder, "/const/bl2D/setup.h5"))
+    mExp   = load_setup_2DPG(string(folder, "/exp/bl2D/setup.h5"))
 
-    s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "/const/bl2D/state1.h5"))
     χtheory = BLtransport2D(mConst, s)
     W = exchangeVel2D(mConst, χtheory)
     ax[1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "const."))
     ax[2].plot(mConst.ξ/1e3, 1e9*W)
 
-    s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "/exp/bl2D/state1.h5"))
     χtheory = BLtransport2D(mExp, s)
     W = exchangeVel2D(mExp, χtheory)
     ax[1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/\delta)$")
@@ -357,10 +357,10 @@ function transportAndExchange(folder)
 end
 
 function ridgeAnimation(folder)
-    m = loadSetup2DPG(string(folder, "setup.h5"))
+    m = load_setup_2DPG(string(folder, "setup.h5"))
     for i=0:90
-        s = loadState2DPG(string(folder, "state$i.h5"))
-        ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); vext=1.5)
+        s = load_state_2DPG(string(folder, "state$i.h5"))
+        ax = ridge_plot(m, s, 1e3*s.χ, "", string(L"streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"); vext=1.5)
         ax.set_title(string(L"$t = $", @sprintf("%1.1f years", m.Δt*s.i[1]/secsInYear)))
         tight_layout()
         savefig(@sprintf("ridgeAnimation%03d.png", i))

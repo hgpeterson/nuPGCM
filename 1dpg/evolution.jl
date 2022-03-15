@@ -1,9 +1,9 @@
 """
-    matrices = getDiffusionMatrix()
+    matrices = get_diffusion_matrix()
 
 Compute the diffusion matrix needed for evolution equation integration.
 """
-function getDiffusionMatrix(z::Array{Float64,1}, κ::Array{Float64,1})
+function get_diffusion_matrix(z::Array{Float64,1}, κ::Array{Float64,1})
     nz = size(z, 1)
     D = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
 
@@ -45,43 +45,43 @@ function getDiffusionMatrix(z::Array{Float64,1}, κ::Array{Float64,1})
 end
 
 """
-    evolutionLHS = getEvolutionLHS(m)
+    evolution_LHS = get_evolution_LHS(m)
 
 Generate the left-hand side matrix for the evolution problem of the form `I - Δt/2*D`
 and the no flux boundary condition applied to the boundaries
 """
-function getEvolutionLHS(m::ModelSetup1DPG)
+function get_evolution_LHS(m::ModelSetup1DPG)
     # implicit euler
-    evolutionLHS = I - m.Δt/2*m.D 
+    evolution_LHS = I - m.Δt/2*m.D 
 
     # no flux boundaries
-    evolutionLHS[1, :] = m.D[1, :]
-    evolutionLHS[m.nz, :] = m.D[m.nz, :]
+    evolution_LHS[1, :] = m.D[1, :]
+    evolution_LHS[m.nz, :] = m.D[m.nz, :]
 
-    return lu(evolutionLHS)
+    return lu(evolution_LHS)
 end
 
 """
-    evolve!(m, s, tFinal, tSave)
+    evolve!(m, s, t_final, t_save)
 
-Solve equation for `b` for `tFinal` seconds.
+Solve equation for `b` for `t_final` seconds.
 """
-function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real)
+function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, t_final::Real, t_save::Real)
     # timestep
-    nSteps = Int64(tFinal/m.Δt)
-    nStepsSave = Int64(tSave/m.Δt)
+    n_steps = Int64(t_final/m.Δt)
+    n_steps_save = Int64(t_save/m.Δt)
 
     # left-hand side for evolution equation
-    LHS = getEvolutionLHS(m)
+    LHS = get_evolution_LHS(m)
 
     # initial condition
-    iSave = 0
-    saveState1DPG(s, iSave)
-    iSave += 1
+    i_save = 0
+    save_state_1DPG(s, i_save)
+    i_save += 1
 
     # main loop
     t = m.Δt
-    for i=1:nSteps
+    for i=1:n_steps
         # right-hand side
         RHS = s.b + m.Δt*(1/2*m.D*s.b + m.κ_z*m.N2 - s.u*m.N2*tan(m.θ))
 
@@ -99,15 +99,15 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, tFinal::Real, tSave::Real
         # invert buoyancy for flow
         invert!(m, s)
 
-        if i % nStepsSave == 0
+        if i % n_steps_save == 0
             # log
-            println(@sprintf("t = %.2f years (i = %d)", m.Δt*i/secsInYear, i))
+            println(@sprintf("t = %.2f years (i = %d)", m.Δt*i/secs_in_year, i))
             
             # save
-            saveState1DPG(s, iSave)
+            save_state_1DPG(s, i_save)
 
             # next
-            iSave += 1
+            i_save += 1
         end
 
         # step

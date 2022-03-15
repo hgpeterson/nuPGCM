@@ -11,7 +11,7 @@ pygui(false)
 # run setup
 include("setup.jl")
 
-function runRidge(; bl = false)
+function run_ridge(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     ξVariation = true
@@ -84,15 +84,15 @@ function runRidge(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 10*secsInDay
-    tPlot = 3*secsInYear
-    tSave = 3*secsInYear
+    Δt = 10*secs_in_day
+    t_plot = 3*secs_in_year
+    t_save = 3*secs_in_year
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
-    saveSetup2DPG(m)
+    save_setup_2DPG(m)
 
     # set initial state
     b = zeros(nξ, nσ)
@@ -104,12 +104,12 @@ function runRidge(; bl = false)
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 15*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 15*secs_in_year, t_plot, t_save; bl=bl) 
 
     return m, s
 end
 
-function runSeamount(; bl = false)
+function run_seamount(; bl = false)
     # parameters (see `setup.jl`)
     f = -5.5e-5
     ξVariation = true
@@ -154,15 +154,15 @@ function runSeamount(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 1*secsInDay
-    tPlot = 20*secsInYear
-    tSave = 20*secsInYear
+    Δt = 1*secs_in_day
+    t_plot = 20*secs_in_year
+    t_save = 20*secs_in_year
     
     # create model struct
     m = ModelSetup2DPG(f, ξVariation, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
-    saveSetup2DPG(m)
+    save_setup_2DPG(m)
 
     # set initial state
     b = zeros(nξ, nσ)
@@ -173,29 +173,29 @@ function runSeamount(; bl = false)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
-    # debug: what's the max Burger number?
-    S = @. m.N2[:, 1]/m.f^2*m.Hx^2
-    println("Sₘₐₓ = ", maximum(S))
+    # debug: what's the max slope Burger number?
+    ϱ = @. m.N2[:, 1]/m.f^2*m.Hx^2
+    println("ϱₘₐₓ = ", maximum(ϱ))
 
     # solve
-    evolve!(m, s, 100*secsInYear, tPlot, tSave; bl=bl) 
+    evolve!(m, s, 100*secs_in_year, t_plot, t_save; bl=bl) 
 
     return m, s
 end
 
-m, s = runRidge()
-# m, s = runRidge(; bl=true)
-# m, s = runSeamount()
-# m, s = runSeamount(; bl=true)
+# m, s = run_ridge()
+# m, s = run_ridge(; bl=true)
+m, s = run_seamount()
+# m, s = run_seamount(; bl=true)
 
 ################################################################################
 # plots
 ################################################################################
 
-setupFile = string(outFolder, "setup.h5")
-m = loadSetup2DPG(setupFile)
-stateFiles = string.(outFolder, "state", 0:5, ".h5")
+setup_file = string(out_folder, "setup.h5")
+m = load_setup_2DPG(setup_file)
+state_files = string.(out_folder, "state", 0:5, ".h5")
 iξ = argmin(abs.(m.ξ .- m.L/4))
-profilePlot(setupFile, stateFiles, iξ) 
+profile_plot(setup_file, state_files, iξ) 
 
 println("Done.")

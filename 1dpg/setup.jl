@@ -5,7 +5,7 @@
 using PyPlot, PyCall, SpecialFunctions, HDF5, Printf, Dierckx
 
 # libraries
-include("../myJuliaLib.jl")
+include("../my_julia_lib.jl")
 include("structs.jl")
 include("plotting.jl")
 include("utils.jl")
@@ -14,9 +14,9 @@ include("evolution.jl")
 include("steady.jl")
 
 # global constants
-const secsInDay = 86400
-const secsInYear = 360*86400
-const outFolder = "out/"
+const secs_in_day = 86400
+const secs_in_year = 360*86400
+const out_folder = "out/"
 
 """
     m = ModelSetup(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
@@ -44,10 +44,10 @@ function ModelSetup1DPG(bl::Bool, f::Float64, nz::Int64, z::Vector{Float64}, H::
                     ν::Vector{Float64}, κ::Vector{Float64}, κ_z::Vector{Float64},
                     N2::Float64, Δt::Real, transportConstraint::Bool, U::Vector{Float64})
     # inversion LHS
-    inversionLHS = getInversionLHS(ν, z, f, θ, transportConstraint) 
+    inversionLHS = get_inversion_LHS(ν, z, f, θ, transportConstraint) 
 
     # diffusion matrix
-    D = getDiffusionMatrix(z, κ)
+    D = get_diffusion_matrix(z, κ)
 
     # return struct
     return ModelSetup1DPG(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, inversionLHS, D, transportConstraint, U)

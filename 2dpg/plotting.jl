@@ -7,11 +7,11 @@ pl = pyimport("matplotlib.pylab")
 mpl = pyimport("matplotlib")
 
 """
-    ax = ridgePlot(m, s, field, titleString, cbarLabel; ax, vext, cmap)
+    ax = ridge_plot(m, s, field, title, cbar_label; ax, vext, cmap)
 
 Create 2D plot of `field` with isopycnals given by the buoyancy perturbation `b`
-from the model state `s`. Set the title to `titleString` and colorbar label to 
-`cbarLabel`. Return the axis handle `ax`.
+from the model state `s`. Set the title to `title` and colorbar label to 
+`cbar_label`. Return the axis handle `ax`.
 
 Optional: 
     - provide `ax`
@@ -22,8 +22,8 @@ Optional:
     - set xlabel with `xlabel`
     - set colorbar pad with `pad`
 """
-function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
-                titleString::AbstractString, cbarLabel::AbstractString; 
+function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
+                title::AbstractString, cbar_label::AbstractString; 
                 ax=nothing, vext=nothing, cmap="RdBu_r", style="contour",
                 cb_orientation="vertical", xlabel=nothing, pad=nothing)
     # km
@@ -61,16 +61,16 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
         levels = range(vmin, vmax, length=8)
         ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
         if pad === nothing
-            cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend)
+            cb = colorbar(img, ax=ax, label=cbar_label, orientation=cb_orientation, extend=extend)
         else
-            cb = colorbar(img, ax=ax, label=cbarLabel, orientation=cb_orientation, extend=extend, pad=pad)
+            cb = colorbar(img, ax=ax, label=cbar_label, orientation=cb_orientation, extend=extend, pad=pad)
         end
     elseif style == "pcolormesh"
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         if pad === nothing
-            cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation)
+            cb = colorbar(img, ax=ax, label=cbar_label, extend=extend, orientation=cb_orientation)
         else
-            cb = colorbar(img, ax=ax, label=cbarLabel, extend=extend, orientation=cb_orientation, pad=pad)
+            cb = colorbar(img, ax=ax, label=cbar_label, extend=extend, orientation=cb_orientation, pad=pad)
         end
         cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     else
@@ -78,18 +78,18 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
     end
 
     # isopycnal contours
-    nLevels = 20
-    lowerLevel = -trapz(m.N2[end, :], m.z[end, :])
-    # upperLevel = 0
-    upperLevel = lowerLevel/100
-    levels = lowerLevel:(upperLevel - lowerLevel)/(nLevels - 1):upperLevel
+    n_levels = 20
+    lower_level = -trapz(m.N2[end, :], m.z[end, :])
+    # upper_level = 0
+    upper_level = lower_level/100
+    levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
     ax.contour(xx, zz, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
 
     # ridge shading
     ax.fill_between(xx[:, 1], zz[:, 1], minimum(zz), color="k", alpha=0.3, lw=0.0)
 
     # labels
-    ax.set_title(titleString)
+    ax.set_title(title)
     if xlabel === nothing
         ax.set_xlabel(L"Horizontal coordinate $x$ (km)")
     else
@@ -106,14 +106,14 @@ function ridgePlot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}
 end
 
 """
-    profilePlot(datafiles, iξ)
+    profile_plot(datafiles, iξ)
 
 Plot profiles of χ, v, b_z from HDF5 snapshot files of buoyancy in the `datafiles` list
 at ξ = ξ[iξ].
 """
-function profilePlot(setupFile, stateFiles, iξ)
+function profile_plot(setup_file, state_files, iξ)
     # ModelSetup 
-    m = loadSetup2DPG(setupFile)
+    m = load_setup_2DPG(setup_file)
 
     # init plot
     fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
@@ -131,20 +131,23 @@ function profilePlot(setupFile, stateFiles, iξ)
         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
     end
 
+    # lims
+    ax[1].set_ylim([m.z[iξ, 1]/1e3, 0])
+
     # color map
-    colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)-1))
+    colors = pl.cm.viridis(range(1, 0, length=size(state_files, 1)-1))
 
     # plot data from `datafiles`
-    for i=1:size(stateFiles, 1)
+    for i=1:size(state_files, 1)
         # load
-        s = loadState2DPG(stateFiles[i])
-        u, v, w = transformFromTF(m, s)
+        s = load_state_2DPG(state_files[i])
+        u, v, w = transform_from_TF(m, s)
 
         # stratification
         bz = zDerivative(m, s.b)
 
         # colors and labels
-        label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
+        label = string(Int64(round(s.i[1]*m.Δt/secs_in_year)), " years")
         if i==1
             color = "tab:red"
         else
@@ -159,154 +162,29 @@ function profilePlot(setupFile, stateFiles, iξ)
 
     ax[1].legend()
 
-    savefig(string(outFolder, "profiles.png"))
-    println(string(outFolder, "profiles.png"))
+    savefig(string(out_folder, "profiles.png"))
+    println(string(out_folder, "profiles.png"))
 end
 
 """
-    plotCurrentState(m, s, iImg)
+    plot_state_2DPG(m, s, i_img)
 
-Make some ridge plots of the current model state using the label number `iImg`.
+Make some ridge plots of the current model state using the label number `i_img`.
 """
-function plotCurrentState(m::ModelSetup2DPG, s::ModelState2DPG, iImg::Int64)
+function plot_state_2DPG(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
     # convert to physical coordinates 
-    u, v, w = transformFromTF(m, s)
+    u, v, w = transform_from_TF(m, s)
 
     # plots
-    ridgePlot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"streamfunction $\chi$ (m$^2$ s$^{-1}$)")
-    savefig(@sprintf("%schi%03d.png", outFolder, iImg))
+    ridge_plot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"streamfunction $\chi$ (m$^2$ s$^{-1}$)")
+    savefig(@sprintf("%schi%03d.png", out_folder, i_img))
     plt.close()
 
-    ridgePlot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"buoyancy $b$ (m s$^{-2}$)"; style="pcolormesh")
-    savefig(@sprintf("%sb%03d.png", outFolder, iImg))
+    ridge_plot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"buoyancy $b$ (m s$^{-2}$)"; style="pcolormesh")
+    savefig(@sprintf("%sb%03d.png", out_folder, i_img))
     plt.close()
 
-    ridgePlot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secsInYear), L"along-ridge flow $v$ (m s$^{-1}$)"; style="pcolormesh")
-    savefig(@sprintf("%sv%03d.png", outFolder, iImg))
+    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"along-ridge flow $v$ (m s$^{-1}$)"; style="pcolormesh")
+    savefig(@sprintf("%sv%03d.png", out_folder, i_img))
     plt.close()
 end
-
-# function plot_advection(setupFile, stateFiles, iξ)
-#     m = loadSetup2DPG(setupFile)
-
-#     # total advection terms
-#     fig, ax = subplots(1, 2, figsize=(2*1.955, 3.167), sharey=true)
-
-#     ax[1].set_xlabel(string("Horizontal Advection", "\n", L"$u^\xi \partial_\xi b$ (m s$^{-3}$)"))
-#     ax[2].set_xlabel(string("Vertical Advection", "\n", L"$u^\sigma \partial_\sigma b$ (m s$^{-3}$)"))
-#     ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-#     ax[2].annotate(string(L"$x = $", @sprintf("%d", round(m.ξ[iξ]/1e3, sigdigits=1)), " km"), (0.1, 0.8), xycoords="axes fraction")
-
-#     ax[1].set_ylim([m.z[iξ, 1]/1e3, 0])
-    
-#     for a=ax
-#         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-#     end
-
-#     # color map
-#     colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)))
-
-#     # plot data from `datafiles`
-#     for i=1:size(stateFiles, 1)
-#         # load
-#         s = loadState2DPG(stateFiles[i])
-
-#         # colors and labels
-#         label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
-#         color = colors[i, :]
-
-#         # gradients
-#         dbdξ = ξDerivative(m, s.b)
-#         dbdσ = σDerivative(m, s.b)
-
-#         # plot
-#         ax[1].plot(s.uξ[iξ, :].*dbdξ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#         ax[2].plot(s.uσ[iξ, :].*dbdσ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#     end
-
-#     ax[1].legend()
-
-#     savefig(string(outFolder, "advection_$iξ.png"))
-#     println(string(outFolder, "advection_$iξ.png"))
-#     plt.close()
-
-#     # one term at a time
-#     fig, ax = subplots(1, 2, figsize=(2*1.955, 3.167), sharey=true)
-
-#     ax[1].set_xlabel(string("Horizontal Velocity", "\n", L"$u^\xi$ (m s$^{-1}$)"))
-#     ax[2].set_xlabel(string("Horizontal Buoyancy Gradient", "\n", L"$\partial_\xi b$ (s$^{-2}$)"))
-#     ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-#     ax[2].annotate(string(L"$x = $", @sprintf("%d", round(m.ξ[iξ]/1e3, sigdigits=1)), " km"), (0.1, 0.8), xycoords="axes fraction")
-
-#     ax[1].set_ylim([m.z[iξ, 1]/1e3, 0])
-    
-#     for a=ax
-#         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-#     end
-
-#     # color map
-#     colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)))
-
-#     # plot data from `datafiles`
-#     for i=1:size(stateFiles, 1)
-#         # load
-#         s = loadState2DPG(stateFiles[i])
-
-#         # colors and labels
-#         label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
-#         color = colors[i, :]
-
-#         # gradients
-#         dbdξ = ξDerivative(m, s.b)
-
-#         # plot
-#         ax[1].plot(s.uξ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#         ax[2].plot(dbdξ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#     end
-
-#     ax[1].legend()
-
-#     savefig(string(outFolder, "horizontal_$iξ.png"))
-#     println(string(outFolder, "horizontal_$iξ.png"))
-#     plt.close()
-
-#     # one term at a time
-#     fig, ax = subplots(1, 2, figsize=(2*1.955, 3.167), sharey=true)
-
-#     ax[1].set_xlabel(string("Vertical Velocity", "\n", L"$u^\sigma$ (s$^{-1}$)"))
-#     ax[2].set_xlabel(string("Vertical Buoyancy Gradient", "\n", L"$\partial_\sigma b$ (m s$^{-2}$)"))
-#     ax[1].set_ylabel(L"Vertical Coordinate $z$ (km)")
-#     ax[2].annotate(string(L"$x = $", @sprintf("%d", round(m.ξ[iξ]/1e3, sigdigits=1)), " km"), (0.1, 0.8), xycoords="axes fraction")
-
-#     ax[1].set_ylim([m.z[iξ, 1]/1e3, 0])
-    
-#     for a=ax
-#         a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-#     end
-
-#     # color map
-#     colors = pl.cm.viridis(range(1, 0, length=size(stateFiles, 1)))
-
-#     # plot data from `datafiles`
-#     for i=1:size(stateFiles, 1)
-#         # load
-#         s = loadState2DPG(stateFiles[i])
-
-#         # colors and labels
-#         label = string(Int64(round(s.i[1]*m.Δt/secsInYear)), " years")
-#         color = colors[i, :]
-
-#         # gradients
-#         dbdσ = σDerivative(m, s.b)
-
-#         # plot
-#         ax[1].plot(s.uσ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#         ax[2].plot(dbdσ[iξ, :], m.z[iξ, :]/1e3, c=color, label=label)
-#     end
-
-#     ax[1].legend()
-
-#     savefig(string(outFolder, "vertical_$iξ.png"))
-#     println(string(outFolder, "vertical_$iξ.png"))
-#     plt.close()
-# end
