@@ -202,8 +202,8 @@ Modify the right-hand side vector `RHS` to include boundary conditions at the to
 function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2})
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if m.bl
-        RHS[:, 1] = s.χ[:, 1].*ξDerivative(m, s.b[:, 1])./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*ξDerivative(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
+        RHS[:, 1] = s.χ[:, 1].*∂ξ(m, s.b[:, 1])./m.κ[:, 1]
+        RHS[:, m.nσ] = s.χ[:, m.nσ].*∂ξ(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
     else
         RHS[:, 1] .= 0
         RHS[:, m.nσ] .= m.N2[:, m.nσ]
@@ -259,9 +259,9 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
         function advection_RHS(b)
             χ, uξ, uη, uσ, U = invert(m, b)
             if m.ξVariation
-                return -uξ.*ξDerivative(m, b) .- uσ.*σDerivative(m, b)
+                return -uξ.*∂ξ(m, b) .- uσ.*∂σ(m, b)
             else
-                return -uσ.*σDerivative(m, b)
+                return -uσ.*∂σ(m, b)
             end
         end
 

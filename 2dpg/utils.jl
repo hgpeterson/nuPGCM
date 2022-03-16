@@ -105,48 +105,48 @@ function get_Dσ(σ::Array{Float64,1})
 end
 
 """
-    fξ = ξDerivative(m, field)
+    dfdξ = ∂ξ(m, field)
 
-Compute dξ(`field`) in terrian-following coordinates.
+Compute derivative of `field` in ξ-direction in terrian-following coordinates.
 """
-function ξDerivative(m::ModelSetup2DPG, field::Array{Float64})
+function ∂ξ(m::ModelSetup2DPG, field::Array{Float64})
     return m.Dξ*field
 end
 
 """
-    fσ = σDerivative(m, field)
+    dfdσ = ∂σ(m, field)
 
-Compute dσ(`field`) in terrian-following coordinates.
+Compute derivative of `field` in σ-direction in terrian-following coordinates.
 """
-function σDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
+function ∂σ(m::ModelSetup2DPG, field::Array{Float64,2})
     return (m.Dσ*field')'
 end
 
 """
-    fx = xDerivative(m, field)
+    dfdx = ∂x(m, field)
 
-Compute dx(`field`) in terrian-following coordinates.
-Note: dx() = dξ() - dx(H)*σ*dσ()/H
+Compute derivative of `field` in x-direction in terrian-following coordinates.
+Note: ∂x() = ∂ξ() - ∂x(H)*σ*∂σ()/H
 """
-function xDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
-    # dξ(field)
-    fx = ξDerivative(m, field)
+function ∂x(m::ModelSetup2DPG, field::Array{Float64,2})
+    # ∂ξ(field)
+    dfdx = ∂ξ(m, field)
 
-    # -dx(H)*σ*dσ(field)/H
-    fx -= repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivative(m, field)
+    # -∂x(H)*σ*∂σ(field)/H
+    dfdx -= repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*∂σ(m, field)
 
-    return fx
+    return dfdx
 end
 
 """
-    fz = zDerivative(m, field)
+    fz = ∂z(m, field)
 
 Compute dz(`field`) in terrian-following coordinates.
 Note: dz() = dσ()/H
 """
-function zDerivative(m::ModelSetup2DPG, field::Array{Float64,2})
+function ∂z(m::ModelSetup2DPG, field::Array{Float64,2})
     # dσ(field)/H
-    fz = σDerivative(m, field)./repeat(m.H, 1, m.nσ)
+    fz = ∂σ(m, field)./repeat(m.H, 1, m.nσ)
     return fz
 end
 
@@ -295,7 +295,7 @@ function get_full_soln(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64},
     χI = s.χ[ix, :]
 
     # BL thickness 
-    bIξ = ξDerivative(m, s.b)
+    bIξ = ∂ξ(m, s.b)
     δ = sqrt(2*m.ν[ix, 1]/abs(m.f))
     μ = m.ν[ix, 1]/m.κ[ix, 1]
     S = -1/m.f^2 * m.Hx[ix]*bIξ[ix, 1]

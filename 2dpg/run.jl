@@ -185,7 +185,7 @@ end
 # m, s = run_ridge()
 # m, s = run_ridge(; bl=true)
 # m, s = run_seamount()
-m, s = run_seamount(; bl=true)
+# m, s = run_seamount(; bl=true)
 
 ################################################################################
 # plots

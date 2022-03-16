@@ -27,7 +27,7 @@ lines = pyimport("matplotlib.lines")
 Compute BL tranport from 2D BL theory.
 """
 function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
-    dbdξ = ξDerivative(m, s.b[:, 1])
+    dbdξ = ∂ξ(m, s.b[:, 1])
     μ = m.ν[1, 1] / m.κ[1, 1]
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
 end
@@ -40,10 +40,10 @@ Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction
 function exchangeVel2D(m::ModelSetup2DPG, χ::Vector{Float64})
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
-        uσ = -ξDerivative(m, χ)./m.H
+        uσ = -∂ξ(m, χ)./m.H
     elseif m.coords == "cylindrical"
         # uσ = -dρ(ρ*χ)/(H*ρ)
-        uσ = -ξDerivative(m, m.ξ.*χ)./m.H./m.ξ
+        uσ = -∂ξ(m, m.ξ.*χ)./m.H./m.ξ
         # assume χ = 0 at ρ = 0
         fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
         uσ[1] = -(fd_ξ[2]*m.ξ[1]*χ[1] + fd_ξ[3]*m.ξ[2]*χ[2])/(m.H[1]*m.ξ[1])
@@ -131,7 +131,7 @@ function px3yr(folder)
 
     # compute p_x
     u, v, w = transform_from_TF(m, s)
-    px = m.f*v + zDerivative(m, m.ν.*zDerivative(m, u)) 
+    px = m.f*v + ∂z(m, m.ν.*∂z(m, u)) 
 
     # # compute p
     # p = zeros(m.nξ, m.nσ)
@@ -179,7 +179,7 @@ function chiI_and_chiB(folder)
     iξ = argmin(abs.(m.ξ .- m.L/4))
 
     χI = s.χ[iξ, :]
-    bIξ = ξDerivative(m, s.b)
+    bIξ = ∂ξ(m, s.b)
     q = (1/(4*m.ν[iξ, 1])*(m.f^2/m.ν[iξ, 1] - m.Hx[iξ]*bIξ[iξ, 1]/m.H[iξ]/m.κ[iξ, 1]))^(1/4)
     χB = boundaryCorrection(χI, m.z[iξ, :] .- m.z[iξ, 1], q)
     χ = χI + χB
@@ -260,7 +260,7 @@ function seamountBL2DSuccess(folder)
     s = load_state_2DPG(string(folder, "bl2D/state5.h5"))
     bI = s.b[ixBL, :]
     χI = s.χ[ixBL, :]
-    bIξ = ξDerivative(mBL, s.b)
+    bIξ = ∂ξ(mBL, s.b)
     q = (1/(4*mBL.ν[ixBL, 1])*(mBL.f^2/mBL.ν[ixBL, 1] - mBL.Hx[ixBL]*bIξ[ixBL, 1]/mBL.H[ixBL]/mBL.κ[ixBL, 1]))^(1/4)
     χB = boundaryCorrection(χI, mBL.z[ixBL, :] .- mBL.z[ixBL, 1], q)
     bB = cumtrapz(χB*bIξ[ixBL, 1]/mBL.κ[ixBL, 1], mBL.z[ixBL, :]) .- trapz(χB.*bIξ[ixBL, 1]/mBL.κ[ixBL, 1], mBL.z[ixBL, :]) 

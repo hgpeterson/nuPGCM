@@ -2,7 +2,7 @@
 # Functions useful for plotting
 ################################################################################
 
-# for colors
+pc = 1/6 # one pica is 1/6th of an inch
 pl = pyimport("matplotlib.pylab")
 mpl = pyimport("matplotlib")
 
@@ -116,14 +116,14 @@ function profile_plot(setup_file, state_files, iξ)
     m = load_setup_2DPG(setup_file)
 
     # init plot
-    fig, ax = subplots(1, 3, figsize=(6.5, 2), sharey=true)
+    fig, ax = subplots(1, 3, figsize=(27*pc, 12*pc), sharey=true)
 
-    ax[1].set_xlabel(string("streamfunction\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
-    ax[1].set_ylabel(L"$z$ (km)")
+    ax[1].set_xlabel(string("Streamfunction\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
-    ax[2].set_xlabel(string("along-slope flow\n", L"$u^y$ (m s$^{-1}$)"))
+    ax[2].set_xlabel(string("Along-slope flow\n", L"$u^\eta$ (m s$^{-1}$)"))
 
-    ax[3].set_xlabel(string("stratification\n", L"$\partial_z b$ (s$^{-2}$)"))
+    ax[3].set_xlabel(string("Stratification\n", L"$\partial_z b$ (s$^{-2}$)"))
 
     subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
 
@@ -144,7 +144,7 @@ function profile_plot(setup_file, state_files, iξ)
         u, v, w = transform_from_TF(m, s)
 
         # stratification
-        bz = zDerivative(m, s.b)
+        bz = ∂z(m, s.b)
 
         # colors and labels
         label = string(Int64(round(s.i[1]*m.Δt/secs_in_year)), " years")
@@ -176,15 +176,15 @@ function plot_state_2DPG(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
     u, v, w = transform_from_TF(m, s)
 
     # plots
-    ridge_plot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"streamfunction $\chi$ (m$^2$ s$^{-1}$)")
+    ridge_plot(m, s, s.χ, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Streamfunction $\chi$ (m$^2$ s$^{-1}$)")
     savefig(@sprintf("%schi%03d.png", out_folder, i_img))
     plt.close()
 
-    ridge_plot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"buoyancy $b$ (m s$^{-2}$)"; style="pcolormesh")
+    ridge_plot(m, s, s.b, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Buoyancy $b$ (m s$^{-2}$)"; style="pcolormesh")
     savefig(@sprintf("%sb%03d.png", out_folder, i_img))
     plt.close()
 
-    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"along-ridge flow $v$ (m s$^{-1}$)"; style="pcolormesh")
+    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Along-ridge flow $u^\eta$ (m s$^{-1}$)"; style="pcolormesh")
     savefig(@sprintf("%sv%03d.png", out_folder, i_img))
     plt.close()
 end

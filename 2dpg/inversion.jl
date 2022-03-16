@@ -153,7 +153,7 @@ function get_U(m::ModelSetup2DPG, χ_b::Matrix{Float64})
 end
 function get_U_BL(m::ModelSetup2DPG, b::Matrix{Float64})
     # bx
-    bx = xDerivative(m, b)
+    bx = ∂x(m, b)
 
     # first term: ⟨ ∫ ∂ₓb dσ ⟩ 
     term1 = zeros(m.nξ)
@@ -163,7 +163,7 @@ function get_U_BL(m::ModelSetup2DPG, b::Matrix{Float64})
     term1 = sum(term1)/m.nξ
 
     # second term: ⟨ 1/q * 1/(1 + μS) * ∂ξ(b)(-1) ⟩
-    dbdξ = ξDerivative(m, b)[:, 1]
+    dbdξ = ∂ξ(m, b)[:, 1]
     δ = @. sqrt(2*m.ν[:, 1]/abs(m.f))
     μ = @. m.ν[:, 1]/m.κ[:, 1]
     S = @. -1/m.f^2 * m.Hx*dbdξ
@@ -189,7 +189,7 @@ function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
     U = χ[1, end] # just take first one since they all must be the same
 
     # uξ = dσ(χ)/H
-    uξ = σDerivative(m, χ)./repeat(m.H, 1, m.nσ)
+    uξ = ∂σ(m, χ)./repeat(m.H, 1, m.nσ)
 
     # uη = int_-1^0 f*χ/nu dσ*H
     uη = zeros(m.nξ, m.nσ)
@@ -200,10 +200,10 @@ function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
     if m.ξVariation
         if m.coords == "cartesian"
             # uσ = -dξ(χ)/H
-            uσ = -ξDerivative(m, χ)./repeat(m.H, 1, m.nσ)
+            uσ = -∂ξ(m, χ)./repeat(m.H, 1, m.nσ)
         elseif m.coords == "axisymmetric"
             # uσ = -dρ(ρ*χ)/(H*ρ)
-            uσ = -ξDerivative(m, repeat(m.ξ, 1, m.nσ).*χ)./repeat(m.H.*m.ξ, 1, m.nσ)
+            uσ = -∂ξ(m, repeat(m.ξ, 1, m.nσ).*χ)./repeat(m.H.*m.ξ, 1, m.nσ)
             # assume χ = 0 at ρ = 0
             fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
             uσ[1, :] = @. -(fd_ξ[2]*m.ξ[1]*χ[1, :] + fd_ξ[3]*m.ξ[2]*χ[2, :])/(m.H[1]*m.ξ[1])
@@ -224,9 +224,9 @@ function invert(m::ModelSetup2DPG, b::Matrix{Float64})
     # buoyancy solution: rhs = dx(b), U = 0;
     # (U = 1 solution `sol_U` is stored in ModelSetup2DPG struct)
     if m.ξVariation
-        rhs = xDerivative(m, b)
+        rhs = ∂x(m, b)
     else
-        rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*σDerivative(m, b)
+        rhs = -repeat(m.Hx./m.H, 1, m.nσ).*repeat(m.σ', m.nξ, 1).*∂σ(m, b)
     end
 
     if m.bl # BL Solution

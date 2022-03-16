@@ -26,7 +26,7 @@ pc = 1/6 # a pica is 1/6th of an inch
 Compute BL tranport from 2D BL theory.
 """
 function BL_transport_2D(m::ModelSetup2DPG, s::ModelState2DPG)
-    dbdξ = ξDerivative(m, s.b[:, 1])
+    dbdξ = ∂ξ(m, s.b[:, 1])
     μ = m.ν[1, 1] / m.κ[1, 1]
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
 end
@@ -39,10 +39,10 @@ Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction
 function exchange_vel_2D(m::ModelSetup2DPG, χ::Vector{Float64})
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
-        uσ = -ξDerivative(m, χ)./m.H
+        uσ = -∂ξ(m, χ)./m.H
     elseif m.coords == "cylindrical"
         # uσ = -dρ(ρ*χ)/(H*ρ)
-        uσ = -ξDerivative(m, m.ξ.*χ)./m.H./m.ξ
+        uσ = -∂ξ(m, m.ξ.*χ)./m.H./m.ξ
         # assume χ = 0 at ρ = 0
         fd_ξ = mkfdstencil([0, m.ξ[1], m.ξ[2]], m.ξ[1], 1)
         uσ[1] = -(fd_ξ[2]*m.ξ[1]*χ[1] + fd_ξ[3]*m.ξ[2]*χ[2])/(m.H[1]*m.ξ[1])
