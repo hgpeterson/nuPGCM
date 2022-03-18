@@ -44,7 +44,7 @@ function ModelSetup1DPG(bl::Bool, f::Float64, nz::Int64, z::Vector{Float64}, H::
                     ν::Vector{Float64}, κ::Vector{Float64}, κ_z::Vector{Float64},
                     N2::Float64, Δt::Real, transportConstraint::Bool, U::Vector{Float64})
     # inversion LHS
-    inversionLHS = get_inversion_LHS(ν, z, f, θ, transportConstraint) 
+    inversionLHS = get_inversion_LHS(ν, z, f, transportConstraint) 
 
     # diffusion matrix
     D = get_diffusion_matrix(z, κ)

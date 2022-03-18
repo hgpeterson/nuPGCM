@@ -143,7 +143,7 @@ end
 Take solution `sol` and extract reshaped `χ`. Compute `u`, `v`
 from definition of χ.
 """
-function post_process(m, sol)
+function post_process(m::ModelSetup1DPG, sol::Vector{Float64})
     iU = m.nz + 1
 
     # transport at iU
