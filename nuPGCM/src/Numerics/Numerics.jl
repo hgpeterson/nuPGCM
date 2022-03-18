@@ -8,7 +8,12 @@ export
 
     # integrals
     trapz,
-    cumtrapz
+    cumtrapz,
+    gaussian_quad2,
+
+    # finite elements
+    tri_area,
+    local_basis_func
 
 using PyPlot
 using PyCall
@@ -21,5 +26,6 @@ using HDF5
 
 include("derivatives.jl")
 include("integrals.jl")
+include("finite_elements.jl")
 
 end # module

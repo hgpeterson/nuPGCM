@@ -19,5 +19,6 @@ const out_folder = "output/"
 include("Numerics/Numerics.jl")
 include("OneDimensionalModel/OneDimensionalModel.jl")
 include("TwoDimensionalModel/TwoDimensionalModel.jl")
+include("ThreeDimensionalModel/ThreeDimensionalModel.jl")
 
 end # module
