@@ -12,6 +12,7 @@ export
     gaussian_quad2,
 
     # finite elements
+    load_mesh,
     tri_area,
     local_basis_func
 

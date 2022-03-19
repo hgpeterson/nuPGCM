@@ -14,7 +14,14 @@ export
 
     # model structs 
     ModelSetup3DPG,
-    ModelState3DPG
+    ModelState3DPG,
+
+    # inversion
+    get_barotropic_LHS,
+    get_barotropic_RHS,
+
+    # plotting
+    tplot
 
 using nuPGCM
 using nuPGCM.Numerics
