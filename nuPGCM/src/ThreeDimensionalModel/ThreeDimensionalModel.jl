@@ -21,7 +21,8 @@ export
     get_barotropic_RHS,
 
     # plotting
-    tplot
+    tplot,
+    plot_Ψ
 
 using nuPGCM
 using nuPGCM.Numerics
