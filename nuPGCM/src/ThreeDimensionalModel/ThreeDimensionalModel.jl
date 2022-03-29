@@ -22,7 +22,7 @@ export
 
     # plotting
     tplot,
-    plot_Ψ
+    plot_horizontal
 
 using nuPGCM
 using nuPGCM.Numerics

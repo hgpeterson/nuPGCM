@@ -26,18 +26,20 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     return fig, ax, im
 end
 
-function plot_Ψ(p, t, Ψ; vext=nothing)
+function plot_horizontal(p, t, u; vext=nothing, clabel="")
+    if vext === nothing
+        vext = maximum(abs.(u))
+        extend = "neither"
+    else
+        extend = "both"
+    end
     p = p/1e3 # km
-    Ψ = Ψ/1e9 # Sv
-    fig, ax, im = tplot(p, t, Ψ; vext=vext)
-    cb = colorbar(im, ax=ax, label=L"Streamfunction $\Psi$ (Sv)")
-    Ψmax = maximum(abs.(Ψ))
+    fig, ax, im = tplot(p, t, u; vext=vext)
+    cb = colorbar(im, ax=ax, label=clabel, extend=extend)
     n = 6
-    levels = Ψmax*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
-    ax.tricontour(p[:, 1], p[:, 2], t .- 1, Ψ, linewidths=0.25, colors="k", linestyles="-", levels=levels)
+    levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
+    ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
     ax.set_xlabel(L"Horizontal coordintate $\xi$ (km)")
     ax.set_ylabel(L"Horizontal coordintate $\eta$ (km)")
     ax.axis("equal")
-    savefig("psi.png")
-    plt.close()
 end

@@ -7,8 +7,10 @@ plt.close("all")
 pygui(false)
 
 # load mesh
-p, t, e = load_mesh("../meshes/square.h5")
-# p, t, e = load_mesh("../meshes/circle.h5")
+# p, t, e = load_mesh("../meshes/square1.h5")
+# p, t, e = load_mesh("../meshes/square2.h5")
+# p, t, e = load_mesh("../meshes/circle1.h5")
+p, t, e = load_mesh("../meshes/circle2.h5")
 
 # widths of basin
 Lx = 5e6
@@ -32,15 +34,15 @@ Hy(ξ, η) = 0
 
 # coriolis parameter f = f₀ + βη
 f₀ = 0
-β = 2e-11
+β = 1e-11
 
 # JEBAR term
 JEBAR(ξ, η) = 0
 
 # wind stress and its curl
-τ_ξ(ξ, η) = 0.1*cos(π*η/Ly)
+τ_ξ(ξ, η) = -0.1*cos(π*η/Ly)
 τ_η(ξ, η) = 0
-curl_τ(ξ, η) = -0.1*π/Ly*sin(π*η/Ly)
+curl_τ(ξ, η) = 0.1*π/Ly*sin(π*η/Ly)
 
 # right-hand-side forcing
 F(ξ, η) = JEBAR(ξ, η) + curl_τ(ξ, η)/H(ξ, η)
@@ -59,28 +61,16 @@ barotropic_RHS = get_barotropic_RHS(p, t, e, F)
 Ψ = barotropic_LHS\barotropic_RHS
 
 # plot Ψ
-# plot_Ψ(p, t, Ψ; vext=15)
-plot_Ψ(p, t, Ψ)
+plot_horizontal(p, t, Ψ/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+savefig("psi.png")
+println("psi.png")
+plt.close()
 
 # plot f/H
-f_over_H = zeros(size(p, 1))
-for i=1:size(p, 1)
-    if H(p[i, 1], p[i, 2]) <= 1e3
-        f_over_H[i] = 0
-    else
-        f_over_H[i] = (f₀ + β*p[i, 2])/H(p[i, 1], p[i, 2])
-    end
-end
-fig, ax, im = tplot(p/1e3, t/1e3, f_over_H)
-cb = colorbar(im, ax=ax, label=L"$f/H$ (s m$^{-1}$)")
-# f_over_H_max = maximum(abs.(f_over_H))
-# n = 6
-# levels = f_over_H_max*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
-# ax.tricontour(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, f_over_H, linewidths=0.25, colors="k", linestyles="-", levels=levels)
-ax.set_xlabel(L"Horizontal coordintate $\xi$ (km)")
-ax.set_ylabel(L"Horizontal coordintate $\eta$ (km)")
-ax.axis("equal")
+f_over_H = @. (f₀ + β*p[:, 2])/(H(p[:, 1], p[:, 2]) + eps())
+plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
 savefig("f_over_H.png")
+println("f_over_H.png")
 plt.close()
 
 # plot wind stress
@@ -94,4 +84,5 @@ ax.spines["left"].set_visible(false)
 ax.set_xlim([-0.15, 0.15])
 ax.set_xticks(-0.15:0.05:0.15)
 savefig("tau.png")
+println("tau.png")
 plt.close()
