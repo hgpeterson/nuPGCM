@@ -107,8 +107,11 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
 
         # log
         if i % 10 == 0
-            println(@sprintf("t = %2.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secs_in_year, i, maximum(abs.(s.χ))))
-            # println(@sprintf("t = %2.2f yr | i = %d | U = %.2e m2 s-1", t/secs_in_year, i, s.χ[1, end]))
+            if m.no_net_transport
+                println(@sprintf("t = %2.2f yr | i = %d | χₘₐₓ = %.2e m2 s-1", t/secs_in_year, i, maximum(abs.(s.χ))))
+            else
+                println(@sprintf("t = %2.2f yr | i = %d | U = %.2e m2 s-1", t/secs_in_year, i, s.χ[1, end]))
+            end
 
             # # CFL stuff
             # uξCFL = minimum(abs.(dξ./s.uξ)) 
