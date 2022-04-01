@@ -1,4 +1,4 @@
-function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τₜ_ξ, τₜ_η)
+function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τ₋₁ξ_t, τ₋₁η_t)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
     imap = reshape(1:n_nodes, 1, n_nodes) 
@@ -18,8 +18,8 @@ function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τₜ_ξ, τₜ_η)
         Cₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(p₀) = -(f₀ + β*p₀[2])*Hx(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2*C₀[3, j]*local_basis_func(C₀[:, i]', p₀) -
-                    (β/H(p₀[1], p₀[2]) - (f₀ + β*p₀[2])*Hy(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2)*C₀[2, j]*local_basis_func(C₀[:, i]', p₀)
+                f(p₀) = -(f₀ + β*p₀[2])*Hx(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2*C₀[3, j]*local_basis_func(C₀[:, i], p₀) -
+                    (β/H(p₀[1], p₀[2]) - (f₀ + β*p₀[2])*Hy(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2)*C₀[2, j]*local_basis_func(C₀[:, i], p₀)
                 Cₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
             end
         end
@@ -28,8 +28,8 @@ function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τₜ_ξ, τₜ_η)
         Kₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(p₀) = τₜ_η(p₀[1], p₀[2])/H(p₀[1], p₀[2])*C₀[2, j]*C₀[2, i] + 
-                           τₜ_ξ(p₀[1], p₀[2])/H(p₀[1], p₀[2])*C₀[3, j]*C₀[3, i]
+                f(p₀) = τ₋₁η_t(p₀[1], p₀[2])/H(p₀[1], p₀[2])*C₀[2, j]*C₀[2, i] + 
+                        τ₋₁ξ_t(p₀[1], p₀[2])/H(p₀[1], p₀[2])*C₀[3, j]*C₀[3, i]
                 Kₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
             end
         end
@@ -79,7 +79,7 @@ function get_barotropic_RHS(p, t, e, F)
 
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
-            f(p₀) = F(p₀[1], p₀[2])*local_basis_func(C₀[:, i]', p₀)
+            f(p₀) = F(p₀[1], p₀[2])*local_basis_func(C₀[:, i], p₀)
             barotropic_RHS[imap[t[k, i]]] += gaussian_quad2(f, p[t[k, :], :])
         end
 	end
