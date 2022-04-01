@@ -17,8 +17,8 @@ function run(; bl=false)
     N2 = 1e-6
     nz = 2^8
     H = 2e3
-    θ = 2.5e-3                 # ridge
-    # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
+    # θ = 2.5e-3                 # ridge
+    θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
@@ -46,7 +46,8 @@ function run(; bl=false)
     ν_func(z) = μ*κ_func(z)
     
     # timestepping
-    Δt = 10*secs_in_day
+    Δt = 1*secs_in_day
+    # Δt = 10*secs_in_day
     t_save = 3*secs_in_year
     
     # create model struct
@@ -74,8 +75,8 @@ end
 # run
 ################################################################################
 
-# m, s = run()
-m, s = run(bl=true)
+m, s = run()
+# m, s = run(bl=true)
 
 ################################################################################
 # plots
