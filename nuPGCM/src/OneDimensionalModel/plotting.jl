@@ -43,10 +43,8 @@ function profile_plot(setup_file::String, state_files::Vector{String})
 
     # lims
     ax[1, 1].set_ylim([m.z[1]/1e3, 0])
-    ax[1, 2].set_ylim([m.z[1]/1e3, 0])
-    axins21.set_ylim([m.z[1]/1e3, 0])
-    ax[2, 1].set_ylim([m.z[1]/1e3, (m.z[1] + 1e2)/1e3]) # zoomed
-    ax[2, 2].set_ylim([m.z[1]/1e3, 0])
+    ax[2, 1].set_ylim([m.z[1]/1e3, 0])
+    axins21.set_ylim([m.z[1]/1e3, (m.z[1] + 1e2)/1e3]) # zoomed
 
     # plot data from `stateFiles`
     for i=2:size(state_files, 1) # don't plot init cond

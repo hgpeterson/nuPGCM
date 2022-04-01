@@ -52,7 +52,6 @@ function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2
         extend = "neither"
     end
 
-
     # 2D plot
     if style == "contour"
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
@@ -77,7 +76,8 @@ function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2
 
     # isopycnal contours
     n_levels = 20
-    lower_level = -trapz(m.N2[end, :], m.z[end, :])
+    iξ = argmax(m.H)
+    lower_level = -trapz(m.N2[iξ, :], m.z[iξ, :])
     # upper_level = 0
     upper_level = lower_level/100
     levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
@@ -146,7 +146,11 @@ function profile_plot(setup_file, state_files, iξ)
         bz = ∂z(m, s.b)
 
         # colors and labels
-        label = string(Int64(round(s.i[1]*m.Δt/secs_in_year)), " years")
+        if s.i[1]*m.Δt/secs_in_year > 1
+            label = string(Int64(round(s.i[1]*m.Δt/secs_in_year)), " years")
+        else
+            label = string(Int64(round((s.i[1] - 1)*m.Δt/secs_in_day)), " days")
+        end
         if i==1
             color = "tab:red"
         else

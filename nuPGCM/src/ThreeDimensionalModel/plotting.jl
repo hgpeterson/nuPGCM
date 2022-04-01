@@ -39,7 +39,7 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="")
     n = 6
     levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
     ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
-    ax.set_xlabel(L"Horizontal coordintate $\xi$ (km)")
-    ax.set_ylabel(L"Horizontal coordintate $\eta$ (km)")
+    ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
+    ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
     ax.axis("equal")
 end
