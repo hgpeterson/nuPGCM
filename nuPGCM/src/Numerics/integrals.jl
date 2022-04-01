@@ -60,7 +60,7 @@ function gaussian_quad2(f::Function, p::Array{Float64,2})
     # return sum
     integral = 0
     for i=1:3
-        integral += w[i]*f(x[i, :]')
+        integral += w[i]*f(x[i, :])
     end
 
     return area*integral
