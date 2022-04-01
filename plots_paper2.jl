@@ -170,12 +170,13 @@ function slope_profiles(folder)
         s = load_state_1DPG(string(folder,     "S1e-3/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = get_full_soln(m, s, z)
-        v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
+        δ, μ, S, q = get_BL_params(m)
+        v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1])
         Bz = m.N2 .+ differentiate(b, z)
-        label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
         ax[1, 1].plot(1e3*χ,  z/1e3, c=color, label=label)
         axins11.plot(1e3*χ,   z/1e3, c=color, label=label)
-        ax[1, 2].plot(1e2*v,  z/1e3, c=color, label=label)
+        ax[1, 2].plot(1e2*v,  (m.z .- m.z[1])/1e3, c=color, label=label)
         ax[1, 3].plot(1e6*Bz, z/1e3, c=color, label=label)
 
         # full 1D small S
@@ -195,12 +196,13 @@ function slope_profiles(folder)
         s = load_state_1DPG(string(folder,     "S5e-1/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = get_full_soln(m, s, z)
-        v = cumtrapz(m.f*(χ .- χ[end])./mFull.ν, z)
+        δ, μ, S, q = get_BL_params(m)
+        v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1])
         Bz = m.N2 .+ differentiate(b, z)
-        label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
         ax[2, 1].plot(1e3*χ,   z/1e3, c=color, label=label)
         axins21.plot(1e3*χ,   z/1e3, c=color, label=label)
-        ax[2, 2].plot(1e2*v,   z/1e3, c=color, label=label)
+        ax[2, 2].plot(1e2*v,   (m.z .- m.z[1])/1e3, c=color, label=label)
         ax[2, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
 
         # full 1D big S
