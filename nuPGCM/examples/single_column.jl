@@ -19,8 +19,9 @@ function run_single_column(; bl=false)
     # θ = -0.03639128788776821   # seamount
     transport_constraint = true
     # transport_constraint = false
-    U = [0.0]
-    # U = [1e-2]
+    # U = [0.0]
+    # U = [0.2e-2]
+    U = [1e1]
 
     # grid: chebyshev unless bl
     if bl
@@ -69,8 +70,8 @@ end
 # run
 ################################################################################
 
-# m, s = run_single_column()
-m, s = run_single_column(bl=true)
+m, s = run_single_column()
+# m, s = run_single_column(bl=true)
 
 ################################################################################
 # plots

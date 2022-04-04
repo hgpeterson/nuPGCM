@@ -77,11 +77,11 @@ function run_ridge(; bl = false)
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1e-6
-    N2_func(ξ, σ) = N2
-    # δ = 1000 # decay scale (m)
-    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
-    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
+    # N2 = 1e-6
+    # N2_func(ξ, σ) = N2
+    δ = 1000 # decay scale (m)
+    N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
+    N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 10*secs_in_day
@@ -148,9 +148,6 @@ function run_seamount(; bl=false)
     # stratification
     N2 = 1e-6
     N2_func(ξ, σ) = N2
-    # δ = 1000 # decay scale (m)
-    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of seamount flank
-    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 1*secs_in_day
@@ -177,7 +174,7 @@ function run_seamount(; bl=false)
     println("ϱₘₐₓ = ", maximum(ϱ))
 
     # solve
-    evolve!(m, s, 100*secs_in_year, t_plot, t_save) 
+    evolve!(m, s, 5*t_save, t_plot, t_save) 
 
     return m, s
 end

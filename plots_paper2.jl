@@ -50,20 +50,6 @@ function exchange_vel_2D(m::ModelSetup2DPG, χ::Vector{Float64})
     return m.H.*uσ
 end
 
-"""
-    p, q = get_pq(S, T, δ, μ)
-
-Get oscillation and decay scales `p` and `q` from 3D BL theory.
-"""
-function get_pq(S, T, δ, μ)
-    r = (-1 + im*sqrt(3))/2
-    c = sqrt(μ^2*T^2/4 + (1 + μ*S)^3/27)
-    λ = sqrt(2)/δ * sqrt(r*cbrt(-μ*T/2 + c) + conj(r)*cbrt(-μ*T/2 - c))
-    q = real(λ)
-    p = imag(λ)
-    return p, q
-end
-
 ### plotting functions
 
 function BL_correction(folder)
@@ -131,8 +117,8 @@ function slope_profiles(folder)
     ax[2, 2].annotate("(e)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2, 3].annotate("(f)", (-0.04, 1.05), xycoords="axes fraction")
 
-    fig.text(0.05, 0.97, L"$\varrho = 10^{-3}$:", ha="left", va="top", size=8)
-    fig.text(0.05, 0.51, L"$\varrho = 0.5$:",     ha="left", va="top", size=8)
+    fig.text(0.05, 0.97, L"Slope Burger number $\varrho = 10^{-3}$:", ha="left", va="top", size=8)
+    fig.text(0.05, 0.51, L"Slope Burger number $\varrho = 0.5$:",     ha="left", va="top", size=8)
 
     subplots_adjust(hspace=0.5)
 
@@ -272,13 +258,14 @@ end
 function seamount(folder)
     fig, ax = subplots(1, 2, figsize=(19*pc, 17*pc), sharey=true)
 
-    m = load_setup_2DPG(string(folder, "L200km/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "L200km/full2D/state1.h5"))
+    m = load_setup_2DPG(string(folder, "full2D/setup.h5"))
+    s = load_state_2DPG(string(folder, "full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e2*s.χ, "", string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); 
+    a, cb = ridge_plot(m, s, 1e2*s.χ, "", string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); 
         ax=ax[1], cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.0)
-    ridgePlot(m, s, 1e1*s.uη, "", string(L"Along-slope flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); 
-        ax=ax[2], style="pcolormesh", cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.0)
+    a, cb = ridge_plot(m, s, 1e1*s.uη, "", string(L"Along-slope flow $r u^\phi$", "\n", L"($\times 10^{-1}$ m s$^{-1}$)"); 
+        ax=ax[2], style="pcolormesh", cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.5)
+    cb.set_ticks([-2.5, 0, 2.5])
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.7)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.7)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -359,7 +346,7 @@ function seamount_profiles(folder)
         χ, b = get_full_soln(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
         Bz = m.N2 .+ differentiate(b, z)
-        label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
         ax[1, 1].plot(1e2*χ,  z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
         axins11.plot(1e2*χ,   z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
         ax[1, 2].plot(1e1*v,  z/1e3 .+ m2D.z[ix, 1]/1e3, c=color, label=label)
@@ -367,7 +354,7 @@ function seamount_profiles(folder)
 
         # full 2D
         m = m2D
-        s = loadState2DPG(string(folder, "full2D/state$i.h5"))
+        s = load_state_2DPG(string(folder, "full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
         ax[1, 1].plot(1e2*s.χ[ix, :],  m.z[ix, :]/1e3, "k--", lw=0.5)
         axins11.plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k--", lw=0.5)
@@ -376,7 +363,7 @@ function seamount_profiles(folder)
 
         # BL 2D
         m = m2DBL
-        s = loadState2DPG(string(folder, "bl2D/state$i.h5"))
+        s = load_state_2DPG(string(folder, "bl2D/state$i.h5"))
         z = m2D.z[ix, :] .- m2D.z[ix, 1]
         χ, b = get_full_soln(m, s, z, ixBL)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
@@ -388,7 +375,7 @@ function seamount_profiles(folder)
 
         # full 2D
         m = m2D
-        s = loadState2DPG(string(folder, "full2D/state$i.h5"))
+        s = load_state_2DPG(string(folder, "full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
         ax[2, 1].plot(1e2*s.χ[ix, :],  m.z[ix, :]/1e3, "k--", lw=0.5)
         axins21.plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k--", lw=0.5)
@@ -417,15 +404,15 @@ function ridge_exp_strat(folder)
     ax[1, 2].annotate(L"(b) $N^2 \sim \exp(z/d)$", (0.0, 1.05), xycoords="axes fraction")
 
     m = load_setup_2DPG(string(folder, "const/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
+    ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
         ax=ax[1, 1], cb_orientation="horizontal", pad=0.2, vext=2)
 
     m = load_setup_2DPG(string(folder, "exp/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "exp/full2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "exp/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
-    ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
+    ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
         ax=ax[1, 2], cb_orientation="horizontal", pad=0.2, vext=3)
     ax[1, 2].set_ylabel("")
 
@@ -442,13 +429,13 @@ function ridge_exp_strat(folder)
     mConst = load_setup_2DPG(string(folder, "/const/bl2D/setup.h5"))
     mExp   = load_setup_2DPG(string(folder, "/exp/bl2D/setup.h5"))
 
-    s = loadState2DPG(string(folder, "/const/bl2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "/const/bl2D/state1.h5"))
     χtheory = BL_transport_2D(mConst, s)
     W = exchange_vel_2D(mConst, χtheory)
     ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "constant"))
     ax[2, 2].plot(mConst.ξ/1e3, 1e9*W)
 
-    s = loadState2DPG(string(folder, "/exp/bl2D/state1.h5"))
+    s = load_state_2DPG(string(folder, "/exp/bl2D/state1.h5"))
     χtheory = BL_transport_2D(mExp, s)
     W = exchange_vel_2D(mExp, χtheory)
     ax[2, 1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/d)$")
@@ -469,52 +456,12 @@ function ridge_exp_strat(folder)
     plt.close()
 end
 
-function pq()
-    δ = 10
-    μ = 1
-    Ss = 10. .^(-3:0.1:1)
-    Ts = [1e-2, 1e-1, 1e0, 1e1, 1e2]
-    cs = pl.cm.viridis(range(1, 0, length=size(Ts, 1)))
-
-    fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
-
-    ax[1].set_xlim([μ*Ss[1], μ*Ss[end]])
-    ax[2].set_xlim([μ*Ss[1], μ*Ss[end]])
-    ax[1].set_ylim([0.5, 3.0])
-
-    for i=1:size(Ts, 1)
-        T = Ts[i]
-        c = cs[i, :] 
-        label = latexstring("\$\\mu T = 10^", @sprintf("{%.0f}\$", log10(μ*T)))
-        pq = get_pq.(Ss, T, δ, μ)
-        ax[1].semilogx(μ*Ss, δ*last.(pq),  c=c, ls="-", label=label)
-        ax[2].semilogx(μ*Ss, δ*first.(pq), c=c, ls="-", label=label)
-    end
-
-    # T = 0 
-    ax[1].semilogx(μ*Ss, (1 .+ μ.*Ss).^(1/4), "k--", lw=0.5)
-    ax[2].semilogx(μ*Ss, (1 .+ μ.*Ss).^(1/4), "k--", lw=0.5)
-
-    custom_handles = [lines.Line2D([0], [0], c="k", ls="--", lw=0.5)]
-    custom_labels = [L"1D and 2D theory ($\mu T = 0$)"]
-    ax[1].legend(custom_handles, custom_labels)
-    ax[2].legend(loc=(0.05, 0.45))
-    ax[1].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
-    ax[2].set_xlabel(L"Prandtl $\times$ slope Burger number $\mu S$")
-    ax[1].set_ylabel(L"Decay Scale $\delta q$")
-    ax[2].set_ylabel(L"Oscillation scale $\delta p$")
-    ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
-    ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
-    savefig("pq.pdf")
-    println("pq.pdf")
-end
-
 path = "../sims/"
 
 # BL_correction(string(path, "sim044/"))
-slope_profiles(string(path, "sim044/"))
+# slope_profiles(string(path, "sim044/"))
 # TF_coords()
-# seamount(string(path, "sim035/"))
+# seamount(string(path, "sim042/"))
 # seamount_profiles(string(path, "sim042/"))
-# ridge_exp_strat(string(path, "sim037/"))
+ridge_exp_strat(string(path, "sim037/"))
 # pq()

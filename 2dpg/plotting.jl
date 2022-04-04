@@ -7,11 +7,11 @@ pl = pyimport("matplotlib.pylab")
 mpl = pyimport("matplotlib")
 
 """
-    ax = ridge_plot(m, s, field, title, cbar_label; ax, vext, cmap)
+    ax, cb = ridge_plot(m, s, field, title, cbar_label; ax, vext, cmap)
 
 Create 2D plot of `field` with isopycnals given by the buoyancy perturbation `b`
 from the model state `s`. Set the title to `title` and colorbar label to 
-`cbar_label`. Return the axis handle `ax`.
+`cbar_label`. Return the axis handle `ax` and colorbar axis `cb`.
 
 Optional: 
     - provide `ax`
@@ -102,7 +102,7 @@ function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     
-    return ax
+    return ax, cb
 end
 
 """
