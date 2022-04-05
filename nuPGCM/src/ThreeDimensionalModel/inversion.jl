@@ -18,8 +18,8 @@ function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τ₋₁ξ_t, τ₋₁
         Cₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(p₀) = -(f₀ + β*p₀[2])*Hx(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2*C₀[3, j]*local_basis_func(C₀[:, i], p₀) -
-                    (β/H(p₀[1], p₀[2]) - (f₀ + β*p₀[2])*Hy(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2)*C₀[2, j]*local_basis_func(C₀[:, i], p₀)
+                f(p₀) = (-β/H(p₀[1], p₀[2]) + (f₀ + β*p₀[2])*Hy(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2)*C₀[2, j]*local_basis_func(C₀[:, i], p₀) + 
+                        -(f₀ + β*p₀[2])*Hx(p₀[1], p₀[2])/H(p₀[1], p₀[2])^2*C₀[3, j]*local_basis_func(C₀[:, i], p₀)
                 Cₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
             end
         end

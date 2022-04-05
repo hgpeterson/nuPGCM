@@ -8,11 +8,11 @@ pygui(false)
 
 # load mesh
 # p, t, e = load_mesh("../meshes/square1.h5")
-# p, t, e = load_mesh("../meshes/square2.h5")
+p, t, e = load_mesh("../meshes/square2.h5")
 # p, t, e = load_mesh("../meshes/square3.h5")
 # p, t, e = load_mesh("../meshes/circle1.h5")
 # p, t, e = load_mesh("../meshes/circle2.h5")
-p, t, e = load_mesh("../meshes/circle3.h5")
+# p, t, e = load_mesh("../meshes/circle3.h5")
 
 # widths of basin
 Lx = 5e6
@@ -24,14 +24,18 @@ p[:, 2] *= Ly
 
 # depth H
 H₀ = 4e3
-R = Lx
-Δ = R/5
-# H(ξ, η) = H₀
-# Hx(ξ, η) = 0
-# Hy(ξ, η) = 0
-H(ξ, η) = H₀ - H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))
-Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
+
+H(ξ, η) = H₀
+Hx(ξ, η) = 0
 Hy(ξ, η) = 0
+
+# Δ = Lx/5
+# H(ξ, η) = H₀ - H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))
+# Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
+# Hy(ξ, η) = 0
+
+# R = Lx
+# Δ = Lx/5
 # H(ξ, η) = H₀ - H₀*exp(-(sqrt(ξ^2 + η^2) - R)^2/(2*Δ^2))
 
 # coriolis parameter f = f₀ + βη
@@ -42,16 +46,18 @@ f₀ = 0
 JEBAR(ξ, η) = 0
 
 # wind stress and its curl
-τ₀ξ(ξ, η) = -0.1*cos(π*η/Ly)
+τ₀ = 0.1 # N m⁻² (should this be scaled by 1/ρ to get units of m² s⁻²?)
+τ₀ξ(ξ, η) = -τ₀*cos(π*η/Ly)
 τ₀η(ξ, η) = 0
-curl_τ₀(ξ, η) = 0.1*π/Ly*sin(π*η/Ly)
+curl_τ₀(ξ, η) = τ₀*π/Ly*sin(π*η/Ly)
 
 # right-hand-side forcing
-F(ξ, η) = JEBAR(ξ, η) + curl_τ₀(ξ, η)/H(ξ, η)
+F(ξ, η) = JEBAR(ξ, η) + curl_τ₀(ξ, η)/H(ξ, η) #FIXME shouldn't the H be inside?
 
 # bottom stress from baroclinic solution
-τ₋₁ξ_t(ξ, η) = 5e-6
-τ₋₁η_t(ξ, η) = 5e-6
+r = 5e-6
+τ₋₁ξ_t(ξ, η) = r
+τ₋₁η_t(ξ, η) = r
 
 # get barotropic_LHS
 barotropic_LHS = get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τ₋₁ξ_t, τ₋₁η_t)
@@ -62,8 +68,18 @@ barotropic_RHS = get_barotropic_RHS(p, t, e, F)
 # solve
 Ψ = barotropic_LHS\barotropic_RHS
 
+# plot flat bottom analytical solution
+x = p[:, 1]/Lx
+y = p[:, 2]/Ly
+ε = r/β/(2Lx)
+Ψ_analytical = @. -τ₀/β*((x - 1)/2 + exp(-(x + 1)/2/ε))*sin(π*y)
+plot_horizontal(p, t, Ψ_analytical/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+savefig("psi_analytical.png")
+println("psi_analytical.png")
+plt.close()
+
 # plot Ψ
-plot_horizontal(p, t, Ψ/1e9; vext=20, clabel=L"Streamfunction $\Psi$ (Sv)")
+plot_horizontal(p, t, Ψ/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
 savefig("psi.png")
 println("psi.png")
 plt.close()
