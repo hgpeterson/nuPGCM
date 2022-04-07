@@ -29,6 +29,20 @@ function tri_area(p::Array{Float64,2})
 end
 
 """
+    C₀ = get_linear_basis_coeffs(p)
+
+Compute coefficients for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
+at the nodes defined by 3×2 matrix `p`. C₀[:, i] are the iᵗʰ basis vector coefficients.
+"""
+function get_linear_basis_coeffs(p::Matrix{Float64})
+	V = zeros(3, 3)
+	for i=1:3
+		V[i, :] = [1 p[i, 1] p[i, 2]]
+	end
+	return inv(V)
+end
+
+"""
     ϕ = local_basis_func(c, p₀)
 
 Evaluate local basis function defined by `c` = [c₁ c₂ c₃] at point `p0` = [x y].
@@ -51,9 +65,7 @@ function pt_in_tri(pt::Vector{Float64}, v1::Vector{Float64}, v2::Vector{Float64}
 
     return !(has_neg && has_pos)
 end
-
-function evaluate(u, p₀, p, t)
-    # find triangle p₀ is in
+function get_tri(p₀, p, t)
 	n_tri = size(t, 1)
     k₀ = 0
     for k=1:n_tri
@@ -64,14 +76,17 @@ function evaluate(u, p₀, p, t)
     end
     if k₀ == 0
         error("p₀ is not in mesh domain")
+    else
+        return k₀
     end
+end
 
-	# get coeffs for linear basis f c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
-	V = zeros(3, 3)
-	for row=1:3
-		V[row, :] = [1 p[t[k₀, row], 1] p[t[k₀, row], 2]]
-	end
-	C₀ = inv(V)
+function evaluate(u, p₀, p, t)
+    # find triangle p₀ is in
+    k₀ = get_tri(p₀, p, t)
+
+	# get coeffs for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
+    C₀ = get_linear_basis_coeffs(p[t[k₀, :], :])
 
     # sum weighted combinations of basis functions at p₀
     u₀ = 0
@@ -80,4 +95,24 @@ function evaluate(u, p₀, p, t)
     end
 
     return u₀
+end
+function ∂ξ(u, p₀, p, t)
+    # find triangle p₀ is in
+    k₀ = get_tri(p₀, p, t)
+
+	# get coeffs for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
+    C₀ = get_linear_basis_coeffs(p[t[k₀, :], :])
+
+    # sum weighted combinations of c₂
+    return sum(u[t[k₀, :]].*C₀[2, :])
+end
+function ∂η(u, p₀, p, t)
+    # find triangle p₀ is in
+    k₀ = get_tri(p₀, p, t)
+
+	# get coeffs for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
+    C₀ = get_linear_basis_coeffs(p[t[k₀, :], :])
+
+    # sum weighted combinations of c₃
+    return sum(u[t[k₀, :]].*C₀[3, :])
 end

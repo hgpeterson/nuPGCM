@@ -14,6 +14,7 @@ export
     # finite elements
     load_mesh,
     tri_area,
+    get_linear_basis_coeffs,
     local_basis_func
 
 using PyPlot
