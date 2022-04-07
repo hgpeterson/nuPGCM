@@ -15,7 +15,10 @@ export
     load_mesh,
     tri_area,
     get_linear_basis_coeffs,
-    local_basis_func
+    local_basis_func,
+    evaluate,
+    ∂ξ,
+    ∂η
 
 using PyPlot
 using PyCall

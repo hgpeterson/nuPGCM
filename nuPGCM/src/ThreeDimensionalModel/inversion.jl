@@ -224,7 +224,7 @@ function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}
     return baroclinic_RHS
 end
 
-function get_τξ_τη(baroclinic_LHSs::Array{SuiteSparse.UMFPbaroclinic_LHSCK.UmfpackLU{Float64,Int64}}, baroclinic_RHSs::Matrix{Float64})
+function get_τξ_τη(baroclinic_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, baroclinic_RHSs::Matrix{Float64})
     np = size(baroclinic_RHSs, 1)
     nσ = size(baroclinic_RHSs, 2)/2
     τ = zeros(np, 2*nσ)
