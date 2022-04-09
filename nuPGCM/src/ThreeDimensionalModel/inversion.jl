@@ -162,7 +162,7 @@ function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vec
         push!(baroclinic_LHS, (row, imap[2, j], f/ν[j]))
 
         # eqtn 2: ∂σσ(τη)/H² - f*τξ/ν = 0 or ∂y(b)
-        row = imap[1, j]
+        row = imap[2, j]
         # term 1
         push!(baroclinic_LHS, (row, imap[2, j-1], fd_σσ[1]/H^2))
         push!(baroclinic_LHS, (row, imap[2, j],   fd_σσ[2]/H^2))
@@ -177,28 +177,32 @@ function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vec
     # b.c. 2: τη = τη_wind at σ = 0
     push!(baroclinic_LHS, (imap[2, nσ], imap[2, nσ], 1))
 
-    # Integral boundary conditions: transport
-    # b.c. 1: -∫ σ τξ dσ = 1 or 0
-    for j=1:nσ-1
-        # trapezoidal rule
-        push!(baroclinic_LHS, (imap[1, 1], imap[1, j],   -σ[j]  *(σ[j+1] - σ[j])/2))
-        push!(baroclinic_LHS, (imap[1, 1], imap[1, j+1], -σ[j+2]*(σ[j+1] - σ[j])/2))
-    end
-    # b.c. 2: -∫ σ τη dσ = 1 or 0
-    for j=1:nσ-1
-        # trapezoidal rule
-        push!(baroclinic_LHS, (imap[2, 1], imap[2, j],   -σ[j]  *(σ[j+1] - σ[j])/2))
-        push!(baroclinic_LHS, (imap[2, 1], imap[2, j+1], -σ[j+2]*(σ[j+1] - σ[j])/2))
-    end
+    # test: dirichlet lower bdy conditions
+    push!(baroclinic_LHS, (imap[1, 1], imap[1, 1], 1))
+    push!(baroclinic_LHS, (imap[2, 1], imap[2, 1], 1))
+
+    # # Integral boundary conditions: transport
+    # # b.c. 1: -∫ σ τξ dσ = 1 or 0
+    # for j=1:nσ-1
+    #     # trapezoidal rule
+    #     push!(baroclinic_LHS, (imap[1, 1], imap[1, j],   -H/ν[j]   * σ[j]  *(σ[j+1] - σ[j])/2))
+    #     push!(baroclinic_LHS, (imap[1, 1], imap[1, j+1], -H/ν[j+1] * σ[j+1]*(σ[j+1] - σ[j])/2))
+    # end
+    # # b.c. 2: -∫ σ τη dσ = 1 or 0
+    # for j=1:nσ-1
+    #     # trapezoidal rule
+    #     push!(baroclinic_LHS, (imap[2, 1], imap[2, j],   -H/ν[j]   * σ[j]  *(σ[j+1] - σ[j])/2))
+    #     push!(baroclinic_LHS, (imap[2, 1], imap[2, j+1], -H/ν[j+1] * σ[j+1]*(σ[j+1] - σ[j])/2))
+    # end
 
     # Create CSC sparse matrix from matrix elements
     baroclinic_LHS = sparse((x->x[1]).(baroclinic_LHS), (x->x[2]).(baroclinic_LHS), (x->x[3]).(baroclinic_LHS), nvar*nσ, nvar*nσ)
 
-    return lu(baroclinic_LHS)
+    return baroclinic_LHS
 end
 
 function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}, τξ_wind::Real, τη_wind::Real, Uξ::Real, Uη::Real)
-    nσ = size(σ, 1)
+    nσ = size(∂b∂x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     baroclinic_RHS = zeros(nvar*nσ)
@@ -219,14 +223,14 @@ function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}
     # b.c. 1: -∫ σ τξ dσ = 1 or 0
     baroclinic_RHS[imap[1, 1]] = Uξ
     # b.c. 2: -∫ σ τη dσ = 1 or 0
-    baroclinic_RHS[imap[1, 1]] = Uη
+    baroclinic_RHS[imap[2, 1]] = Uη
 
     return baroclinic_RHS
 end
 
 function get_τξ_τη(baroclinic_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, baroclinic_RHSs::Matrix{Float64})
     np = size(baroclinic_RHSs, 1)
-    nσ = size(baroclinic_RHSs, 2)/2
+    nσ = Int64(size(baroclinic_RHSs, 2)/2)
     τ = zeros(np, 2*nσ)
     for i=1:np
         τ[i, :] = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]

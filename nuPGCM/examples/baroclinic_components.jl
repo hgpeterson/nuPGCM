@@ -1,5 +1,6 @@
 using nuPGCM.Numerics
 using nuPGCM.ThreeDimensionalModel
+using SuiteSparse
 using PyPlot
 
 plt.style.use("../plots.mplstyle")
@@ -7,8 +8,8 @@ plt.close("all")
 pygui(false)
 
 # load horizontal mesh
-# p, t, e = load_mesh("../meshes/square1.h5")
-p, t, e = load_mesh("../meshes/square2.h5")
+p, t, e = load_mesh("../meshes/square1.h5")
+# p, t, e = load_mesh("../meshes/square2.h5")
 # p, t, e = load_mesh("../meshes/square3.h5")
 # p, t, e = load_mesh("../meshes/circle1.h5")
 # p, t, e = load_mesh("../meshes/circle2.h5")
@@ -53,30 +54,32 @@ h = 200
 μ = 1e0
 κ = zeros(np, nσ)
 for i=1:nσ
-    κ = @. κ0 + κ1*exp(-H(ξ, η)*(σ[i] + 1)/h)
+    κ[:, i] = @. κ0 + κ1*exp(-H(ξ, η)*(σ[i] + 1)/h)
 end
 ν = μ*κ
 
-# buoyancy field
-N² = 1e-6
-b = zeros(np, nσ)
-for i=1:nσ
-    b[:, i] = N²*σ[i]*H.(ξ, η)
-end
+# # buoyancy field
+# N² = 1e-6
+# b = zeros(np, nσ)
+# for i=1:nσ
+#     b[:, i] = N²*σ[i]*H.(ξ, η)
+# end
 
 # buoyancy gradients
 ∂b∂x = zeros(np, nσ)
 ∂b∂y = zeros(np, nσ)
-for i=1:nσ
-    for p₀=p
-        ∂b∂x[:, i] += ∂ξ(b, p₀, p, t)
-        ∂b∂y[:, i] += ∂η(b, p₀, p, t)
-    end
-end
-for i=1:np
-    ∂b∂x[i, :] -= σ.*Hx(ξ[i], η[i])*differentiate(b[i, :], σ)/H(ξ[i], η[i])
-    ∂b∂y[i, :] -= σ.*Hy(ξ[i], η[i])*differentiate(b[i, :], σ)/H(ξ[i], η[i])
-end
+# for i=1:nσ
+#     println("i = $i / $nσ")
+#     for j=1:np
+#         ∂b∂x[:, i] .+= ∂ξ(b, p[j, :], p, t)
+#         ∂b∂y[:, i] .+= ∂η(b, p[j, :], p, t)
+#     end
+# end
+# for i=1:np
+#     println("i = $i / $np")
+#     ∂b∂x[i, :] .-= σ*Hx(ξ[i], η[i]).*differentiate(b[i, :], σ)/H(ξ[i], η[i])
+#     ∂b∂y[i, :] .-= σ*Hy(ξ[i], η[i]).*differentiate(b[i, :], σ)/H(ξ[i], η[i])
+# end
 
 # wind stress 
 τ₀ = 0.1 
@@ -84,27 +87,41 @@ end
 τη_wind(ξ, η) = 0
 
 # barotropic flow
-Uξ(ξ, η) = 1e-2
-Uη(ξ, η) = 0
+Uξ(ξ, η) = 1
+Uη(ξ, η) = 1
 
-# get baroclinic_LHS matrices
-baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
-for i=1:np 
-    baroclinic_LHSs[i] = get_baroclinic_LHS(ν, f₀ + β*η[i], H(ξ[i], η[i]), σ)
-end  
+# test inversion at single column
+i = 1
+baroclinic_LHS = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H(ξ[i], η[i]), σ)
+# baroclinic_RHS = get_baroclinic_RHS(∂b∂x[i, :], ∂b∂y[i, :], τξ_wind(ξ[i], η[i]), τη_wind(ξ[i], η[i]), Uξ(ξ[i], η[i]), Uη(ξ[i], η[i]))
+baroclinic_RHS = get_baroclinic_RHS(∂b∂x[i, :], ∂b∂y[i, :], 0.1, -0.1, 1.0, 1.0)
+sol = baroclinic_LHS\baroclinic_RHS
+τξ = sol[1:nσ]
+τη = sol[nσ+1:end]
+plot(τξ, σ); plot(τη, σ, "--"); savefig("debug1.png"); plt.close()
+plot(τξ, σ); plot(τη, σ, "--"); ylim([-1, -0.9]); savefig("debug2.png"); plt.close()
+plot(τξ, σ); plot(τη, σ, "--"); ylim([-0.1, 0]);  savefig("debug3.png"); plt.close()
 
-# get baroclinic_RHS vectors
-baroclinic_RHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
-for i=1:np
-    get_baroclinic_RHS(∂b∂x[i, :], ∂b∂y[i, :], τξ_wind(ξ[i], η[i]), τη_wind(ξ[i], η[i]), Uξ(ξ[i], η[i]), Uη(ξ[i], η[i]))
-end
+# # get baroclinic_LHS matrices
+# baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
+# for i=1:np 
+#     baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H(ξ[i], η[i]), σ)
+# end  
 
-# solve system
-τξ, τη = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs)
+# # get baroclinic_RHS vectors
+# baroclinic_RHSs = zeros(np, 2*nσ)
+# for i=1:np
+#     baroclinic_RHSs[i, :] = get_baroclinic_RHS(∂b∂x[i, :], ∂b∂y[i, :], τξ_wind(ξ[i], η[i]), τη_wind(ξ[i], η[i]), Uξ(ξ[i], η[i]), Uη(ξ[i], η[i]))
+# end
 
-# convert to uξ, uη
-uξ = zeros(np, nσ)
-uη = zeros(np, nσ)
-for i=1:np
-    uξ[i, :], uη[i, :] = get_uξ_uη(τξ[i, :], τη[i, :], σ, H(ξ[i], η[i]), ν[i, :])
-end
+# # solve system
+# τξ, τη = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs)
+
+# # convert to uξ, uη
+# uξ = zeros(np, nσ)
+# uη = zeros(np, nσ)
+# for i=1:np
+#     uξ[i, :], uη[i, :] = get_uξ_uη(τξ[i, :], τη[i, :], σ, H(ξ[i], η[i]), ν[i, :])
+# end
+
+# # plots

@@ -19,6 +19,10 @@ export
     # inversion
     get_barotropic_LHS,
     get_barotropic_RHS,
+    get_baroclinic_LHS,
+    get_baroclinic_RHS,
+    get_τξ_τη,
+    get_uξ_uη,
 
     # plotting
     tplot,
