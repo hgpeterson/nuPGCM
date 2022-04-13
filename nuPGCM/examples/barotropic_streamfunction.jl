@@ -8,10 +8,10 @@ pygui(false)
 
 # load mesh
 # p, t, e = load_mesh("../meshes/square1.h5")
-p, t, e = load_mesh("../meshes/square2.h5")
+# p, t, e = load_mesh("../meshes/square2.h5")
 # p, t, e = load_mesh("../meshes/square3.h5")
 # p, t, e = load_mesh("../meshes/circle1.h5")
-# p, t, e = load_mesh("../meshes/circle2.h5")
+p, t, e = load_mesh("../meshes/circle2.h5")
 # p, t, e = load_mesh("../meshes/circle3.h5")
 
 # widths of basin
@@ -23,17 +23,33 @@ p[:, 1] *= Lx
 p[:, 2] *= Ly
 
 # depth H
-H₀ = 4e3
-H(ξ, η) = H₀
-Hx(ξ, η) = 0
-Hy(ξ, η) = 0
+# H₀ = 4e3
+# H(ξ, η) = H₀
+# Hx(ξ, η) = 0
+# Hy(ξ, η) = 0
+
+# H₀ = 4e3
 # Δ = Lx/5
 # H(ξ, η) = H₀ - H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))
 # Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
 # Hy(ξ, η) = 0
-# R = Lx
+
+# H₀ = 4e3
 # Δ = Lx/5
-# H(ξ, η) = H₀ - H₀*exp(-(sqrt(ξ^2 + η^2) - R)^2/(2*Δ^2))
+# G(x) = 1 - exp(-x^2/(2*Δ^2))
+# Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+# H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
+# Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+# Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+
+H₀ = 4e3
+R = Lx
+Δ = R/5
+G(x) = 1 - exp(-x^2/(2*Δ^2))
+Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+H(ξ, η) = H₀*G(sqrt(ξ^2 + η^2) - R)
+Hx(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
+Hy(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
 
 # coriolis parameter f = f₀ + βη
 f₀ = 0
@@ -65,6 +81,12 @@ barotropic_RHS = get_barotropic_RHS(p, t, e, F)
 # solve
 Ψ = barotropic_LHS\barotropic_RHS
 
+# evaluate Ψ at a point
+# println(Numerics.evaluate(Ψ, [0, 2e6], p, t))
+# square1: 1.591767429539354e10
+# square2: 1.5934110876112041e10
+# square3: 1.5945647530011332e10
+
 # # plot flat bottom analytical solution
 # ξ = p[:, 1]
 # η = p[:, 2]
@@ -80,11 +102,23 @@ savefig("psi.png")
 println("psi.png")
 plt.close()
 
-# evaluate Ψ at a point
-# println(Numerics.evaluate(Ψ, [0, 2e6], p, t))
-# square1: 1.591767429539354e10
-# square2: 1.5934110876112041e10
-# square3: 1.5945647530011332e10
+# plot H
+plot_horizontal(p, t, H.(p[:, 1], p[:, 2]); clabel=L"$H$ (m)")
+savefig("H.png")
+println("H.png")
+plt.close()
+
+# plot Hx
+plot_horizontal(p, t, Hx.(p[:, 1], p[:, 2]); clabel=L"$\partial_x H$ (-)")
+savefig("Hx.png")
+println("Hx.png")
+plt.close()
+
+# plot Hy
+plot_horizontal(p, t, Hy.(p[:, 1], p[:, 2]); clabel=L"$\partial_y H$ (-)")
+savefig("Hy.png")
+println("Hy.png")
+plt.close()
 
 # plot f/H
 f_over_H = @. (f₀ + β*p[:, 2])/(H(p[:, 1], p[:, 2]) + eps())
