@@ -198,7 +198,7 @@ function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vec
     # Create CSC sparse matrix from matrix elements
     baroclinic_LHS = sparse((x->x[1]).(baroclinic_LHS), (x->x[2]).(baroclinic_LHS), (x->x[3]).(baroclinic_LHS), nvar*nσ, nvar*nσ)
 
-    return baroclinic_LHS
+    return lu(baroclinic_LHS)
 end
 
 function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}, τξ_wind::Real, τη_wind::Real, Uξ::Real, Uη::Real)
