@@ -8,29 +8,33 @@ plt.close("all")
 pygui(false)
 
 # # test inversion at single column
+# function get_τξ_τη_SC(nσ, ν, f, H, σ)
+#     baroclinic_LHS = get_baroclinic_LHS(ν, f, H, σ)
+#     baroclinic_RHS = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1.0, 1.0)
+#     sol = baroclinic_LHS\baroclinic_RHS
+#     imap = reshape(1:2*nσ, (2, nσ)) 
+#     τξ = sol[imap[1, :]]
+#     τη = sol[imap[2, :]]
+#     return τξ, τη
+# end
+
+# fig, ax = subplots()
+# ax.set_xlabel(L"$\tau$ (m$^2$ s$^{-2}$)")
+# ax.set_ylabel(L"$\sigma$")
 # nσ = 2^8
 # σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
-# ν = 1e1*ones(nσ)
-# f = 0.0
-# H = 2e3
-# baroclinic_LHS = get_baroclinic_LHS(ν, f, H, σ)
-# baroclinic_RHS = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1.0, 1.0)
-# sol = baroclinic_LHS\baroclinic_RHS
-# imap = reshape(1:2*nσ, (2, nσ)) 
-# τξ = sol[imap[1, :]]
-# τη = sol[imap[2, :]]
-# plot(τξ, σ); plot(τη, σ, "--"); savefig("debug1.png"); plt.close()
-# plot(τξ, σ); plot(τη, σ, "--"); ylim([-1, -0.9]); savefig("debug2.png"); plt.close()
-# plot(τξ, σ); plot(τη, σ, "--"); ylim([-0.1, 0]);  savefig("debug3.png"); plt.close()
-# println("bottom stress: ($(τξ[1]), $(τη[1]))")
+# ν = 2e-3*ones(nσ)
+# f = -5.5e-5
+# for H=[4.1e3, 3.1e3, 2.1e3, 1.1e3, 0.1e3, 0.01e3]
+#     τξ, τη = get_τξ_τη_SC(nσ, ν, f, H, σ)
+#     println("H = $H; bottom stress: ($(τξ[1]), $(τη[1]))")
+#     ax.plot(abs.(τξ), σ, c="tab:blue")
+#     ax.plot(abs.(τη), σ, c="tab:orange", ls="--")
+# end
+# savefig("debug.png")
 
 # load horizontal mesh
 p, t, e = load_mesh("../meshes/square1.h5")
-# p, t, e = load_mesh("../meshes/square2.h5")
-# p, t, e = load_mesh("../meshes/square3.h5")
-# p, t, e = load_mesh("../meshes/circle1.h5")
-# p, t, e = load_mesh("../meshes/circle2.h5")
-# p, t, e = load_mesh("../meshes/circle3.h5")
 np = size(p, 1)
 
 # widths of basin
@@ -49,16 +53,12 @@ nσ = 2^8
 
 # depth H
 H₀ = 4e3
-# H(ξ, η) = H₀
-# Hx(ξ, η) = 0
-# Hy(ξ, η) = 0
 Δ = Lx/5
-H(ξ, η) = H₀ - H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2)) + 1000
-Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
-Hy(ξ, η) = 0
-# R = Lx
-# Δ = Lx/5
-# H(ξ, η) = H₀ - H₀*exp(-(sqrt(ξ^2 + η^2) - R)^2/(2*Δ^2))
+G(x) = 1 - exp(-x^2/(2*Δ^2))
+Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 20
+Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
 
 # coriolis parameter f = f₀ + βη
 f₀ = 0
@@ -110,11 +110,7 @@ Uη(ξ, η) = 0
 # get baroclinic_LHS matrices
 baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
 for i=1:np 
-    if H(ξ[i], η[i]) < eps()
-        baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H(ξ[i], η[i]) + 100, σ)
-    else
-        baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H(ξ[i], η[i]), σ)
-    end
+    baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H(ξ[i], η[i]), σ)
 end  
 
 # get baroclinic_RHS vectors
@@ -126,11 +122,14 @@ end
 # solve system
 τξ, τη = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs)
 
-# convert to uξ, uη
-uξ = zeros(np, nσ)
-uη = zeros(np, nσ)
-for i=1:np
-    uξ[i, :], uη[i, :] = get_uξ_uη(τξ[i, :], τη[i, :], σ, H(ξ[i], η[i]), ν[i, :])
-end
+# # convert to uξ, uη
+# uξ = zeros(np, nσ)
+# uη = zeros(np, nσ)
+# for i=1:np
+#     uξ[i, :], uη[i, :] = get_uξ_uη(τξ[i, :], τη[i, :], σ, H(ξ[i], η[i]), ν[i, :])
+# end
 
-# plots
+# plot
+plot_horizontal(p, t, τξ[:, 1])
+savefig("debug.png")
+plt.close()
