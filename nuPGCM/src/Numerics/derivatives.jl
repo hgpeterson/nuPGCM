@@ -19,7 +19,7 @@ Compute `n`th order derivative of `f` at `z0` given grid `z`.
 """
 function differentiate_pointwise(f::Array{Float64,1}, z::Array{Float64,1}, z0::Float64, n::Int64)
     fd_z = mkfdstencil(z, z0, n)
-    return sum(fd_z.*f)
+    return dot(fd_z, f)
 end
 
 """

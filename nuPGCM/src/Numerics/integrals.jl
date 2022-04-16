@@ -4,7 +4,7 @@
 Integrate array `f` over domain `x` using trapezoidal rule.
 """
 function trapz(f::Array{Float64,1}, x::Array{Float64,1})
-    return 0.5*sum((f[1:end-1] .+ f[2:end]).*(x[2:end] .- x[1:end-1]))
+    return 0.5*dot((f[1:end-1] .+ f[2:end]), (x[2:end] .- x[1:end-1]))
 end
 
 """
