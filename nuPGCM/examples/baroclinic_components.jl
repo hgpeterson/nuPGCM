@@ -7,32 +7,6 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-# # test inversion at single column
-# function get_τξ_τη_SC(nσ, ν, f, H, σ)
-#     baroclinic_LHS = get_baroclinic_LHS(ν, f, H, σ)
-#     baroclinic_RHS = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1.0, 1.0)
-#     sol = baroclinic_LHS\baroclinic_RHS
-#     imap = reshape(1:2*nσ, (2, nσ)) 
-#     τξ = sol[imap[1, :]]
-#     τη = sol[imap[2, :]]
-#     return τξ, τη
-# end
-
-# fig, ax = subplots()
-# ax.set_xlabel(L"$\tau$ (m$^2$ s$^{-2}$)")
-# ax.set_ylabel(L"$\sigma$")
-# nσ = 2^8
-# σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
-# ν = 2e-3*ones(nσ)
-# f = -5.5e-5
-# for H=[4.1e3, 3.1e3, 2.1e3, 1.1e3, 0.1e3, 0.01e3]
-#     τξ, τη = get_τξ_τη_SC(nσ, ν, f, H, σ)
-#     println("H = $H; bottom stress: ($(τξ[1]), $(τη[1]))")
-#     ax.plot(abs.(τξ), σ, c="tab:blue")
-#     ax.plot(abs.(τη), σ, c="tab:orange", ls="--")
-# end
-# savefig("debug.png")
-
 # load horizontal mesh
 p, t, e = load_mesh("../meshes/square1.h5")
 np = size(p, 1)
@@ -59,31 +33,35 @@ H₀ = 4e3
 Δ = Lx/5
 G(x) = 1 - exp(-x^2/(2*Δ^2))
 Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-H = @. 20 + H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
-Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+H_func(ξ, η) = eps() + H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
+Hx_func(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+Hy_func(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
 
 # coriolis parameter f = f₀ + βη
 f₀ = 0
 β = 1e-11
-f = @. f₀ + β*η
+f_func(ξ, η) = f₀ + β*η
+fy_func(ξ, η) = β
 
 # diffusivity and viscosity
-κ0 = 6e-5
-κ1 = 2e-3
-h = 200
-μ = 1e0
-κ = zeros(np, nσ)
-for i=1:nσ
-    κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-end
-ν = μ*κ
+# κ0 = 6e-5
+# κ1 = 2e-3
+# h = 200
+# μ = 1e0
+# κ = zeros(np, nσ)
+# for i=1:nσ
+#     κ[:, i] = @. κ0 + κ1*exp(-H_func.(ξ, η)*(σ[i] + 1)/h)
+# end
+# ν = μ*κ
+ν = 1e1*ones(np, nσ)
+κ = 1e1*ones(np, nσ)
 
 # stratification
 N² = 1e-6*ones(np, nσ)
 
 # model setup struct
-m = ModelSetup3DPG(false, f, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0)
+m = ModelSetup3DPG(false, f_func, fy_func, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², 0.)
+println("done")
 
 # # buoyancy field
 # b = zeros(np, nσ)
@@ -104,38 +82,66 @@ m = ModelSetup3DPG(false, f, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0)
 #     ∂b∂y[i, :] .-= σ*Hy[i].*differentiate(b[i, :], σ)/H[i]
 # end
 
-# # wind stress 
-# τ₀ = 0.1 
-# τξ_wind = @. -τ₀*cos(π*η/Ly)
-# τη_wind = zeros(np)
+# JEBAR term
+JEBAR(ξ, η) = 0
 
-# # barotropic flow
-# Uξ = zeros(np)
-# Uη = zeros(np)
+# wind stress and its curl
+τ₀ = 0.1 # N m⁻² 
+τξ_wind(ξ, η) = -τ₀*cos(π*η/Ly)
+τη_wind(ξ, η) = 0
+# ∂ξ(τη/H) - ∂η(τξ/H)
+curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ_wind(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
 
-# # get baroclinic_LHS matrices
-# baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
-# for i=1:np 
-#     baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f₀ + β*η[i], H[i], σ)
-# end  
+# right-hand-side forcing
+F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)
 
-# # get baroclinic_RHS vectors
-# baroclinic_RHSs = zeros(np, 2*nσ)
-# for i=1:np
-#     baroclinic_RHSs[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 1)
-# end
+# get barotropic_RHS
+barotropic_RHS = get_barotropic_RHS(p, t, e, F)
 
-# # solve system
-# τξ, τη = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs)
+# solve
+Ψ = m.barotropic_LHS\barotropic_RHS
 
-# # convert to uξ, uη
-# uξ = zeros(np, nσ)
-# uη = zeros(np, nσ)
-# for i=1:np
-#     uξ[i, :], uη[i, :] = get_uξ_uη(τξ[i, :], τη[i, :], σ, H[i], ν[i, :])
-# end
+# plot Ψ
+plot_horizontal(p, t, Ψ/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+savefig("psi.png")
+println("psi.png")
+plt.close()
 
-# # plot
-# plot_horizontal(p, t, τξ[:, 1])
-# savefig("debug.png")
-# plt.close()
+# plot H
+plot_horizontal(p, t, H_func.(ξ, η); clabel=L"$H$ (m)")
+savefig("H.png")
+println("H.png")
+plt.close()
+
+# plot Hx
+plot_horizontal(p, t, Hx_func.(ξ, η); clabel=L"$\partial_x H$ (-)")
+savefig("Hx.png")
+println("Hx.png")
+plt.close()
+
+# plot Hy
+plot_horizontal(p, t, Hy_func.(ξ, η); clabel=L"$\partial_y H$ (-)")
+savefig("Hy.png")
+println("Hy.png")
+plt.close()
+
+# plot f/H
+f_over_H = @. f_func(ξ, η)/(H_func(ξ, η) + eps())
+plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
+savefig("f_over_H.png")
+println("f_over_H.png")
+plt.close()
+
+# plot wind stress
+y = -Ly:2*Ly/100:Ly
+fig, ax = subplots(figsize=(1.955, 3.167))
+ax.axvline(0, c="k", lw=0.5, ls="-")
+ax.plot(τξ_wind.(0, y), y/1e3)
+ax.set_xlabel(L"Wind stress $\tau^\xi$ (N m$^{-2}$)")
+ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
+ax.spines["left"].set_visible(false)
+ax.set_xlim([-0.15, 0.15])
+ax.set_xticks(-0.15:0.05:0.15)
+savefig("tau.png")
+println("tau.png")
+plt.close()

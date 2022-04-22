@@ -13,9 +13,9 @@ function get_K(p, t, e, H, τξ_tξ_bot, τη_tη_bot)
         Kₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(ξ, η) = -τη_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[2, i] + 
-                          -τξ_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[3, i]
-                Kₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
+                func(ξ, η) = -τη_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[2, i] + 
+                             -τξ_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[3, i]
+                Kₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -52,9 +52,9 @@ function get_K′(p, t, e, H, τξ_tη_bot, τη_tξ_bot)
         Kₑ′ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(ξ, η) = τη_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[2, i] + 
-                          τξ_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[3, i]
-                Kₑ′[i, j] = gaussian_quad2(f, p[t[k, :], :])
+                func(ξ, η) = τη_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[2, i] + 
+                             τξ_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[3, i]
+                Kₑ′[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -76,7 +76,7 @@ function get_K′(p, t, e, H, τξ_tη_bot, τη_tξ_bot)
     return K′
 end
 
-function get_C(p, t, e, f₀, β, H, Hx, Hy)
+function get_C(p, t, e, f, fy, H, Hx, Hy)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
     imap = reshape(1:n_nodes, 1, n_nodes) 
@@ -91,9 +91,9 @@ function get_C(p, t, e, f₀, β, H, Hx, Hy)
         Cₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(ξ, η) = (β/H(ξ, η) - (f₀ + β*η)*Hy(ξ, η)/H(ξ, η)^2)*C₀[2, j]*local_basis_func(C₀[:, i], [ξ, η]) - 
-                         -(f₀ + β*η)*Hx(ξ, η)/H(ξ, η)^2*C₀[3, j]*local_basis_func(C₀[:, i], [ξ, η])
-                Cₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
+                func(ξ, η) = (fy(ξ, η)/H(ξ, η) - f(ξ, η)*Hy(ξ, η)/H(ξ, η)^2)*C₀[2, j]*local_basis_func(C₀[:, i], [ξ, η]) - 
+                             -f(ξ, η)*Hx(ξ, η)/H(ξ, η)^2*C₀[3, j]*local_basis_func(C₀[:, i], [ξ, η])
+                Cₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -131,11 +131,15 @@ function get_E(p, e)
     return E
 end
 
-function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
+function get_barotropic_LHS(p, t, e, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
     # build matrices
+    println("building K")
     K = get_K(p, t, e, H, τξ_tξ_bot, τη_tη_bot)
+    println("building K′")
     K′ = get_K′(p, t, e, H, τξ_tη_bot, τη_tξ_bot)
-    C = get_C(p, t, e, f₀, β, H, Hx, Hy)
+    println("building C")
+    C = get_C(p, t, e, f, fy, H, Hx, Hy)
+    println("building E")
     E = get_E(p, e)
 
     # full barotropic_LHS matrix
