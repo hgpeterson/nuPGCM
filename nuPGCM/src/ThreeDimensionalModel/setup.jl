@@ -4,76 +4,76 @@
 #   (2) Setup/Params
 ################################################################################
 
-struct ModelState3DPG
+struct ModelState3DPG{FT,IT}
     # buoyancy (m s⁻²)
-	b::Array{Float64,2}
+	b::AbstractArray{FT,2}
     
     # barotropic streamfunction
-    Ψ::Array{Float64,1}
+    Ψ::AbstractArray{FT,1}
 
     # velocities (m s⁻¹)
-	uξ::Array{Float64,2}
-	uη::Array{Float64,2}
-	uσ::Array{Float64,2}
+	uξ::AbstractArray{FT,2}
+	uη::AbstractArray{FT,2}
+	uσ::AbstractArray{FT,2}
 
     # iteration
-    i::Array{Int64,1}
+    i::AbstractArray{IT,1}
 end
 
-struct ModelSetup3DPG
+struct ModelSetup3DPG{FT,IT}
     # use BL model or full?
     bl::Bool 
 
 	# Coriolis parameter (s⁻¹)
-    f::Array{Float64,1}
+    f::AbstractArray{FT,1}
 
 	# number of mesh points
-	np::Int64
+	np::IT
 
     # number of vertical grid points
-	nσ::Int64
+	nσ::IT
 
     # mesh points
-    p::Array{Float64,2}
+    p::AbstractArray{FT,2}
 
     # mesh triangles
-    t::Array{Int64,2}
+    t::AbstractArray{IT,2}
 
     # mesh outter edges
-    e::Array{Int64,1}
+    e::AbstractArray{IT,1}
 
     # shape function coefficients
-    C₀::Array{Float64,3}
+    C₀::AbstractArray{FT,3}
 
 	# vertical grid 
-	σ::Array{Float64,1}
+	σ::AbstractArray{FT,1}
 
     # depth (m)
-    H::Array{Float64,1}
+    H::AbstractArray{FT,1}
 
     # ∂H/∂x and ∂H/∂y
-    Hx::Array{Float64,1}
-    Hy::Array{Float64,1}
+    Hx::AbstractArray{FT,1}
+    Hy::AbstractArray{FT,1}
 
     # turbulent viscosity and diffusivity (m² s⁻¹)
-	ν::Array{Float64,2}
-	κ::Array{Float64,2}
+	ν::AbstractArray{FT,2}
+	κ::AbstractArray{FT,2}
 
     # buoyancy frequency (s⁻²)
-	N²::Array{Float64,2}
+	N²::AbstractArray{FT,2}
 
     # timestep (s)
-	Δt::Float64
+	Δt::FT
 
     # baroclinic LHS matrices
-    baroclinic_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
+    baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU{FT,IT}}
 
     # barotropic LHS matrix
-    barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}
+    barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
 
     # transport stress
-    τξ_t::Array{Float64,2}
-    τη_t::Array{Float64,2}
+    τξ_t::AbstractArray{FT,2}
+    τη_t::AbstractArray{FT,2}
 end
 
 ################################################################################
@@ -89,13 +89,13 @@ function ModelSetup3DPG(bl, f, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
 
     # compute baroclinic LHS matrices
     baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, np) 
-    for i=1:np 
+    @inbounds for i=1:np 
         baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f[i], H[i], σ)
     end  
 
     # compute τ_t
     baroclinic_RHSs = zeros(np, 2*nσ)
-    for i=1:np
+    @inbounds for i=1:np
         baroclinic_RHSs[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 1)
     end
     τξ_t, τη_t = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs)
