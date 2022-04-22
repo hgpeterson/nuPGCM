@@ -97,7 +97,7 @@ function evaluate(u, p₀, p, t, C₀)
 
     # sum weighted combinations of basis functions at p₀
     u₀ = 0
-    for i=1:3
+    @inbounds for i=1:3
         u₀ += u[t[k₀, i]]*local_basis_func(C₀[k₀, :, i], p₀)
     end
 
