@@ -1,4 +1,4 @@
-function get_K(p, t, e, H, τξ_t_bottom, τη_t_bottom)
+function get_K(p, t, e, H, τξ_tξ_bot, τη_tη_bot)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
     imap = reshape(1:n_nodes, 1, n_nodes) 
@@ -13,8 +13,8 @@ function get_K(p, t, e, H, τξ_t_bottom, τη_t_bottom)
         Kₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                f(ξ, η) = -τη_t_bottom(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[2, i] + 
-                          -τξ_t_bottom(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[3, i]
+                f(ξ, η) = -τη_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[2, i] + 
+                          -τξ_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[3, i]
                 Kₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
             end
         end
@@ -37,6 +37,45 @@ function get_K(p, t, e, H, τξ_t_bottom, τη_t_bottom)
     return K
 end
 
+function get_K′(p, t, e, H, τξ_tη_bot, τη_tξ_bot)
+	n_nodes = size(p, 1)
+	n_tri = size(t, 1)
+    imap = reshape(1:n_nodes, 1, n_nodes) 
+
+	# create global linear system using stamping method
+    K′ = Tuple{Int64,Int64,Float64}[]  
+	for k=1:n_tri
+		# get coeffs for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
+        C₀ = get_linear_basis_coeffs(p[t[k, :], :])
+
+		# calculate K′ matrix element Kₑ′
+        Kₑ′ = zeros(3, 3)
+        for i=1:3
+            for j=1:3
+                f(ξ, η) = τη_tξ_bot(ξ, η)/H(ξ, η)*C₀[3, j]*C₀[2, i] + 
+                          τξ_tη_bot(ξ, η)/H(ξ, η)*C₀[2, j]*C₀[3, i]
+                Kₑ′[i, j] = gaussian_quad2(f, p[t[k, :], :])
+            end
+        end
+
+		# add to global system
+		for i=1:3
+			for j=1:3
+                if t[k, i] in e
+                    # edge node, leave for E
+                    continue
+                end
+                push!(K′, (imap[t[k, i]], imap[t[k, j]], Kₑ′[i, j]))
+			end
+		end
+	end
+
+    # make CSC matrix
+    K′ = sparse((x->x[1]).(K′), (x->x[2]).(K′), (x->x[3]).(K′), n_nodes, n_nodes)
+
+    return K′
+end
+
 function get_C(p, t, e, f₀, β, H, Hx, Hy)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
@@ -54,7 +93,6 @@ function get_C(p, t, e, f₀, β, H, Hx, Hy)
             for j=1:3
                 f(ξ, η) = (β/H(ξ, η) - (f₀ + β*η)*Hy(ξ, η)/H(ξ, η)^2)*C₀[2, j]*local_basis_func(C₀[:, i], [ξ, η]) - 
                          -(f₀ + β*η)*Hx(ξ, η)/H(ξ, η)^2*C₀[3, j]*local_basis_func(C₀[:, i], [ξ, η])
-                # f(p₀) = β/H(p₀[1], p₀[2])*C₀[2, j]*local_basis_func(C₀[:, i], p₀)
                 Cₑ[i, j] = gaussian_quad2(f, p[t[k, :], :])
             end
         end
@@ -93,27 +131,18 @@ function get_E(p, e)
     return E
 end
 
-function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_t_bottom, τη_t_bottom)
+function get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
     # build matrices
-    K = get_K(p, t, e, H, τξ_t_bottom, τη_t_bottom)
+    K = get_K(p, t, e, H, τξ_tξ_bot, τη_tη_bot)
+    K′ = get_K′(p, t, e, H, τξ_tη_bot, τη_tξ_bot)
     C = get_C(p, t, e, f₀, β, H, Hx, Hy)
     E = get_E(p, e)
 
     # full barotropic_LHS matrix
-    barotropic_LHS = C + K + E
+    barotropic_LHS = K + K′ + C + E
 
     return lu(barotropic_LHS)
 end
-function get_barotropic_LHS(p, t, e, H, τξ_t_bottom, τη_t_bottom, C, E)
-    # build K matrix
-    K = get_K(p, t, e, H, τξ_t_bottom, τη_t_bottom)
-
-    # full barotropic_LHS matrix
-    barotropic_LHS = C + K + E
-
-    return lu(barotropic_LHS)
-end
-
 
 function get_barotropic_RHS(p, t, e, F)
 	n_nodes = size(p, 1)
@@ -140,7 +169,7 @@ function get_barotropic_RHS(p, t, e, F)
     return barotropic_RHS
 end
 
-function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector{Float64})
+function get_baroclinic_LHS(ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
     # convention: τξ is variable 1, τη is variable 2
     nσ = size(σ, 1)
     nvar = 2
@@ -148,7 +177,7 @@ function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vec
     baroclinic_LHS = Tuple{Int64,Int64,Float64}[]  
 
     # Interior nodes
-    for j=2:nσ-1
+    @inbounds for j=2:nσ-1 
         # ∂σσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
 
@@ -201,7 +230,7 @@ function get_baroclinic_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vec
     return lu(baroclinic_LHS)
 end
 
-function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}, τξ_wind::Real, τη_wind::Real, Uξ::Real, Uη::Real)
+function get_baroclinic_RHS(∂b∂x::AbstractArray{<:Real,1}, ∂b∂y::AbstractArray{<:Real,1}, τξ_wind::Real, τη_wind::Real, Uξ::Real, Uη::Real)
     nσ = size(∂b∂x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
@@ -228,13 +257,13 @@ function get_baroclinic_RHS(∂b∂x::Vector{Float64}, ∂b∂y::Vector{Float64}
     return baroclinic_RHS
 end
 
-function get_τξ_τη(baroclinic_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, baroclinic_RHSs::Matrix{Float64})
+function get_τξ_τη(baroclinic_LHSs::AbstractArray{<:LinearAlgebra.Factorization{Float64},1}, baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     τ = zeros(np, 2*nσ)
-    for i=1:np
+    @inbounds for i=1:np
         τ[i, :] = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
     end
     return τ[:, imap[1, :]], τ[:, imap[2, :]]

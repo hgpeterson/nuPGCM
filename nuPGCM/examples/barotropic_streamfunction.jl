@@ -11,8 +11,8 @@ pygui(false)
 # p, t, e = load_mesh("../meshes/square2.h5")
 # p, t, e = load_mesh("../meshes/square3.h5")
 # p, t, e = load_mesh("../meshes/circle1.h5")
-p, t, e = load_mesh("../meshes/circle2.h5")
-# p, t, e = load_mesh("../meshes/circle3.h5")
+# p, t, e = load_mesh("../meshes/circle2.h5")
+p, t, e = load_mesh("../meshes/circle3.h5")
 
 # widths of basin
 Lx = 5e6
@@ -59,21 +59,24 @@ f₀ = 0
 JEBAR(ξ, η) = 0
 
 # wind stress and its curl
-τ₀ = 0.1 # N m⁻² (should this be scaled by 1/ρ to get units of m² s⁻²?)
+τ₀ = 0.1 # N m⁻² 
 τξ_wind(ξ, η) = -τ₀*cos(π*η/Ly)
 τη_wind(ξ, η) = 0
-curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly) # ∂ξ(τη) - ∂η(τξ)
+# ∂ξ(τη/H) - ∂η(τξ/H)
+curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H(ξ, η) - τξ_wind(ξ, η)*Hy(ξ, η)/H(ξ, η)^2  
 
 # right-hand-side forcing
-F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)/H(ξ, η) #FIXME shouldn't the H be inside?
+F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)
 
 # bottom stress from baroclinic solution
 r = 5e-6
-τξ_t_bottom(ξ, η) = r
-τη_t_bottom(ξ, η) = r
+τξ_tξ_bot(ξ, η) = r
+τη_tη_bot(ξ, η) = r
+τξ_tη_bot(ξ, η) = r/1e2
+τη_tξ_bot(ξ, η) = r/1e2
 
 # get barotropic_LHS
-barotropic_LHS = get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_t_bottom, τη_t_bottom)
+barotropic_LHS = get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
 
 # get barotropic_RHS
 barotropic_RHS = get_barotropic_RHS(p, t, e, F)
