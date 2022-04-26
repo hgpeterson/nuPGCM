@@ -92,16 +92,21 @@ function get_tri(p₀, p, t)
 end
 
 function evaluate(u, p₀, p, t, C₀)
-    # find triangle p₀ is in
-    k₀ = get_tri(p₀, p, t)
+    # find closest point and return that value
+    Δp = p - repeat(p₀', size(p, 1))
+    d = Δp[:, 1].^2 + Δp[:, 2].^2
+    return u[argmin(d)]
 
-    # sum weighted combinations of basis functions at p₀
-    u₀ = 0
-    @inbounds for i=1:3
-        u₀ += u[t[k₀, i]]*local_basis_func(C₀[k₀, :, i], p₀)
-    end
+    # # find triangle p₀ is in
+    # k₀ = get_tri(p₀, p, t)
 
-    return u₀
+    # # sum weighted combinations of basis functions at p₀
+    # u₀ = 0
+    # @inbounds for i=1:3
+    #     u₀ += u[t[k₀, i]]*local_basis_func(C₀[k₀, :, i], p₀)
+    # end
+
+    # return u₀
 end
 function ∂ξ(u, p₀, p, t, C₀)
     # find triangle p₀ is in
