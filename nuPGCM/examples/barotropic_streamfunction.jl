@@ -8,10 +8,10 @@ pygui(false)
 
 # load mesh
 # p, t, e = load_mesh("../meshes/square1.h5")
-# p, t, e = load_mesh("../meshes/square2.h5")
+p, t, e = load_mesh("../meshes/square2.h5")
 # p, t, e = load_mesh("../meshes/square3.h5")
 # p, t, e = load_mesh("../meshes/circle1.h5")
-p, t, e = load_mesh("../meshes/circle2.h5")
+# p, t, e = load_mesh("../meshes/circle2.h5")
 # p, t, e = load_mesh("../meshes/circle3.h5")
 
 # widths of basin
@@ -21,6 +21,9 @@ Ly = 5e6
 # rescale p
 p[:, 1] *= Lx
 p[:, 2] *= Ly
+
+# basis
+C₀ = get_linear_basis_coeffs(p, t)
 
 # depth H
 # H₀ = 4e3
@@ -34,46 +37,51 @@ p[:, 2] *= Ly
 # Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
 # Hy(ξ, η) = 0
 
-# H₀ = 4e3
-# Δ = Lx/5
-# G(x) = 1 - exp(-x^2/(2*Δ^2))
-# Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-# H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
-# Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-# Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
-
 H₀ = 4e3
-R = Lx
-Δ = R/5
+Δ = Lx/5
 G(x) = 1 - exp(-x^2/(2*Δ^2))
 Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-H(ξ, η) = H₀*G(sqrt(ξ^2 + η^2) - R)
-Hx(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
-Hy(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
+H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
+Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+
+# H₀ = 4e3
+# R = Lx
+# Δ = R/5
+# G(x) = 1 - exp(-x^2/(2*Δ^2))
+# Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+# H(ξ, η) = H₀*G(sqrt(ξ^2 + η^2) - R)
+# Hx(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
+# Hy(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
 
 # coriolis parameter f = f₀ + βη
 f₀ = 0
 β = 1e-11
+f(ξ, η) = f₀ + β*η
+fy(ξ, η) = β
 
 # JEBAR term
 JEBAR(ξ, η) = 0
 
 # wind stress and its curl
-τ₀ = 0.1 # N m⁻² (should this be scaled by 1/ρ to get units of m² s⁻²?)
+τ₀ = 0.1 # N m⁻² 
 τξ_wind(ξ, η) = -τ₀*cos(π*η/Ly)
 τη_wind(ξ, η) = 0
-curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly) # ∂ξ(τη) - ∂η(τξ)
+# ∂ξ(τη/H) - ∂η(τξ/H)
+curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H(ξ, η) - τξ_wind(ξ, η)*Hy(ξ, η)/H(ξ, η)^2  
 
 # right-hand-side forcing
-F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)/H(ξ, η) #FIXME shouldn't the H be inside?
+F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)
 
 # bottom stress from baroclinic solution
 r = 5e-6
-τξ_t_bottom(ξ, η) = r
-τη_t_bottom(ξ, η) = r
+τξ_tξ_bot(ξ, η) = r
+τη_tη_bot(ξ, η) = r
+τξ_tη_bot(ξ, η) = r/1e2
+τη_tξ_bot(ξ, η) = r/1e2
 
 # get barotropic_LHS
-barotropic_LHS = get_barotropic_LHS(p, t, e, f₀, β, H, Hx, Hy, τξ_t_bottom, τη_t_bottom)
+barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
 
 # get barotropic_RHS
 barotropic_RHS = get_barotropic_RHS(p, t, e, F)
