@@ -1,4 +1,4 @@
-function get_K(p, t, e, C₀, H, τξ_tξ_bot, τη_tη_bot)
+function get_K(p, t, e, C₀, ρ₀, H, τξ_tξ_bot)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
     imap = reshape(1:n_nodes, 1, n_nodes) 
@@ -10,8 +10,7 @@ function get_K(p, t, e, C₀, H, τξ_tξ_bot, τη_tη_bot)
         Kₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = -τη_tη_bot(ξ, η)/H(ξ, η)*C₀[k, 2, j]*C₀[k, 2, i] + 
-                             -τξ_tξ_bot(ξ, η)/H(ξ, η)*C₀[k, 3, j]*C₀[k, 3, i]
+                func(ξ, η) = -τξ_tξ_bot(ξ, η)/ρ₀/H(ξ, η)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 Kₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -34,7 +33,7 @@ function get_K(p, t, e, C₀, H, τξ_tξ_bot, τη_tη_bot)
     return K
 end
 
-function get_K′(p, t, e, C₀, H, τξ_tη_bot, τη_tξ_bot)
+function get_K′(p, t, e, C₀, ρ₀, H, τη_tξ_bot)
 	n_nodes = size(p, 1)
 	n_tri = size(t, 1)
     imap = reshape(1:n_nodes, 1, n_nodes) 
@@ -46,8 +45,7 @@ function get_K′(p, t, e, C₀, H, τξ_tη_bot, τη_tξ_bot)
         Kₑ′ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = τη_tξ_bot(ξ, η)/H(ξ, η)*C₀[k, 3, j]*C₀[k, 2, i] + 
-                             τξ_tη_bot(ξ, η)/H(ξ, η)*C₀[k, 2, j]*C₀[k, 3, i]
+                func(ξ, η) = τη_tξ_bot(ξ, η)/ρ₀/H(ξ, η)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 Kₑ′[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -122,12 +120,12 @@ function get_E(p, e)
     return E
 end
 
-function get_barotropic_LHS(p, t, e, C₀, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
+function get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_tξ_bot)
     # build matrices
     println("building K")
-    K = get_K(p, t, e, C₀, H, τξ_tξ_bot, τη_tη_bot)
+    K = get_K(p, t, e, C₀, ρ₀, H, τξ_tξ_bot)
     println("building K′")
-    K′ = get_K′(p, t, e, C₀, H, τξ_tη_bot, τη_tξ_bot)
+    K′ = get_K′(p, t, e, C₀, ρ₀, H, τη_tξ_bot)
     println("building C")
     C = get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
     println("building E")
@@ -139,32 +137,27 @@ function get_barotropic_LHS(p, t, e, C₀, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(p, t, e, F)
-	n_nodes = size(p, 1)
-	n_tri = size(t, 1)
-    imap = reshape(1:n_nodes, 1, n_nodes) 
+function get_barotropic_RHS(m::ModelSetup3DPG, F)
+    imap = reshape(1:m.np, 1, m.np) 
 
 	# create global linear system using stamping method
-    barotropic_RHS = zeros(n_nodes)
-	for k=1:n_tri
-		# get coeffs for linear basis function c₁ + c₂ξ + c₃η stored in 3×3 C₀ matrix
-        C₀ = get_linear_basis_coeffs(p[t[k, :], :])
-
+    barotropic_RHS = zeros(m.np)
+	for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
-            if t[k, i] in e
+            if m.t[k, i] in m.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            f(ξ, η) = F(ξ, η)*local_basis_func(C₀[:, i], [ξ, η])
-            barotropic_RHS[imap[t[k, i]]] += gaussian_quad2(f, p[t[k, :], :])
+            f(ξ, η) = F(ξ, η)*local_basis_func(m.C₀[k, :, i], [ξ, η])
+            barotropic_RHS[imap[m.t[k, i]]] += gaussian_quad2(f, m.p[m.t[k, :], :])
         end
 	end
 
     return barotropic_RHS
 end
 
-function get_baroclinic_LHS(ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
+function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
     # convention: τξ is variable 1, τη is variable 2
     nσ = size(σ, 1)
     nvar = 2
@@ -176,47 +169,43 @@ function get_baroclinic_LHS(ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::A
         # ∂σσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
 
-        # eqtn 1: ∂σσ(τξ)/H² + f*τη/ν = 0 or ∂x(b)
+        # eqtn 1: ν/f/H² ∂σσ(τξ) + τη = ν/ρ₀/f ∂x(b)
         row = imap[1, j]
         # term 1
-        push!(baroclinic_LHS, (row, imap[1, j-1], fd_σσ[1]/H^2))
-        push!(baroclinic_LHS, (row, imap[1, j],   fd_σσ[2]/H^2))
-        push!(baroclinic_LHS, (row, imap[1, j+1], fd_σσ[3]/H^2))
+        push!(baroclinic_LHS, (row, imap[1, j-1], ν[j]/f/H^2 * fd_σσ[1]))
+        push!(baroclinic_LHS, (row, imap[1, j],   ν[j]/f/H^2 * fd_σσ[2]))
+        push!(baroclinic_LHS, (row, imap[1, j+1], ν[j]/f/H^2 * fd_σσ[3]))
         # term 2
-        push!(baroclinic_LHS, (row, imap[2, j], f/ν[j]))
+        push!(baroclinic_LHS, (row, imap[2, j], 1))
 
-        # eqtn 2: ∂σσ(τη)/H² - f*τξ/ν = 0 or ∂y(b)
+        # eqtn 2: ν/f/H² ∂σσ(τη) - τξ = ν/ρ₀/f ∂y(b)
         row = imap[2, j]
         # term 1
-        push!(baroclinic_LHS, (row, imap[2, j-1], fd_σσ[1]/H^2))
-        push!(baroclinic_LHS, (row, imap[2, j],   fd_σσ[2]/H^2))
-        push!(baroclinic_LHS, (row, imap[2, j+1], fd_σσ[3]/H^2))
+        push!(baroclinic_LHS, (row, imap[2, j-1], ν[j]/f/H^2 * fd_σσ[1]))
+        push!(baroclinic_LHS, (row, imap[2, j],   ν[j]/f/H^2 * fd_σσ[2]))
+        push!(baroclinic_LHS, (row, imap[2, j+1], ν[j]/f/H^2 * fd_σσ[3]))
         # term 2
-        push!(baroclinic_LHS, (row, imap[1, j], -f/ν[j]))
+        push!(baroclinic_LHS, (row, imap[1, j], -1))
     end
 
     # Upper boundary conditions: wind stress
-    # b.c. 1: τξ = 0 or τξ_wind at σ = 0
+    # b.c. 1: τξ = τξ₀ at σ = 0
     push!(baroclinic_LHS, (imap[1, nσ], imap[1, nσ], 1))
-    # b.c. 2: τη = 0 or τη_wind at σ = 0
+    # b.c. 2: τη = τη₀ at σ = 0
     push!(baroclinic_LHS, (imap[2, nσ], imap[2, nσ], 1))
 
-    # # test: dirichlet lower bdy conditions
-    # push!(baroclinic_LHS, (imap[1, 1], imap[1, 1], 1))
-    # push!(baroclinic_LHS, (imap[2, 1], imap[2, 1], 1))
-
     # Integral boundary conditions: transport
-    # b.c. 1: -H² ∫ σ τξ / ν  dσ = 1 or 0
+    # b.c. 1: -H² ∫ στξ/ρ₀/ν dσ = Uξ
     for j=1:nσ-1
         # trapezoidal rule
-        push!(baroclinic_LHS, (imap[1, 1], imap[1, j],   -H^2/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
-        push!(baroclinic_LHS, (imap[1, 1], imap[1, j+1], -H^2/ν[j+1] * σ[j+1] * (σ[j+1] - σ[j])/2))
+        push!(baroclinic_LHS, (imap[1, 1], imap[1, j],   -H^2/ρ₀/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
+        push!(baroclinic_LHS, (imap[1, 1], imap[1, j+1], -H^2/ρ₀/ν[j+1] * σ[j+1] * (σ[j+1] - σ[j])/2))
     end
-    # b.c. 2: -H² ∫ σ τη / ν dσ = 1 or 0
+    # b.c. 1: -H² ∫ στη/ρ₀/ν dσ = Uη
     for j=1:nσ-1
         # trapezoidal rule
-        push!(baroclinic_LHS, (imap[2, 1], imap[2, j],   -H^2/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
-        push!(baroclinic_LHS, (imap[2, 1], imap[2, j+1], -H^2/ν[j+1] * σ[j+1] * (σ[j+1] - σ[j])/2))
+        push!(baroclinic_LHS, (imap[2, 1], imap[2, j],   -H^2/ρ₀/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
+        push!(baroclinic_LHS, (imap[2, 1], imap[2, j+1], -H^2/ρ₀/ν[j+1] * σ[j+1] * (σ[j+1] - σ[j])/2))
     end
 
     # Create CSC sparse matrix from matrix elements
@@ -225,51 +214,54 @@ function get_baroclinic_LHS(ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::A
     return lu(baroclinic_LHS)
 end
 
-function get_baroclinic_RHS(∂b∂x::AbstractArray{<:Real,1}, ∂b∂y::AbstractArray{<:Real,1}, τξ_wind::Real, τη_wind::Real, Uξ::Real, Uη::Real)
-    nσ = size(∂b∂x, 1)
+function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray{<:Real,1}, τξ₀::Real, τη₀::Real, Uξ::Real, Uη::Real)
+    nσ = size(rhs_x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     baroclinic_RHS = zeros(nvar*nσ)
 
     # eqtns:
-    # eqtn 1: ∂σσ(τξ)/H² + f*τη/ν = ∂x(b)
-    baroclinic_RHS[imap[1, 2:nσ-1]] = ∂b∂x[2:nσ-1] 
-    # eqtn 2: ∂σσ(τη)/H² - f*τξ/ν = ∂y(b)
-    baroclinic_RHS[imap[2, 2:nσ-1]] = ∂b∂y[2:nσ-1] 
+    # eqtn 1: ν/f/H² ∂σσ(τξ) + τη = ν/ρ₀/f ∂x(b)
+    baroclinic_RHS[imap[1, 2:nσ-1]] = rhs_x[2:nσ-1] 
+    # eqtn 2: ν/f/H² ∂σσ(τη) - τξ = ν/ρ₀/f ∂y(b)
+    baroclinic_RHS[imap[2, 2:nσ-1]] = rhs_y[2:nσ-1] 
 
     # top b.c.:
-    # b.c. 1: τξ = τξ_wind at σ = 0
-    baroclinic_RHS[imap[1, nσ]] = τξ_wind
-    # b.c. 2: τη = τη_wind at σ = 0
-    baroclinic_RHS[imap[2, nσ]] = τη_wind
+    # b.c. 1: τξ = τξ₀ at σ = 0
+    baroclinic_RHS[imap[1, nσ]] = τξ₀
+    # b.c. 2: τη = τη₀ at σ = 0
+    baroclinic_RHS[imap[2, nσ]] = τη₀
     
     # integral b.c.:
-    # b.c. 1: -H² ∫ σ τξ / ν dσ = Uξ
+    # b.c. 1: -H² ∫ στξ/ρ₀/ν dσ = Uξ
     baroclinic_RHS[imap[1, 1]] = Uξ
-    # b.c. 2: -H² ∫ σ τη / ν dσ = Uη
+    # b.c. 2: -H² ∫ στη/ρ₀/ν dσ = Uη
     baroclinic_RHS[imap[2, 1]] = Uη
 
     return baroclinic_RHS
 end
 
-function get_τξ_τη(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
+function get_τ(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    τ = zeros(np, 2*nσ)
+    τ = zeros(2, np, nσ)
     @inbounds for i=1:np
         if baroclinic_LHSs[i] === nothing
             continue
         else
-            τ[i, :] = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
+            sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
+            τ[1, i, :] = sol[imap[1, :]]
+            τ[2, i, :] = sol[imap[2, :]]
         end
     end
-    return τ[:, imap[1, :]], τ[:, imap[2, :]]
+    return τ
 end
 
-function get_uξ_uη(τξ, τη, σ, H, ν)
-    uξ = cumtrapz(H./ν.*τξ, σ)
-    uη = cumtrapz(H./ν.*τη, σ)
-    return uξ, uη
+function get_u(τ, ρ₀, ν, H, σ)
+    u = zeros(size(τ))
+    u[1, :, :] = cumtrapz(H/ρ₀./ν.*τ[1, :, :], σ)
+    u[2, :, :] = cumtrapz(H/ρ₀./ν.*τ[2, :, :], σ)
+    return u
 end

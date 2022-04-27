@@ -8,8 +8,8 @@ pygui(false)
 
 function get_basin_geometry()
     # load horizontal mesh
-    # p, t, e = load_mesh("../meshes/square1.h5")
-    p, t, e = load_mesh("../meshes/square2.h5")
+    p, t, e = load_mesh("../meshes/square1.h5")
+    # p, t, e = load_mesh("../meshes/square2.h5")
     # p, t, e = load_mesh("../meshes/square3.h5")
     np = size(p, 1)
 
@@ -36,6 +36,13 @@ function get_basin_geometry()
 end
 
 function setup_model()
+    # use bl theory?
+    bl = false
+
+    # ref density
+    # ρ₀ = 1000.
+    ρ₀ = 1.
+
     # basin geo
     p, t, e, np, Lx, Ly, ξ, η, H_func, Hx_func, Hy_func = get_basin_geometry()
 
@@ -62,14 +69,14 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H_func.(ξ, η)*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 1e0*ones(np, nσ)
-    κ = 1e0*ones(np, nσ)
+    ν = ones(np, nσ)
+    κ = ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
 
     # model setup struct
-    m = ModelSetup3DPG(false, f_func, fy_func, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², 0.)
+    m = ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², 0.)
 
     # plot H
     plot_horizontal(p, t, H_func.(ξ, η); clabel=L"$H$ (m)")
@@ -97,21 +104,29 @@ function setup_model()
     plt.close()
 
     # plot baroclinic components 
-    plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)")
-    savefig("tau_xi_t_xi.png")
-    println("tau_xi_t_xi.png")
+    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)")
+    savefig("tau_xi_t.png")
+    println("tau_xi_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τη_tη[:, 1]; clabel=L"Symmetric bottom stress $\tau^\eta_{t\eta}$ (s$^{-1}$)")
-    savefig("tau_eta_t_eta.png")
-    println("tau_eta_t_eta.png")
+    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (s$^{-1}$)")
+    savefig("tau_eta_t.png")
+    println("tau_eta_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τξ_tη[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\xi_{t\eta}$ (s$^{-1}$)")
-    savefig("tau_xi_t_eta.png")
-    println("tau_xi_t_eta.png")
+    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (s$^{-1}$)")
+    savefig("tau_xi_w.png")
+    println("tau_xi_w.png")
     plt.close()
-    plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (s$^{-1}$)")
-    savefig("tau_eta_t_xi.png")
-    println("tau_eta_t_xi.png")
+    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (s$^{-1}$)")
+    savefig("tau_eta_w.png")
+    println("tau_eta_w.png")
+    plt.close()
+    plot_horizontal(p, t, m.τ_bξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{b\xi}$ (s$^{-1}$)")
+    savefig("tau_xi_b.png")
+    println("tau_xi_b.png")
+    plt.close()
+    plot_horizontal(p, t, m.τ_bξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{b\xi}$ (s$^{-1}$)")
+    savefig("tau_eta_b.png")
+    println("tau_eta_b.png")
     plt.close()
 
     return m
@@ -144,17 +159,17 @@ function invert3D(m)
     JEBAR(ξ, η) = 0
 
     # wind stress and its curl
-    τ₀ = 0.1 # N m⁻² 
-    τξ_wind(ξ, η) = -τ₀*cos(π*η/Ly)
-    τη_wind(ξ, η) = 0
-    # ∂ξ(τη/H) - ∂η(τξ/H)
-    curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ_wind(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
+    τ₀ = 0.1 # kg m⁻¹ s⁻² 
+    τξ₀(ξ, η) = -τ₀*cos(π*η/Ly)
+    τη₀(ξ, η) = 0
+    # ∂ξ(τη/ρ₀/H) - ∂η(τξ/ρ₀/H)
+    curl_τ₀(ξ, η) = -τ₀/m.ρ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ₀(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
 
     # right-hand-side forcing
-    F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)
+    F(ξ, η) = JEBAR(ξ, η) + curl_τ₀(ξ, η)
 
     # get barotropic_RHS
-    barotropic_RHS = get_barotropic_RHS(p, t, e, F)
+    barotropic_RHS = get_barotropic_RHS(m, F)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
@@ -169,8 +184,8 @@ function invert3D(m)
     y = -Ly:2*Ly/100:Ly
     fig, ax = subplots(figsize=(1.955, 3.167))
     ax.axvline(0, c="k", lw=0.5, ls="-")
-    ax.plot(τξ_wind.(0, y), y/1e3)
-    ax.set_xlabel(L"Wind stress $\tau^\xi$ (N m$^{-2}$)")
+    ax.plot(τξ₀.(0, y), y/1e3)
+    ax.set_xlabel(L"Wind stress $\tau^\xi_0$ (N m$^{-2}$)")
     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
     ax.spines["left"].set_visible(false)
     ax.set_xlim([-0.15, 0.15])

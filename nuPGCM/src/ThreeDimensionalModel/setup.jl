@@ -24,11 +24,24 @@ struct ModelSetup3DPG{FT,IT}
     # use BL model or full?
     bl::Bool 
 
+    # reference density (kg m⁻³)
+    ρ₀::FT
+
 	# Coriolis parameter (s⁻¹)
     f::AbstractArray{FT,1}
 
+    # basin widths (m)
+    Lx::FT
+    Ly::FT
+
 	# number of mesh points
 	np::IT
+
+	# number of triangles
+	nt::IT
+
+	# number of edge points
+	ne::IT
 
     # number of vertical grid points
 	nσ::IT
@@ -71,19 +84,24 @@ struct ModelSetup3DPG{FT,IT}
     # barotropic LHS matrix
     barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
 
+    # wind stress
+    τ_wξ::AbstractArray{FT,3}
+
     # transport stress
-    τξ_tξ::AbstractArray{FT,2}
-    τη_tη::AbstractArray{FT,2}
-    τξ_tη::AbstractArray{FT,2}
-    τη_tξ::AbstractArray{FT,2}
+    τ_tξ::AbstractArray{FT,3}
+
+    # buoyancy stress
+    τ_bξ::AbstractArray{FT,3}
 end
 
 ################################################################################
 # Constructors for ModelSetup3DPG
 ################################################################################
 
-function ModelSetup3DPG(bl, f_func, fy_func, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², Δt)
+function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², Δt)
     np = size(p, 1)
+    nt = size(t, 1)
+    ne = size(e, 1)
     nσ = size(σ, 1)
 
     # evaluate functions
@@ -104,35 +122,33 @@ function ModelSetup3DPG(bl, f_func, fy_func, p, t, e, σ, H_func, Hx_func, Hy_fu
         if i in e
             baroclinic_LHSs[i] = nothing
         else
-            baroclinic_LHSs[i] = get_baroclinic_LHS(ν[i, :], f[i], H[i], σ)
+            baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
         end
     end  
 
-    # compute τ_t
+    # compute τ's
+    baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
-    baroclinic_RHSs_tη = zeros(np, 2*nσ)
+    baroclinic_RHSs_bξ = zeros(np, 2*nσ)
     @inbounds for i=1:np
         if i in e
             continue
         else
+            baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0)
             baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
-            baroclinic_RHSs_tη[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 0, 1)
+            baroclinic_RHSs_bξ[i, :] = get_baroclinic_RHS(ones(nσ), zeros(nσ), 0, 0, 0, 0)
         end
     end
-    τξ_tξ, τη_tξ = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_tξ)
-    τξ_tη, τη_tη = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_tη)
+    τ_tξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_tξ)
+    τ_wξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_wξ)
+    τ_bξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_bξ)
 
     # compute barotropic LHS matrix
-    # r = 5e-6
-    # τξ_tξ_bot_func(ξ, η) = r
-    # τη_tη_bot_func(ξ, η) = r
-    # τξ_tη_bot_func(ξ, η) = r/1e2
-    # τη_tξ_bot_func(ξ, η) = r/1e2
-    τξ_tξ_bot_func(ξ, η) = evaluate(τξ_tξ[:, 1], [ξ, η], p, t, C₀)
-    τη_tη_bot_func(ξ, η) = evaluate(τη_tη[:, 1], [ξ, η], p, t, C₀)
-    τξ_tη_bot_func(ξ, η) = evaluate(τξ_tη[:, 1], [ξ, η], p, t, C₀)
-    τη_tξ_bot_func(ξ, η) = evaluate(τη_tξ[:, 1], [ξ, η], p, t, C₀)
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, f_func, fy_func, H_func, Hx_func, Hy_func, τξ_tξ_bot_func, τη_tη_bot_func, τξ_tη_bot_func, τη_tξ_bot_func)
+    τξ_tξ_bot_func(ξ, η) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀)
+    τη_tξ_bot_func(ξ, η) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f_func, fy_func, H_func, Hx_func, Hy_func, τξ_tξ_bot_func, τη_tξ_bot_func)
 
-    return ModelSetup3DPG(bl, f, np, nσ, p, t, e, C₀, σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, τξ_tξ, τη_tη, τξ_tη, τη_tξ)
+    println("setup complete!\n")
+
+    return ModelSetup3DPG(bl, ρ₀, f, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, τ_tξ, τ_wξ, τ_bξ)
 end
