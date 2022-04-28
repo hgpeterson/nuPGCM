@@ -69,6 +69,8 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H_func.(ξ, η)*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
+    # ν = 1e-3*ones(np, nσ)
+    # κ = 1e-3*ones(np, nσ)
     ν = ones(np, nσ)
     κ = ones(np, nσ)
 
@@ -163,10 +165,10 @@ function invert3D(m)
     τξ₀(ξ, η) = -τ₀*cos(π*η/Ly)
     τη₀(ξ, η) = 0
     # ∂ξ(τη/ρ₀/H) - ∂η(τξ/ρ₀/H)
-    curl_τ₀(ξ, η) = -τ₀/m.ρ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ₀(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
+    curl_τ₀(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ₀(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
 
     # right-hand-side forcing
-    F(ξ, η) = JEBAR(ξ, η) + curl_τ₀(ξ, η)
+    F(ξ, η) = JEBAR(ξ, η) + 1/m.ρ₀*curl_τ₀(ξ, η)
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, F)
