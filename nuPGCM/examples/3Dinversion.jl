@@ -40,8 +40,7 @@ function setup_model()
     bl = false
 
     # ref density
-    # ρ₀ = 1000.
-    ρ₀ = 1.
+    ρ₀ = 1000.
 
     # basin geo
     p, t, e, np, Lx, Ly, ξ, η, H_func, Hx_func, Hy_func = get_basin_geometry()
@@ -177,7 +176,7 @@ function invert3D(m)
     Ψ = m.barotropic_LHS\barotropic_RHS
 
     # plot Ψ
-    plot_horizontal(p, t, Ψ/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+    plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
     savefig("psi.png")
     println("psi.png")
     plt.close()

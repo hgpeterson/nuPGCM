@@ -21,15 +21,17 @@ Ly = 5e6
 # rescale p
 p[:, 1] *= Lx
 p[:, 2] *= Ly
+ξ = p[:, 1]
+η = p[:, 1]
 
 # basis
 C₀ = get_linear_basis_coeffs(p, t)
 
 # depth H
-# H₀ = 4e3
-# H(ξ, η) = H₀
-# Hx(ξ, η) = 0
-# Hy(ξ, η) = 0
+H₀ = 4e3
+H_func(ξ, η) = H₀
+Hx_func(ξ, η) = 0
+Hy_func(ξ, η) = 0
 
 # H₀ = 4e3
 # Δ = Lx/5
@@ -37,13 +39,13 @@ C₀ = get_linear_basis_coeffs(p, t)
 # Hx(ξ, η) = H₀*exp(-(abs(ξ) - Lx)^2/(2*Δ^2))*(abs(ξ) - Lx)/Δ^2*sign(ξ)
 # Hy(ξ, η) = 0
 
-H₀ = 4e3
-Δ = Lx/5
-G(x) = 1 - exp(-x^2/(2*Δ^2))
-Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
-Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+# H₀ = 4e3
+# Δ = Lx/5
+# G(x) = 1 - exp(-x^2/(2*Δ^2))
+# Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+# H(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
+# Hx(ξ, η) = H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+# Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
 
 # H₀ = 4e3
 # R = Lx
@@ -54,37 +56,39 @@ Hy(ξ, η) = H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)
 # Hx(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
 # Hy(ξ, η) = H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
 
+# density
+ρ₀ = 1000. # kg m⁻³
+
 # coriolis parameter f = f₀ + βη
 f₀ = 0
 β = 1e-11
-f(ξ, η) = f₀ + β*η
-fy(ξ, η) = β
+f_func(ξ, η) = f₀ + β*η
+fy_func(ξ, η) = β
 
 # JEBAR term
 JEBAR(ξ, η) = 0
 
 # wind stress and its curl
-τ₀ = 0.1 # N m⁻² 
-τξ_wind(ξ, η) = -τ₀*cos(π*η/Ly)
-τη_wind(ξ, η) = 0
-# ∂ξ(τη/H) - ∂η(τξ/H)
-curl_τ_wind(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H(ξ, η) - τξ_wind(ξ, η)*Hy(ξ, η)/H(ξ, η)^2  
+τ₀ = 0.1 # kg m⁻¹ s⁻² 
+τξ₀(ξ, η) = -τ₀*cos(π*η/Ly)
+τη₀(ξ, η) = 0
+# ∂ξ(τη/ρ₀/H) - ∂η(τξ/ρ₀/H)
+curl_τ₀(ξ, η) = -τ₀*π/Ly*sin(π*η/Ly)/H_func(ξ, η) - τξ₀(ξ, η)*Hy_func(ξ, η)/H_func(ξ, η)^2  
 
 # right-hand-side forcing
-F(ξ, η) = JEBAR(ξ, η) + curl_τ_wind(ξ, η)
+F(ξ, η) = JEBAR(ξ, η) + 1/ρ₀*curl_τ₀(ξ, η)
 
 # bottom stress from baroclinic solution
 r = 5e-6
-τξ_tξ_bot(ξ, η) = r
-τη_tη_bot(ξ, η) = r
-τξ_tη_bot(ξ, η) = r/1e2
-τη_tξ_bot(ξ, η) = r/1e2
+τξ_tξ_bot(ξ, η) = r*ρ₀
+τη_tξ_bot(ξ, η) = 0
+# τη_tξ_bot(ξ, η) = τξ_tξ_bot(ξ, η)/1e2
 
 # get barotropic_LHS
-barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, f, fy, H, Hx, Hy, τξ_tξ_bot, τη_tη_bot, τξ_tη_bot, τη_tξ_bot)
+barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f_func, fy_func, H_func, Hx_func, Hy_func, τξ_tξ_bot, τη_tξ_bot)
 
 # get barotropic_RHS
-barotropic_RHS = get_barotropic_RHS(p, t, e, F)
+barotropic_RHS = get_barotropic_RHS(p, t, e, C₀, F)
 
 # solve
 Ψ = barotropic_LHS\barotropic_RHS
@@ -99,47 +103,47 @@ barotropic_RHS = get_barotropic_RHS(p, t, e, F)
 # ξ = p[:, 1]
 # η = p[:, 2]
 # Ψ_analytical = @. 1/β*(ξ - Lx + 2Lx*exp(-β*(ξ + Lx)/r))*curl_τ_wind(ξ, η)
-# plot_horizontal(p, t, Ψ_analytical/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+# plot_horizontal(p, t, Ψ_analytical/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
 # savefig("psi_analytical.png")
 # println("psi_analytical.png")
 # plt.close()
 
 # plot Ψ
-plot_horizontal(p, t, Ψ/1e9; clabel=L"Streamfunction $\Psi$ (Sv)")
+plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
 savefig("psi.png")
 println("psi.png")
 plt.close()
 
 # plot H
-plot_horizontal(p, t, H.(p[:, 1], p[:, 2]); clabel=L"$H$ (m)")
+plot_horizontal(p, t, H_func.(p[:, 1], p[:, 2]); clabel=L"$H$ (m)")
 savefig("H.png")
 println("H.png")
 plt.close()
 
 # plot Hx
-plot_horizontal(p, t, Hx.(p[:, 1], p[:, 2]); clabel=L"$\partial_x H$ (-)")
+plot_horizontal(p, t, Hx_func.(p[:, 1], p[:, 2]); clabel=L"$\partial_x H$ (-)")
 savefig("Hx.png")
 println("Hx.png")
 plt.close()
 
 # plot Hy
-plot_horizontal(p, t, Hy.(p[:, 1], p[:, 2]); clabel=L"$\partial_y H$ (-)")
+plot_horizontal(p, t, Hy_func.(ξ, η); clabel=L"$\partial_y H$ (-)")
 savefig("Hy.png")
 println("Hy.png")
 plt.close()
 
 # plot f/H
-f_over_H = @. (f₀ + β*p[:, 2])/(H(p[:, 1], p[:, 2]) + eps())
+f_over_H = @. f_func(ξ, η)/(H_func(ξ, η) + eps())
 plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
 savefig("f_over_H.png")
 println("f_over_H.png")
 plt.close()
 
 # plot wind stress
-η = -Ly:2*Ly/100:Ly
+y = -Ly:2*Ly/100:Ly
 fig, ax = subplots(figsize=(1.955, 3.167))
 ax.axvline(0, c="k", lw=0.5, ls="-")
-ax.plot(τξ_wind.(0, η), η/1e3)
+ax.plot(τξ₀.(0, y), y/1e3)
 ax.set_xlabel(L"Wind stress $\tau^\xi$ (N m$^{-2}$)")
 ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
 ax.spines["left"].set_visible(false)

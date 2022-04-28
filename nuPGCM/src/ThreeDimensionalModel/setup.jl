@@ -89,9 +89,6 @@ struct ModelSetup3DPG{FT,IT}
 
     # transport stress
     τ_tξ::AbstractArray{FT,3}
-
-    # buoyancy stress
-    τ_bξ::AbstractArray{FT,3}
 end
 
 ################################################################################
@@ -129,19 +126,16 @@ function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func,
     # compute τ's
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
-    baroclinic_RHSs_bξ = zeros(np, 2*nσ)
     @inbounds for i=1:np
         if i in e
             continue
         else
             baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0)
             baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
-            baroclinic_RHSs_bξ[i, :] = get_baroclinic_RHS(ones(nσ), zeros(nσ), 0, 0, 0, 0)
         end
     end
     τ_tξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_tξ)
     τ_wξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_wξ)
-    τ_bξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_bξ)
 
     # compute barotropic LHS matrix
     τξ_tξ_bot_func(ξ, η) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀)
@@ -150,5 +144,5 @@ function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func,
 
     println("setup complete!\n")
 
-    return ModelSetup3DPG(bl, ρ₀, f, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, τ_tξ, τ_wξ, τ_bξ)
+    return ModelSetup3DPG(bl, ρ₀, f, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, τ_tξ, τ_wξ)
 end

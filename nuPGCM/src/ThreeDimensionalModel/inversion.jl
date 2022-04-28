@@ -137,24 +137,29 @@ function get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τξ_tξ_bot
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(m::ModelSetup3DPG, F)
-    imap = reshape(1:m.np, 1, m.np) 
+function get_barotropic_RHS(p, t, e, C₀, F)
+    np = size(p, 1)
+    nt = size(t, 1)
+    imap = reshape(1:np, 1, np) 
 
 	# create global linear system using stamping method
-    barotropic_RHS = zeros(m.np)
-	for k=1:m.nt
+    barotropic_RHS = zeros(np)
+	for k=1:nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
-            if m.t[k, i] in m.e
+            if t[k, i] in e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            f(ξ, η) = F(ξ, η)*local_basis_func(m.C₀[k, :, i], [ξ, η])
-            barotropic_RHS[imap[m.t[k, i]]] += gaussian_quad2(f, m.p[m.t[k, :], :])
+            f(ξ, η) = F(ξ, η)*local_basis_func(C₀[k, :, i], [ξ, η])
+            barotropic_RHS[imap[t[k, i]]] += gaussian_quad2(f, p[t[k, :], :])
         end
 	end
 
     return barotropic_RHS
+end
+function get_barotropic_RHS(m::ModelSetup3DPG, F)
+    return get_barotropic_RHS(m.p, m.t, m.e, m.C₀, F)
 end
 
 function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
