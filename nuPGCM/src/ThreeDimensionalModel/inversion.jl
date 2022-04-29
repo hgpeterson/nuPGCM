@@ -10,7 +10,7 @@ function get_K(p, t, e, C₀, ρ₀, H, τξ_tξ_bot)
         Kₑ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = -τξ_tξ_bot(ξ, η)/ρ₀/H(ξ, η)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
+                func(ξ, η) = -τξ_tξ_bot(ξ, η, k)/ρ₀/H(ξ, η)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 Kₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -45,7 +45,7 @@ function get_K′(p, t, e, C₀, ρ₀, H, τη_tξ_bot)
         Kₑ′ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = τη_tξ_bot(ξ, η)/ρ₀/H(ξ, η)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
+                func(ξ, η) = τη_tξ_bot(ξ, η, k)/ρ₀/H(ξ, η)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 Kₑ′[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end

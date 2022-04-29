@@ -138,8 +138,8 @@ function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func,
     τ_wξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
-    τξ_tξ_bot_func(ξ, η) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀)
-    τη_tξ_bot_func(ξ, η) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀)
+    τξ_tξ_bot_func(ξ, η, k₀) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀, k₀)
+    τη_tξ_bot_func(ξ, η, k₀) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀, k₀)
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f_func, fy_func, H_func, Hx_func, Hy_func, τξ_tξ_bot_func, τη_tξ_bot_func)
 
     println("setup complete!\n")
