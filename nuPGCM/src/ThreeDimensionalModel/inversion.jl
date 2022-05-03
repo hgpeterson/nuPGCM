@@ -270,3 +270,6 @@ function get_u(τ, ρ₀, ν, H, σ)
     u[2, :, :] = cumtrapz(H/ρ₀./ν.*τ[2, :, :], σ)
     return u
 end
+function get_u(m, τ)
+   get_u(τ, m.ρ₀, m.ν, m.H, m.σ) 
+end

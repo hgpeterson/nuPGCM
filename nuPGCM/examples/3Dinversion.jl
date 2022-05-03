@@ -140,12 +140,15 @@ function invert3D(m)
     # basin geo
     p, t, e, np, Lx, Ly, ξ, η, H_func, Hx_func, Hy_func = get_basin_geometry()
 
-    # # buoyancy field
-    # b = zeros(np, nσ)
+    # buoyancy field
+    b = zeros(np, nσ)
 
-    # # buoyancy gradients
-    # ∂b∂x = zeros(np, nσ)
-    # ∂b∂y = zeros(np, nσ)
+    # JEBAR term
+    JEBAR(ξ, η) = 0
+
+    # buoyancy gradients
+    ∂b∂x = zeros(np, nσ)
+    ∂b∂y = zeros(np, nσ)
     # for i=1:nσ
     #     println("i = $i / $nσ")
     #     for j=1:np
@@ -158,9 +161,23 @@ function invert3D(m)
     #     ∂b∂x[i, :] .-= σ*Hx[i].*differentiate(b[i, :], σ)/H[i]
     #     ∂b∂y[i, :] .-= σ*Hy[i].*differentiate(b[i, :], σ)/H[i]
     # end
+    
+    # stress due to buoyancy gradients
+    # baroclinic_RHSs_b = zeros(np, 2*nσ)
+    # @inbounds for i=1:np
+    #     if i in e
+    #         continue
+    #     else
+    #         rhs_x = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂x[i, :]
+    #         rhs_y = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂y[i, :]
+    #         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x, rhs_y, 0, 0, 0, 0)
+    #     end
+    # end
+    # τ_b = get_τ(baroclinic_LHSs, baroclinic_RHSs_b)
+    τ_b = zeros(2, np, nσ)
 
-    # JEBAR term
-    JEBAR(ξ, η) = 0
+    # curl of bottom stress due buoyancy gradients
+    curl_τ_b_bot(ξ, η) = 0
 
     # wind stress
     τ₀ = 0.1 # kg m⁻¹ s⁻² 
@@ -173,22 +190,6 @@ function invert3D(m)
     # curl of bottom stress due to wind stress
     curl_τ_w_bot(ξ, η) = 0
 
-    # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(np, 2*nσ)
-    # @inbounds for i=1:np
-    #     if i in e
-    #         continue
-    #     else
-    #         rhs_x = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂x[i, :]
-    #         rhs_y = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂y[i, :]
-    #         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x, rhs_y, 0, 0, 0, 0)
-    #     end
-    # end
-    # τ_b = get_τ(baroclinic_LHSs, baroclinic_RHSs_b)
-
-    # curl of bottom stress due buoyancy gradients
-    curl_τ_b_bot(ξ, η) = 0
-
     # right-hand-side forcing
     F(ξ, η) = JEBAR(ξ, η) + 1/m.ρ₀*(curl_τ₀(ξ, η) - curl_τ_w_bot(ξ, η) - curl_τ_b_bot(ξ, η))
 
@@ -197,6 +198,27 @@ function invert3D(m)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
+
+    # Uξ and Uη
+    Uξ = ∂ξ(m, Ψ)
+    Uη = ∂η(m, Ψ)
+
+    # get τ
+    τ = zeros(2, np, nσ)
+    for j=1:nσ
+        τ[1, :, j] = τ_b[1, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] + τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] + Uη*m.τ_tξ[2, :, j]
+        τ[2, :, j] = τ_b[2, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] - τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] - Uη*m.τ_tξ[2, :, j]
+    end
+
+    # convert to uξ, uη
+    u = get_u(m, τ)
+
+    # compute uσ
+    div = ∂ξ(m, u[1, :, :]) + ∂η(m, u[2, :, :])
+    uσ = zeros(np, nσ)
+    for i=1:np
+        uσ[i, :] = cumtrapz(-div[i, :], m.σ)
+    end
 
     # plot Ψ
     plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
