@@ -13,8 +13,8 @@ function get_basin_geometry()
 
     # refinement
     # ref = 1
-    ref = 2
-    # ref = 3
+    # ref = 2
+    ref = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$ref.h5")
@@ -31,6 +31,8 @@ function get_basin_geometry()
     η = p[:, 2]
 
     # depth H
+
+    # square bathtub
     H₀ = 4e3
     Δ = Lx/5
     G(x) = 1 - exp(-x^2/(2*Δ^2))
@@ -39,6 +41,7 @@ function get_basin_geometry()
     Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
     Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
 
+    # # circular bathtub
     # H₀ = 4e3
     # R = Lx
     # Δ = R/5
@@ -84,10 +87,8 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 1e-1*ones(np, nσ)
-    κ = 1e-1*ones(np, nσ)
-    # ν = 1e-3*ones(np, nσ)
-    # κ = 1e-3*ones(np, nσ)
+    ν = 1e-3*ones(np, nσ)
+    κ = 1e-3*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -249,5 +250,5 @@ function invert3D(m)
     # plt.close()
 end
 
-# m = setup_model()
+m = setup_model()
 invert3D(m)
