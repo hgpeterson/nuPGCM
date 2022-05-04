@@ -41,5 +41,6 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="")
     ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
     ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
+    ax.set_yticks(-5000:2500:5000)
     ax.axis("equal")
 end
