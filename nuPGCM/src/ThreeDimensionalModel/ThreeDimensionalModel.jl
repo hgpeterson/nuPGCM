@@ -26,7 +26,13 @@ export
 
     # plotting
     tplot,
-    plot_horizontal
+    plot_horizontal,
+
+    # operators
+    evaluate,
+    ∂ξ,
+    ∂η,
+    ∇×
 
 using nuPGCM
 using nuPGCM.Numerics

@@ -95,24 +95,21 @@ end
 # Constructors for ModelSetup3DPG
 ################################################################################
 
-function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func, Hx_func, Hy_func, ν, κ, N², Δt)
+function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
+    # indices
     np = size(p, 1)
     nt = size(t, 1)
     ne = size(e, 1)
     nσ = size(σ, 1)
 
-    # evaluate functions
+    # coords
     ξ = p[:, 1]
     η = p[:, 2]
-    f = f_func.(ξ, η)
-    H = H_func.(ξ, η)
-    Hx = Hx_func.(ξ, η)
-    Hy = Hy_func.(ξ, η)
 
-    # compute shape function coefficients
+    # shape function coefficients
     C₀ = get_linear_basis_coeffs(p, t)
 
-    # compute baroclinic LHS matrices
+    # baroclinic LHS matrices
     println("computing baroclinic components")
     baroclinic_LHSs = Array{Any}(undef, np) 
     @inbounds for i=1:np 
@@ -123,7 +120,7 @@ function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func,
         end
     end  
 
-    # compute τ's
+    # τ's
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     @inbounds for i=1:np
@@ -138,9 +135,7 @@ function ModelSetup3DPG(bl, ρ₀, f_func, fy_func, Lx, Ly, p, t, e, σ, H_func,
     τ_wξ = get_τ(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
-    τξ_tξ_bot_func(ξ, η, k₀) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀, k₀)
-    τη_tξ_bot_func(ξ, η, k₀) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀, k₀)
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f_func, fy_func, H_func, Hx_func, Hy_func, τξ_tξ_bot_func, τη_tξ_bot_func)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
 
     println("setup complete!\n")
 

@@ -16,9 +16,7 @@ export
     tri_area,
     get_linear_basis_coeffs,
     local_basis_func,
-    evaluate,
-    ∂ξ,
-    ∂η
+    evaluate
 
 using PyPlot
 using PyCall
