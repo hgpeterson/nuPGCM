@@ -10,7 +10,7 @@ function get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
 
 	# create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]  
-	for k=1:nt
+	@showprogress "Building K..." for k=1:nt
 		# calculate K matrix element Kₑ
         Kₑ = zeros(3, 3)
         for i=1:3
@@ -50,7 +50,7 @@ function get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
 
 	# create global linear system using stamping method
     K′ = Tuple{Int64,Int64,Float64}[]  
-	for k=1:nt
+	@showprogress "Building K′..." for k=1:nt
 		# calculate K′ matrix element Kₑ′
         Kₑ′ = zeros(3, 3)
         for i=1:3
@@ -93,7 +93,7 @@ function get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
 
 	# create global linear system using stamping method
     C = Tuple{Int64,Int64,Float64}[]  
-	for k=1:nt
+	@showprogress "Building C..." for k=1:nt
 		# calculate C matrix elements Cₑ
         Cₑ = zeros(3, 3)
         for i=1:3
@@ -129,7 +129,7 @@ function get_E(p, e)
 
     # dirichlet Ψ = 0 along edges
     E = Tuple{Int64,Int64,Float64}[]  
-    for i=1:size(e, 1)
+    @showprogress "Building E..." for i=1:size(e, 1)
         push!(E, (imap[e[i]], imap[e[i]], 1))
     end
     
@@ -141,13 +141,9 @@ end
 
 function get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
     # build matrices
-    println("building K")
     K = get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
-    println("building K′")
     K′ = get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
-    println("building C")
     C = get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
-    println("building E")
     E = get_E(p, e)
 
     # full barotropic_LHS matrix
@@ -162,24 +158,24 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
 
     # functions
     JEBAR(ξ, η, k) = 0 # for now
-    H_func(ξ, η, k) = evaluate(m, m.H, [ξ, η], k)
-    τξ_func(ξ, η, k) = evaluate(m, τ[1, :], [ξ, η], k)
-    τη_func(ξ, η, k) = evaluate(m, τ[2, :], [ξ, η], k)
+    H_func(ξ, η, k) = evaluate(m.H, [ξ, η], m.p, m.t, m.C₀, k)
+    τξ_func(ξ, η, k) = evaluate(τ[1, :], [ξ, η], m.p, m.t, m.C₀, k)
+    τη_func(ξ, η, k) = evaluate(τ[2, :], [ξ, η], m.p, m.t, m.C₀, k)
     # curl of stress ∂ξ(τη/H) - ∂η(τξ/H)
     curl_τ(ξ, η, k) = ∂ξ(m, τ[2, :], [ξ, η], k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*∂ξ(m, m.H, [ξ, η], k) -
                       ∂η(m, τ[1, :], [ξ, η], k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*∂η(m, m.H, [ξ, η], k)
 
 	# create global linear system using stamping method
-    barotropic_RHS = zeros(np)
-	for k=1:nt
+    barotropic_RHS = zeros(m.np)
+	for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
-            if t[k, i] in e
+            if m.t[k, i] in m.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            f(ξ, η) = (JEBAR(ξ, η, k) + curl(ξ, η, k))*local_basis_func(C₀[k, :, i], [ξ, η])
-            barotropic_RHS[imap[t[k, i]]] += gaussian_quad2(f, p[t[k, :], :])
+            f(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*local_basis_func(m.C₀[k, :, i], [ξ, η])
+            barotropic_RHS[imap[m.t[k, i]]] += gaussian_quad2(f, m.p[m.t[k, :], :])
         end
 	end
 

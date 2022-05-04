@@ -7,13 +7,17 @@ plt.close("all")
 pygui(false)
 
 function get_basin_geometry()
+    # geometry type
+    geo = "square"
+    # geo = "circle"
+
+    # refinement
+    # ref = 1
+    ref = 2
+    # ref = 3
+
     # load horizontal mesh
-    # p, t, e = load_mesh("../meshes/square1.h5")
-    # p, t, e = load_mesh("../meshes/square2.h5")
-    # p, t, e = load_mesh("../meshes/square3.h5")
-    # p, t, e = load_mesh("../meshes/circle1.h5")
-    # p, t, e = load_mesh("../meshes/circle2.h5")
-    p, t, e = load_mesh("../meshes/circle3.h5")
+    p, t, e = load_mesh("../meshes/$(geo)$ref.h5")
     np = size(p, 1)
 
     # widths of basin
@@ -27,23 +31,22 @@ function get_basin_geometry()
     η = p[:, 2]
 
     # depth H
-
-    # H₀ = 4e3
-    # Δ = Lx/5
-    # G(x) = 1 - exp(-x^2/(2*Δ^2))
-    # Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    # H(ξ, η) = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
-    # Hx(ξ, η) = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-    # Hy(ξ, η) = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
-
     H₀ = 4e3
-    R = Lx
-    Δ = R/5
+    Δ = Lx/5
     G(x) = 1 - exp(-x^2/(2*Δ^2))
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    H = @. H₀*G(sqrt(ξ^2 + η^2) - R)
-    Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
-    Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
+    H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
+    Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+    Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+
+    # H₀ = 4e3
+    # R = Lx
+    # Δ = R/5
+    # G(x) = 1 - exp(-x^2/(2*Δ^2))
+    # Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+    # H = @. H₀*G(sqrt(ξ^2 + η^2) - R)
+    # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
+    # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
 
     return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
 end
@@ -81,8 +84,10 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 1e-3*ones(np, nσ)
-    κ = 1e-3*ones(np, nσ)
+    ν = 1e-1*ones(np, nσ)
+    κ = 1e-1*ones(np, nσ)
+    # ν = 1e-3*ones(np, nσ)
+    # κ = 1e-3*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -141,14 +146,11 @@ function invert3D(m)
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
     # buoyancy field
-    b = zeros(np, nσ)
-
-    # JEBAR term
-    JEBAR(ξ, η) = 0
+    b = zeros(np, m.nσ)
 
     # buoyancy gradients
-    ∂b∂x = zeros(np, nσ)
-    ∂b∂y = zeros(np, nσ)
+    ∂b∂x = zeros(np, m.nσ)
+    ∂b∂y = zeros(np, m.nσ)
     # for i=1:nσ
     #     println("i = $i / $nσ")
     #     for j=1:np
@@ -184,17 +186,20 @@ function invert3D(m)
     #     end
     # end
     # τ_b = get_τ(baroclinic_LHSs, baroclinic_RHSs_b)
-    τ_b = zeros(2, np, nσ)
+    τ_b = zeros(2, np, m.nσ)
 
     # bottom stress due buoyancy gradients
     # τ_b_bot = τ_b[:, : 1]
     τ_b_bot = zeros(2, np)
 
     # full τ
-    τ = @. τ₀ - 
-          (τ₀[1, :]*τ_w_bot[1, :] + τ₀[2, :]*τ_w_bot[1, :]) -
-          (τ₀[1, :]*τ_w_bot[2, :] - τ₀[2, :]*τ_w_bot[2, :]) -
-          τ_b_bot
+    τ = zeros(2, np)
+    τ[1, :] = @. τ₀[1, :] - 
+                (τ₀[1, :]*τ_w_bot[1, :] + τ₀[2, :]*τ_w_bot[1, :]) -
+                τ_b_bot[1, :]
+    τ[2, :] = @. τ₀[2, :] - 
+                (τ₀[1, :]*τ_w_bot[2, :] - τ₀[2, :]*τ_w_bot[2, :]) -
+                τ_b_bot[2, :]
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τ)
@@ -202,26 +207,26 @@ function invert3D(m)
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
 
-    # Uξ and Uη
-    Uξ = ∂ξ(m, Ψ)
-    Uη = ∂η(m, Ψ)
+    # # Uξ and Uη
+    # Uξ = ∂ξ(m, Ψ)
+    # Uη = ∂η(m, Ψ)
 
-    # get τ
-    τ = zeros(2, np, nσ)
-    for j=1:nσ
-        τ[1, :, j] = τ_b[1, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] + τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] + Uη*m.τ_tξ[2, :, j]
-        τ[2, :, j] = τ_b[2, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] - τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] - Uη*m.τ_tξ[2, :, j]
-    end
+    # # get τ
+    # τ = zeros(2, np, nσ)
+    # for j=1:nσ
+    #     τ[1, :, j] = τ_b[1, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] + τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] + Uη*m.τ_tξ[2, :, j]
+    #     τ[2, :, j] = τ_b[2, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] - τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] - Uη*m.τ_tξ[2, :, j]
+    # end
 
-    # convert to uξ, uη
-    u = get_u(m, τ)
+    # # convert to uξ, uη
+    # u = get_u(m, τ)
 
-    # compute uσ
-    div = ∂ξ(m, u[1, :, :]) + ∂η(m, u[2, :, :])
-    uσ = zeros(np, nσ)
-    for i=1:np
-        uσ[i, :] = cumtrapz(-div[i, :], m.σ)
-    end
+    # # compute uσ
+    # div = ∂ξ(m, u[1, :, :]) + ∂η(m, u[2, :, :])
+    # uσ = zeros(np, nσ)
+    # for i=1:np
+    #     uσ[i, :] = cumtrapz(-div[i, :], m.σ)
+    # end
 
     # plot Ψ
     plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
@@ -244,5 +249,5 @@ function invert3D(m)
     # plt.close()
 end
 
-m = setup_model()
+# m = setup_model()
 invert3D(m)

@@ -110,9 +110,8 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
     C₀ = get_linear_basis_coeffs(p, t)
 
     # baroclinic LHS matrices
-    println("computing baroclinic components")
     baroclinic_LHSs = Array{Any}(undef, np) 
-    @inbounds for i=1:np 
+    @inbounds @showprogress "Computing baroclinic components..." for i=1:np 
         if i in e
             baroclinic_LHSs[i] = nothing
         else
@@ -137,7 +136,7 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
     # compute barotropic LHS matrix
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
 
-    println("setup complete!\n")
+    println("Setup complete!\n")
 
     return ModelSetup3DPG(bl, ρ₀, f, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, τ_tξ, τ_wξ)
 end

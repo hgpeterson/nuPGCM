@@ -29,10 +29,9 @@ export
     plot_horizontal,
 
     # operators
-    evaluate,
     ∂ξ,
     ∂η,
-    ∇×
+    curl
 
 using nuPGCM
 using nuPGCM.Numerics
@@ -45,6 +44,7 @@ using SparseArrays
 using SuiteSparse
 using LinearAlgebra
 using HDF5
+using ProgressMeter
 
 include("setup.jl")
 include("logging.jl")
