@@ -17,7 +17,16 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
         else
             vmax = vext
         end
-        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading="gouraud")
+
+        if size(u, 1) == size(t, 1)
+            # `u` represents values on triangle faces
+            shading = "flat"
+        elseif size(u, 1) == size(p, 1)
+            # `u` represents values on triangle vertices
+            shading = "gouraud"
+        end
+
+        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading)
     end
 
     # no spines
