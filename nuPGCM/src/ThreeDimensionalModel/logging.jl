@@ -1,23 +1,19 @@
-################################################################################
-# General utility functions
-################################################################################
+# """
+#     log_params(ofile, text)
+
+# Write `text` to `ofile` and print it.
+# """
+# function log_params(ofile::IOStream, text::String)
+#     write(ofile, string(text, "\n"))
+#     println(text)
+# end
 
 """
-    log_params(ofile, text)
-
-Write `text` to `ofile` and print it.
-"""
-function log_params(ofile::IOStream, text::String)
-    write(ofile, string(text, "\n"))
-    println(text)
-end
-
-"""
-    save_setup_3DPG(m)
+    save_setup(m)
 
 Save .h5 file for parameters.
 """
-function save_setup_3DPG(m::ModelSetup3DPG)
+function save_setup(m::ModelSetup3DPG)
     save_file = string(out_folder, "setup.h5")
     file = h5open(save_file, "w")
     write(file, "bl", m.bl)
@@ -52,11 +48,11 @@ function save_setup_3DPG(m::ModelSetup3DPG)
 end
 
 """
-    m = load_setup_3DPG(filename)
+    m = load_setup_3D(filename)
 
 Load .h5 setup file given by `filename`.
 """
-function load_setup_3DPG(filename::String)
+function load_setup_3D(filename::String)
     file = h5open(filename, "r")
     bl = read(file, "bl")
     f = read(file, "f")
@@ -76,11 +72,11 @@ function load_setup_3DPG(filename::String)
 end
 
 """
-    save_state_3DPG(s, iSave)
+    save_state(s, iSave)
 
 Save .h5 state file.
 """
-function save_state_3DPG(s::ModelState3DPG, iSave::Int64)
+function save_state(s::ModelState3DPG, iSave::Int64)
     save_file = @sprintf("%sstate%d.h5", out_folder, iSave)
     file = h5open(save_file, "w")
     write(file, "b", s.b)
@@ -94,11 +90,11 @@ function save_state_3DPG(s::ModelState3DPG, iSave::Int64)
 end
 
 """
-    s = load_state_3DPG(filename)
+    s = load_state_3D(filename)
 
 Load .h5 state file given by `filename`.
 """
-function load_state_3DPG(filename::String)
+function load_state_3D(filename::String)
     file = h5open(filename, "r")
     b = read(file, "b")
     Ψ = read(file, "Ψ")

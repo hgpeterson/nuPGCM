@@ -1,5 +1,4 @@
-using nuPGCM.Numerics
-using nuPGCM.ThreeDimensionalModel
+using nuPGCM
 using PyPlot
 
 plt.style.use("../plots.mplstyle")

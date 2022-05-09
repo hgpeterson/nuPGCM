@@ -9,11 +9,11 @@ function log_params(ofile::IOStream, text::String)
 end
 
 """
-    save_setup_1DPG(m)
+    save_setup(m)
 
 Save .h5 file for parameters.
 """
-function save_setup_1DPG(m::ModelSetup1DPG)
+function save_setup(m::ModelSetup1DPG)
     save_file = string(out_folder, "setup.h5")
     file = h5open(save_file, "w")
     write(file, "bl", m.bl)
@@ -52,11 +52,11 @@ function save_setup_1DPG(m::ModelSetup1DPG)
 end
 
 """
-    m = load_setup_1DPG(filename)
+    m = load_setup_1D(filename)
 
 Load .h5 setup file given by `filename`.
 """
-function load_setup_1DPG(filename::String)
+function load_setup_1D(filename::String)
     file = h5open(filename, "r")
     bl = read(file, "bl")
     f = read(file, "f")
@@ -76,11 +76,11 @@ function load_setup_1DPG(filename::String)
 end
 
 """
-    saveState1DPG(s, i_save)
+    save_state(s, i_save)
 
 Save .h5 checkpoint file for state.
 """
-function save_state_1DPG(s::ModelState1DPG, i_save::Int64)
+function save_state(s::ModelState1DPG, i_save::Int64)
     save_file = @sprintf("%sstate%d.h5", out_folder, i_save)
     file = h5open(save_file, "w")
     write(file, "b", s.b)
@@ -93,11 +93,11 @@ function save_state_1DPG(s::ModelState1DPG, i_save::Int64)
 end
 
 """
-    s = load_state_1DPG(filename)
+    s = load_state_1D(filename)
 
 Load .h5 state file given by `filename`.
 """
-function load_state_1DPG(filename::String)
+function load_state_1D(filename::String)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")
