@@ -167,7 +167,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
 
 	# create global linear system using stamping method
     barotropic_RHS = zeros(m.np)
-	for k=1:m.nt
+	@showprogress "Building F..." for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
             if m.t[k, i] in m.e
