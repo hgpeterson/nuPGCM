@@ -1,14 +1,17 @@
-using PyPlot, PyCall, Printf, HDF5, Dierckx
+################################################################################
+# This file contains all the code needed (appart from simulation setup) to 
+# produce the plots in 
+# 
+#       Peterson & Callies (2022) Coupling between abyssal boundary layers and 
+#       the interior ocean in the absence of along-slope variations, submitted.
+#
+################################################################################
 
-plt.style.use("plots.mplstyle")
+using nuPGCM, PyPlot, PyCall
+
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
-
-include("my_julia_lib.jl")
-
-# for loading data
-include("1dpg/setup.jl")
-include("2dpg/setup.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
@@ -59,9 +62,9 @@ function BL_correction(folder)
     ax[1].xaxis.set_label_coords(1.0, -0.15)
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
-    m = load_setup_1DPG(string(folder,     "S1e-3/bl/setup.h5"))
-    mFull = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
-    s = load_state_1DPG(string(folder,     "S1e-3/bl/state1.h5"))
+    m = load_setup_1D(string(folder,     "S1e-3/bl/setup.h5"))
+    mFull = load_setup_1D(string(folder, "S1e-3/full/setup.h5"))
+    s = load_state_1D(string(folder,     "S1e-3/bl/state1.h5"))
 
     # compute full solution on finer grid
     z = mFull.z .- mFull.z[1]
@@ -151,9 +154,9 @@ function slope_profiles(folder)
         color = colors[i, :]
 
         # BL 1D small S
-        m = load_setup_1DPG(string(folder,     "S1e-3/bl/setup.h5"))
-        mFull = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
-        s = load_state_1DPG(string(folder,     "S1e-3/bl/state$i.h5"))
+        m = load_setup_1D(string(folder,     "S1e-3/bl/setup.h5"))
+        mFull = load_setup_1D(string(folder, "S1e-3/full/setup.h5"))
+        s = load_state_1D(string(folder,     "S1e-3/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = get_full_soln(m, s, z)
         δ, μ, S, q = get_BL_params(m)
@@ -166,8 +169,8 @@ function slope_profiles(folder)
         ax[1, 3].plot(1e6*Bz, z/1e3, c=color, label=label)
 
         # full 1D small S
-        m = load_setup_1DPG(string(folder, "S1e-3/full/setup.h5"))
-        s = load_state_1DPG(string(folder, "S1e-3/full/state$i.h5"))
+        m = load_setup_1D(string(folder, "S1e-3/full/setup.h5"))
+        s = load_state_1D(string(folder, "S1e-3/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
@@ -177,9 +180,9 @@ function slope_profiles(folder)
         ax[1, 3].plot(1e6*Bz, z/1e3, "k--", lw=0.5)
 
         # BL 1D big S
-        m = load_setup_1DPG(string(folder,     "S5e-1/bl/setup.h5"))
-        mFull = load_setup_1DPG(string(folder, "S5e-1/full/setup.h5"))
-        s = load_state_1DPG(string(folder,     "S5e-1/bl/state$i.h5"))
+        m = load_setup_1D(string(folder,     "S5e-1/bl/setup.h5"))
+        mFull = load_setup_1D(string(folder, "S5e-1/full/setup.h5"))
+        s = load_state_1D(string(folder,     "S5e-1/bl/state$i.h5"))
         z = mFull.z .- mFull.z[1]
         χ, b = get_full_soln(m, s, z)
         δ, μ, S, q = get_BL_params(m)
@@ -192,8 +195,8 @@ function slope_profiles(folder)
         ax[2, 3].plot(1e6*Bz,  z/1e3, c=color, label=label)
 
         # full 1D big S
-        m = load_setup_1DPG(string(folder, "S5e-1/full/setup.h5"))
-        s = load_state_1DPG(string(folder, "S5e-1/full/state$i.h5"))
+        m = load_setup_1D(string(folder, "S5e-1/full/setup.h5"))
+        s = load_state_1D(string(folder, "S5e-1/full/state$i.h5"))
         z = m.z .- m.z[1]
         v = s.v
         Bz = m.N2 .+ differentiate(b, z)
@@ -258,8 +261,8 @@ end
 function seamount(folder)
     fig, ax = subplots(1, 2, figsize=(19*pc, 17*pc), sharey=true)
 
-    m = load_setup_2DPG(string(folder, "full2D/setup.h5"))
-    s = load_state_2DPG(string(folder, "full2D/state1.h5"))
+    m = load_setup_2D(string(folder, "full2D/setup.h5"))
+    s = load_state_2D(string(folder, "full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     a, cb = ridge_plot(m, s, 1e2*s.χ, "", string(L"Streamfunction $\chi$", "\n", L"($\times 10^{-2}$ m$^2$ s$^{-1}$)"); 
         ax=ax[1], cb_orientation="horizontal", xlabel=L"Horizontal coordinate $r$ (km)", pad=0.2, vext=2.0)
@@ -305,7 +308,7 @@ function seamount_profiles(folder)
     subplots_adjust(hspace=0.5)
 
     # model setups
-    m1DBL = load_setup_1DPG(string(folder, "bl1D/setup.h5"))
+    m1DBL = load_setup_1D(string(folder, "bl1D/setup.h5"))
     m2D = load_setup_2DPG(string(folder, "full2D/setup.h5"))
     ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
     m2DBL = load_setup_2DPG(string(folder, "bl2D/setup.h5"))
@@ -341,7 +344,7 @@ function seamount_profiles(folder)
 
         # BL 1D
         m = m1DBL
-        s = load_state_1DPG(string(folder, "bl1D/state$i.h5"))
+        s = load_state_1D(string(folder, "bl1D/state$i.h5"))
         z = m2D.z[ix, :] .- m2D.z[ix, 1]
         χ, b = get_full_soln(m, s, z)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
@@ -354,7 +357,7 @@ function seamount_profiles(folder)
 
         # full 2D
         m = m2D
-        s = load_state_2DPG(string(folder, "full2D/state$i.h5"))
+        s = load_state_2D(string(folder, "full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
         ax[1, 1].plot(1e2*s.χ[ix, :],  m.z[ix, :]/1e3, "k--", lw=0.5)
         axins11.plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k--", lw=0.5)
@@ -363,7 +366,7 @@ function seamount_profiles(folder)
 
         # BL 2D
         m = m2DBL
-        s = load_state_2DPG(string(folder, "bl2D/state$i.h5"))
+        s = load_state_2D(string(folder, "bl2D/state$i.h5"))
         z = m2D.z[ix, :] .- m2D.z[ix, 1]
         χ, b = get_full_soln(m, s, z, ixBL)
         v = cumtrapz(m.f*(χ .- χ[end])./m2D.ν[ix, :], z)
@@ -375,7 +378,7 @@ function seamount_profiles(folder)
 
         # full 2D
         m = m2D
-        s = load_state_2DPG(string(folder, "full2D/state$i.h5"))
+        s = load_state_2D(string(folder, "full2D/state$i.h5"))
         bz = differentiate(s.b[ix, :], m.z[ix, :])
         ax[2, 1].plot(1e2*s.χ[ix, :],  m.z[ix, :]/1e3, "k--", lw=0.5)
         axins21.plot(1e2*s.χ[ix, :],   m.z[ix, :]/1e3, "k--", lw=0.5)
@@ -403,14 +406,14 @@ function ridge_exp_strat(folder)
     ax[1, 1].annotate(L"(a) $N^2 =$ constant", (0.0, 1.05), xycoords="axes fraction")
     ax[1, 2].annotate(L"(b) $N^2 \sim \exp(z/d)$", (0.0, 1.05), xycoords="axes fraction")
 
-    m = load_setup_2DPG(string(folder, "const/full2D/setup.h5"))
-    s = load_state_2DPG(string(folder, "const/full2D/state1.h5"))
+    m = load_setup_2D(string(folder, "const/full2D/setup.h5"))
+    s = load_state_2D(string(folder, "const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
         ax=ax[1, 1], cb_orientation="horizontal", pad=0.2, vext=2)
 
-    m = load_setup_2DPG(string(folder, "exp/full2D/setup.h5"))
-    s = load_state_2DPG(string(folder, "exp/full2D/state1.h5"))
+    m = load_setup_2D(string(folder, "exp/full2D/setup.h5"))
+    s = load_state_2D(string(folder, "exp/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
     ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; 
         ax=ax[1, 2], cb_orientation="horizontal", pad=0.2, vext=3)
@@ -426,16 +429,16 @@ function ridge_exp_strat(folder)
     ax[2, 2].set_xlabel(L"Horizontal coordinate $x$ (km)")
     ax[2, 2].set_ylabel(string(L"Exchange velocity $H u^\sigma$", "\n", L"($\times 10^{-9}$ m s$^{-1}$)"))
 
-    mConst = load_setup_2DPG(string(folder, "/const/bl2D/setup.h5"))
-    mExp   = load_setup_2DPG(string(folder, "/exp/bl2D/setup.h5"))
+    mConst = load_setup_2D(string(folder, "/const/bl2D/setup.h5"))
+    mExp   = load_setup_2D(string(folder, "/exp/bl2D/setup.h5"))
 
-    s = load_state_2DPG(string(folder, "/const/bl2D/state1.h5"))
+    s = load_state_2D(string(folder, "/const/bl2D/state1.h5"))
     χtheory = BL_transport_2D(mConst, s)
     W = exchange_vel_2D(mConst, χtheory)
     ax[2, 1].plot(mConst.ξ/1e3, 1e3*χtheory, label=string(L"$N^2 = $", "constant"))
     ax[2, 2].plot(mConst.ξ/1e3, 1e9*W)
 
-    s = load_state_2DPG(string(folder, "/exp/bl2D/state1.h5"))
+    s = load_state_2D(string(folder, "/exp/bl2D/state1.h5"))
     χtheory = BL_transport_2D(mExp, s)
     W = exchange_vel_2D(mExp, χtheory)
     ax[2, 1].plot(mExp.ξ/1e3, 1e3*χtheory,label=L"$N^2 \sim \exp(z/d)$")
@@ -456,7 +459,7 @@ function ridge_exp_strat(folder)
     plt.close()
 end
 
-path = "../sims/"
+path = "../../sims/"
 
 # BL_correction(string(path, "sim044/"))
 # slope_profiles(string(path, "sim044/"))
@@ -464,4 +467,3 @@ path = "../sims/"
 # seamount(string(path, "sim042/"))
 # seamount_profiles(string(path, "sim042/"))
 ridge_exp_strat(string(path, "sim037/"))
-# pq()

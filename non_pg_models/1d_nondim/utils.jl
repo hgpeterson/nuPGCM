@@ -2,6 +2,8 @@
 # Utility functions for nondimensional transport-constrained 1D model
 ################################################################################
 
+using Printf
+
 """
     saveCheckpoint1DTCNondim(ũ, ṽ, b̃, P̃x̃, t̃, i)
 

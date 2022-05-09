@@ -130,6 +130,7 @@ using Printf
 using SparseArrays
 using SuiteSparse
 using LinearAlgebra
+using Dierckx
 using HDF5
 using ProgressMeter
 

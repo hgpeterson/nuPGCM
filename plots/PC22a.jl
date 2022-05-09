@@ -1,16 +1,21 @@
-using PyPlot, PyCall, Printf, HDF5, Dierckx
+################################################################################
+# This file contains all the code needed (appart from simulation setup) to 
+# produce the plots in 
+# 
+#       Peterson & Callies (2022) Rapid spin up and spin down of flow along 
+#       slopes. JPO. 52 (4), 579--596. doi: 10.1175/JPO-D-21-0173.1
+#
+################################################################################
 
-plt.style.use("plots.mplstyle")
+using nuPGCM, PyPlot, PyCall
+
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-include("my_julia_lib.jl")
-
-# for loading data
-include("1d_nondim/utils.jl")
-include("1d/setup.jl")
-include("1dpg/setup.jl")
-include("2dpg/setup.jl")
+# for non-PG 1D simulations
+# include("../non_pg_models/1d_nondim/utils.jl")
+# include("../non_pg_models/1d/setup.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
@@ -19,7 +24,7 @@ inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 pc = 1/6 # a pica is 1/6th of an inch
 
-function sketchRidge()
+function sketch_ridge()
     fig, ax = subplots(1)
     ax.fill_between(x[:, 1]/1000, z[:, 1]/1000, minimum(z)/1000, color="k", alpha=0.3, lw=0.0)
     ax.spines["left"].set_visible(false)
@@ -27,11 +32,11 @@ function sketchRidge()
     ax.set_ylim([minimum(z)/1000, 0])
     ax.set_xticks([])
     ax.set_yticks([])
-    savefig("sketchRidge.svg")
-    println("sketchRidge.svg")
+    savefig("sketch_ridge.svg")
+    println("sketch_ridge.svg")
 end
 
-function sketchSlope()
+function sketch_slope()
     x = 0:0.001:1
     z = 0:0.001:1
     Px = repeat(x, 1, size(z, 1))
@@ -42,47 +47,47 @@ function sketchSlope()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([])
     ax.set_yticks([])
-    savefig("sketchSlope.svg")
-    println("sketchSlope.svg")
+    savefig("sketch_slope.svg")
+    println("sketch_slope.svg")
 end
 
-function spinupRidge(folder)
+function spinup_ridge(folder)
     # load
-    m = loadSetup2DPG(string(folder, "const/full2D/setup.h5"))
-    s = loadState2DPG(string(folder, "const/full2D/state1.h5"))
+    m = load_setup_2D(string(folder, "const/full2D/setup.h5"))
+    s = load_state_2D(string(folder, "const/full2D/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
 
     # plot
     fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
-    ridgePlot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; ax=ax[1], vext=1.5)
-    ridgePlot(m, s, 1e2*s.uη, "", L"Along-ridge flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
+    ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; ax=ax[1], vext=1.5)
+    ridge_plot(m, s, 1e2*s.uη, "", L"Along-ridge flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
 
-    savefig("spinupRidge.pdf")
-    println("spinupRidge.pdf")
+    savefig("spinup_ridge.pdf")
+    println("spinup_ridge.pdf")
     plt.close()
 end
 
-function spinupRidgeAsym(folder)
+function spinup_ridge_asym(folder)
     # load
-    m = loadSetup2DPG(string(folder, "setup.h5"))
-    s = loadState2DPG(string(folder, "state1.h5"))
+    m = load_setup_2D(string(folder, "setup.h5"))
+    s = load_state_2D(string(folder, "state1.h5"))
 
     U = s.χ[1, end]
 
     # plot
-    ax = ridgePlot(m, s, 1e3*s.χ, "", string(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"); vext=6)
+    ax = ridge_plot(m, s, 1e3*s.χ, "", string(L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"); vext=6)
     ax.annotate(string(L"$U =$", @sprintf("%1.1f", 1e4*U), L"$\times 10^{-4}$ m$^2$ s$^{1}$"), (0.05, 0.9), size=8, xycoords="axes fraction")
-    savefig("spinupRidgeAsym.pdf")
-    println("spinupRidgeAsym.pdf")
+    savefig("spinup_ridge_asym.pdf")
+    println("spinup_ridge_asym.pdf")
     plt.close()
 end
 
-function spinupProfiles(folder; μ=1)
+function spinup_profiles(folder; μ=1)
     ii = 1:5
 
     # init plot
@@ -129,13 +134,13 @@ function spinupProfiles(folder; μ=1)
     ax[2, 1].set_ylim([-2, 0])
 
     # setup file
-    m2D = loadSetup2DPG(string(folder, "2dpg/mu", μ, "/setup.h5"))
+    m2D = load_setup_2D(string(folder, "2dpg/mu", μ, "/setup.h5"))
 
     # plot data from folder
     for i=ii
         # canonical 1D solution
-        m = loadSetup1DPG(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
-        s = loadState1DPG(string(folder, "1dtc_pg/can/mu", μ, "/state", i, ".h5"))
+        m = load_setup_1D(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+        s = load_state_1D(string(folder, "1dtc_pg/can/mu", μ, "/state", i, ".h5"))
         label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
         Bz = m.N2 .+ differentiate(s.b, m.z)
         ax[1, 1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label, zorder=0)
@@ -143,7 +148,7 @@ function spinupProfiles(folder; μ=1)
         ax[1, 3].plot(1e6*Bz,  m.z/1e3, c=colors[i, :], label=label, zorder=0)
         
         # 2D PG solution
-        s2D = loadState2DPG(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
+        s2D = load_state_2D(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
         ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
         Bz2D = differentiate(s2D.b[ix, :], m2D.z[ix, :])
         ax[1, 1].plot(1e3*s2D.χ[ix, :],  m2D.z[ix, :]/1e3, "k--", lw=0.5, zorder=1)
@@ -151,8 +156,8 @@ function spinupProfiles(folder; μ=1)
         ax[1, 3].plot(1e6*Bz2D,          m2D.z[ix, :]/1e3, "k--", lw=0.5, zorder=1)
 
         # transport-constrained 1D solution
-        m = loadSetup1DPG(string(folder, "1dtc_pg/tc/mu", μ, "/setup.h5"))
-        s = loadState1DPG(string(folder, "1dtc_pg/tc/mu", μ, "/state", i, ".h5"))
+        m = load_setup_1D(string(folder, "1dtc_pg/tc/mu", μ, "/setup.h5"))
+        s = load_state_1D(string(folder, "1dtc_pg/tc/mu", μ, "/state", i, ".h5"))
         Bz = m.N2 .+ differentiate(s.b, m.z)
         ax[2, 1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label)
         ax[2, 2].plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label)
@@ -165,8 +170,8 @@ function spinupProfiles(folder; μ=1)
     end
 
     # steady state canonical
-    m = loadSetup1DPG(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
-    s = loadState1DPG(string(folder, "1dtc_pg/can/mu", μ, "/state-1.h5"))
+    m = load_setup_1D(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+    s = load_state_1D(string(folder, "1dtc_pg/can/mu", μ, "/state-1.h5"))
     Bz = m.N2 .+ differentiate(s.b, m.z)
     ax[1, 1].plot(1e3*s.χ,  m.z/1e3, c="k")
     ax[1, 2].plot(1e2*s.v,  m.z/1e3, c="k")
@@ -191,12 +196,12 @@ function spinupProfiles(folder; μ=1)
     end
 
     subplots_adjust(hspace=0.4)
-    savefig(string("spinupProfilesMu", μ, ".pdf"))
-    println(string("spinupProfilesMu", μ, ".pdf"))
+    savefig(string("spinup_profilesMu", μ, ".pdf"))
+    println(string("spinup_profilesMu", μ, ".pdf"))
     plt.close()
 end
 
-function spindownProfiles(folder; ratio=nothing)
+function spindown_profiles(folder; ratio=nothing)
     # init plot
     fig, ax = subplots(2, 3, figsize=(27*pc, 23*pc), sharey=true)
 
@@ -289,16 +294,16 @@ function spindownProfiles(folder; ratio=nothing)
 
     subplots_adjust(hspace=0.4)
     if ratio !== nothing
-        savefig(string("spindownProfilesRatio", ratio, ".pdf"))
-        println(string("spindownProfilesRatio", ratio, ".pdf"))
+        savefig(string("spindown_profiles_ratio", ratio, ".pdf"))
+        println(string("spindown_profiles_ratio", ratio, ".pdf"))
     else
-        savefig("spindownProfiles.pdf")
-        println("spindownProfiles.pdf")
+        savefig("spindown_profiles.pdf")
+        println("spindown_profiles.pdf")
     end
     plt.close()
 end
 
-function spindownGrid(folder)
+function spindown_grid(folder)
     # read data
     file = h5open(string(folder, "vs.h5"), "r")
     vs_5A = read(file, "vs_5A")
@@ -349,12 +354,12 @@ function spindownGrid(folder)
     
     subplots_adjust(bottom=0.4, wspace=-0.2)
 
-    savefig("spindownGrid.pdf")
-    println("spindownGrid.pdf")
+    savefig("spindown_grid.pdf")
+    println("spindown_grid.pdf")
     plt.close()
 end
 
-function spinupProfilesPGvsFull(folder)
+function spinup_profiles_PGvsFull(folder)
     tDays = 1000:1000:5000
     
     # init plot
@@ -403,8 +408,8 @@ function spinupProfilesPGvsFull(folder)
         ax[3].plot(1e6*Bz,   m.z/1e3, c=colors[i, :], label=label)
 
         # 1D PG
-        m = loadSetup1DPG(string(folder, "1dtc_pg/setup.h5"))
-        s = loadState1DPG(string(folder, "1dtc_pg/state", i, ".h5"))
+        m = load_setup_1D(string(folder, "1dtc_pg/setup.h5"))
+        s = load_state_1D(string(folder, "1dtc_pg/state", i, ".h5"))
         Bz = m.N2 .+ differentiate(s.b, m.z)
         ax[1].plot(1e4*s.u,   m.z/1e3, "k--", lw=0.5)
         axins1.plot(1e4*s.u,  m.z/1e3, "k--", lw=0.5)
@@ -423,20 +428,20 @@ function spinupProfilesPGvsFull(folder)
     ax[3].annotate("(c)", (-0.04, 1.05), xycoords="axes fraction")
 
     subplots_adjust(left=0.1, right=0.95, bottom=0.28, top=0.9, wspace=0.1, hspace=0.6)
-    savefig("spinupProfilesPGvsFull.pdf")
-    println("spinupProfilesPGvsFull.pdf")
+    savefig("spinup_profiles_PGvsFull.pdf")
+    println("spinup_profiles_PGvsFull.pdf")
     plt.close()
 end
 
-path = "../sims/"
+path = "../../sims/"
 
 # sketchRidge() 
 # sketchSlope() 
-spinupRidge(string(path, "sim037/"))
-spinupRidgeAsym(string(path, "sim040/")) 
-spinupProfiles(string(path, "sim039/"); μ=1)
-spinupProfiles(string(path, "sim039/"); μ=200)
-spindownProfiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
-spindownProfiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
-spindownGrid(string(path, "sim033/")) 
-spinupProfilesPGvsFull(string(path, "sim025/"))
+# spinup_ridge(string(path, "sim037/"))
+# spinup_ridge_asym(string(path, "sim040/")) 
+# spinup_profiles(string(path, "sim039/"); μ=1)
+# spinup_profiles(string(path, "sim039/"); μ=200)
+# spindown_profiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
+# spindown_profiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")
+# spindown_grid(string(path, "sim033/")) 
+# spinup_profiles_PGvsFull(string(path, "sim025/"))
