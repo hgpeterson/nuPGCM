@@ -7,7 +7,7 @@ Plot profiles of b, χ, u, and v from HDF5 snapshot files.
 """
 function profile_plot(setup_file::String, state_files::Vector{String})
     # ModelSetup 
-    m = load_setup_1DPG(setup_file)
+    m = load_setup_1D(setup_file)
 
     # init plot
     fig, ax = subplots(2, 2, figsize=(18*pc, 23*pc), sharey=true)
@@ -49,7 +49,7 @@ function profile_plot(setup_file::String, state_files::Vector{String})
     # plot data from `stateFiles`
     for i=2:size(state_files, 1) # don't plot init cond
         # load
-        s = load_state_1DPG(state_files[i])
+        s = load_state_1D(state_files[i])
 
         # colors and labels
         if s.i[1] == -1

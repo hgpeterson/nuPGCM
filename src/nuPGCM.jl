@@ -9,6 +9,7 @@ export
     secs_in_day,
     secs_in_year,
     out_folder,
+    set_out_folder,
 
     ### Numerics ###
 
@@ -29,17 +30,9 @@ export
     local_basis_func,
     evaluate,
 
-    ### 1D Model ### 
-
-    # saving and loading
+    # saving models
     save_setup,
-    load_setup_1D,
     save_state,
-    load_state_1D,
-
-    # model structs 
-    ModelSetup1DPG,
-    ModelState1DPG,
 
     # inversion
     invert,
@@ -50,6 +43,16 @@ export
 
     # plotting
     profile_plot,
+
+    ### 1D Model ### 
+
+    # loading
+    load_setup_1D,
+    load_state_1D,
+
+    # model structs 
+    ModelSetup1DPG,
+    ModelState1DPG,
 
     # BL theory
     get_BL_correction,
@@ -68,26 +71,16 @@ export
     ∂z,
     transform_from_TF,
 
-    # saving and loading
-    save_setup,
+    # loading
     load_setup_2D,
-    save_state,
     load_state_2D,
 
     # model structs 
     ModelSetup2DPG,
     ModelState2DPG,
 
-    # inversion
-    invert,
-    invert!,
-
-    # evolution
-    evolve!,
-
     # plotting
     ridge_plot,
-    profile_plot,
     plot_state_2DPG,
 
     # BL theory
@@ -95,10 +88,8 @@ export
 
     ### 3D Model ###
 
-    # saving and loading
-    save_setup,
+    # loading
     load_setup_3D,
-    save_state,
     load_state_3D,
 
     # model structs 
@@ -137,7 +128,12 @@ using ProgressMeter
 # global constants
 const secs_in_day = 86400
 const secs_in_year = 360*86400
-const out_folder = "output/"
+
+# default output folder, can be changed
+out_folder = ""
+function set_out_folder(of::String)
+    global out_folder = of
+end
 
 # include code
 include("Numerics/derivatives.jl")

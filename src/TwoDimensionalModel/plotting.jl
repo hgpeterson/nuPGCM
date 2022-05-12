@@ -111,7 +111,7 @@ at ξ = ξ[iξ].
 """
 function profile_plot(setup_file, state_files, iξ)
     # ModelSetup 
-    m = load_setup_2DPG(setup_file)
+    m = load_setup_2D(setup_file)
 
     # init plot
     fig, ax = subplots(1, 3, figsize=(27*pc, 12*pc), sharey=true)
@@ -139,7 +139,7 @@ function profile_plot(setup_file, state_files, iξ)
     # plot data from `datafiles`
     for i=1:size(state_files, 1)
         # load
-        s = load_state_2DPG(state_files[i])
+        s = load_state_2D(state_files[i])
         u, v, w = transform_from_TF(m, s)
 
         # stratification
@@ -170,11 +170,11 @@ function profile_plot(setup_file, state_files, iξ)
 end
 
 """
-    plot_state_2DPG(m, s, i_img)
+    plot_state(m, s, i_img)
 
 Make some ridge plots of the current model state using the label number `i_img`.
 """
-function plot_state_2DPG(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
+function plot_state(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
     # convert to physical coordinates 
     u, v, w = transform_from_TF(m, s)
 

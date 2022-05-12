@@ -55,12 +55,12 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
 
     # save initial state
     i_save = 0
-    save_state_2DPG(s, i_save)
+    save_state(s, i_save)
     i_save += 1
     
     # plot initial state
     i_img = 0
-    plot_state_2DPG(m, s, i_img)
+    plot_state(m, s, i_img)
     i_img += 1
 
     # store previous buoyancy field for timestepping scheme
@@ -121,11 +121,11 @@ function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Re
         
         if i % n_steps_plot == 0
             # plot flow
-            plot_state_2DPG(m, s, i_img)
+            plot_state(m, s, i_img)
             i_img += 1
         end
         if i % n_steps_save == 0
-            save_state_2DPG(s, i_save)
+            save_state(s, i_save)
             i_save += 1
         end
     end

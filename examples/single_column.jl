@@ -1,10 +1,11 @@
-using nuPGCM.Numerics
-using nuPGCM.OneDimensionalModel
+using nuPGCM
 using PyPlot
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
+
+set_out_folder("../output/")
 
 function run_single_column(; bl=false)
     # parameters (see `setup.jl`)
@@ -49,7 +50,7 @@ function run_single_column(; bl=false)
     m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transport_constraint, U)
 
     # save and log params
-    save_setup_1DPG(m)
+    save_setup(m)
 
     # set initial state
     b = zeros(nz)

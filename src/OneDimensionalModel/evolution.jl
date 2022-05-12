@@ -30,7 +30,7 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, t_final::Real, t_save::Re
 
     # initial condition
     i_save = 0
-    save_state_1DPG(s, i_save)
+    save_state(s, i_save)
     i_save += 1
 
     # main loop
@@ -58,7 +58,7 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, t_final::Real, t_save::Re
             println(@sprintf("t = %.2f years (i = %d)", m.Δt*i/secs_in_year, i))
             
             # save
-            save_state_1DPG(s, i_save)
+            save_state(s, i_save)
 
             # next
             i_save += 1
