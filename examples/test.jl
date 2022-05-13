@@ -12,23 +12,24 @@ plt.close("all")
 pygui(false)
 
 function get_Mᵏ(p, t, C₀, k)
-    Mᵏ = 0
+    Mᵏ = zeros(3, 3)
     for i=1:3
-        func(ξ, η) = local_basis_func(C₀[k, :, i], [ξ, η])*local_basis_func(C₀[k, :, 1], [ξ, η])
-        Mᵏ += gaussian_quad2(func, p[t[k, :], :])
+        for j=1:3
+            func(ξ, η) = local_basis_func(C₀[k, :, i], [ξ, η])*local_basis_func(C₀[k, :, j], [ξ, η])
+            Mᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+        end
     end
     return Mᵏ
 end
 
-function get_fᵢ(p, t, C₀, k, f)
-    fᵢ = 0
+function get_fᵏ(p, t, C₀, k, f)
+    fᵏ = zeros(3)
     for i=1:3
         func(ξ, η) = f(ξ, η)*local_basis_func(C₀[k, :, i], [ξ, η])
-        fᵢ += gaussian_quad2(func, p[t[k, :], :])
+        fᵏ[i] = gaussian_quad2(func, p[t[k, :], :])
     end
-    return fᵢ
+    return fᵏ
 end
-
 
 function get_LHS(λ::Real, σ::AbstractArray{<:Real,1})
     nσ = size(σ, 1)
@@ -69,16 +70,6 @@ function get_RHS(f::AbstractArray{<:Real,1}, u₀::Real)
     return RHS
 end
 
-function get_u(LHSs::AbstractArray{Any,1}, RHSs::AbstractArray{<:Real,2})
-    nt = size(RHSs, 1)
-    nσ = size(RHSs, 2)
-    u = zeros(nt, nσ)
-    for k=1:nt
-        u[k, :] = LHSs[k]\RHSs[k, :]
-    end
-    return u
-end
-
 function test_problem()
     # mesh
     p, t, e = load_mesh("../meshes/circle1.h5")
@@ -93,57 +84,69 @@ function test_problem()
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # parameters
-    λ = 1e1
-    τ₀ = 1
+    λ = 1e2
+    τ₀(ξ, η) = 5*ξ - 2*η^2
 
     # rhs function
-    f(ξ, η, σ) = 1
+    f(ξ, η, σ) = 3*ξ + 5*η #+ 1e4*exp(-(σ + 0.1)^2)
 
-    # LHS matrices
-    LHSs = Array{Any}(undef, nt) 
-    for k=1:nt 
-        LHSs[k] = get_LHS(λ, σ)
-    end  
+    # LHS matrix
+    LHS = get_LHS(λ, σ)
 
-    # RHS vectors
-    RHSs = zeros(nt, nσ)
+    # solve for u
+    u = zeros(3, nt, nσ)
     for k=1:nt
-        fᵢ = zeros(nσ)
+        # get fᵏ
+        fᵏ = zeros(3, nσ)
         for j=1:nσ
             g(ξ, η) = f(ξ, η, σ[j])
-            fᵢ[j] = get_fᵢ(p, t, C₀, k, g)
+            fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
         end
-        Mᵏ = get_Mᵏ(p, t, C₀, k)
-        u₀ = Mᵏ*τ₀ #FIXME: when you sum over j, this gets double counted
-        RHSs[k, :] = get_RHS(fᵢ, u₀)
-    end
 
-    # solve for u = Mᵏτ
-    u = get_u(LHSs, RHSs)
+        # get Mᵏ
+        Mᵏ = get_Mᵏ(p, t, C₀, k)
+
+        # upper b.c.
+        u₀ = Mᵏ*τ₀.(ξ[t[k, :]], η[t[k, :]])
+
+        # solve for u
+        for i=1:3
+            RHS = get_RHS(fᵏ[i, :], u₀[i])
+            u[i, k, :] = LHS\RHS
+        end
+    end
 
     # get τ
     τ = zeros(np, nσ)
     for k=1:nt
         Mᵏ = get_Mᵏ(p, t, C₀, k)
-        for j=1:3
-            τ[t[k, j], :] .+= u[k, :]/Mᵏ
+        for j=1:nσ
+            τ[t[k, :], j] .+= Mᵏ\u[:, k, j]
         end
+    end
+    for j=1:np
+        # divide by number of triangles at τⱼ
+        τ[j, :] /= count(x -> (x == j), t)
     end
 
     # analytical solution
-    τ_exact(ξ, η, σ) = (τ₀ + f(ξ, η, σ)/λ^2)*exp(λ*σ) - f(ξ, η, σ)/λ^2
+    τ_a(ξ, η, σ) = (τ₀(ξ, η) + f(ξ, η, σ)/λ^2)*exp(λ*σ) - f(ξ, η, σ)/λ^2
 
     # error
-    ip = 100
-    τ_exact_ip = τ_exact.(ξ[ip], η[ip], σ)
-    println(maximum(abs.(τ_exact_ip .- τ[ip, :])))
+    τ_exact = zeros(np, nσ)
+    for i=1:np
+        τ_exact[i, :] = τ_a.(ξ[i], η[i], σ)
+    end
+    println("Max error: ", maximum(abs.(τ_exact .- τ)))
 
+    ip = 100
     plot(τ[ip, :], σ, label="Numerical")
-    plot(τ_exact_ip, σ, label="Exact")
+    plot(τ_exact[ip, :], σ, "--", label="Exact")
+    legend()
     savefig("debug.png")
     plt.close()
 
     return τ
 end
 
-test_problem()
+τ = test_problem()
