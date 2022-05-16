@@ -11,6 +11,40 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+function get_M(p, t, e, C₀)
+    np = size(p, 1)
+    nt = size(t, 1)
+    ne = size(e, 1)
+
+	# create global linear system using stamping method
+    M = Tuple{Int64,Int64,Float64}[]  
+	for k=1:nt
+		# calculate M matrix element Mᵏ
+        Mᵏ = get_Mᵏ(p, t, C₀, k)
+
+		# add to global system
+        for i=1:3
+		    for j=1:3
+                if t[k, i] in e
+                    # edge node, leave for dirichlet
+                    continue
+                end
+                push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
+			end
+		end
+	end
+
+    # dirichlet
+    for i=1:ne
+        push!(M, (e[i], e[i], 1))
+    end
+
+    # make CSC matrix
+    M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)
+
+    return M
+end
+
 function get_Mᵏ(p, t, C₀, k)
     Mᵏ = zeros(3, 3)
     for i=1:3
@@ -85,16 +119,58 @@ function test_problem()
 
     # parameters
     λ = 1e2
-    τ₀(ξ, η) = 5*ξ - 2*η^2
+    τ₀(ξ, η) = 1 + 5*ξ - 2*η^2
 
     # rhs function
-    f(ξ, η, σ) = 3*ξ + 5*η #+ 1e4*exp(-(σ + 0.1)^2)
+    f(ξ, η, σ) = 1 + 3*ξ + 5*η #+ 1e4*exp(-(σ + 0.1)^2)
 
     # LHS matrix
     LHS = get_LHS(λ, σ)
 
+    # # solve for u
+    # u = zeros(3, nt, nσ)
+    # for k=1:nt
+    #     # get fᵏ
+    #     fᵏ = zeros(3, nσ)
+    #     for j=1:nσ
+    #         g(ξ, η) = f(ξ, η, σ[j])
+    #         fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
+    #     end
+    
+    #     # get Mᵏ
+    #     Mᵏ = get_Mᵏ(p, t, C₀, k)
+    
+    #     # upper b.c.
+    #     u₀ = Mᵏ*τ₀.(ξ[t[k, :]], η[t[k, :]])
+    
+    #     # solve for u
+    #     for i=1:3
+    #         RHS = get_RHS(fᵏ[i, :], u₀[i])
+    #         u[i, k, :] = LHS\RHS
+    #     end
+    # end
+    
+    # # get τ
+    # τ = zeros(np, nσ)
+    # for k=1:nt
+    #     Mᵏ = get_Mᵏ(p, t, C₀, k)
+    #     for j=1:nσ
+    #         τ[t[k, :], j] .+= Mᵏ\u[:, k, j]
+    #     end
+    # end
+    # for j=1:np
+    #     # divide by number of triangles at τⱼ
+    #     τ[j, :] /= count(x -> (x == j), t)
+    # end
+
+    # get M
+    M = get_M(p, t, e, C₀)
+
+    # upper b.c.
+    u₀ = M*τ₀.(ξ, η)
+
     # solve for u
-    u = zeros(3, nt, nσ)
+    u = zeros(np, nσ)
     for k=1:nt
         # get fᵏ
         fᵏ = zeros(3, nσ)
@@ -103,31 +179,15 @@ function test_problem()
             fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
         end
 
-        # get Mᵏ
-        Mᵏ = get_Mᵏ(p, t, C₀, k)
-
-        # upper b.c.
-        u₀ = Mᵏ*τ₀.(ξ[t[k, :]], η[t[k, :]])
-
         # solve for u
         for i=1:3
-            RHS = get_RHS(fᵏ[i, :], u₀[i])
-            u[i, k, :] = LHS\RHS
+            RHS = get_RHS(fᵏ[i, :], u₀[t[k, i]])
+            u[t[k, i], :] .+= LHS\RHS
         end
     end
 
     # get τ
-    τ = zeros(np, nσ)
-    for k=1:nt
-        Mᵏ = get_Mᵏ(p, t, C₀, k)
-        for j=1:nσ
-            τ[t[k, :], j] .+= Mᵏ\u[:, k, j]
-        end
-    end
-    for j=1:np
-        # divide by number of triangles at τⱼ
-        τ[j, :] /= count(x -> (x == j), t)
-    end
+    τ = M\u
 
     # analytical solution
     τ_a(ξ, η, σ) = (τ₀(ξ, η) + f(ξ, η, σ)/λ^2)*exp(λ*σ) - f(ξ, η, σ)/λ^2
@@ -143,7 +203,11 @@ function test_problem()
     plot(τ[ip, :], σ, label="Numerical")
     plot(τ_exact[ip, :], σ, "--", label="Exact")
     legend()
-    savefig("debug.png")
+    savefig("debug_vert.png")
+    plt.close()
+
+    plot_horizontal(p, t, abs.((τ[:, nσ] .- τ_exact[:, nσ])./τ_exact[:, nσ]); clabel=L"Relative Error at $\sigma = 0$")
+    savefig("debug_horiz.png")
     plt.close()
 
     return τ
