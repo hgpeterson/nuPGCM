@@ -18,7 +18,7 @@ function get_M(p, t, C₀)
 
 	# create global linear system using stamping method
     M = Tuple{Int64,Int64,Float64}[]  
-	@showprogress "Calculating M..." for k=1:nt
+	for k=1:nt
 		# calculate M matrix element Mᵏ
         Mᵏ = get_Mᵏ(p, t, C₀, k)
 
@@ -118,7 +118,6 @@ function test_problem()
     # mesh
     p, t, e = load_mesh("../meshes/circle2.h5")
     np = size(p, 1)
-    nt = size(t, 1)
     ξ = p[:, 1]
     η = p[:, 2]
     C₀ = get_linear_basis_coeffs(p, t)
@@ -148,7 +147,7 @@ function test_problem()
 
     # solve for v
     v = zeros(np, nσ)
-    @showprogress "Calculating v..." for i=1:np
+    for i=1:np
         RHS = get_RHS(f[i, :], v₀[i])
         v[i, :] = LHS\RHS
     end
@@ -182,9 +181,12 @@ function test_problem()
         plot_horizontal(p, t, f_func.(ξ, η, σ[j]); clabel=latexstring(L"$f$ at $\sigma =$", σ[j]))
         savefig("f$j.png")
         plt.close()
+        plot_horizontal(p, t, τ₀.(ξ, η); clabel=L"$\tau_0$")
+        savefig("tau0_$j.png")
+        plt.close()
     end
 
     return τ
 end
 
-τ = test_problem()
+# τ = test_problem()
