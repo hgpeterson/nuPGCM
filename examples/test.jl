@@ -6,38 +6,29 @@ using nuPGCM
 using SparseArrays
 using LinearAlgebra
 using PyPlot
+using ProgressMeter
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function get_M(p, t, e, C₀)
+function get_M(p, t, C₀)
     np = size(p, 1)
     nt = size(t, 1)
-    ne = size(e, 1)
 
 	# create global linear system using stamping method
     M = Tuple{Int64,Int64,Float64}[]  
-	for k=1:nt
+	@showprogress "Calculating M..." for k=1:nt
 		# calculate M matrix element Mᵏ
         Mᵏ = get_Mᵏ(p, t, C₀, k)
 
 		# add to global system
         for i=1:3
 		    for j=1:3
-                if t[k, i] in e
-                    # edge node, leave for dirichlet
-                    continue
-                end
                 push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
 			end
 		end
 	end
-
-    # dirichlet
-    for i=1:ne
-        push!(M, (e[i], e[i], 1))
-    end
 
     # make CSC matrix
     M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)
@@ -54,6 +45,25 @@ function get_Mᵏ(p, t, C₀, k)
         end
     end
     return Mᵏ
+end
+
+function get_f(p, t, C₀, σ, f_func)
+    np = size(p, 1)
+    nt = size(t, 1)
+    nσ = size(σ, 1)
+    f = zeros(np, nσ)
+    # @@@@ this is the slow part because it needs to integrate over every triangle and every vertical level
+    @showprogress "Calculating f..." for k=1:nt
+        # get fᵏ
+        fᵏ = zeros(3, nσ)
+        for j=1:nσ
+            g(ξ, η) = f_func(ξ, η, σ[j])
+            fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
+        end
+        # stamp
+        f[t[k, :], :] .+= fᵏ
+    end
+    return f
 end
 
 function get_fᵏ(p, t, C₀, k, f)
@@ -74,7 +84,7 @@ function get_LHS(λ::Real, σ::AbstractArray{<:Real,1})
         # ∂σσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
 
-        # ∂σσ(u) - λ²u = f
+        # ∂σσ(v) - λ²v = f
         # term 1
         push!(LHS, (j, j-1, fd_σσ[1]))
         push!(LHS, (j, j,   fd_σσ[2]))
@@ -83,9 +93,9 @@ function get_LHS(λ::Real, σ::AbstractArray{<:Real,1})
         push!(LHS, (j, j, -λ^2))
     end
 
-    # Bottom boundary condition: u = 0
+    # Bottom boundary condition: v = 0
     push!(LHS, (1, 1, 1))
-    # Upper boundary condition: u = u₀
+    # Upper boundary condition: v = v₀
     push!(LHS, (nσ, nσ, 1))
 
     # Create CSC sparse matrix from matrix elements
@@ -94,19 +104,19 @@ function get_LHS(λ::Real, σ::AbstractArray{<:Real,1})
     return lu(LHS)
 end
 
-function get_RHS(f::AbstractArray{<:Real,1}, u₀::Real)
-    # ∂σσ(u) - λ²u = f
+function get_RHS(f::AbstractArray{<:Real,1}, v₀::Real)
+    # ∂σσ(v) - λ²v = f
     RHS = copy(f)
-    # Bottom boundary condition: u = 0
+    # Bottom boundary condition: v = 0
     RHS[1] = 0
-    # Upper boundary condition: u = u₀
-    RHS[end] = u₀
+    # Upper boundary condition: v = v₀
+    RHS[end] = v₀
     return RHS
 end
 
 function test_problem()
     # mesh
-    p, t, e = load_mesh("../meshes/circle1.h5")
+    p, t, e = load_mesh("../meshes/circle2.h5")
     np = size(p, 1)
     nt = size(t, 1)
     ξ = p[:, 1]
@@ -122,75 +132,32 @@ function test_problem()
     τ₀(ξ, η) = 1 + 5*ξ - 2*η^2
 
     # rhs function
-    f(ξ, η, σ) = 1 + 3*ξ + 5*η #+ 1e4*exp(-(σ + 0.1)^2)
+    f_func(ξ, η, σ) = 1 + 3*ξ + 5*η #+ 1e4*exp(-(σ + 0.1)^2)
 
     # LHS matrix
     LHS = get_LHS(λ, σ)
 
-    # # solve for u
-    # u = zeros(3, nt, nσ)
-    # for k=1:nt
-    #     # get fᵏ
-    #     fᵏ = zeros(3, nσ)
-    #     for j=1:nσ
-    #         g(ξ, η) = f(ξ, η, σ[j])
-    #         fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
-    #     end
-    
-    #     # get Mᵏ
-    #     Mᵏ = get_Mᵏ(p, t, C₀, k)
-    
-    #     # upper b.c.
-    #     u₀ = Mᵏ*τ₀.(ξ[t[k, :]], η[t[k, :]])
-    
-    #     # solve for u
-    #     for i=1:3
-    #         RHS = get_RHS(fᵏ[i, :], u₀[i])
-    #         u[i, k, :] = LHS\RHS
-    #     end
-    # end
-    
-    # # get τ
-    # τ = zeros(np, nσ)
-    # for k=1:nt
-    #     Mᵏ = get_Mᵏ(p, t, C₀, k)
-    #     for j=1:nσ
-    #         τ[t[k, :], j] .+= Mᵏ\u[:, k, j]
-    #     end
-    # end
-    # for j=1:np
-    #     # divide by number of triangles at τⱼ
-    #     τ[j, :] /= count(x -> (x == j), t)
-    # end
-
     # get M
-    M = get_M(p, t, e, C₀)
+    M = get_M(p, t, C₀)
+
+    # get f
+    f = get_f(p, t, C₀, σ, f_func)
 
     # upper b.c.
-    u₀ = M*τ₀.(ξ, η)
+    v₀ = M*τ₀.(ξ, η)
 
-    # solve for u
-    u = zeros(np, nσ)
-    for k=1:nt
-        # get fᵏ
-        fᵏ = zeros(3, nσ)
-        for j=1:nσ
-            g(ξ, η) = f(ξ, η, σ[j])
-            fᵏ[:, j] = get_fᵏ(p, t, C₀, k, g)
-        end
-
-        # solve for u
-        for i=1:3
-            RHS = get_RHS(fᵏ[i, :], u₀[t[k, i]])
-            u[t[k, i], :] .+= LHS\RHS
-        end
+    # solve for v
+    v = zeros(np, nσ)
+    @showprogress "Calculating v..." for i=1:np
+        RHS = get_RHS(f[i, :], v₀[i])
+        v[i, :] = LHS\RHS
     end
 
-    # get τ
-    τ = M\u
+    # solve for τ
+    τ = M\v
 
     # analytical solution
-    τ_a(ξ, η, σ) = (τ₀(ξ, η) + f(ξ, η, σ)/λ^2)*exp(λ*σ) - f(ξ, η, σ)/λ^2
+    τ_a(ξ, η, σ) = (τ₀(ξ, η) + f_func(ξ, η, σ)/λ^2)*exp(λ*σ) - f_func(ξ, η, σ)/λ^2
 
     # error
     τ_exact = zeros(np, nσ)
@@ -203,12 +170,19 @@ function test_problem()
     plot(τ[ip, :], σ, label="Numerical")
     plot(τ_exact[ip, :], σ, "--", label="Exact")
     legend()
-    savefig("debug_vert.png")
+    savefig("tau$ip.png")
     plt.close()
 
-    plot_horizontal(p, t, abs.((τ[:, nσ] .- τ_exact[:, nσ])./τ_exact[:, nσ]); clabel=L"Relative Error at $\sigma = 0$")
-    savefig("debug_horiz.png")
-    plt.close()
+    # jlevs = [nσ, nσ - 32, nσ - 64]
+    jlevs = [nσ]
+    for j=jlevs
+        plot_horizontal(p, t, abs.((τ[:, j] .- τ_exact[:, j])./τ_exact[:, j]); clabel=latexstring(L"Relative Error at $\sigma =$", σ[j]))
+        savefig("re$j.png")
+        plt.close()
+        plot_horizontal(p, t, f_func.(ξ, η, σ[j]); clabel=latexstring(L"$f$ at $\sigma =$", σ[j]))
+        savefig("f$j.png")
+        plt.close()
+    end
 
     return τ
 end
