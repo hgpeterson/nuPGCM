@@ -66,10 +66,10 @@ function get_f(p, t, C₀, σ, f_func)
     return f
 end
 
-function get_fᵏ(p, t, C₀, k, f)
+function get_fᵏ(p, t, C₀, k, f_func)
     fᵏ = zeros(3)
     for i=1:3
-        func(ξ, η) = f(ξ, η)*local_basis_func(C₀[k, :, i], [ξ, η])
+        func(ξ, η) = f_func(ξ, η)*local_basis_func(C₀[k, :, i], [ξ, η])
         fᵏ[i] = gaussian_quad2(func, p[t[k, :], :])
     end
     return fᵏ
@@ -163,7 +163,7 @@ function test_problem()
     for i=1:np
         τ_exact[i, :] = τ_a.(ξ[i], η[i], σ)
     end
-    println("Max error: ", maximum(abs.(τ_exact .- τ)))
+    println("Max abs error: ", maximum(abs.(τ_exact .- τ)))
 
     ip = 100
     plot(τ[ip, :], σ, label="Numerical")
@@ -172,21 +172,21 @@ function test_problem()
     savefig("tau$ip.png")
     plt.close()
 
-    # jlevs = [nσ, nσ - 32, nσ - 64]
-    jlevs = [nσ]
+    jlevs = [nσ, nσ - 32, nσ - 64]
+    # jlevs = [nσ]
     for j=jlevs
-        plot_horizontal(p, t, abs.((τ[:, j] .- τ_exact[:, j])./τ_exact[:, j]); clabel=latexstring(L"Relative Error at $\sigma =$", σ[j]))
-        savefig("re$j.png")
+        plot_horizontal(p, t, abs.((τ[:, j] .- τ_exact[:, j])); clabel=latexstring(L"Absolute Error at $\sigma =$", σ[j]))
+        savefig("ae$j.png")
         plt.close()
         plot_horizontal(p, t, f_func.(ξ, η, σ[j]); clabel=latexstring(L"$f$ at $\sigma =$", σ[j]))
         savefig("f$j.png")
         plt.close()
-        plot_horizontal(p, t, τ₀.(ξ, η); clabel=L"$\tau_0$")
-        savefig("tau0_$j.png")
-        plt.close()
     end
+    plot_horizontal(p, t, τ₀.(ξ, η); clabel=L"$\tau_0$")
+    savefig("tau0.png")
+    plt.close()
 
     return τ
 end
 
-# τ = test_problem()
+τ = test_problem()
