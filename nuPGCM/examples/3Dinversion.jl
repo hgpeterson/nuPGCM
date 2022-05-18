@@ -278,7 +278,7 @@ function plot_curl_τ_H()
         # curl
         c = curl_τ(p₀[1], p₀[2], k)
         if isnan(c)
-            curl[k] = 0
+            curl[k] = Inf
         else
             curl[k] = c
         end
@@ -287,8 +287,8 @@ function plot_curl_τ_H()
     # plot
     fig, ax, im = tplot(p/1e3, t, ; vext=30)
     fig, ax = subplots()
-    im = ax.tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, log.(abs.(curl)), vmin=-30, vmax=-12, shading="flat")
-    cb = colorbar(im, ax=ax, label="")
+    im = ax.tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, log.(abs.(curl)), vmin=-30, vmax=-10, shading="flat")
+    cb = colorbar(im, ax=ax, label=L"\log | \nabla \times (\tau_0 / H) |", extend="both")
     ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
     ax.set_yticks(-5000:2500:5000)
