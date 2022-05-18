@@ -2,7 +2,6 @@ function get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
     # indices
 	np = size(p, 1)
 	nt = size(t, 1)
-    imap = reshape(1:np, 1, np) 
 
     # functions
     H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
@@ -11,12 +10,12 @@ function get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
 	# create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]  
 	@showprogress "Building K..." for k=1:nt
-		# calculate K matrix element Kₑ
-        Kₑ = zeros(3, 3)
+		# calculate contribution to K from element k
+        Kᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
-                Kₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+                Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -27,7 +26,7 @@ function get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
                     # edge node, leave for E
                     continue
                 end
-                push!(K, (imap[t[k, i]], imap[t[k, j]], Kₑ[i, j]))
+                push!(K, (t[k, i], t[k, j], Kᵏ[i, j]))
 			end
 		end
 	end
@@ -42,7 +41,6 @@ function get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
     # indices
 	np = size(p, 1)
 	nt = size(t, 1)
-    imap = reshape(1:np, 1, np) 
 
     # functions
     H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
@@ -51,12 +49,12 @@ function get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
 	# create global linear system using stamping method
     K′ = Tuple{Int64,Int64,Float64}[]  
 	@showprogress "Building K′..." for k=1:nt
-		# calculate K′ matrix element Kₑ′
-        Kₑ′ = zeros(3, 3)
+		# calculate contribution to K′ from element k
+        K′ᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
-                Kₑ′[i, j] = gaussian_quad2(func, p[t[k, :], :])
+                K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -67,7 +65,7 @@ function get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
                     # edge node, leave for E
                     continue
                 end
-                push!(K′, (imap[t[k, i]], imap[t[k, j]], Kₑ′[i, j]))
+                push!(K′, (t[k, i], t[k, j], K′ᵏ[i, j]))
 			end
 		end
 	end
@@ -82,7 +80,6 @@ function get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
     # indices
 	np = size(p, 1)
 	nt = size(t, 1)
-    imap = reshape(1:np, 1, np) 
 
     # functions
     H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
@@ -94,13 +91,13 @@ function get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
 	# create global linear system using stamping method
     C = Tuple{Int64,Int64,Float64}[]  
 	@showprogress "Building C..." for k=1:nt
-		# calculate C matrix elements Cₑ
-        Cₑ = zeros(3, 3)
+		# calculate contribution to C from element k
+        Cᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
                 func(ξ, η) = (fy_func(ξ, η, k)/H_func(ξ, η, k) - f_func(ξ, η, k)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η]) - 
                              -f_func(ξ, η, k)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
-                Cₑ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+                Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
@@ -111,7 +108,7 @@ function get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
                     # edge node, leave for E
                     continue
                 end
-                push!(C, (imap[t[k, i]], imap[t[k, j]], Cₑ[i, j]))
+                push!(C, (t[k, i], t[k, j], Cᵏ[i, j]))
 			end
 		end
 	end
@@ -125,12 +122,12 @@ end
 function get_E(p, e)
     # indices
 	np = size(p, 1)
-    imap = reshape(1:np, 1, np) 
+	ne = size(e, 1)
 
     # dirichlet Ψ = 0 along edges
     E = Tuple{Int64,Int64,Float64}[]  
-    @showprogress "Building E..." for i=1:size(e, 1)
-        push!(E, (imap[e[i]], imap[e[i]], 1))
+    @showprogress "Building E..." for i=1:ne
+        push!(E, (e[i], e[i], 1))
     end
     
     # make CSC matrix
@@ -153,9 +150,6 @@ function get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
 end
 
 function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
-    # indices
-    imap = reshape(1:m.np, 1, m.np) 
-
     # functions
     JEBAR(ξ, η, k) = 0 # for now
     H_func(ξ, η, k) = evaluate(m.H, [ξ, η], m.p, m.t, m.C₀, k)
@@ -175,7 +169,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
                 continue
             end
             f(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*local_basis_func(m.C₀[k, :, i], [ξ, η])
-            barotropic_RHS[imap[m.t[k, i]]] += gaussian_quad2(f, m.p[m.t[k, :], :])
+            barotropic_RHS[m.t[k, i]] += gaussian_quad2(f, m.p[m.t[k, :], :])
         end
 	end
 
