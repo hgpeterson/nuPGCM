@@ -1,3 +1,86 @@
+function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1}, C₀::AbstractArray{<:Real,3})
+    # indices
+	np = size(p, 1)
+	nt = size(t, 1)
+	ne = size(e, 1)
+
+	# create global linear system using stamping method
+    M = Tuple{Int64,Int64,Float64}[]  
+	for k=1:nt
+		# calculate contribution to M from element k
+        Mᵏ = zeros(3, 3)
+        for i=1:3
+            for j=1:3
+                func(ξ, η) = local_basis_func(C₀[k, :, j], [ξ, η])*local_basis_func(C₀[k, :, i], [ξ, η])
+                Mᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+            end
+        end
+
+		# add to global system
+		for i=1:3
+			for j=1:3
+                if t[k, i] in e
+                    continue
+                else
+                    push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
+                end
+                push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
+			end
+		end
+	end
+    for i=1:ne
+        push!(M, (e[i], e[i], 1))
+    end
+
+    # make CSC matrix
+    M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)
+
+    return M
+end
+
+function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+    # indices
+	np = size(p, 1)
+	nt = size(t, 1)
+
+	# create global linear system using stamping method
+    Cξ = Tuple{Int64,Int64,Float64}[]  
+    Cη = Tuple{Int64,Int64,Float64}[]  
+	for k=1:nt
+		# calculate contribution to Cξ from element k
+        Cξᵏ = zeros(3, 3)
+        for i=1:3
+            for j=1:3
+                func(ξ, η) = C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+                Cξᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+            end
+        end
+
+		# calculate contribution to Cη from element k
+        Cηᵏ = zeros(3, 3)
+        for i=1:3
+            for j=1:3
+                func(ξ, η) = C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+                Cηᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+            end
+        end
+
+		# add to global system
+		for i=1:3
+			for j=1:3
+                push!(Cξ, (t[k, i], t[k, j], Cξᵏ[i, j]))
+                push!(Cη, (t[k, i], t[k, j], Cηᵏ[i, j]))
+			end
+		end
+	end
+
+    # make CSC matrix
+    Cξ = sparse((x->x[1]).(Cξ), (x->x[2]).(Cξ), (x->x[3]).(Cξ), np, np)
+    Cη = sparse((x->x[1]).(Cη), (x->x[2]).(Cη), (x->x[3]).(Cη), np, np)
+
+    return Cξ, Cη
+end
+
 # function evaluate(m::ModelSetup3DPG, u)
 #     return evaluate(u, m.p₀, m.p, m.t, m.C₀)
 # end

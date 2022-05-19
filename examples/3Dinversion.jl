@@ -10,13 +10,17 @@ function get_basin_geometry()
     # geo = "square"
     geo = "circle"
 
-    # refinement
-    # ref = 1
-    ref = 2
-    # ref = 3
+    # bathymetry type
+    # bath = "flat"
+    bath = "tub"
+
+    # resolution
+    # res = 1
+    # res = 2
+    res = 3
 
     # load horizontal mesh
-    p, t, e = load_mesh("../meshes/$(geo)$ref.h5")
+    p, t, e = load_mesh("../meshes/$(geo)$res.h5")
     np = size(p, 1)
 
     # widths of basin
@@ -30,31 +34,28 @@ function get_basin_geometry()
     η = p[:, 2]
 
     # depth H
-
-    # flat bottom
     H₀ = 4e3
-    H = H₀*ones(np)
-    Hx = zeros(np)
-    Hy = zeros(np)
-
-    # # square bathtub
-    # H₀ = 4e3
-    # Δ = Lx/5
-    # G(x) = 1 - exp(-x^2/(2*Δ^2))
-    # Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    # H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η)
-    # Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-    # Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
-
-    # # circular bathtub
-    # H₀ = 4e3
-    # R = Lx
-    # Δ = R/5
-    # G(x) = 1 - exp(-x^2/(2*Δ^2))
-    # Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    # H = @. H₀*G(sqrt(ξ^2 + η^2) - R)
-    # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*ξ/sqrt(ξ^2 + η^2)
-    # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - R)*η/sqrt(ξ^2 + η^2)
+    Δ = Lx/5 # width of gaussian for bathtub
+    G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
+    Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+    if bath == "flat"
+        # flat bottom
+        H = H₀*ones(np)
+        Hx = zeros(np)
+        Hy = zeros(np)
+    elseif bath == "tub"
+        if geo == "square"
+            # square bathtub
+            H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) 
+            Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
+            Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+        elseif geo == "circle"
+            # circular bathtub (radius = Lx)
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx)
+            Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
+            Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+        end
+    end
 
     return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
 end
@@ -68,9 +69,6 @@ function setup_model()
 
     # basin geo
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
-
-    # linear basis
-    C₀ = get_linear_basis_coeffs(p, t)
 
     # vertical coordinate
     nσ = 2^8
@@ -105,45 +103,45 @@ function setup_model()
 
     # plot H
     plot_horizontal(p, t, H; clabel=L"$H$ (m)")
-    savefig("H.png")
-    println("H.png")
+    savefig("images/H.png")
+    println("images/H.png")
     plt.close()
 
     # plot Hx
     plot_horizontal(p, t, Hx; clabel=L"$\partial_x H$ (-)")
-    savefig("Hx.png")
-    println("Hx.png")
+    savefig("images/Hx.png")
+    println("images/Hx.png")
     plt.close()
 
     # plot Hy
     plot_horizontal(p, t, Hy; clabel=L"$\partial_y H$ (-)")
-    savefig("Hy.png")
-    println("Hy.png")
+    savefig("images/Hy.png")
+    println("images/Hy.png")
     plt.close()
 
     # plot f/H
     f_over_H = @. f/(H+ eps())
     plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
-    savefig("f_over_H.png")
-    println("f_over_H.png")
+    savefig("images/f_over_H.png")
+    println("images/f_over_H.png")
     plt.close()
 
     # plot baroclinic components 
-    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)")
-    savefig("tau_xi_t.png")
-    println("tau_xi_t.png")
+    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; vext=1e0, clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
+    savefig("images/tau_xi_t.png")
+    println("images/tau_xi_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (s$^{-1}$)")
-    savefig("tau_eta_t.png")
-    println("tau_eta_t.png")
+    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (s$^{-1}$)", contours=false)
+    savefig("images/tau_eta_t.png")
+    println("images/tau_eta_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (s$^{-1}$)")
-    savefig("tau_xi_w.png")
-    println("tau_xi_w.png")
+    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (s$^{-1}$)", contours=false)
+    savefig("images/tau_xi_w.png")
+    println("images/tau_xi_w.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (s$^{-1}$)")
-    savefig("tau_eta_w.png")
-    println("tau_eta_w.png")
+    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (s$^{-1}$)", contours=false)
+    savefig("images/tau_eta_w.png")
+    println("images/tau_eta_w.png")
     plt.close()
 
     return m
@@ -197,7 +195,7 @@ function invert3D(m)
     τ_b = zeros(2, np, m.nσ)
 
     # bottom stress due buoyancy gradients
-    # τ_b_bot = τ_b[:, : 1]
+    # τ_b_bot = τ_b[:, :, 1]
     τ_b_bot = zeros(2, np)
 
     # full τ
@@ -238,8 +236,8 @@ function invert3D(m)
 
     # plot Ψ
     plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
-    savefig("psi.png")
-    println("psi.png")
+    savefig("images/psi.png")
+    println("images/psi.png")
     plt.close()
 
     # # plot wind stress
@@ -252,8 +250,8 @@ function invert3D(m)
     # ax.spines["left"].set_visible(false)
     # ax.set_xlim([-0.15, 0.15])
     # ax.set_xticks(-0.15:0.05:0.15)
-    # savefig("tau.png")
-    # println("tau.png")
+    # savefig("images/tau.png")
+    # println("images/tau.png")
     # plt.close()
 end
 
@@ -302,12 +300,13 @@ function plot_curl_τ_H()
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     ax.axis("equal")
-    savefig("curl_tau_H.png")
+    savefig("images/curl_tau_H.png")
+    println("images/curl_tau_H.png")
     plt.close()
 
     return curl
 end
 
-# m = setup_model()
-# invert3D(m)
-curl = plot_curl_τ_H()
+m = setup_model()
+invert3D(m)
+# curl = plot_curl_τ_H()

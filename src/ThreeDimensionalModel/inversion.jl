@@ -1,150 +1,72 @@
-function get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
+function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1},
+    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f::AbstractArray{<:Real,1}, fy::AbstractArray{<:Real,1},
+    H::AbstractArray{<:Real,1}, Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1},
+    τ_tξ::AbstractArray{<:Real,3})
     # indices
-	np = size(p, 1)
-	nt = size(t, 1)
+    np = size(p, 1)
+    nt = size(t, 1)
+    ne = size(e, 1)
 
     # functions
-    H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
+    H_func(ξ, η, k)         = evaluate(H,             [ξ, η], p, t, C₀, k)
+    Hx_func(ξ, η, k)        = evaluate(Hx,            [ξ, η], p, t, C₀, k)
+    Hy_func(ξ, η, k)        = evaluate(Hy,            [ξ, η], p, t, C₀, k)
     τξ_tξ_bot_func(ξ, η, k) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀, k)
+    τη_tξ_bot_func(ξ, η, k) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀, k)
+    f_func(ξ, η, k)         = evaluate(f,             [ξ, η], p, t, C₀, k)
+    fy_func(ξ, η, k)        = evaluate(fy,            [ξ, η], p, t, C₀, k)
 
-	# create global linear system using stamping method
-    K = Tuple{Int64,Int64,Float64}[]  
-	@showprogress "Building K..." for k=1:nt
-		# calculate contribution to K from element k
+    # create global linear system using stamping method
+    barotropic_LHS = Tuple{Int64,Int64,Float64}[]
+    @showprogress "Building barotropic_LHS..." for k = 1:nt
+        # calculate contribution to K from element k
         Kᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
+        for i = 1:3
+            for j = 1:3
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
-		# add to global system
-		for i=1:3
-			for j=1:3
-                if t[k, i] in e
-                    # edge node, leave for E
-                    continue
-                end
-                push!(K, (t[k, i], t[k, j], Kᵏ[i, j]))
-			end
-		end
-	end
-
-    # make CSC matrix
-    K = sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), np, np)
-
-    return K
-end
-
-function get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
-    # indices
-	np = size(p, 1)
-	nt = size(t, 1)
-
-    # functions
-    H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
-    τη_tξ_bot_func(ξ, η, k) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀, k)
-
-	# create global linear system using stamping method
-    K′ = Tuple{Int64,Int64,Float64}[]  
-	@showprogress "Building K′..." for k=1:nt
-		# calculate contribution to K′ from element k
+        # calculate contribution to K′ from element k
         K′ᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
+        for i = 1:3
+            for j = 1:3
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
-		# add to global system
-		for i=1:3
-			for j=1:3
-                if t[k, i] in e
-                    # edge node, leave for E
-                    continue
-                end
-                push!(K′, (t[k, i], t[k, j], K′ᵏ[i, j]))
-			end
-		end
-	end
-
-    # make CSC matrix
-    K′ = sparse((x->x[1]).(K′), (x->x[2]).(K′), (x->x[3]).(K′), np, np)
-
-    return K′
-end
-
-function get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
-    # indices
-	np = size(p, 1)
-	nt = size(t, 1)
-
-    # functions
-    H_func(ξ, η, k) = evaluate(H, [ξ, η], p, t, C₀, k)
-    Hx_func(ξ, η, k) = evaluate(Hx, [ξ, η], p, t, C₀, k)
-    Hy_func(ξ, η, k) = evaluate(Hy, [ξ, η], p, t, C₀, k)
-    f_func(ξ, η, k) = evaluate(f, [ξ, η], p, t, C₀, k)
-    fy_func(ξ, η, k) = evaluate(fy, [ξ, η], p, t, C₀, k)
-
-	# create global linear system using stamping method
-    C = Tuple{Int64,Int64,Float64}[]  
-	@showprogress "Building C..." for k=1:nt
-		# calculate contribution to C from element k
+        # calculate contribution to C from element k
         Cᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
-                func(ξ, η) = (fy_func(ξ, η, k)/H_func(ξ, η, k) - f_func(ξ, η, k)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η]) - 
-                             -f_func(ξ, η, k)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+        for i = 1:3
+            for j = 1:3
+                func(ξ, η) = (fy_func(ξ, η, k)/H_func(ξ, η, k) - f_func(ξ, η, k)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2) * C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η]) -
+                             -f_func(ξ, η, k)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2* C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
                 Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
-		# add to global system
-		for i=1:3
-			for j=1:3
+        # add to global system
+        for i = 1:3
+            for j = 1:3
                 if t[k, i] in e
                     # edge node, leave for E
                     continue
                 end
-                push!(C, (t[k, i], t[k, j], Cᵏ[i, j]))
-			end
-		end
-	end
-
-    # make CSC matrix
-    C = sparse((x->x[1]).(C), (x->x[2]).(C), (x->x[3]).(C), np, np)
-
-    return C
-end
-
-function get_E(p, e)
-    # indices
-	np = size(p, 1)
-	ne = size(e, 1)
-
-    # dirichlet Ψ = 0 along edges
-    E = Tuple{Int64,Int64,Float64}[]  
-    @showprogress "Building E..." for i=1:ne
-        push!(E, (e[i], e[i], 1))
+                push!(barotropic_LHS, (t[k, i], t[k, j], Kᵏ[i, j]))
+                push!(barotropic_LHS, (t[k, i], t[k, j], K′ᵏ[i, j]))
+                push!(barotropic_LHS, (t[k, i], t[k, j], Cᵏ[i, j]))
+            end
+        end
     end
-    
+    # dirichlet Ψ = 0 along edges
+    for i = 1:ne
+        push!(barotropic_LHS, (e[i], e[i], 1))
+    end
+
     # make CSC matrix
-    E = sparse((x->x[1]).(E), (x->x[2]).(E), (x->x[3]).(E), np, np)
-
-    return E
-end
-
-function get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
-    # build matrices
-    K = get_K(p, t, e, C₀, ρ₀, H, τ_tξ)
-    K′ = get_K′(p, t, e, C₀, ρ₀, H, τ_tξ)
-    C = get_C(p, t, e, C₀, f, fy, H, Hx, Hy)
-    E = get_E(p, e)
-
-    # full barotropic_LHS matrix
-    barotropic_LHS = K + K′ + C + E
+    barotropic_LHS = sparse((x -> x[1]).(barotropic_LHS), (x -> x[2]).(barotropic_LHS), (x -> x[3]).(barotropic_LHS), np, np)
 
     return lu(barotropic_LHS)
 end
@@ -161,7 +83,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
 
 	# create global linear system using stamping method
     barotropic_RHS = zeros(m.np)
-	@showprogress "Building F..." for k=1:m.nt
+	@showprogress "Building barotropic_RHS..." for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
             if m.t[k, i] in m.e
@@ -174,6 +96,24 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
 	end
 
     return barotropic_RHS
+end
+
+function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+    # indices
+	np = size(p, 1)
+	nt = size(t, 1)
+
+	# create global linear system using stamping method
+    m = zeros(np)
+	for k=1:nt
+		# add contribution to m from element k
+        for i=1:3
+            func(ξ, η) = local_basis_func(C₀[k, :, i], [ξ, η])
+            m[t[k, i]] += gaussian_quad2(func, p[t[k, :], :])
+        end
+	end
+
+    return m
 end
 
 function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
@@ -233,7 +173,8 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
     return lu(baroclinic_LHS)
 end
 
-function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray{<:Real,1}, vξ₀::Real, vη₀::Real, Uξφ::Real, Uηφ::Real)
+function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray{<:Real,1}, 
+                            vξ₀::Real, vη₀::Real, Uξφ::Real, Uηφ::Real)
     nσ = size(rhs_x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
@@ -260,53 +201,22 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function get_M(p, t, C₀)
-    # indices
-	np = size(p, 1)
-	nt = size(t, 1)
-
-	# create global linear system using stamping method
-    M = Tuple{Int64,Int64,Float64}[]  
-	for k=1:nt
-		# calculate contribution to M from element k
-        Mᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
-                func(ξ, η) = local_basis_func(C₀[k, :, j], [ξ, η])*local_basis_func(C₀[k, :, i], [ξ, η])
-                Mᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
-            end
-        end
-
-		# add to global system
-		for i=1:3
-			for j=1:3
-                push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
-			end
-		end
-	end
-
-    # make CSC matrix
-    M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)
-
-    return M
-end
-
-function get_τ(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
+function get_v(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    τ = zeros(2, np, nσ)
+    v = zeros(2, np, nσ)
     @inbounds for i=1:np
         if baroclinic_LHSs[i] === nothing
             continue
         else
             sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
-            τ[1, i, :] = sol[imap[1, :]]
-            τ[2, i, :] = sol[imap[2, :]]
+            v[1, i, :] = sol[imap[1, :]]
+            v[2, i, :] = sol[imap[2, :]]
         end
     end
-    return τ
+    return v
 end
 
 function get_u(τ, ρ₀, ν, H, σ)
