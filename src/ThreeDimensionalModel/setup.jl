@@ -111,7 +111,7 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
 
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{Any}(undef, np) 
-    @inbounds @showprogress "Computing baroclinic components..." for i=1:np 
+    @inbounds @showprogress "Computing baroclinic LHS matrices..." for i=1:np 
         if i in e
             baroclinic_LHSs[i] = nothing
         else
@@ -126,7 +126,7 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
         if i in e
             continue
         else
-            baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0)
+            baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0) #FIXME: needs to be in integrated sense now
             baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
         end
     end
