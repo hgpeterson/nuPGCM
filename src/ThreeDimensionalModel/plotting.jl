@@ -35,7 +35,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     return fig, ax, im
 end
 
-function plot_horizontal(p, t, u; vext=nothing, clabel="")
+function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true)
     if vext === nothing
         vext = maximum(abs.(u))
         extend = "neither"
@@ -45,9 +45,11 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="")
     p = p/1e3 # km
     fig, ax, im = tplot(p, t, u; vext=vext)
     cb = colorbar(im, ax=ax, label=clabel, extend=extend)
-    n = 6
-    levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
-    ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
+    if contours
+        n = 6
+        levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
+        ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
+    end
     ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
     ax.set_yticks(-5000:2500:5000)
