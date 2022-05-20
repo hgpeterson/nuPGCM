@@ -20,7 +20,7 @@ end
 
 Compute area of triangle defined by points `p`.
 """
-function tri_area(p::Array{Float64,2})
+function tri_area(p::AbstractArray{<:Real,2})
     p₁ = p[1, :]
     p₂ = p[2, :]
     p₃ = p[3, :]
@@ -36,14 +36,14 @@ at the nodes defined by 3×2 matrix `p`. C₀[:, i] are the iᵗʰ basis vector 
 
 If triangles `t` are provided, then C₀ stores coefficients for _all_ bases.
 """
-function get_linear_basis_coeffs(p::Matrix{Float64})
+function get_linear_basis_coeffs(p::AbstractArray{<:Real,2})
 	V = zeros(3, 3)
 	for i=1:3
 		V[i, :] = [1 p[i, 1] p[i, 2]]
 	end
 	return inv(V)
 end
-function get_linear_basis_coeffs(p::Matrix{Float64}, t::Matrix{Int64})
+function get_linear_basis_coeffs(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2})
     nt = size(t, 1)
     C₀ = zeros(nt, 3, 3)
     for k=1:nt
@@ -55,17 +55,17 @@ end
 """
     ϕ = local_basis_func(c, p₀)
 
-Evaluate local basis function defined by `c` = [c₁ c₂ c₃] at point `p₀` = [ξ η].
+Evaluate local basis function defined by coefficients matrix (or vector) `c` at point `p₀` = [ξ η].
 """
-function local_basis_func(c::Vector{Float64}, p₀::Vector{Float64})
+function local_basis_func(c::AbstractArray{<:Real}, p₀::AbstractArray{<:Real,1})
     return c'*[1, p₀[1], p₀[2]]
 end
 
 # https://stackoverflow.com/a/2049593
-function pt_sign(p₁::Vector{Float64}, p₂::Vector{Float64}, p₃::Vector{Float64})
+function pt_sign(p₁::AbstractArray{<:Real,1}, p₂::AbstractArray{<:Real,1}, p₃::AbstractArray{<:Real,1})
     return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 end
-function pt_in_tri(p₀::Vector{Float64}, v₁::Vector{Float64}, v₂::Vector{Float64}, v₃::Vector{Float64})
+function pt_in_tri(p₀::AbstractArray{<:Real,1}, v₁::AbstractArray{<:Real,1}, v₂::AbstractArray{<:Real,1}, v₃::AbstractArray{<:Real,1})
     d₁ = pt_sign(p₀, v₁, v₂)
     d₂ = pt_sign(p₀, v₂, v₃)
     d₃ = pt_sign(p₀, v₃, v₁)
@@ -100,9 +100,5 @@ function evaluate(u, p₀, p, t, C₀)
 end
 function evaluate(u, p₀, p, t, C₀, k₀)
     # sum weighted combinations of triangle k₀'s basis functions at p₀
-    u₀ = 0
-    @inbounds for i=1:3
-        u₀ += u[t[k₀, i]]*local_basis_func(C₀[k₀, :, i], p₀)
-    end
-    return u₀
+    return u[t[k₀, :]]'*local_basis_func(C₀[k₀, :, :], p₀)
 end

@@ -22,6 +22,9 @@ function get_basin_geometry()
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
     np = size(p, 1)
+    centroids = (m.p[m.t[:, 1], :] + m.p[m.t[:, 1], :] + m.p[m.t[:, 1], :])/3
+    radii = sqrt.(centroids[:, 1].^2 .+ centroids[:, 2].^2)
+    t = t[sortperm(radii), :]
 
     # widths of basin
     Lx = 5e6
