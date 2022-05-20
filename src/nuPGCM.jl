@@ -107,6 +107,8 @@ export
     # plotting
     tplot,
     plot_horizontal,
+    plot_ξ_slice,
+    plot_η_slice,
 
     # operators
     ∂ξ,

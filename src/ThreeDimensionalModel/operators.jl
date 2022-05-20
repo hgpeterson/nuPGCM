@@ -19,18 +19,18 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::Abs
 		# add to global system
 		for i=1:3
 			for j=1:3
-                if t[k, i] in e
-                    continue
-                else
-                    push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
-                end
+                # if t[k, i] in e
+                #     continue
+                # else
+                #     push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
+                # end
                 push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
 			end
 		end
 	end
-    for i=1:ne
-        push!(M, (e[i], e[i], 1))
-    end
+    # for i=1:ne
+    #     push!(M, (e[i], e[i], 1))
+    # end
 
     # make CSC matrix
     M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)

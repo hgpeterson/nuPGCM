@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    # res = 2
-    res = 3
+    res = 2
+    # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -46,12 +46,12 @@ function get_basin_geometry()
     elseif bath == "tub"
         if geo == "square"
             # square bathtub
-            H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) 
+            H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
             Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx)
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 100
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -90,8 +90,8 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 5e1*ones(np, nσ)
-    κ = 5e1*ones(np, nσ)
+    ν = 1e-1*ones(np, nσ)
+    κ = 1e-1*ones(np, nσ)
     # ν = 1e-3*ones(np, nσ)
     # κ = 1e-3*ones(np, nσ)
 
@@ -127,7 +127,8 @@ function setup_model()
     plt.close()
 
     # plot baroclinic components 
-    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; vext=1e0, clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
+    # plot_horizontal(p, t, m.τ_tξ[1, :, 1]; vext=1e0, clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
     savefig("images/tau_xi_t.png")
     println("images/tau_xi_t.png")
     plt.close()
@@ -153,32 +154,25 @@ function invert3D(m)
 
     # buoyancy field
     b = zeros(np, m.nσ)
+    for j=1:m.nσ
+        b[:, j] .= m.N²[:, j]*m.σ[j] - 0.1*m.N²[:, j]*exp((m.σ[j] + 1)/0.1)
+    end
+    plot_ξ_slice(m, b, (-Lx + 1e3):Lx/2^5:(Lx - 1e3), 0)
+    savefig("images/b_slice.png")
+    println("images/b_slice.png")
+    plt.close()
+    error()
 
-    # buoyancy gradients
-    ∂b∂x = zeros(np, m.nσ)
-    ∂b∂y = zeros(np, m.nσ)
-    # for i=1:nσ
-    #     println("i = $i / $nσ")
-    #     for j=1:np
-    #         ∂b∂x[:, i] .+= ∂ξ(b, p[j, :], p, t, C₀)
-    #         ∂b∂y[:, i] .+= ∂η(b, p[j, :], p, t, C₀)
-    #     end
-    # end
-    # for i=1:np
-    #     println("i = $i / $np")
-    #     ∂b∂x[i, :] .-= σ*Hx[i].*differentiate(b[i, :], σ)/H[i]
-    #     ∂b∂y[i, :] .-= σ*Hy[i].*differentiate(b[i, :], σ)/H[i]
-    # end
+    # derivative matrices
+    Cξ, Cη = nuPGCM.get_Cξ_Cη(p, t, m.C₀)
 
-    # JEBAR term
-    γ = zeros(np)
-
-    # wind stress
-    τ₀ = zeros(2, np)
-    τ₀[1, :] = @. -0.1*cos(π*η/Ly)
-
-    # bottom stress due to wind stress
-    τ_w_bot = m.τ_wξ[:, :, 1]
+    # integrals of buoyancy gradients on rhs
+    rhs_x = Cξ*b
+    rhs_y = Cη*b
+    for i=1:np
+        rhs_x[i, :] .-= m.σ*Hx[i].*differentiate(b[i, :], m.σ)/H[i] 
+        rhs_y[i, :] .-= m.σ*Hy[i].*differentiate(b[i, :], m.σ)/H[i]
+    end
 
     # # stress due to buoyancy gradients
     # baroclinic_RHSs_b = zeros(np, 2*nσ)
@@ -195,8 +189,21 @@ function invert3D(m)
     τ_b = zeros(2, np, m.nσ)
 
     # bottom stress due buoyancy gradients
-    # τ_b_bot = τ_b[:, :, 1]
-    τ_b_bot = zeros(2, np)
+    τ_b_bot = τ_b[:, :, 1]
+
+    # JEBAR term
+    γ = zeros(np)
+    for i=1:np
+        γ[i] = -H[i]^2*trapz(m.σ.*b[i, :], m.σ)
+    end
+
+    # wind stress
+    τ₀ = zeros(2, np)
+    τ₀[1, :] = @. -0.1*cos(π*η/Ly)
+
+    # bottom stress due to wind stress
+    τ_w_bot = m.τ_wξ[:, :, 1]
+
 
     # full τ
     τ = zeros(2, np)
@@ -307,6 +314,6 @@ function plot_curl_τ_H()
     return curl
 end
 
-m = setup_model()
+# m = setup_model()
 invert3D(m)
 # curl = plot_curl_τ_H()

@@ -112,12 +112,12 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{Any}(undef, np) 
     @inbounds @showprogress "Computing baroclinic_LHSs..." for i=1:np 
-        if i in e
-            baroclinic_LHSs[i] = nothing
-        else
-            baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
-        end
-        # baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
+        # if i in e
+        #     baroclinic_LHSs[i] = nothing
+        # else
+        #     baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
+        # end
+        baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
     end  
 
     # compute m = ∫ φᵢ 
@@ -127,17 +127,17 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
     M = get_M(p, t, e, C₀)
 
     # baroclinic RHSs for wind and transport terms
-    baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
+    baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     @inbounds for i=1:np
-        if i in e
-            continue
-        else
-            baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0, 0) 
-            baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, m[i], 0)
-        end
-        # baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0,    0, 0) 
-        # baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ),    0, 0, m[i], 0)
+        # if i in e
+        #     continue
+        # else
+        #     baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, m[i], 0)
+        #     baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0, 0) 
+        # end
+        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0,    0, 0) 
+        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ),    0, 0, m[i], 0)
     end
 
     # solve for v = M τ

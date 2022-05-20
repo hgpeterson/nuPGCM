@@ -73,13 +73,14 @@ end
 
 function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
     # functions
-    JEBAR(ξ, η, k) = 0 # for now
-    H_func(ξ, η, k) = evaluate(m.H, [ξ, η], m.p, m.t, m.C₀, k)
+    H_func(ξ, η, k)  = evaluate(m.H,     [ξ, η], m.p, m.t, m.C₀, k)
+    Hx_func(ξ, η, k) = evaluate(m.Hx,    [ξ, η], m.p, m.t, m.C₀, k)
+    Hy_func(ξ, η, k) = evaluate(m.Hy,    [ξ, η], m.p, m.t, m.C₀, k)
     τξ_func(ξ, η, k) = evaluate(τ[1, :], [ξ, η], m.p, m.t, m.C₀, k)
     τη_func(ξ, η, k) = evaluate(τ[2, :], [ξ, η], m.p, m.t, m.C₀, k)
-    # curl of stress ∂ξ(τη/H) - ∂η(τξ/H)
-    curl_τ(ξ, η, k) = ∂ξ(m, τ[2, :], [ξ, η], k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*∂ξ(m, m.H, [ξ, η], k) -
-                      (∂η(m, τ[1, :], [ξ, η], k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*∂η(m, m.H, [ξ, η], k))
+    JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, [ξ, η, k]) - Hy_func(ξ, η, k)*∂ξ(m, γ, [ξ, η, k]))
+    curl_τ(ξ, η, k)  = ∂ξ(m, τ[2, :], [ξ, η], k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                      (∂η(m, τ[1, :], [ξ, η], k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
 
 	# create global linear system using stamping method
     barotropic_RHS = zeros(m.np)
