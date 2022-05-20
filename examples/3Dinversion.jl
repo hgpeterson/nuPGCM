@@ -22,7 +22,7 @@ function get_basin_geometry()
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
     np = size(p, 1)
-    centroids = (m.p[m.t[:, 1], :] + m.p[m.t[:, 1], :] + m.p[m.t[:, 1], :])/3
+    centroids = (p[t[:, 1], :] + p[t[:, 1], :] + p[t[:, 1], :])/3
     radii = sqrt.(centroids[:, 1].^2 .+ centroids[:, 2].^2)
     t = t[sortperm(radii), :]
 
@@ -158,7 +158,7 @@ function invert3D(m)
     # buoyancy field
     b = zeros(np, m.nσ)
     for j=1:m.nσ
-        b[:, j] .= m.N²[:, j]*m.σ[j] - 0.1*m.N²[:, j]*exp((m.σ[j] + 1)/0.1)
+        b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     end
     plot_ξ_slice(m, b, (-Lx + 1e3):Lx/2^5:(Lx - 1e3), 0)
     savefig("images/b_slice.png")
@@ -263,6 +263,9 @@ function invert3D(m)
     # savefig("images/tau.png")
     # println("images/tau.png")
     # plt.close()
+
+    s = ModelState3DPG(b, Ψ, zeros(2, 2), zeros(2, 2), zeros(2, 2), [1])
+    return s
 end
 
 function plot_curl_τ_H()
@@ -318,5 +321,5 @@ function plot_curl_τ_H()
 end
 
 # m = setup_model()
-invert3D(m)
+s = invert3D(m)
 # curl = plot_curl_τ_H()
