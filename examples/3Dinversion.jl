@@ -17,7 +17,7 @@ function get_basin_geometry()
     # resolution
     # res = 1
     res = 2
-    # res = 3
+    res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -160,36 +160,48 @@ function invert3D(m)
     for j=1:m.nσ
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     end
-    plot_ξ_slice(m, b, (-Lx + 1e3):Lx/2^5:(Lx - 1e3), 0)
-    savefig("images/b_slice.png")
-    println("images/b_slice.png")
-    plt.close()
-    error()
+    # ax = plot_ξ_slice(m, b, (-Lx + 1e3):Lx/2^5:(Lx - 1e3), 0; clabel=L"Buoyancy $b$ (m s$^{-2}$)")
+    # ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    # ax.set_ylim([-4, 0])
+    # savefig("images/b_slice.png")
+    # println("images/b_slice.png")
+    # plt.close()
 
     # derivative matrices
     Cξ, Cη = nuPGCM.get_Cξ_Cη(p, t, m.C₀)
 
+    # mass matrix
+    M = nuPGCM.get_M(p, t, e, m.C₀)
+
     # integrals of buoyancy gradients on rhs
-    rhs_x = Cξ*b
-    rhs_y = Cη*b
+    bσ_x = zeros(np, m.nσ)
+    bσ_y = zeros(np, m.nσ)
     for i=1:np
-        rhs_x[i, :] .-= m.σ*Hx[i].*differentiate(b[i, :], m.σ)/H[i] 
-        rhs_y[i, :] .-= m.σ*Hy[i].*differentiate(b[i, :], m.σ)/H[i]
+        bσ_x[i, :] = -m.σ*Hx[i].*differentiate(b[i, :], m.σ)/H[i] 
+        bσ_y[i, :] = -m.σ*Hy[i].*differentiate(b[i, :], m.σ)/H[i]
+    end
+    rhs_x = Cξ*b + M*bσ_x
+    rhs_y = Cη*b + M*bσ_y
+    for i=1:np
+        rhs_x[i, :] .*= m.ν[i, :]/m.ρ₀/m.f[i]
+        rhs_y[i, :] .*= m.ν[i, :]/m.ρ₀/m.f[i]
     end
 
-    # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(np, 2*nσ)
-    # @inbounds for i=1:np
-    #     if i in e
-    #         continue
-    #     else
-    #         rhs_x = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂x[i, :]
-    #         rhs_y = @. m.ν[i, :]/m.ρ₀/m.f[i]*∂b∂y[i, :]
-    #         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x, rhs_y, 0, 0, 0, 0)
-    #     end
-    # end
-    # τ_b = get_τ(baroclinic_LHSs, baroclinic_RHSs_b)
+    # stress due to buoyancy gradients
+    baroclinic_RHSs_b = zeros(np, 2*m.nσ)
+    for i=1:np
+        # if i in e
+        #     continue
+        # else
+        #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+        # end
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+    end
+    v_b = get_v(m.baroclinic_LHSs, baroclinic_RHSs_b)
     τ_b = zeros(2, np, m.nσ)
+    τ_b[1, :, :] = M\v_b[1, :, :]
+    τ_b[2, :, :] = M\v_b[2, :, :]
+    # τ_b = zeros(2, np, m.nσ)
 
     # bottom stress due buoyancy gradients
     τ_b_bot = τ_b[:, :, 1]
@@ -202,11 +214,10 @@ function invert3D(m)
 
     # wind stress
     τ₀ = zeros(2, np)
-    τ₀[1, :] = @. -0.1*cos(π*η/Ly)
+    # τ₀[1, :] = @. -0.1*cos(π*η/Ly)
 
     # bottom stress due to wind stress
     τ_w_bot = m.τ_wξ[:, :, 1]
-
 
     # full τ
     τ = zeros(2, np)
@@ -320,6 +331,6 @@ function plot_curl_τ_H()
     return curl
 end
 
-# m = setup_model()
+m = setup_model()
 s = invert3D(m)
 # curl = plot_curl_τ_H()
