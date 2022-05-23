@@ -75,7 +75,7 @@ function plot_ξ_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, ξ_range::
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
-    plot_slice(m, ax, ξ_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
+    return plot_slice(m, ax, ξ_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
 end
 
 function plot_η_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, η_range::AbstractArray{<:Real,1}, ξ₀::Real; 
@@ -97,7 +97,7 @@ function plot_η_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, η_range::
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
-    plot_slice(m, ax, η_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
+    return plot_slice(m, ax, η_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
 end
 
 function plot_slice(m::ModelSetup3DPG, ax, x::AbstractArray{<:Real,1}, v_slice::AbstractArray{<:Real,2}, H_slice::AbstractArray{<:Real,1}; 
@@ -125,4 +125,10 @@ function plot_slice(m::ModelSetup3DPG, ax, x::AbstractArray{<:Real,1}, v_slice::
 
     # topo
     ax.fill_between(x/1e3, z[:, 1]/1e3, minimum(z)/1e3, color="k", alpha=0.3, lw=0.0)
+
+    # no spines
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+
+    return ax
 end
