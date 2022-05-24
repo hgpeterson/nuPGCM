@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    res = 2
-    # res = 3
+    # res = 2
+    res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -78,10 +78,11 @@ function setup_model()
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    # f₀ = 0
-    # β = 1e-11
-    f₀ = 1e-4
-    β = 2e-11
+    f₀ = 0
+    β = 1e-11
+    # f₀ = 1e-4
+    # β = 2e-11
+    # β = 0
     f = @. f₀ + β*η
     fy = β*ones(np)
 
@@ -205,20 +206,24 @@ function invert3D(m)
 
     # bottom stress due buoyancy gradients
     τ_b_bot = τ_b[:, :, 1]
-    plot_horizontal(p, t, τ_b_bot[1, :]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+    plot_horizontal(p, t, τ_b_bot[1, :]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
     savefig("images/tau_xi_b.png")
     println("images/tau_xi_b.png")
     plt.close()
-    plot_horizontal(p, t, τ_b_bot[2, :]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+    plot_horizontal(p, t, τ_b_bot[2, :]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
     savefig("images/tau_eta_b.png")
     println("images/tau_eta_b.png")
     plt.close()
 
-    # JEBAR term
+    # buoyancy integral for JEBAR term
     γ = zeros(np)
     for i=1:np
         γ[i] = -H[i]^2*trapz(m.σ.*b[i, :], m.σ)
     end
+    plot_horizontal(p, t, γ; clabel=L"Buoyancy integral $\gamma$ (m$^{3}$ s$^{-2}$)")
+    savefig("images/gamma.png")
+    println("images/gamma.png")
+    plt.close()
 
     # wind stress
     τ₀ = zeros(2, np)
