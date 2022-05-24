@@ -17,7 +17,7 @@ function get_basin_geometry()
     # resolution
     # res = 1
     res = 2
-    res = 3
+    # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -78,8 +78,10 @@ function setup_model()
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    f₀ = 0
-    β = 1e-11
+    # f₀ = 0
+    # β = 1e-11
+    f₀ = 1e-4
+    β = 2e-11
     f = @. f₀ + β*η
     fy = β*ones(np)
 
@@ -123,27 +125,26 @@ function setup_model()
     plt.close()
 
     # plot f/H
-    f_over_H = @. f/(H+ eps())
+    f_over_H = @. f/(H + eps())
     plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
     savefig("images/f_over_H.png")
     println("images/f_over_H.png")
     plt.close()
 
     # plot baroclinic components 
-    # plot_horizontal(p, t, m.τ_tξ[1, :, 1]; vext=1e0, clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
-    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
     savefig("images/tau_xi_t.png")
     println("images/tau_xi_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
     savefig("images/tau_eta_t.png")
     println("images/tau_eta_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
     savefig("images/tau_xi_w.png")
     println("images/tau_xi_w.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
     savefig("images/tau_eta_w.png")
     println("images/tau_eta_w.png")
     plt.close()
@@ -183,8 +184,8 @@ function invert3D(m)
     rhs_x = Cξ*b + M*bσ_x
     rhs_y = Cη*b + M*bσ_y
     for i=1:np
-        rhs_x[i, :] .*= m.ν[i, :]/m.ρ₀/m.f[i]
-        rhs_y[i, :] .*= m.ν[i, :]/m.ρ₀/m.f[i]
+        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/m.f[i]
+        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/m.f[i]
     end
 
     # stress due to buoyancy gradients
@@ -201,10 +202,17 @@ function invert3D(m)
     τ_b = zeros(2, np, m.nσ)
     τ_b[1, :, :] = M\v_b[1, :, :]
     τ_b[2, :, :] = M\v_b[2, :, :]
-    # τ_b = zeros(2, np, m.nσ)
 
     # bottom stress due buoyancy gradients
     τ_b_bot = τ_b[:, :, 1]
+    plot_horizontal(p, t, τ_b_bot[1, :]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+    savefig("images/tau_xi_b.png")
+    println("images/tau_xi_b.png")
+    plt.close()
+    plot_horizontal(p, t, τ_b_bot[2, :]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+    savefig("images/tau_eta_b.png")
+    println("images/tau_eta_b.png")
+    plt.close()
 
     # JEBAR term
     γ = zeros(np)
