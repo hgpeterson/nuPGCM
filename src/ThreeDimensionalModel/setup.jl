@@ -27,8 +27,9 @@ struct ModelSetup3DPG{FT,IT}
     # reference density (kg m⁻³)
     ρ₀::FT
 
-	# Coriolis parameter (s⁻¹)
-    f::AbstractArray{FT,1}
+	# Coriolis parameter f = f₀ + βη (s⁻¹)
+    f₀::FT
+    β::FT
 
     # basin widths (m)
     Lx::FT
@@ -95,7 +96,7 @@ end
 # Constructors for ModelSetup3DPG
 ################################################################################
 
-function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
+function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -117,7 +118,7 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
         # else
         #     baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
         # end
-        baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
+        baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
     end  
 
     # compute m = ∫ φᵢ 
@@ -153,11 +154,11 @@ function ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ
     τ_wξ[2, :, :] = M\v_wξ[2, :, :]
 
     # compute barotropic LHS matrix
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f, fy, H, Hx, Hy, τ_tξ)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τ_tξ)
 
     println("Setup complete!\n")
 
-    return ModelSetup3DPG(bl, ρ₀, f, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, 
+    return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
                           τ_tξ, τ_wξ)
 end

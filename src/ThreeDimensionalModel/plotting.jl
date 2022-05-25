@@ -56,17 +56,19 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true)
     ax.axis("equal")
 end
 
-function plot_ξ_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, ξ_range::AbstractArray{<:Real,1}, η₀::Real; 
-                      vext=nothing, clabel="", contours=true)
-    # compute v and H on ξ range
+function plot_ξ_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:Real,2},
+                      ξ_range::AbstractArray{<:Real,1}, η₀::Real; vext=nothing, clabel="", contours=true)
+    # compute v, b, and H on ξ range
     nξ = size(ξ_range, 1)
     v_slice = zeros(nξ, m.nσ)
+    b_slice = zeros(nξ, m.nσ)
     H_slice = zeros(nξ)
     @showprogress "Computing slices for plotting..." for i=1:nξ
         for j=1:m.nσ
-            v_slice[i, j] = evaluate(v[:, j], [ξ_range[i], η₀], m.p, m.t, m.C₀)
+            v_slice[i, j] = fem_evaluate(m, v[:, j],   ξ_range[i], η₀)
+            b_slice[i, j] = fem_evaluate(m, s.b[:, j], ξ_range[i], η₀)
         end
-        H_slice[i] = evaluate(m.H, [ξ_range[i], η₀], m.p, m.t, m.C₀)
+        H_slice[i] = fem_evaluate(m ,m.H, ξ_range[i], η₀)
     end
 
     # init figure
@@ -75,20 +77,22 @@ function plot_ξ_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, ξ_range::
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
-    return plot_slice(m, ax, ξ_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
+    return plot_slice(m, ax, ξ_range, v_slice, b_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
 end
 
-function plot_η_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, η_range::AbstractArray{<:Real,1}, ξ₀::Real; 
-                      vext=nothing, clabel="", contours=true)
-    # compute v and H on η range
+function plot_η_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:Real,2},
+                      η_range::AbstractArray{<:Real,1}, ξ₀::Real; vext=nothing, clabel="", contours=true)
+    # compute v, b, and H on η range
     nη = size(η_range, 1)
     v_slice = zeros(nη, m.nσ)
+    b_slice = zeros(nη, m.nσ)
     H_slice = zeros(nη)
     @showprogress "Computing slices for plotting..." for i=1:nη
         for j=1:m.nσ
-            v_slice[i, j] = evaluate(v[:, j], [ξ₀, η_range[i]], m.p, m.t, m.C₀)
+            v_slice[i, j] = fem_evaluate(m, v[:, j],   ξ₀, η_range[i])
+            b_slice[i, j] = fem_evaluate(m, s.b[:, j], ξ₀, η_range[i])
         end
-        H_slice[i] = evaluate(m.H, [ξ₀, η_range[i]], m.p, m.t, m.C₀)
+        H_slice[i] = fem_evaluate(m, m.H, ξ₀, η_range[i])
     end
 
     # init figure
@@ -97,11 +101,11 @@ function plot_η_slice(m::ModelSetup3DPG, v::AbstractArray{<:Real,2}, η_range::
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
-    return plot_slice(m, ax, η_range, v_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
+    return plot_slice(m, ax, η_range, v_slice, b_slice, H_slice; vext=vext, clabel=clabel, contours=contours)
 end
 
-function plot_slice(m::ModelSetup3DPG, ax, x::AbstractArray{<:Real,1}, v_slice::AbstractArray{<:Real,2}, H_slice::AbstractArray{<:Real,1}; 
-                      vext=nothing, clabel="", contours=true)
+function plot_slice(m::ModelSetup3DPG, ax, x::AbstractArray{<:Real,1}, v_slice::AbstractArray{<:Real,2}, b_slice::AbstractArray{<:Real,2},
+                    H_slice::AbstractArray{<:Real,1}; vext=nothing, clabel="", contours=true)
     # z coordinates along slice 
     nx = size(x, 1)
     z = repeat(m.σ', nx, 1).*repeat(H_slice, 1, m.nσ)
@@ -122,6 +126,14 @@ function plot_slice(m::ModelSetup3DPG, ax, x::AbstractArray{<:Real,1}, v_slice::
         ax.contour(xx/1e3, z/1e3, v_slice, levels=levels, colors="k", linestyles="-", linewidths=0.25)
     end
     cb = colorbar(img, ax=ax, label=clabel, extend=extend)
+
+    # isopycnal contours
+    n_levels = 20
+    i = argmax(m.H)
+    lower_level = -trapz(m.N²[i, :], m.H[i]*m.σ)
+    upper_level = lower_level/100
+    levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
+    ax.contour(xx/1e3, z/1e3, b_slice, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
 
     # topo
     ax.fill_between(x/1e3, z[:, 1]/1e3, minimum(z)/1e3, color="k", alpha=0.3, lw=0.0)

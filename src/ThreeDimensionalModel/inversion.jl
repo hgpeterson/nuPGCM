@@ -1,5 +1,5 @@
 function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1},
-    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f::AbstractArray{<:Real,1}, fy::AbstractArray{<:Real,1},
+    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f₀::Real, β::Real,
     H::AbstractArray{<:Real,1}, Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1},
     τ_tξ::AbstractArray{<:Real,3})
     # indices
@@ -8,13 +8,11 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     ne = size(e, 1)
 
     # functions
-    H_func(ξ, η, k)         = evaluate(H,             [ξ, η], p, t, C₀, k)
-    Hx_func(ξ, η, k)        = evaluate(Hx,            [ξ, η], p, t, C₀, k)
-    Hy_func(ξ, η, k)        = evaluate(Hy,            [ξ, η], p, t, C₀, k)
-    τξ_tξ_bot_func(ξ, η, k) = evaluate(τ_tξ[1, :, 1], [ξ, η], p, t, C₀, k)
-    τη_tξ_bot_func(ξ, η, k) = evaluate(τ_tξ[2, :, 1], [ξ, η], p, t, C₀, k)
-    f_func(ξ, η, k)         = evaluate(f,             [ξ, η], p, t, C₀, k)
-    fy_func(ξ, η, k)        = evaluate(fy,            [ξ, η], p, t, C₀, k)
+    H_func(ξ, η, k)         = fem_evaluate(H,             ξ, η, p, t, C₀, k)
+    Hx_func(ξ, η, k)        = fem_evaluate(Hx,            ξ, η, p, t, C₀, k)
+    Hy_func(ξ, η, k)        = fem_evaluate(Hy,            ξ, η, p, t, C₀, k)
+    τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τ_tξ[1, :, 1], ξ, η, p, t, C₀, k)
+    τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τ_tξ[2, :, 1], ξ, η, p, t, C₀, k)
 
     # create global linear system using stamping method
     barotropic_LHS = Tuple{Int64,Int64,Float64}[]
@@ -41,8 +39,8 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Cᵏ = zeros(3, 3)
         for i = 1:3
             for j = 1:3
-                func(ξ, η) = (fy_func(ξ, η, k)/H_func(ξ, η, k) - f_func(ξ, η, k)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2) * C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η]) -
-                             -f_func(ξ, η, k)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2* C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2) * C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η) -
+                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2* C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
                 Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -71,28 +69,29 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(m::ModelSetup3DPG, γ, τ)
+function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τ::AbstractArray{<:Real,2})
     # functions
-    H_func(ξ, η, k)  = evaluate(m.H,     [ξ, η], m.p, m.t, m.C₀, k)
-    Hx_func(ξ, η, k) = evaluate(m.Hx,    [ξ, η], m.p, m.t, m.C₀, k)
-    Hy_func(ξ, η, k) = evaluate(m.Hy,    [ξ, η], m.p, m.t, m.C₀, k)
-    τξ_func(ξ, η, k) = evaluate(τ[1, :], [ξ, η], m.p, m.t, m.C₀, k)
-    τη_func(ξ, η, k) = evaluate(τ[2, :], [ξ, η], m.p, m.t, m.C₀, k)
-    JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, [ξ, η], k) - Hy_func(ξ, η, k)*∂ξ(m, γ, [ξ, η], k))
-    curl_τ(ξ, η, k)  = ∂ξ(m, τ[2, :], [ξ, η], k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
-                      (∂η(m, τ[1, :], [ξ, η], k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
+    H_func(ξ, η, k)  = fem_evaluate(m, m.H,     ξ, η, k)
+    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx,    ξ, η, k)
+    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy,    ξ, η, k)
+    τξ_func(ξ, η, k) = fem_evaluate(m, τ[1, :], ξ, η, k)
+    τη_func(ξ, η, k) = fem_evaluate(m, τ[2, :], ξ, η, k)
+    JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
+    curl_τ(ξ, η, k)  = ∂ξ(m, τ[2, :], ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                      (∂η(m, τ[1, :], ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
 
 	# create global linear system using stamping method
-    barotropic_RHS = zeros(m.np)
-	@showprogress "Building barotropic_RHS..." for k=1:m.nt
+    barotropic_RHS = zeros(Float64, m.np)
+	# @showprogress "Building barotropic_RHS..." for k=1:m.nt
+	for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
             if m.t[k, i] in m.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            f(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*local_basis_func(m.C₀[k, :, i], [ξ, η])
-            barotropic_RHS[m.t[k, i]] += gaussian_quad2(f, m.p[m.t[k, :], :])
+            func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*local_basis_func(m.C₀[k, :, i], ξ, η)
+            barotropic_RHS[m.t[k, i]] += gaussian_quad2(func, m.p[m.t[k, :], :])
         end
 	end
 
@@ -109,7 +108,7 @@ function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 	for k=1:nt
 		# add contribution to m from element k
         for i=1:3
-            func(ξ, η) = local_basis_func(C₀[k, :, i], [ξ, η])
+            func(ξ, η) = local_basis_func(C₀[k, :, i], ξ, η)
             m[t[k, i]] += gaussian_quad2(func, p[t[k, :], :])
         end
 	end

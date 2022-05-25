@@ -11,7 +11,7 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::Abs
         Mᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = local_basis_func(C₀[k, :, j], [ξ, η])*local_basis_func(C₀[k, :, i], [ξ, η])
+                func(ξ, η) = local_basis_func(C₀[k, :, j], ξ, η)*local_basis_func(C₀[k, :, i], ξ, η)
                 Mᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -51,7 +51,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cξᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 2, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+                func(ξ, η) = C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η)
                 Cξᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -60,7 +60,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cηᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 3, j]*local_basis_func(C₀[k, :, i], [ξ, η])
+                func(ξ, η) = C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
                 Cηᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -81,28 +81,31 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
     return Cξ, Cη
 end
 
-# function evaluate(m::ModelSetup3DPG, u)
-#     return evaluate(u, m.p₀, m.p, m.t, m.C₀)
-# end
+function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real)
+    fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀)
+end
+function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, k::Integer)
+    fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀, k)
+end
 
-function ∂ᵢ(u::AbstractArray{<:Real,1}, p₀::AbstractArray{<:Real,1}, p::AbstractArray{<:Real,2}, 
+function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, 
             t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
     # find triangle p₀ is in
-    k = get_tri(p₀, p, t)
+    k = get_tri(ξ₀, η₀, p, t)
 
     # evaluate there
-    return ∂ᵢ(u, p₀, k, p, t, C₀; i)
+    return ∂ᵢ(u, ξ₀, η₀, k, p, t, C₀; i)
 end
-function ∂ᵢ(u::AbstractArray{<:Real,1}, p₀::AbstractArray{<:Real,1}, k::Integer, p::AbstractArray{<:Real,2}, 
+function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, k::Integer, p::AbstractArray{<:Real,2}, 
             t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
     # sum weighted combinations of c₂
     return dot(u[t[k, :]], C₀[k, i+1, :])
 end
-function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, p₀::AbstractArray{<:Real,1}; i::Integer)
-    return ∂ᵢ(u, p₀, m.p, m.t, m.C₀; i)
+function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real; i::Integer)
+    return ∂ᵢ(u, ξ₀, η₀, m.p, m.t, m.C₀; i)
 end
-function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, p₀::AbstractArray{<:Real,1}, k::Integer; i::Integer)
-    return ∂ᵢ(u, p₀, k, m.p, m.t, m.C₀; i)
+function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, k::Integer; i::Integer)
+    return ∂ᵢ(u, ξ₀, η₀, k, m.p, m.t, m.C₀; i)
 end
 
 function ∂ξ(args...)
@@ -112,13 +115,13 @@ function ∂η(args...)
     return ∂ᵢ(args...; i=2)
 end
 
-function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, p₀::AbstractArray{<:Real,1})
+function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, ξ₀::Real, η₀::Real)
     # find triangle p₀ is in
-    k = get_tri(p₀, m.p, m.t)
+    k = get_tri(ξ₀, η₀, m.p, m.t)
 
     # evaluate there
-    return curl(m, u, p₀, k)
+    return curl(m, u, ξ₀, η₀, k)
 end
-function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, p₀::AbstractArray{<:Real,1}, k::Integer)
-    return ∂ξ(m, u[2, :], p₀, k) - ∂η(m, u[1, :], p₀, k)
+function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, ξ₀::Real, η₀::Real, k::Integer)
+    return ∂ξ(m, u[2, :], ξ₀, η₀, k) - ∂η(m, u[1, :], ξ₀, η₀, k)
 end

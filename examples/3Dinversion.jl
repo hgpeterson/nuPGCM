@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    # res = 2
-    res = 3
+    res = 2
+    # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -78,13 +78,22 @@ function setup_model()
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    f₀ = 0
-    β = 1e-11
-    # f₀ = 1e-4
-    # β = 2e-11
+    # # ϕ = 0:
+    # f₀ = 0
+    # β = 2.3e-11
+    # # ϕ = π/6
+    # f₀ = 1.3e-4
+    # β = 2.0e-11
+    # # ϕ = π/4
+    # f₀ = 1.0e-4
+    # β = 1.6e-11
+    # # no β
     # β = 0
-    f = @. f₀ + β*η
-    fy = β*ones(np)
+    Ω = 2π/86400
+    a = 6.378e6
+    ϕ = 37 * π/180
+    f₀ = 2Ω*sin(ϕ)
+    β = 2Ω*cos(ϕ)/a
 
     # diffusivity and viscosity
     # κ0 = 6e-5
@@ -105,29 +114,29 @@ function setup_model()
     N² = 1e-6*ones(np, nσ)
 
     # model setup struct
-    m = ModelSetup3DPG(bl, ρ₀, f, fy, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
+    m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
 
     # plot H
-    plot_horizontal(p, t, H; clabel=L"$H$ (m)")
+    plot_horizontal(p, t, H; clabel=L"Depth $H$ (m)")
     savefig("images/H.png")
     println("images/H.png")
     plt.close()
 
     # plot Hx
-    plot_horizontal(p, t, Hx; clabel=L"$\partial_x H$ (-)")
+    plot_horizontal(p, t, Hx; clabel=L"Slope $\partial_x H$ (-)")
     savefig("images/Hx.png")
     println("images/Hx.png")
     plt.close()
 
     # plot Hy
-    plot_horizontal(p, t, Hy; clabel=L"$\partial_y H$ (-)")
+    plot_horizontal(p, t, Hy; clabel=L"Slope $\partial_y H$ (-)")
     savefig("images/Hy.png")
     println("images/Hy.png")
     plt.close()
 
     # plot f/H
-    f_over_H = @. f/(H + eps())
-    plot_horizontal(p, t, f_over_H; vext=1e-8, clabel=L"$f/H$ (s m$^{-1}$)")
+    f_over_H = @. (f₀ + β*η)/(H + eps())
+    plot_horizontal(p, t, f_over_H; vext=1e-7, clabel=L"$f/H$ (s m$^{-1}$)")
     savefig("images/f_over_H.png")
     println("images/f_over_H.png")
     plt.close()
@@ -162,7 +171,12 @@ function invert3D(m)
     for j=1:m.nσ
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     end
-    # ax = plot_ξ_slice(m, b, (-Lx + 1e3):Lx/2^5:(Lx - 1e3), 0; clabel=L"Buoyancy $b$ (m s$^{-2}$)")
+
+    # # plot b slice
+    # s = ModelState3DPG(b, zeros(1), zeros(1, 1), zeros(1, 1), zeros(1, 1), [1])
+    # ξ_slice = (-Lx + 1e3):Lx/2^8:(Lx - 1e3)
+    # η₀ = 0
+    # ax = plot_ξ_slice(m, s, b, ξ_slice, η₀; clabel=L"Buoyancy $b$ (m s$^{-2}$)", contours=false)
     # ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     # ax.set_ylim([-4, 0])
     # savefig("images/b_slice.png")
@@ -185,8 +199,8 @@ function invert3D(m)
     rhs_x = Cξ*b + M*bσ_x
     rhs_y = Cη*b + M*bσ_y
     for i=1:np
-        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/m.f[i]
-        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/m.f[i]
+        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
     end
 
     # stress due to buoyancy gradients
@@ -292,58 +306,58 @@ function invert3D(m)
     return s
 end
 
-function plot_curl_τ_H()
-    # basin geo
-    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
+# function plot_curl_τ_H()
+#     # basin geo
+#     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
-    # linear basis
-    C₀ = get_linear_basis_coeffs(p, t)
+#     # linear basis
+#     C₀ = get_linear_basis_coeffs(p, t)
 
-    # wind stress
-    τξ = @. -0.1*cos(π*η/Ly)
+#     # wind stress
+#     τξ = @. -0.1*cos(π*η/Ly)
 
-    # functions 
-    H_func(ξ, η, k)  = evaluate(H,  [ξ, η], p, t, C₀, k)
-    τξ_func(ξ, η, k) = evaluate(τξ, [ξ, η], p, t, C₀, k)
+#     # functions 
+#     H_func(ξ, η, k)  = evaluate(H,  [ξ, η], p, t, C₀, k)
+#     τξ_func(ξ, η, k) = evaluate(τξ, [ξ, η], p, t, C₀, k)
 
-    # curl
-    curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)/H_func(ξ, η, k) + τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*∂η(H, [ξ, η], k, p, t, C₀)
-    # curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)
-    # curl_τ(ξ, η, k) = ∂ξ(H, [ξ, η], k, p, t, C₀)
+#     # curl
+#     curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)/H_func(ξ, η, k) + τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*∂η(H, [ξ, η], k, p, t, C₀)
+#     # curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)
+#     # curl_τ(ξ, η, k) = ∂ξ(H, [ξ, η], k, p, t, C₀)
 
-    # evaluate at triangle centers
-    curl = zeros(size(t, 1))
-    for k=1:size(t, 1)
-        # triangle center
-        p₀ = sum(p[t[k, :], :], dims=1)/3
+#     # evaluate at triangle centers
+#     curl = zeros(size(t, 1))
+#     for k=1:size(t, 1)
+#         # triangle center
+#         p₀ = sum(p[t[k, :], :], dims=1)/3
 
-        # curl
-        c = curl_τ(p₀[1], p₀[2], k)
-        if isnan(c)
-            curl[k] = Inf
-        else
-            curl[k] = c
-        end
-    end
+#         # curl
+#         c = curl_τ(p₀[1], p₀[2], k)
+#         if isnan(c)
+#             curl[k] = Inf
+#         else
+#             curl[k] = c
+#         end
+#     end
 
-    # plot
-    fig, ax, im = tplot(p/1e3, t, ; vext=30)
-    fig, ax = subplots()
-    im = ax.tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, log.(abs.(curl)), vmin=-30, vmax=-10, shading="flat")
-    cb = colorbar(im, ax=ax, label=L"\log | \nabla \times (\tau_0 / H) |", extend="both")
-    ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
-    ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
-    ax.set_yticks(-5000:2500:5000)
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    ax.axis("equal")
-    savefig("images/curl_tau_H.png")
-    println("images/curl_tau_H.png")
-    plt.close()
+#     # plot
+#     fig, ax, im = tplot(p/1e3, t, ; vext=30)
+#     fig, ax = subplots()
+#     im = ax.tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, log.(abs.(curl)), vmin=-30, vmax=-10, shading="flat")
+#     cb = colorbar(im, ax=ax, label=L"\log | \nabla \times (\tau_0 / H) |", extend="both")
+#     ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
+#     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
+#     ax.set_yticks(-5000:2500:5000)
+#     ax.spines["left"].set_visible(false)
+#     ax.spines["bottom"].set_visible(false)
+#     ax.axis("equal")
+#     savefig("images/curl_tau_H.png")
+#     println("images/curl_tau_H.png")
+#     plt.close()
 
-    return curl
-end
+#     return curl
+# end
 
 m = setup_model()
-s = invert3D(m)
+# s = invert3D(m)
 # curl = plot_curl_τ_H()
