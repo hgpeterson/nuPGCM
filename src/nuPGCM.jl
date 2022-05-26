@@ -101,8 +101,8 @@ export
     get_barotropic_RHS,
     get_baroclinic_LHS,
     get_baroclinic_RHS,
-    get_v,
-    get_u,
+    get_vξ_vη,
+    get_uξ_uη,
 
     # plotting
     tplot,

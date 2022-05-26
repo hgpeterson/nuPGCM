@@ -1,18 +1,18 @@
 function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1},
     C₀::AbstractArray{<:Real,3}, ρ₀::Real, f₀::Real, β::Real,
     H::AbstractArray{<:Real,1}, Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1},
-    τ_tξ::AbstractArray{<:Real,3})
+    τξ_tξ_bot::AbstractArray{<:Real,1}, τη_tξ_bot::AbstractArray{<:Real,1})
     # indices
     np = size(p, 1)
     nt = size(t, 1)
     ne = size(e, 1)
 
     # functions
-    H_func(ξ, η, k)         = fem_evaluate(H,             ξ, η, p, t, C₀, k)
-    Hx_func(ξ, η, k)        = fem_evaluate(Hx,            ξ, η, p, t, C₀, k)
-    Hy_func(ξ, η, k)        = fem_evaluate(Hy,            ξ, η, p, t, C₀, k)
-    τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τ_tξ[1, :, 1], ξ, η, p, t, C₀, k)
-    τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τ_tξ[2, :, 1], ξ, η, p, t, C₀, k)
+    H_func(ξ, η, k)         = fem_evaluate(H,         ξ, η, p, t, C₀, k)
+    Hx_func(ξ, η, k)        = fem_evaluate(Hx,        ξ, η, p, t, C₀, k)
+    Hy_func(ξ, η, k)        = fem_evaluate(Hy,        ξ, η, p, t, C₀, k)
+    τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τξ_tξ_bot, ξ, η, p, t, C₀, k)
+    τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τη_tξ_bot, ξ, η, p, t, C₀, k)
 
     # create global linear system using stamping method
     barotropic_LHS = Tuple{Int64,Int64,Float64}[]
@@ -69,21 +69,22 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τ::AbstractArray{<:Real,2})
+function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ::AbstractArray{<:Real,1},
+                            τη::AbstractArray{<:Real,1})
     # functions
-    H_func(ξ, η, k)  = fem_evaluate(m, m.H,     ξ, η, k)
-    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx,    ξ, η, k)
-    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy,    ξ, η, k)
-    τξ_func(ξ, η, k) = fem_evaluate(m, τ[1, :], ξ, η, k)
-    τη_func(ξ, η, k) = fem_evaluate(m, τ[2, :], ξ, η, k)
+    H_func(ξ, η, k)  = fem_evaluate(m, m.H,  ξ, η, k)
+    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
+    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
+    τξ_func(ξ, η, k) = fem_evaluate(m, τξ,   ξ, η, k)
+    τη_func(ξ, η, k) = fem_evaluate(m, τη,   ξ, η, k)
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
-    curl_τ(ξ, η, k)  = ∂ξ(m, τ[2, :], ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
-                      (∂η(m, τ[1, :], ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
+    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
 
 	# create global linear system using stamping method
     barotropic_RHS = zeros(Float64, m.np)
-	# @showprogress "Building barotropic_RHS..." for k=1:m.nt
-	for k=1:m.nt
+	@showprogress "Building barotropic_RHS..." for k=1:m.nt
+	# for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
         for i=1:3
             if m.t[k, i] in m.e
@@ -201,30 +202,34 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function get_v(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
+function get_vξ_vη(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    v = zeros(2, np, nσ)
+    vξ = zeros(np, nσ)
+    vη = zeros(np, nσ)
     @inbounds for i=1:np
         if baroclinic_LHSs[i] === nothing
             continue
         else
             sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
-            v[1, i, :] = sol[imap[1, :]]
-            v[2, i, :] = sol[imap[2, :]]
+            vξ[i, :] = sol[imap[1, :]]
+            vη[i, :] = sol[imap[2, :]]
         end
     end
-    return v
+    return vξ, vη
 end
 
-function get_u(τ, ρ₀, ν, H, σ)
-    u = zeros(size(τ))
-    u[1, :, :] = cumtrapz(H/ρ₀./ν.*τ[1, :, :], σ)
-    u[2, :, :] = cumtrapz(H/ρ₀./ν.*τ[2, :, :], σ)
-    return u
+function get_uξ_uη(τξ, τη, ρ₀, ν, H, σ)
+    uξ = zeros(size(τξ))
+    uη = zeros(size(τξ))
+    for i=1:size(uξ, 1)
+        uξ[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τξ[i, :], σ)
+        uη[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τη[i, :], σ)
+    end
+    return uξ, uη
 end
-function get_u(m, τ)
-   get_u(τ, m.ρ₀, m.ν, m.H, m.σ) 
+function get_uξ_uη(m, τξ, τη)
+   get_uξ_uη(τξ, τη, m.ρ₀, m.ν, m.H, m.σ) 
 end

@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    res = 2
-    # res = 3
+    # res = 2
+    res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -136,25 +136,25 @@ function setup_model()
 
     # plot f/H
     f_over_H = @. (f₀ + β*η)/(H + eps())
-    plot_horizontal(p, t, f_over_H; vext=1e-7, clabel=L"$f/H$ (s m$^{-1}$)")
+    plot_horizontal(p, t, f_over_H; vext=1e-7, clabel=L"$f/H$ (s$^{-1}$ m$^{-1}$)")
     savefig("images/f_over_H.png")
     println("images/f_over_H.png")
     plt.close()
 
     # plot baroclinic components 
-    plot_horizontal(p, t, m.τ_tξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
     savefig("images/tau_xi_t.png")
     println("images/tau_xi_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_tξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+    plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
     savefig("images/tau_eta_t.png")
     println("images/tau_eta_t.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[1, :, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
+    plot_horizontal(p, t, m.τξ_wξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
     savefig("images/tau_xi_w.png")
     println("images/tau_xi_w.png")
     plt.close()
-    plot_horizontal(p, t, m.τ_wξ[2, :, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
+    plot_horizontal(p, t, m.τη_wξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
     savefig("images/tau_eta_w.png")
     println("images/tau_eta_w.png")
     plt.close()
@@ -213,18 +213,18 @@ function invert3D(m)
         # end
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
-    v_b = get_v(m.baroclinic_LHSs, baroclinic_RHSs_b)
-    τ_b = zeros(2, np, m.nσ)
-    τ_b[1, :, :] = M\v_b[1, :, :]
-    τ_b[2, :, :] = M\v_b[2, :, :]
+    vξ_b, vη_b = get_vξ_vη(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    τξ_b = M\vξ_b
+    τη_b = M\vη_b
 
     # bottom stress due buoyancy gradients
-    τ_b_bot = τ_b[:, :, 1]
-    plot_horizontal(p, t, τ_b_bot[1, :]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
+    τξ_b_bot = τξ_b[:, 1]
+    τη_b_bot = τη_b[:, 1]
+    plot_horizontal(p, t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
     savefig("images/tau_xi_b.png")
     println("images/tau_xi_b.png")
     plt.close()
-    plot_horizontal(p, t, τ_b_bot[2, :]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
+    plot_horizontal(p, t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
     savefig("images/tau_eta_b.png")
     println("images/tau_eta_b.png")
     plt.close()
@@ -240,23 +240,20 @@ function invert3D(m)
     plt.close()
 
     # wind stress
-    τ₀ = zeros(2, np)
-    # τ₀[1, :] = @. -0.1*cos(π*η/Ly)
+    τξ₀ = zeros(np)
+    τη₀ = zeros(np)
+    # τη₀ = @. -0.1*cos(π*η/Ly)
 
     # bottom stress due to wind stress
-    τ_w_bot = m.τ_wξ[:, :, 1]
+    τξ_w_bot = m.τξ_wξ[:, 1]
+    τη_w_bot = m.τη_wξ[:, 1]
 
     # full τ
-    τ = zeros(2, np)
-    τ[1, :] = @. τ₀[1, :] - 
-                (τ₀[1, :]*τ_w_bot[1, :] + τ₀[2, :]*τ_w_bot[1, :]) -
-                τ_b_bot[1, :]
-    τ[2, :] = @. τ₀[2, :] - 
-                (τ₀[1, :]*τ_w_bot[2, :] - τ₀[2, :]*τ_w_bot[2, :]) -
-                τ_b_bot[2, :]
+    τξ = @. τξ₀ - (τξ₀*τξ_w_bot + τη₀*τξ_w_bot) - τξ_b_bot
+    τη = @. τη₀ - (τξ₀*τη_w_bot - τη₀*τη_w_bot) - τη_b_bot
 
     # get barotropic_RHS
-    barotropic_RHS = get_barotropic_RHS(m, γ, τ)
+    barotropic_RHS = get_barotropic_RHS(m, γ, τξ, τη)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
@@ -358,6 +355,6 @@ end
 #     return curl
 # end
 
-m = setup_model()
-# s = invert3D(m)
+# m = setup_model()
+s = invert3D(m)
 # curl = plot_curl_τ_H()

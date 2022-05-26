@@ -48,13 +48,16 @@ struct ModelSetup3DPG{FT,IT}
 	nσ::IT
 
     # mesh points
-    p::AbstractArray{FT,2}
+    # p::AbstractArray{FT,2}
+    p::Array{FT,2}
 
     # mesh triangles
-    t::AbstractArray{IT,2}
+    # t::AbstractArray{IT,2}
+    t::Array{IT,2}
 
-    # mesh outter edges
-    e::AbstractArray{IT,1}
+    # mesh outer edges
+    # e::AbstractArray{IT,1}
+    e::Array{IT,1}
 
     # shape function coefficients
     C₀::AbstractArray{FT,3}
@@ -86,10 +89,12 @@ struct ModelSetup3DPG{FT,IT}
     barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
 
     # transport stress
-    τ_tξ::AbstractArray{FT,3}
+    τξ_tξ::AbstractArray{FT,2}
+    τη_tξ::AbstractArray{FT,2}
 
     # wind stress
-    τ_wξ::AbstractArray{FT,3}
+    τξ_wξ::AbstractArray{FT,2}
+    τη_wξ::AbstractArray{FT,2}
 end
 
 ################################################################################
@@ -142,23 +147,21 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     end
 
     # solve for v = M τ
-    v_tξ = get_v(baroclinic_LHSs, baroclinic_RHSs_tξ)
-    v_wξ = get_v(baroclinic_LHSs, baroclinic_RHSs_wξ)
+    vξ_tξ, vη_tξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_tξ)
+    vξ_wξ, vη_wξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # invert for τ
-    τ_tξ = zeros(2, np, nσ)
-    τ_tξ[1, :, :] = M\v_tξ[1, :, :]
-    τ_tξ[2, :, :] = M\v_tξ[2, :, :]
-    τ_wξ = zeros(2, np, nσ)
-    τ_wξ[1, :, :] = M\v_wξ[1, :, :]
-    τ_wξ[2, :, :] = M\v_wξ[2, :, :]
+    τξ_tξ = M\vξ_tξ
+    τη_tξ = M\vη_tξ
+    τξ_wξ = M\vξ_wξ
+    τη_wξ = M\vη_wξ
 
     # compute barotropic LHS matrix
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τ_tξ)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τξ_tξ[:, 1], τη_tξ[:, 1])
 
     println("Setup complete!\n")
 
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
-                          τ_tξ, τ_wξ)
+                          τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
 end
