@@ -88,6 +88,14 @@ struct ModelSetup3DPG{FT,IT}
     # barotropic LHS matrix
     barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
 
+    # mass matrix and its LU decomposition
+    M::SparseArrays.SparseMatrixCSC{FT, IT}
+    M_LU::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
+
+    # derivative matrices
+    Cξ::SparseArrays.SparseMatrixCSC{FT, IT}
+    Cη::SparseArrays.SparseMatrixCSC{FT, IT}
+
     # transport stress
     τξ_tξ::AbstractArray{FT,2}
     τη_tξ::AbstractArray{FT,2}
@@ -131,6 +139,10 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
 
     # compute M = ∫ φᵢ φⱼ
     M = get_M(p, t, e, C₀)
+    M_LU = lu(M)
+
+    # compute Cξ = ∫ φᵢ ∂ξ(φⱼ), Cη = ∫ φᵢ ∂η(φⱼ)
+    Cξ, Cη = get_Cξ_Cη(p, t, C₀)
 
     # baroclinic RHSs for wind and transport terms
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
@@ -151,10 +163,10 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     vξ_wξ, vη_wξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # invert for τ
-    τξ_tξ = M\vξ_tξ
-    τη_tξ = M\vη_tξ
-    τξ_wξ = M\vξ_wξ
-    τη_wξ = M\vη_wξ
+    τξ_tξ = M_LU\vξ_tξ
+    τη_tξ = M_LU\vη_tξ
+    τξ_wξ = M_LU\vξ_wξ
+    τη_wξ = M_LU\vη_wξ
 
     # compute barotropic LHS matrix
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τξ_tξ[:, 1], τη_tξ[:, 1])
@@ -163,5 +175,5 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
 
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
-                          τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
+                          M, M_LU, Cξ, Cη, τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
 end

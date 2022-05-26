@@ -53,8 +53,14 @@ end
 
 Evaluate local basis function defined by coefficients matrix (or vector) `c` at point (ξ₀, η₀).
 """
-function local_basis_func(c::AbstractArray{<:Real}, ξ₀::Real, η₀::Real)
-    return c'*[1, ξ₀, η₀]
+function local_basis_func(c::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real)
+    return c[1] + c[2]*ξ₀ + c[3]*η₀
+end
+function local_basis_func(c::AbstractArray{<:Real,2}, ξ₀::Real, η₀::Real)
+    # return c'*[1, ξ₀, η₀]
+    return [c[1, 1] + c[2, 1]*ξ₀ + c[3, 1]*η₀,
+            c[1, 2] + c[2, 2]*ξ₀ + c[3, 2]*η₀,
+            c[1, 3] + c[2, 3]*ξ₀ + c[3, 3]*η₀]
 end
 
 # https://stackoverflow.com/a/2049593

@@ -82,7 +82,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                       (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
 
 	# create global linear system using stamping method
-    barotropic_RHS = zeros(Float64, m.np)
+    barotropic_RHS = zeros(m.np)
 	@showprogress "Building barotropic_RHS..." for k=1:m.nt
 	# for k=1:m.nt
 		# calculate barotropic_RHS vector element and add it to the global system
@@ -209,7 +209,7 @@ function get_vξ_vη(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::Abs
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     vξ = zeros(np, nσ)
     vη = zeros(np, nσ)
-    @inbounds for i=1:np
+    @showprogress "Calculating vξ and vη..." for i=1:np
         if baroclinic_LHSs[i] === nothing
             continue
         else

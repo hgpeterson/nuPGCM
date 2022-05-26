@@ -183,12 +183,6 @@ function invert3D(m)
     # println("images/b_slice.png")
     # plt.close()
 
-    # derivative matrices
-    Cξ, Cη = nuPGCM.get_Cξ_Cη(p, t, m.C₀)
-
-    # mass matrix
-    M = nuPGCM.get_M(p, t, e, m.C₀)
-
     # integrals of buoyancy gradients on rhs
     bσ_x = zeros(np, m.nσ)
     bσ_y = zeros(np, m.nσ)
@@ -196,8 +190,8 @@ function invert3D(m)
         bσ_x[i, :] = -m.σ*Hx[i].*differentiate(b[i, :], m.σ)/H[i] 
         bσ_y[i, :] = -m.σ*Hy[i].*differentiate(b[i, :], m.σ)/H[i]
     end
-    rhs_x = Cξ*b + M*bσ_x
-    rhs_y = Cη*b + M*bσ_y
+    rhs_x = m.Cξ*b + m.M*bσ_x
+    rhs_y = m.Cη*b + m.M*bσ_y
     for i=1:np
         rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
         rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
@@ -214,8 +208,8 @@ function invert3D(m)
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
     vξ_b, vη_b = get_vξ_vη(m.baroclinic_LHSs, baroclinic_RHSs_b)
-    τξ_b = M\vξ_b
-    τη_b = M\vη_b
+    τξ_b = m.M_LU\vξ_b
+    τη_b = m.M_LU\vη_b
 
     # bottom stress due buoyancy gradients
     τξ_b_bot = τξ_b[:, 1]
@@ -355,6 +349,6 @@ end
 #     return curl
 # end
 
-# m = setup_model()
+m = setup_model()
 s = invert3D(m)
 # curl = plot_curl_τ_H()
