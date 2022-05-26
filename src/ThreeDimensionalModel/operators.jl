@@ -82,10 +82,10 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
 end
 
 function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real)
-    fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀)
+    return fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀)
 end
 function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, k::Integer)
-    fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀, k)
+    return fem_evaluate(v, ξ₀, η₀, m.p, m.t, m.C₀, k)
 end
 
 function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, 
