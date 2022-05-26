@@ -28,17 +28,9 @@ Compute ∫ f(x) dx on [a, b] using second order gaussian quadrature.
 function gaussian_quad2(f::Function, a::Real, b::Real)
     # integration points 
     x = @. (b - a)/2*[-1/sqrt(3), 1/sqrt(3)] + (a + b)/2
-    
-    # weights are constant
-    w = [1, 1]
 
-    # return sum
-    integral = 0
-    for i=1:2
-        integral += w[i]*f(x[i])
-    end
-
-    return (b - a)/2*integral
+    # weights are both 1
+    return (b - a)/2*(f(x[1]) + f(x[2]))
 end
 
 """
@@ -47,21 +39,13 @@ end
 Compute ∫ f(x, y) dA over a triangle defined by the points `p` using second 
 order gaussian quadrature.
 """
-function gaussian_quad2(f::Function, p::AbstractArray{<:Real,2})
+function gaussian_quad2(f::Function, p::Array{<:Real,2})
     # area of triangle
     area = tri_area(p)
 
     # integration points (rows: point number, columns: x, y)
-	x = 1/6*sum(p, dims=1) .+ 1/2*I*p
-    
-    # weights are constant
-    w = [1/3, 1/3, 1/3]
+	x = p/2 .+ 1/6*sum(p, dims=1)
 
-    # return sum
-    integral = 0.
-    for i=1:3
-        integral += w[i]*f(x[i, 1], x[i, 2])
-    end
-
-    return area*integral
+    # weights are all 1/3
+    return area/3 * (f(x[1, 1], x[1, 2]) + f(x[2, 1], x[2, 2]) + f(x[3, 1], x[3, 2]))
 end

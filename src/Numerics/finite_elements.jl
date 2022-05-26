@@ -21,11 +21,7 @@ end
 Compute area of triangle defined by points `p`.
 """
 function tri_area(p::AbstractArray{<:Real,2})
-    p₁ = p[1, :]
-    p₂ = p[2, :]
-    p₃ = p[3, :]
-	area = 1/2*abs(p₁[1]*(p₂[2] - p₃[2]) + p₂[1]*(p₃[2] - p₁[2]) + p₃[1]*(p₁[2] - p₂[2]))
-    return area
+	return 1/2*abs(p[1, 1]*(p[2, 2] - p[3, 2]) + p[2, 1]*(p[3, 2] - p[1, 2]) + p[3, 1]*(p[1, 2] - p[2, 2]))
 end
 
 """
