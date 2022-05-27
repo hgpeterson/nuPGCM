@@ -19,7 +19,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     @showprogress "Building barotropic_LHS..." for k = 1:nt
         # calculate contribution to K from element k
         Kᵏ = zeros(3, 3)
-        for i = 1:3
+        for i=1:3
             for j = 1:3
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
@@ -28,7 +28,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
 
         # calculate contribution to K′ from element k
         K′ᵏ = zeros(3, 3)
-        for i = 1:3
+        for i=1:3
             for j = 1:3
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
@@ -37,7 +37,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
 
         # calculate contribution to C from element k
         Cᵏ = zeros(3, 3)
-        for i = 1:3
+        for i=1:3
             for j = 1:3
                 func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2) * C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η) -
                              -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2* C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
@@ -46,7 +46,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         end
 
         # add to global system
-        for i = 1:3
+        for i=1:3
             for j = 1:3
                 if t[k, i] in e
                     # edge node, leave for E
@@ -59,7 +59,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         end
     end
     # dirichlet Ψ = 0 along edges
-    for i = 1:ne
+    for i=1:ne
         push!(barotropic_LHS, (e[i], e[i], 1))
     end
 
@@ -202,7 +202,7 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function get_vξ_vη(baroclinic_LHSs::AbstractArray{Any,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
+function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
