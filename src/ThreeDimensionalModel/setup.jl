@@ -83,7 +83,7 @@ struct ModelSetup3DPG{FT,IT}
 	Δt::FT
 
     # baroclinic LHS matrices
-    baroclinic_LHSs::AbstractArray{Any}
+    baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU}
 
     # barotropic LHS matrix
     barotropic_LHS::SuiteSparse.UMFPACK.UmfpackLU{FT,IT}
@@ -124,8 +124,8 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     C₀ = get_linear_basis_coeffs(p, t)
 
     # baroclinic LHS matrices
-    baroclinic_LHSs = Array{Any}(undef, np) 
-    @inbounds @showprogress "Computing baroclinic_LHSs..." for i=1:np 
+    baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 
+    @showprogress "Computing baroclinic_LHSs..." for i=1:np 
         # if i in e
         #     baroclinic_LHSs[i] = nothing
         # else
@@ -147,15 +147,15 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     # baroclinic RHSs for wind and transport terms
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
-    @inbounds for i=1:np
+    for i=1:np
         # if i in e
         #     continue
         # else
         #     baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, m[i], 0)
         #     baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0, 0) 
         # end
-        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0,    0, 0) 
         baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ),    0, 0, m[i], 0)
+        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0,    0, 0) 
     end
 
     # solve for v = M τ
