@@ -16,15 +16,15 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    # res = 2
-    res = 3
+    res = 2
+    # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
     np = size(p, 1)
-    centroids = (p[t[:, 1], :] + p[t[:, 1], :] + p[t[:, 1], :])/3
-    radii = sqrt.(centroids[:, 1].^2 .+ centroids[:, 2].^2)
-    t = t[sortperm(radii), :]
+    # centroids = (p[t[:, 1], :] + p[t[:, 1], :] + p[t[:, 1], :])/3
+    # radii = sqrt.(centroids[:, 1].^2 .+ centroids[:, 2].^2)
+    # t = t[sortperm(radii), :]
 
     # widths of basin
     Lx = 5e6
@@ -78,20 +78,10 @@ function setup_model()
     σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    # # ϕ = 0:
-    # f₀ = 0
-    # β = 2.3e-11
-    # # ϕ = π/6
-    # f₀ = 1.3e-4
-    # β = 2.0e-11
-    # # ϕ = π/4
-    # f₀ = 1.0e-4
-    # β = 1.6e-11
-    # # no β
-    # β = 0
     Ω = 2π/86400
     a = 6.378e6
-    ϕ = 37 * π/180
+    # ϕ = 37 * π/180
+    ϕ = 0
     f₀ = 2Ω*sin(ϕ)
     β = 2Ω*cos(ϕ)/a
 
@@ -107,8 +97,6 @@ function setup_model()
     # ν = μ*κ
     ν = 1e-1*ones(np, nσ)
     κ = 1e-1*ones(np, nσ)
-    # ν = 1e-3*ones(np, nσ)
-    # κ = 1e-3*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -234,17 +222,17 @@ function invert3D(m)
     plt.close()
 
     # wind stress
-    τξ₀ = zeros(np)
+    τξ₀ = @. -0.1*cos(π*η/Ly)
+    # τξ₀ = zeros(np)
     τη₀ = zeros(np)
-    # τη₀ = @. -0.1*cos(π*η/Ly)
 
     # bottom stress due to wind stress
     τξ_w_bot = m.τξ_wξ[:, 1]
     τη_w_bot = m.τη_wξ[:, 1]
 
     # full τ
-    τξ = @. τξ₀ - (τξ₀*τξ_w_bot + τη₀*τξ_w_bot) - τξ_b_bot
-    τη = @. τη₀ - (τξ₀*τη_w_bot - τη₀*τη_w_bot) - τη_b_bot
+    τξ = @. τξ₀ - (τξ₀*τξ_w_bot + τη₀*τξ_w_bot) #- τξ_b_bot
+    τη = @. τη₀ - (τξ₀*τη_w_bot - τη₀*τη_w_bot) #- τη_b_bot
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τξ, τη)
@@ -349,6 +337,6 @@ end
 #     return curl
 # end
 
-m = setup_model()
+# m = setup_model()
 s = invert3D(m)
 # curl = plot_curl_τ_H()
