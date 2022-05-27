@@ -1,7 +1,7 @@
 function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1},
-    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f₀::Real, β::Real,
-    H::AbstractArray{<:Real,1}, Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1},
-    τξ_tξ_bot::AbstractArray{<:Real,1}, τη_tξ_bot::AbstractArray{<:Real,1})
+    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f₀::Real, β::Real, H::AbstractArray{<:Real,1}, 
+    Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1}, τξ_tξ_bot::AbstractArray{<:Real,1}, 
+    τη_tξ_bot::AbstractArray{<:Real,1})
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -20,7 +20,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         # calculate contribution to K from element k
         Kᵏ = zeros(3, 3)
         for i=1:3
-            for j = 1:3
+            for j=1:3
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
@@ -29,7 +29,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         # calculate contribution to K′ from element k
         K′ᵏ = zeros(3, 3)
         for i=1:3
-            for j = 1:3
+            for j=1:3
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
@@ -38,18 +38,18 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         # calculate contribution to C from element k
         Cᵏ = zeros(3, 3)
         for i=1:3
-            for j = 1:3
-                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2) * C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η) -
-                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2* C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
+            for j=1:3
+                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η) -
+                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
                 Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
 
         # add to global system
         for i=1:3
-            for j = 1:3
+            for j=1:3
                 if t[k, i] in e
-                    # edge node, leave for E
+                    # edge node, leave for dirichlet
                     continue
                 end
                 push!(barotropic_LHS, (t[k, i], t[k, j], Kᵏ[i, j]))
