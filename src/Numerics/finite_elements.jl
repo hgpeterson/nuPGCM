@@ -77,20 +77,16 @@ function pt_in_tri(ξ₀::Real, η₀::Real, v₁::AbstractArray{<:Real,1}, v₂
 
     return !(has_neg && has_pos)
 end
-function get_tri(ξ₀, η₀, p, t)
-	n_tri = size(t, 1)
-    k₀ = 0
-    for k=1:n_tri
-        if pt_in_tri(ξ₀, η₀, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
-            k₀ = k
-            break
+function get_tri(ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2})
+    closest_p = argmin((p[:, 1] .- ξ₀).^2 + (p[:, 2] .- η₀).^2)
+    for k=1:size(t, 1)
+        if closest_p in t[k, :]
+            if pt_in_tri(ξ₀, η₀, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+                return k
+            end
         end
     end
-    if k₀ == 0
-        error("p₀ is not in mesh domain")
-    else
-        return k₀
-    end
+    error("Cannot find triangle; p₀=($ξ₀, $η₀) is not inside mesh domain.")
 end
 
 function fem_evaluate(v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, 
@@ -99,7 +95,7 @@ function fem_evaluate(v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::A
     k₀ = get_tri(ξ₀, η₀, p, t)
     
     # evaluate there
-    return fem_evaluate(v, p₀, p, t, C₀, k₀)
+    return fem_evaluate(v, ξ₀, η₀, p, t, C₀, k₀)
 end
 function fem_evaluate(v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, 
                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3}, k₀::Integer)
