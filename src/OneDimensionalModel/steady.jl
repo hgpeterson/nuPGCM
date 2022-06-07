@@ -107,9 +107,9 @@ function get_steady_state(m::ModelSetup1DPG)
 
     # solve
     sol = reshape(A\rhs, n_vars, m.nz)
-    u = sol[1, :]
-    v = sol[2, :]
-    b = sol[3, :]
+    u = sol[imap[1, :]]
+    v = sol[imap[2, :]]
+    b = sol[imap[3, :]]
 
     # compute χ and U
     χ = cumtrapz(u, m.z)
@@ -117,7 +117,7 @@ function get_steady_state(m::ModelSetup1DPG)
 
     # save data
     s = ModelState1DPG(b, χ, u, v, [-1])
-    save_state_1DPG(s, -1)
+    save_state(s, -1)
 
     return s
 end

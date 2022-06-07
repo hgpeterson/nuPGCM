@@ -39,7 +39,7 @@ function run_ridge(; bl = false)
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
-    μ = 1e2
+    μ = 2e2
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
@@ -50,7 +50,8 @@ function run_ridge(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 10*secs_in_day
+    # Δt = 10*secs_in_day
+    Δt = 1*secs_in_day
     t_plot = 3*secs_in_year
     t_save = 3*secs_in_year
     

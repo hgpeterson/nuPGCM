@@ -18,11 +18,11 @@ function run_single_column(; bl=false)
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
-    transport_constraint = true
-    # transport_constraint = false
-    # U = [0.0]
+    # transport_constraint = true
+    transport_constraint = false
+    U = [0.0]
     # U = [0.2e-2]
-    U = [1e1]
+    # U = [1e1]
 
     # grid: chebyshev unless bl
     if bl
@@ -43,7 +43,7 @@ function run_single_column(; bl=false)
     ν_func(z) = μ*κ_func(z)
     
     # timestepping
-    Δt = 10*secs_in_day
+    Δt = 1*secs_in_day
     t_save = 3*secs_in_year
     
     # create model struct
@@ -62,7 +62,7 @@ function run_single_column(; bl=false)
     evolve!(m, s, 15*secs_in_year, t_save) 
     
     # solve steady state
-    # steady_state(m)
+    get_steady_state(m)
 
     return m, s
 end
@@ -79,8 +79,8 @@ m, s = run_single_column()
 ################################################################################
 
 setup_file = string(out_folder, "setup.h5")
-# state_files = string.(out_folder, "state", -1:5, ".h5")
-state_files = string.(out_folder, "state", 0:5, ".h5")
+state_files = string.(out_folder, "state", -1:5, ".h5")
+# state_files = string.(out_folder, "state", 0:5, ".h5")
 profile_plot(setup_file, state_files)
 
 println("Done.")
