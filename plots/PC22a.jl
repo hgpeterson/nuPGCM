@@ -7,7 +7,7 @@
 #
 ################################################################################
 
-using nuPGCM, PyPlot, PyCall
+using nuPGCM, PyPlot, PyCall, Printf
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -141,7 +141,7 @@ function spinup_profiles(folder; μ=1)
         # canonical 1D solution
         m = load_setup_1D(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
         s = load_state_1D(string(folder, "1dtc_pg/can/mu", μ, "/state", i, ".h5"))
-        label = string(Int64(m.Δt*s.i[1]/secsInYear), " years")
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
         Bz = m.N2 .+ differentiate(s.b, m.z)
         ax[1, 1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label, zorder=0)
         ax[1, 2].plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label, zorder=0)
@@ -439,7 +439,7 @@ path = "../../sims/"
 # sketchSlope() 
 # spinup_ridge(string(path, "sim037/"))
 # spinup_ridge_asym(string(path, "sim040/")) 
-# spinup_profiles(string(path, "sim039/"); μ=1)
+spinup_profiles(string(path, "sim039/"); μ=1)
 # spinup_profiles(string(path, "sim039/"); μ=200)
 # spindown_profiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindown_profiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")

@@ -1,23 +1,15 @@
-using PyPlot, PyCall, Printf, HDF5, Dierckx
+using nuPGCM, PyPlot, PyCall, Printf
 
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
-
-include("my_julia_lib.jl")
-
-# for loading data
-include("1dpg/setup.jl")
-include("2dpg/setup.jl")
-
-# for ridgePlot
-include("2dpg/plotting.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
 pe = pyimport("matplotlib.patheffects")
 inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
+pc = 1/6 # a pica is 1/6th of an inch
 
 ### utility functions
 
@@ -368,11 +360,139 @@ function ridgeAnimation(folder)
         plt.close()
     end
 end
-path = "../sims/"
+
+function spinup_profiles_tc(folder; μ=1)
+    ii = 1:5
+
+    # init plot
+    fig, ax = subplots(1, 3, figsize=(27*pc, 11.5*pc), sharey=true)
+
+    fig.text(0.05, 0.97, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=8, ha="left", va="top")
+
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
+
+    ax[1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
+    ax[2].set_xlabel(string(L"Along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[3].set_xlabel(string(L"Stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
+
+    # fixed x
+    if μ == 1
+        ax[1].set_xlim([-0.5, 1.65])
+        ax[1].set_xticks(-0.5:0.5:1.5)
+        ax[2].set_xlim([-3.0, 1.7])
+        ax[2].set_xticks(-3:1.5:1.5)
+        ax[3].set_xlim([0, 1.3])
+    elseif μ == 200
+        ax[1].set_xlim([-25, 95])
+        ax[1].set_xticks(-25:25:75)
+        ax[2].set_xlim([-2.0, 0.3])
+        ax[3].set_xlim([0, 1.3])
+    end
+
+    # fixed y
+    ax[1].set_ylim([-2, 0])
+
+    # setup file
+    m2D = load_setup_2D(string(folder, "2dpg/mu", μ, "/setup.h5"))
+
+    # plot data from folder
+    for i=ii
+        # transport-constrained 1D solution
+        m = load_setup_1D(string(folder, "1dtc_pg/tc/mu", μ, "/setup.h5"))
+        s = load_state_1D(string(folder, "1dtc_pg/tc/mu", μ, "/state", i, ".h5"))
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
+        Bz = m.N2 .+ differentiate(s.b, m.z)
+        ax[1].plot(1e3*s.χ, m.z/1e3, c=colors[i, :], label=label)
+        ax[2].plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label)
+        ax[3].plot(1e6*Bz,  m.z/1e3, c=colors[i, :], label=label)
+
+        # 2D PG solution
+        s2D = load_state_2D(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
+        ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
+        Bz2D = differentiate(s2D.b[ix, :], m2D.z[ix, :])
+        ax[1].plot(1e3*s2D.χ[ix, :],  m2D.z[ix, :]/1e3, "k--", lw=0.5)
+        ax[2].plot(1e2*s2D.uη[ix, :], m2D.z[ix, :]/1e3, "k--", lw=0.5)
+        ax[3].plot(1e6*Bz2D,          m2D.z[ix, :]/1e3, "k--", lw=0.5)
+    end
+
+    ax[3].legend(loc="upper left")
+    custom_handles = [lines.Line2D([0], [0], c="k", ls="--", lw=0.5)]
+    custom_labels = ["2D"]
+    ax[2].legend(custom_handles, custom_labels)
+
+    subplots_adjust(hspace=0.4)
+    savefig(string("spinup_profiles_tc.pdf"))
+    println(string("spinup_profiles_tc.pdf"))
+    plt.close()
+end
+
+function spinup_profiles_v(folder; μ=1)
+    ii = 1:5
+
+    # init plot
+    fig, ax = subplots(1, 1, figsize=(9*pc, 11.5*pc), sharey=true)
+
+    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+
+    ax.set_xlabel(string(L"Along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+
+    # color map
+    colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
+
+    # fixed x
+    if μ == 1
+        ax.set_xlim([-3.0, 1.7])
+        ax.set_xticks(-3:1.5:1.5)
+    elseif μ == 200
+        ax.set_xlim([-2.0, 0.3])
+    end
+
+    # fixed y
+    ax.set_ylim([-2, 0])
+
+    # setup file
+    m2D = load_setup_2D(string(folder, "2dpg/mu", μ, "/setup.h5"))
+
+    # plot data from folder
+    for i=ii
+        # canonical 1D solution
+        m = load_setup_1D(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+        s = load_state_1D(string(folder, "1dtc_pg/can/mu", μ, "/state", i, ".h5"))
+        label = string(Int64(m.Δt*s.i[1]/secs_in_year), " years")
+        Bz = m.N2 .+ differentiate(s.b, m.z)
+        ax.plot(1e2*s.v, m.z/1e3, c=colors[i, :], label=label, zorder=0)
+
+        # 2D PG solution
+        s2D = load_state_2D(string(folder, "2dpg/mu", μ, "/state", i, ".h5"))
+        ix = argmin(abs.(m2D.x[:, 1] .- m2D.L/4))
+        Bz2D = differentiate(s2D.b[ix, :], m2D.z[ix, :])
+        ax.plot(1e2*s2D.uη[ix, :], m2D.z[ix, :]/1e3, "k--", lw=0.5)
+    end
+
+    # steady state canonical
+    m = load_setup_1D(string(folder, "1dtc_pg/can/mu", μ, "/setup.h5"))
+    s = load_state_1D(string(folder, "1dtc_pg/can/mu", μ, "/state-1.h5"))
+    Bz = m.N2 .+ differentiate(s.b, m.z)
+    ax.plot(1e2*s.v,  m.z/1e3, c="k", label="Steady state")
+
+    ax.legend(loc=(0.8, 0.4))
+
+    fig.text(0.55, 0.97, "1D", size=8, ha="left", va="top")
+    fig.text(0.3, 0.97, "2D", size=8, ha="left", va="top")
+
+    savefig(string("spinup_profiles_v.pdf"))
+    println(string("spinup_profiles_v.pdf"))
+    plt.close()
+end
+
+path = "../../sims/"
 
 # spinupProfilesAnimation(string(path, "sim036/"))
 # chiProfile(string(path, "sim039"))
-v3yr(string(path, "sim037"))
+# v3yr(string(path, "sim037"))
 # px3yr(string(path, "sim037"))
 # chiI_and_chiB(string(path, "sim037"))
 # seamountBL1DFail(string(path, "sim042/"))
@@ -380,3 +500,5 @@ v3yr(string(path, "sim037"))
 # chi3yrN2exp(string(path, "sim037"))
 # transportAndExchange(string(path, "sim037"))
 # ridgeAnimation(string(path, "sim041/"))
+# spinup_profiles_tc(string(path, "sim039/"))
+spinup_profiles_v(string(path, "sim039/"))

@@ -461,9 +461,9 @@ end
 
 path = "../../sims/"
 
-# BL_correction(string(path, "sim044/"))
+BL_correction(string(path, "sim044/"))
 # slope_profiles(string(path, "sim044/"))
 # TF_coords()
 # seamount(string(path, "sim042/"))
 # seamount_profiles(string(path, "sim042/"))
-ridge_exp_strat(string(path, "sim037/"))
+# ridge_exp_strat(string(path, "sim037/"))
