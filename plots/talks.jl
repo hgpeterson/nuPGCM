@@ -367,8 +367,6 @@ function spinup_profiles_tc(folder; μ=1)
     # init plot
     fig, ax = subplots(1, 3, figsize=(27*pc, 11.5*pc), sharey=true)
 
-    fig.text(0.05, 0.97, string(L"Transport-Constrained 1D ($\mu$ = ", μ, "):"), size=8, ha="left", va="top")
-
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     ax[1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
@@ -424,8 +422,10 @@ function spinup_profiles_tc(folder; μ=1)
     ax[2].legend(custom_handles, custom_labels)
 
     subplots_adjust(hspace=0.4)
-    savefig(string("spinup_profiles_tc.pdf"))
-    println(string("spinup_profiles_tc.pdf"))
+    # savefig(string("spinup_profiles_tc.pdf"))
+    # println(string("spinup_profiles_tc.pdf"))
+    savefig(string("spinup_profiles_tc.png"))
+    println(string("spinup_profiles_tc.png"))
     plt.close()
 end
 
@@ -433,7 +433,7 @@ function spinup_profiles_v(folder; μ=1)
     ii = 1:5
 
     # init plot
-    fig, ax = subplots(1, 1, figsize=(9*pc, 11.5*pc), sharey=true)
+    fig, ax = subplots(1, 1, figsize=(9*pc, 10*pc), sharey=true)
 
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
@@ -483,8 +483,10 @@ function spinup_profiles_v(folder; μ=1)
     fig.text(0.55, 0.97, "1D", size=8, ha="left", va="top")
     fig.text(0.3, 0.97, "2D", size=8, ha="left", va="top")
 
-    savefig(string("spinup_profiles_v.pdf"))
-    println(string("spinup_profiles_v.pdf"))
+    # savefig(string("spinup_profiles_v.pdf"))
+    # println(string("spinup_profiles_v.pdf"))
+    savefig(string("spinup_profiles_v.png"))
+    println(string("spinup_profiles_v.png"))
     plt.close()
 end
 
@@ -500,5 +502,5 @@ path = "../../sims/"
 # chi3yrN2exp(string(path, "sim037"))
 # transportAndExchange(string(path, "sim037"))
 # ridgeAnimation(string(path, "sim041/"))
-# spinup_profiles_tc(string(path, "sim039/"))
+spinup_profiles_tc(string(path, "sim039/"))
 spinup_profiles_v(string(path, "sim039/"))

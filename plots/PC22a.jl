@@ -53,8 +53,8 @@ end
 
 function spinup_ridge(folder)
     # load
-    m = load_setup_2D(string(folder, "const/full2D/setup.h5"))
-    s = load_state_2D(string(folder, "const/full2D/state1.h5"))
+    m = load_setup_2D(string(folder, "2dpg/mu1/setup.h5"))
+    s = load_state_2D(string(folder, "2dpg/mu1/state1.h5"))
     ix = argmin(abs.(m.x[:, 1] .- m.L/4))
 
     # plot
@@ -63,12 +63,14 @@ function spinup_ridge(folder)
     ridge_plot(m, s, 1e2*s.uη, "", L"Along-ridge flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
-    ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
-    ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
+    # ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
+    # ax[2].annotate("(b)", (0.0, 1.05), xycoords="axes fraction")
     ax[2].set_ylabel("")
 
-    savefig("spinup_ridge.pdf")
-    println("spinup_ridge.pdf")
+    # savefig("spinup_ridge.pdf")
+    # println("spinup_ridge.pdf")
+    savefig("spinup_ridge.png")
+    println("spinup_ridge.png")
     plt.close()
 end
 
@@ -437,9 +439,9 @@ path = "../../sims/"
 
 # sketchRidge() 
 # sketchSlope() 
-# spinup_ridge(string(path, "sim037/"))
+spinup_ridge(string(path, "sim039/"))
 # spinup_ridge_asym(string(path, "sim040/")) 
-spinup_profiles(string(path, "sim039/"); μ=1)
+# spinup_profiles(string(path, "sim039/"); μ=1)
 # spinup_profiles(string(path, "sim039/"); μ=200)
 # spindown_profiles(string(path, "sim033/tauA2e0_tauS1e2/"); ratio="Small")
 # spindown_profiles(string(path, "sim033/tauA1e2_tauS1e2/"); ratio="Big")

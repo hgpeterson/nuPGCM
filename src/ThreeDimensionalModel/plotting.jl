@@ -10,7 +10,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     end
 
     if u === nothing
-        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, 0*t[:, 1], cmap="Set3", edgecolors="k", linewidth=0.5)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, 0*t[:, 1], cmap="Set3", edgecolors="k", linewidth=0.5, rasterized=true)
     else
         if vext === nothing
             vmax = maximum(abs.(u))
@@ -26,7 +26,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
             shading = "gouraud"
         end
 
-        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
     end
 
     # no spines
@@ -35,7 +35,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     return fig, ax, im
 end
 
-function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true)
+function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, ncontours=6)
     if vext === nothing
         vext = maximum(abs.(u))
         extend = "neither"
@@ -46,14 +46,15 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true)
     fig, ax, im = tplot(p, t, u; vext=vext)
     cb = colorbar(im, ax=ax, label=clabel, extend=extend)
     if contours
-        n = 6
+        n = ncontours
         levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
         ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
     end
-    ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
-    ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
-    ax.set_yticks(-5000:2500:5000)
+    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+    ax.set_ylabel(L"Meridional coordinate $y$ (km)")
     ax.axis("equal")
+    ax.set_yticks(-5000:2500:5000)
+    return fig, ax, im
 end
 
 function plot_ξ_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:Real,2},

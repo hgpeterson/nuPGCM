@@ -88,15 +88,17 @@ function BL_correction(folder)
 
     # labels
     ax[1].legend()
-    ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
-    ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
+    # ax[1].annotate("(a)", (-0.04, 1.05), xycoords="axes fraction")
+    # ax[2].annotate("(b)", (-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("Interior", (0.2, 0.8), xycoords="axes fraction")
     ax[2].annotate("BL",       (0.1, 0.1), xycoords="axes fraction")
 
     subplots_adjust(wspace=0.3)
 
-    savefig("BL_correction.pdf")
-    println("BL_correction.pdf")
+    # savefig("BL_correction.pdf")
+    # println("BL_correction.pdf")
+    savefig("BL_correction.png")
+    println("BL_correction.png")
     plt.close()
 end
 

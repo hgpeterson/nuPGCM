@@ -16,15 +16,12 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    res = 2
-    # res = 3
+    # res = 2
+    res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
     np = size(p, 1)
-    # centroids = (p[t[:, 1], :] + p[t[:, 1], :] + p[t[:, 1], :])/3
-    # radii = sqrt.(centroids[:, 1].^2 .+ centroids[:, 2].^2)
-    # t = t[sortperm(radii), :]
 
     # widths of basin
     Lx = 5e6
@@ -54,7 +51,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 100
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 40
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -75,13 +72,14 @@ function setup_model()
 
     # vertical coordinate
     nσ = 2^8
-    σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
+    σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
     Ω = 2π/86400
     a = 6.378e6
-    # ϕ = 37 * π/180
-    ϕ = 0
+    # ϕ = 45*π/180
+    ϕ = 37*π/180
+    # ϕ = 0
     f₀ = 2Ω*sin(ϕ)
     β = 2Ω*cos(ϕ)/a
 
@@ -158,6 +156,7 @@ function invert3D(m)
     b = zeros(np, m.nσ)
     for j=1:m.nσ
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
+        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H.*exp.(-(m.σ[j] + 1)./(200 ./m.H))
     end
 
     # # plot b slice
@@ -170,6 +169,7 @@ function invert3D(m)
     # savefig("images/b_slice.png")
     # println("images/b_slice.png")
     # plt.close()
+    # error()
 
     # integrals of buoyancy gradients on rhs
     bσ_x = zeros(np, m.nσ)
@@ -222,8 +222,8 @@ function invert3D(m)
     plt.close()
 
     # wind stress
-    τξ₀ = @. -0.1*cos(π*η/Ly)
-    # τξ₀ = zeros(np)
+    # τξ₀ = @. -0.1*cos(π*η/Ly)
+    τξ₀ = zeros(np)
     τη₀ = zeros(np)
 
     # bottom stress due to wind stress
@@ -231,8 +231,8 @@ function invert3D(m)
     τη_w_bot = m.τη_wξ[:, 1]
 
     # full τ
-    τξ = @. τξ₀ - (τξ₀*τξ_w_bot + τη₀*τξ_w_bot) #- τξ_b_bot
-    τη = @. τη₀ - (τξ₀*τη_w_bot - τη₀*τη_w_bot) #- τη_b_bot
+    τξ = @. τξ₀ - (τξ₀*τξ_w_bot + τη₀*τξ_w_bot) - τξ_b_bot
+    τη = @. τη₀ - (τξ₀*τη_w_bot - τη₀*τη_w_bot) - τη_b_bot
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τξ, τη)
@@ -262,7 +262,7 @@ function invert3D(m)
     # end
 
     # plot Ψ
-    plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
+    fig, ax, im = plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
     savefig("images/psi.png")
     println("images/psi.png")
     plt.close()
@@ -337,6 +337,15 @@ end
 #     return curl
 # end
 
-# m = setup_model()
+m = setup_model()
 s = invert3D(m)
 # curl = plot_curl_τ_H()
+
+fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)
+ax.set_yticklabels(0:2500:10000)
+# fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=10, ncontours=5)
+savefig("images/psi.pdf")
+println("images/psi.pdf")
+savefig("images/psi.png")
+println("images/psi.png")
+plt.close()
