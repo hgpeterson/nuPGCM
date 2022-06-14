@@ -27,7 +27,7 @@ export
     load_mesh,
     tri_area,
     get_linear_basis_coeffs,
-    local_basis_func,
+    shape_func,
     evaluate,
 
     # saving models

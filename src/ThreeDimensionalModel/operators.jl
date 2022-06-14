@@ -11,7 +11,7 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::Abs
         Mᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = local_basis_func(C₀[k, :, j], ξ, η)*local_basis_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = shape_func(C₀[k, :, j], ξ, η)*shape_func(C₀[k, :, i], ξ, η)
                 Mᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -51,7 +51,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cξᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η)
                 Cξᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -60,7 +60,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cηᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
                 Cηᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end

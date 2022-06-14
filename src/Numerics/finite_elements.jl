@@ -49,18 +49,28 @@ function get_linear_basis_coeffs(p::AbstractArray{<:Real,2}, t::AbstractArray{<:
 end
 
 """
-    ϕ = local_basis_func(c, ξ₀, η₀)
+    ϕ = shape_func(c, ξ₀, η₀)
 
-Evaluate local basis function defined by coefficients matrix (or vector) `c` at point (ξ₀, η₀).
+Evaluate shape function defined by coefficients matrix (or vector) `c` at point (ξ₀, η₀).
 """
-function local_basis_func(c::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real)
-    return c[1] + c[2]*ξ₀ + c[3]*η₀
+function shape_func(c::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real)
+    if size(c, 1) == 3
+        # first order = linear
+        return c[1] + c[2]*ξ₀ + c[3]*η₀
+    elseif size(c, 1) == 6
+        # second order = quadratic
+        return c[1] + c[2]*ξ₀ + c[3]*η₀ + c[4]*ξ₀^2 + c[5]*η₀^2 + c[6]*ξ₀*η₀
+    else
+        error("Invalid coefficient vector. Only first and second degree polynomials supported.")
+    end
 end
-function local_basis_func(c::AbstractArray{<:Real,2}, ξ₀::Real, η₀::Real)
-    # return c'*[1, ξ₀, η₀]
-    return [c[1, 1] + c[2, 1]*ξ₀ + c[3, 1]*η₀,
-            c[1, 2] + c[2, 2]*ξ₀ + c[3, 2]*η₀,
-            c[1, 3] + c[2, 3]*ξ₀ + c[3, 3]*η₀]
+function shape_func(c::AbstractArray{<:Real,2}, ξ₀::Real, η₀::Real)
+    n = size(c, 1)
+    v = zeros(n)
+    for i=1:n
+        v[i] = shape_func(c[:, i], ξ₀, η₀)
+    end
+    return v
 end
 
 # https://stackoverflow.com/a/2049593
@@ -100,5 +110,5 @@ end
 function fem_evaluate(v::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::AbstractArray{<:Real,2}, 
                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3}, k₀::Integer)
     # sum weighted combinations of triangle k₀'s basis functions at p₀
-    return v[t[k₀, :]]'*local_basis_func(C₀[k₀, :, :], ξ₀, η₀)
+    return v[t[k₀, :]]'*shape_func(C₀[k₀, :, :], ξ₀, η₀)
 end

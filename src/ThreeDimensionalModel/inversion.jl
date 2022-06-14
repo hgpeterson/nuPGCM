@@ -39,8 +39,8 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Cᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*local_basis_func(C₀[k, :, i], ξ, η) -
-                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*local_basis_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η) -
+                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
                 Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -91,7 +91,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*local_basis_func(m.C₀[k, :, i], ξ, η)
+            func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, :, i], ξ, η)
             barotropic_RHS[m.t[k, i]] += gaussian_quad2(func, m.p[m.t[k, :], :])
         end
 	end
@@ -109,7 +109,7 @@ function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 	for k=1:nt
 		# add contribution to m from element k
         for i=1:3
-            func(ξ, η) = local_basis_func(C₀[k, :, i], ξ, η)
+            func(ξ, η) = shape_func(C₀[k, :, i], ξ, η)
             m[t[k, i]] += gaussian_quad2(func, p[t[k, :], :])
         end
 	end
