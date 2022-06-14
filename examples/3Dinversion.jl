@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1
-    # res = 2
-    res = 3
+    res = 2
+    # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -156,7 +156,6 @@ function invert3D(m)
     b = zeros(np, m.nσ)
     for j=1:m.nσ
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H.*exp.(-(m.σ[j] + 1)./(200 ./m.H))
     end
 
     # # plot b slice
@@ -341,11 +340,11 @@ m = setup_model()
 s = invert3D(m)
 # curl = plot_curl_τ_H()
 
-fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)
-ax.set_yticklabels(0:2500:10000)
-# fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=10, ncontours=5)
-savefig("images/psi.pdf")
-println("images/psi.pdf")
-savefig("images/psi.png")
-println("images/psi.png")
-plt.close()
+# fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)
+# ax.set_yticklabels(0:2500:10000)
+# # fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=10, ncontours=5)
+# savefig("images/psi.pdf")
+# println("images/psi.pdf")
+# savefig("images/psi.png")
+# println("images/psi.png")
+# plt.close()
