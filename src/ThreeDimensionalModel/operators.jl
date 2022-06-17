@@ -51,7 +51,8 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cξᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η)
+                # func(ξ, η) = C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = shape_func(C₀[k, :, j], ξ, η; dξ=1)*shape_func(C₀[k, :, i], ξ, η)
                 Cξᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -60,7 +61,8 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cηᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
+                # func(ξ, η) = C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = shape_func(C₀[k, :, j], ξ, η; dη=1)*shape_func(C₀[k, :, i], ξ, η)
                 Cηᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -98,8 +100,13 @@ function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, p::Abstrac
 end
 function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real, k::Integer, p::AbstractArray{<:Real,2}, 
             t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
-    # sum weighted combinations of c₂
-    return dot(u[t[k, :]], C₀[k, i+1, :])
+    # sum weighted combinations of shape function derivatives
+    # return dot(u[t[k, :]], C₀[k, i+1, :])
+    ∂u = 0
+    for j=1:3
+        ∂u += u[t[k, j]]*shape_func(C₀[k, :, j], ξ₀, η₀; dξ=Int(i==1), dη=Int(i==2))
+    end
+    return ∂u
 end
 function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, ξ₀::Real, η₀::Real; i::Integer)
     return ∂ᵢ(u, ξ₀, η₀, m.p, m.t, m.C₀; i)

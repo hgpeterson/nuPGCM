@@ -25,8 +25,9 @@ export
 
     # finite elements
     load_mesh,
+    add_midpoints,
     tri_area,
-    get_linear_basis_coeffs,
+    get_shape_func_coeffs,
     shape_func,
     evaluate,
 

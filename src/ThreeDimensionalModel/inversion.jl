@@ -21,7 +21,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Kᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
+                # func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
+                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
+                             (shape_func(C₀[k, :, j], ξ, η; dξ=1)*shape_func(C₀[k, :, i], ξ, η; dξ=1) + 
+                              shape_func(C₀[k, :, j], ξ, η; dη=1)*shape_func(C₀[k, :, i], ξ, η; dη=1))
                 Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end
@@ -30,7 +33,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         K′ᵏ = zeros(3, 3)
         for i=1:3
             for j=1:3
-                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
+                # func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
+                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
+                             (shape_func(C₀[k, :, j], ξ, η; dη=1)*shape_func(C₀[k, :, i], ξ, η; dξ=1) - 
+                              shape_func(C₀[k, :, j], ξ, η; dξ=1)*shape_func(C₀[k, :, i], ξ, η; dη=1))
                 K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
             end
         end

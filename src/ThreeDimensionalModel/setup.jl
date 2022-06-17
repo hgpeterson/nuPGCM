@@ -121,7 +121,7 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     η = p[:, 2]
 
     # shape function coefficients
-    C₀ = get_linear_basis_coeffs(p, t)
+    C₀ = get_shape_func_coeffs(p, t)
 
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 

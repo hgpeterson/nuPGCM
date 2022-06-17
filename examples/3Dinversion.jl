@@ -21,6 +21,7 @@ function get_basin_geometry()
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
+    p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
