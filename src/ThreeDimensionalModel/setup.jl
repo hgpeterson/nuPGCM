@@ -126,11 +126,6 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 
     @showprogress "Computing baroclinic_LHSs..." for i=1:np 
-        # if i in e
-        #     baroclinic_LHSs[i] = nothing
-        # else
-        #     baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f[i], H[i], σ)
-        # end
         baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
     end  
 
@@ -138,7 +133,7 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     m = get_m(p, t, C₀)
 
     # compute M = ∫ φᵢ φⱼ
-    M = get_M(p, t, e, C₀)
+    M = get_M(p, t, C₀)
     M_LU = lu(M)
 
     # compute Cξ = ∫ φᵢ ∂ξ(φⱼ), Cη = ∫ φᵢ ∂η(φⱼ)
@@ -148,14 +143,8 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     for i=1:np
-        # if i in e
-        #     continue
-        # else
-        #     baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, m[i], 0)
-        #     baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0, 0) 
-        # end
-        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ),    0, 0, m[i], 0)
-        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0,    0, 0) 
+        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0,    0, m[i], 0)
+        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0,    0) 
     end
 
     # solve for v = M τ

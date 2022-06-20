@@ -15,8 +15,8 @@ function get_basin_geometry()
     bath = "tub"
 
     # resolution
-    # res = 1
-    res = 2
+    res = 1
+    # res = 2
     # res = 3
 
     # load horizontal mesh
@@ -188,11 +188,6 @@ function invert3D(m)
     # stress due to buoyancy gradients
     baroclinic_RHSs_b = zeros(np, 2*m.nσ)
     for i=1:np
-        # if i in e
-        #     continue
-        # else
-        #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
-        # end
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
     vξ_b, vη_b = get_vξ_vη(m.baroclinic_LHSs, baroclinic_RHSs_b)
@@ -338,7 +333,7 @@ end
 # end
 
 m = setup_model()
-s = invert3D(m)
+# s = invert3D(m)
 # curl = plot_curl_τ_H()
 
 # fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)

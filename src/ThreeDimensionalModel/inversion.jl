@@ -7,6 +7,9 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     nt = size(t, 1)
     ne = size(e, 1)
 
+    # number of shape functions per triangle
+    n = size(t, 2)
+
     # functions
     H_func(ξ, η, k)         = fem_evaluate(H,         ξ, η, p, t, C₀, k)
     Hx_func(ξ, η, k)        = fem_evaluate(Hx,        ξ, η, p, t, C₀, k)
@@ -18,42 +21,46 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     barotropic_LHS = Tuple{Int64,Int64,Float64}[]
     @showprogress "Building barotropic_LHS..." for k = 1:nt
         # calculate contribution to K from element k
-        Kᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
+        Kᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
                 # func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
-                             (shape_func(C₀[k, :, j], ξ, η; dξ=1)*shape_func(C₀[k, :, i], ξ, η; dξ=1) + 
-                              shape_func(C₀[k, :, j], ξ, η; dη=1)*shape_func(C₀[k, :, i], ξ, η; dη=1))
-                Kᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+                             (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
+                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
+                Kᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
             end
         end
 
         # calculate contribution to K′ from element k
-        K′ᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
+        K′ᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
                 # func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
-                             (shape_func(C₀[k, :, j], ξ, η; dη=1)*shape_func(C₀[k, :, i], ξ, η; dξ=1) - 
-                              shape_func(C₀[k, :, j], ξ, η; dξ=1)*shape_func(C₀[k, :, i], ξ, η; dη=1))
-                K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+                             (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
+                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
+                K′ᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
             end
         end
 
         # calculate contribution to C from element k
-        Cᵏ = zeros(3, 3)
-        for i=1:3
-            for j=1:3
-                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η) -
-                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
-                Cᵏ[i, j] = gaussian_quad2(func, p[t[k, :], :])
+        Cᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
+                # func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*shape_func(C₀[k, i, :], ξ, η) -
+                #              -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
+                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
+                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
+                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                Cᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
             end
         end
 
         # add to global system
-        for i=1:3
-            for j=1:3
+        for i=1:n
+            for j=1:n
                 if t[k, i] in e
                     # edge node, leave for dirichlet
                     continue
@@ -77,6 +84,9 @@ end
 
 function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ::AbstractArray{<:Real,1},
                             τη::AbstractArray{<:Real,1})
+    # number of shape functions per triangle
+    n = size(m.t, 2)
+
     # functions
     H_func(ξ, η, k)  = fem_evaluate(m, m.H,  ξ, η, k)
     Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
@@ -90,15 +100,13 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
 	# create global linear system using stamping method
     barotropic_RHS = zeros(m.np)
 	@showprogress "Building barotropic_RHS..." for k=1:m.nt
-	# for k=1:m.nt
-		# calculate barotropic_RHS vector element and add it to the global system
-        for i=1:3
+        for i=1:n
             if m.t[k, i] in m.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, :, i], ξ, η)
-            barotropic_RHS[m.t[k, i]] += gaussian_quad2(func, m.p[m.t[k, :], :])
+            func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
+            barotropic_RHS[m.t[k, i]] += gaussian_quad2(func, m.p[m.t[k, 1:3], :])
         end
 	end
 
@@ -110,13 +118,16 @@ function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 	np = size(p, 1)
 	nt = size(t, 1)
 
+    # number of shape functions per triangle
+    n = size(t, 2)
+
 	# create global linear system using stamping method
     m = zeros(np)
 	for k=1:nt
 		# add contribution to m from element k
-        for i=1:3
-            func(ξ, η) = shape_func(C₀[k, :, i], ξ, η)
-            m[t[k, i]] += gaussian_quad2(func, p[t[k, :], :])
+        for i=1:n
+            func(ξ, η) = shape_func(C₀[k, i, :], ξ, η)
+            m[t[k, i]] += gaussian_quad2(func, p[t[k, 1:3], :])
         end
 	end
 
@@ -216,13 +227,9 @@ function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackL
     vξ = zeros(np, nσ)
     vη = zeros(np, nσ)
     @showprogress "Calculating vξ and vη..." for i=1:np
-        if baroclinic_LHSs[i] === nothing
-            continue
-        else
-            sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
-            vξ[i, :] = sol[imap[1, :]]
-            vη[i, :] = sol[imap[2, :]]
-        end
+        sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
+        vξ[i, :] = sol[imap[1, :]]
+        vη[i, :] = sol[imap[2, :]]
     end
     return vξ, vη
 end

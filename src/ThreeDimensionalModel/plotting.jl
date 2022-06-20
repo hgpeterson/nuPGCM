@@ -10,7 +10,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     end
 
     if u === nothing
-        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, 0*t[:, 1], cmap="Set3", edgecolors="k", linewidth=0.5, rasterized=true)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Set3", edgecolors="k", linewidth=0.5, rasterized=true)
     else
         if vext === nothing
             vmax = maximum(abs.(u))
@@ -26,7 +26,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
             shading = "gouraud"
         end
 
-        im = ax.tripcolor(p[:, 1], p[:, 2], t .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
     end
 
     # no spines
@@ -48,7 +48,7 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, nconto
     if contours
         n = ncontours
         levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
-        ax.tricontour(p[:, 1], p[:, 2], t .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
+        ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
     end
     ax.set_xlabel(L"Zonal coordinate $x$ (km)")
     ax.set_ylabel(L"Meridional coordinate $y$ (km)")
