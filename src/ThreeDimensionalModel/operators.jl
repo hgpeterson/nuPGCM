@@ -14,7 +14,7 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
         for i=1:n
             for j=1:n
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η)*shape_func(C₀[k, i, :], ξ, η)
-                Mᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
+                Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
             end
         end
 
@@ -50,7 +50,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
             for j=1:n
                 # func(ξ, η) = C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η)
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cξᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
+                Cξᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
             end
         end
 
@@ -60,7 +60,7 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
             for j=1:n
                 # func(ξ, η) = C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cηᵏ[i, j] = gaussian_quad2(func, p[t[k, 1:3], :])
+                Cηᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
             end
         end
 

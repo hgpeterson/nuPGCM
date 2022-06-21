@@ -22,6 +22,7 @@ export
     trapz,
     cumtrapz,
     gaussian_quad2,
+    tri_quad,
 
     # finite elements
     load_mesh,

@@ -15,13 +15,13 @@ function get_basin_geometry()
     bath = "tub"
 
     # resolution
-    res = 1
-    # res = 2
+    # res = 1
+    res = 2
     # res = 3
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -333,7 +333,7 @@ end
 # end
 
 m = setup_model()
-# s = invert3D(m)
+s = invert3D(m)
 # curl = plot_curl_τ_H()
 
 # fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)
