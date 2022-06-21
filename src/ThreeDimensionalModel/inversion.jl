@@ -24,11 +24,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Kᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 2, j]*C₀[k, 2, i] + C₀[k, 3, j]*C₀[k, 3, i])
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
                               shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
-                Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -36,11 +35,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         K′ᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*(C₀[k, 3, j]*C₀[k, 2, i] - C₀[k, 2, j]*C₀[k, 3, i])
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
                               shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
-                K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -48,13 +46,11 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Cᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*C₀[k, 2, j]*shape_func(C₀[k, i, :], ξ, η) -
-                #              -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
                 func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
                              -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -106,7 +102,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                 continue
             end
             func(ξ, η) = (JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
-            barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=7)
+            barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
 
@@ -127,7 +123,7 @@ function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 		# add contribution to m from element k
         for i=1:n
             func(ξ, η) = shape_func(C₀[k, i, :], ξ, η)
-            m[t[k, i]] += tri_quad(func, p[t[k, 1:3], :]; degree=7)
+            m[t[k, i]] += tri_quad(func, p[t[k, 1:3], :]; degree=4)
         end
 	end
 
@@ -226,7 +222,7 @@ function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackL
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     vξ = zeros(np, nσ)
     vη = zeros(np, nσ)
-    @showprogress "Calculating vξ and vη..." for i=1:np
+    for i=1:np
         sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
         vξ[i, :] = sol[imap[1, :]]
         vη[i, :] = sol[imap[2, :]]

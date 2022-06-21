@@ -1,3 +1,8 @@
+"""
+    M = get_M(p, t, C₀)
+
+Compute CSC sparse mass matrix `M` where M_ij = ∫ φᵢ φⱼ.
+"""
 function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
     # indices
 	np = size(p, 1)
@@ -14,7 +19,7 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
         for i=1:n
             for j=1:n
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η)*shape_func(C₀[k, i, :], ξ, η)
-                Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -32,6 +37,12 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
     return M
 end
 
+"""
+    Cξ, Cη = get_Cξ_Cη(p, t, C₀)
+
+Compute CSC sparse matrices `Cξ` and `Cη` where 
+Cξ_ij = ∫ φᵢ ∂ξ(φⱼ) and Cη_ij = ∫ φᵢ ∂η(φⱼ).
+"""
 function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
     # indices
 	np = size(p, 1)
@@ -48,9 +59,8 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cξᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = C₀[k, 2, j]*shape_func(C₀[k, :, i], ξ, η)
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cξᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                Cξᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -58,9 +68,8 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
         Cηᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = C₀[k, 3, j]*shape_func(C₀[k, :, i], ξ, η)
                 func(ξ, η) = shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cηᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=7)
+                Cηᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -80,6 +89,13 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
     return Cξ, Cη
 end
 
+"""
+    v₀ = fem_evaluate(m, v, ξ, η)
+    v₀ = fem_evaluate(m, v, ξ, η, k)
+
+Define FEM evaluation function with ModelSetup3DPG struct (see ../Numerics/finite_elements.jl
+for original definition).
+"""
 function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real)
     return fem_evaluate(v, ξ, η, m.p, m.t, m.C₀)
 end
@@ -87,45 +103,45 @@ function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, �
     return fem_evaluate(v, ξ, η, m.p, m.t, m.C₀, k)
 end
 
-function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
+"""
+    ∂ᵢv₀ = fem_evaluate(v, ξ, η, p, t, C₀, i)
+    ∂ᵢv₀ = fem_evaluate(v, ξ, η, k, p, t, C₀, i)
+    ∂ᵢv₀ = fem_evaluate(m, v, ξ, η, i)
+    ∂ᵢv₀ = fem_evaluate(m, v, ξ, η, k, i)
+
+Evaluate derivative of `v` in `i` direction at (ξ, η).
+"""
+function ∂ᵢ(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
             t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
     # find triangle p₀ is in
     k = get_tri(ξ, η, p, t)
 
     # evaluate there
-    return ∂ᵢ(u, ξ, η, k, p, t, C₀; i)
+    return ∂ᵢ(v, ξ, η, k, p, t, C₀; i)
 end
-function ∂ᵢ(u::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer, p::AbstractArray{<:Real,2}, 
+function ∂ᵢ(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer, p::AbstractArray{<:Real,2}, 
             t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
     # sum weighted combinations of shape function derivatives
-    # return dot(u[t[k, :]], C₀[k, i+1, :])
-    ∂u = 0
-    for j=1:3
-        ∂u += u[t[k, j]]*shape_func(C₀[k, j, :], ξ, η; dξ=Int(i==1), dη=Int(i==2))
+    n = size(t, 2)
+    ∂v = 0
+    for j=1:n
+        ∂v += v[t[k, j]]*shape_func(C₀[k, j, :], ξ, η; dξ=Int(i==1), dη=Int(i==2))
     end
-    return ∂u
+    return ∂v
 end
-function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, ξ::Real, η::Real; i::Integer)
-    return ∂ᵢ(u, ξ, η, m.p, m.t, m.C₀; i)
+function ∂ᵢ(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real; i::Integer)
+    return ∂ᵢ(v, ξ, η, m.p, m.t, m.C₀; i)
 end
-function ∂ᵢ(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer; i::Integer)
-    return ∂ᵢ(u, ξ, η, k, m.p, m.t, m.C₀; i)
+function ∂ᵢ(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer; i::Integer)
+    return ∂ᵢ(v, ξ, η, k, m.p, m.t, m.C₀; i)
 end
 
+"""
+Explicitly define ξ and η derivatives in terms of ∂ᵢ.
+"""
 function ∂ξ(args...)
     return ∂ᵢ(args...; i=1)
 end
 function ∂η(args...)
     return ∂ᵢ(args...; i=2)
-end
-
-function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, ξ::Real, η::Real)
-    # find triangle (ξ, η) is in
-    k = get_tri(ξ, η, m.p, m.t)
-
-    # evaluate there
-    return curl(m, u, ξ, η, k)
-end
-function curl(m::ModelSetup3DPG, u::AbstractArray{<:Real,2}, ξ::Real, η::Real, k::Integer)
-    return ∂ξ(m, u[2, :], ξ, η, k) - ∂η(m, u[1, :], ξ, η, k)
 end

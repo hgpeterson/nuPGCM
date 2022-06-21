@@ -21,7 +21,7 @@ function get_basin_geometry()
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    # p, t, e = add_midpoints(p, t)
+    p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -52,7 +52,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 40
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 20
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -280,67 +280,5 @@ function invert3D(m)
     return s
 end
 
-# function plot_curl_τ_H()
-#     # basin geo
-#     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
-
-#     # linear basis
-#     C₀ = get_linear_basis_coeffs(p, t)
-
-#     # wind stress
-#     τξ = @. -0.1*cos(π*η/Ly)
-
-#     # functions 
-#     H_func(ξ, η, k)  = evaluate(H,  [ξ, η], p, t, C₀, k)
-#     τξ_func(ξ, η, k) = evaluate(τξ, [ξ, η], p, t, C₀, k)
-
-#     # curl
-#     curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)/H_func(ξ, η, k) + τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*∂η(H, [ξ, η], k, p, t, C₀)
-#     # curl_τ(ξ, η, k) = -∂η(τξ, [ξ, η], k, p, t, C₀)
-#     # curl_τ(ξ, η, k) = ∂ξ(H, [ξ, η], k, p, t, C₀)
-
-#     # evaluate at triangle centers
-#     curl = zeros(size(t, 1))
-#     for k=1:size(t, 1)
-#         # triangle center
-#         p₀ = sum(p[t[k, :], :], dims=1)/3
-
-#         # curl
-#         c = curl_τ(p₀[1], p₀[2], k)
-#         if isnan(c)
-#             curl[k] = Inf
-#         else
-#             curl[k] = c
-#         end
-#     end
-
-#     # plot
-#     fig, ax, im = tplot(p/1e3, t, ; vext=30)
-#     fig, ax = subplots()
-#     im = ax.tripcolor(p[:, 1]/1e3, p[:, 2]/1e3, t .- 1, log.(abs.(curl)), vmin=-30, vmax=-10, shading="flat")
-#     cb = colorbar(im, ax=ax, label=L"\log | \nabla \times (\tau_0 / H) |", extend="both")
-#     ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
-#     ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
-#     ax.set_yticks(-5000:2500:5000)
-#     ax.spines["left"].set_visible(false)
-#     ax.spines["bottom"].set_visible(false)
-#     ax.axis("equal")
-#     savefig("images/curl_tau_H.png")
-#     println("images/curl_tau_H.png")
-#     plt.close()
-
-#     return curl
-# end
-
 m = setup_model()
 s = invert3D(m)
-# curl = plot_curl_τ_H()
-
-# fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=6)
-# ax.set_yticklabels(0:2500:10000)
-# # fig, ax, im = plot_horizontal(m.p, m.t, s.Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)", vext=10, ncontours=5)
-# savefig("images/psi.pdf")
-# println("images/psi.pdf")
-# savefig("images/psi.png")
-# println("images/psi.png")
-# plt.close()
