@@ -52,7 +52,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 20
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 40
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
