@@ -74,7 +74,7 @@ function plot_ξ_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:
 
     # init figure
     fig, ax = subplots()
-    ax.set_xlabel(L"Horizontal coordinate $\xi$ (km)")
+    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
@@ -98,7 +98,7 @@ function plot_η_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:
 
     # init figure
     fig, ax = subplots()
-    ax.set_xlabel(L"Horizontal coordinate $\eta$ (km)")
+    ax.set_xlabel(L"Meridional coordinate $y$ (km)")
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
 
     # call plotting function
