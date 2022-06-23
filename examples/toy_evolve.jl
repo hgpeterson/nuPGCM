@@ -1,5 +1,10 @@
 ###
-# evolve ζₜ + J(ψ, ζ) = F on FEM grid
+# Evolve 
+#
+#   ∂t(ζ) + J(ψ, ζ) + β ∂y(ψ) = ν ∇²ζ 
+#                  ∇²ψ + ψ/λ² = ζ
+#
+# on FEM grid.
 ###
 
 using nuPGCM, PyPlot, Random, LinearAlgebra, SparseArrays, Printf, ProgressMeter
@@ -9,6 +14,38 @@ plt.close("all")
 pygui(false)
 
 Random.seed!(42)
+
+"""
+    K = get_K()
+
+Diffusion term: Kᵢⱼ = -∫ [∂x(φᵢ)∂x(φⱼ) + ∂y(φᵢ)∂y(φⱼ)]
+"""
+function get_K()
+    K = Tuple{Int64,Int64,Float64}[]  
+	for k=1:nt
+		# calculate contribution to K from element k
+        Kᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
+                func(ξ, η) = -shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η, dξ=1) - 
+                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η, dη=1) 
+                Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+            end
+        end
+
+		# add to global system
+		for i=1:n
+			for j=1:n
+                push!(K, (t[k, i], t[k, j], Kᵏ[i, j]))
+			end
+		end
+	end
+
+    # make CSC matrix
+    K = sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), np, np)
+
+    return K
+end
 
 """
     A = get_A()
@@ -87,31 +124,51 @@ function ∂y(v, x, y, k)
 end
 
 """
+    Js = get_Js()
+
+Compute Jᵢⱼₖ = ∫ [∂x(φₖ)∂y(φⱼ) - ∂y(φₖ)∂x(φⱼ)] φᵢ. 
+"""
+function get_Js()
+    Js = zeros(nt, n, n, n)
+    @showprogress "Computing Js..." for k₀=1:nt
+        for i=1:n
+            for j=1:n
+                for k=1:n
+                    func(x, y) = (shape_func(C₀[k₀, k, :], x, y; dξ=1)*shape_func(C₀[k₀, j, :], x, y; dη=1) -
+                                  shape_func(C₀[k₀, k, :], x, y; dη=1)*shape_func(C₀[k₀, j, :], x, y; dξ=1))*
+                                  shape_func(C₀[k₀, i, :], x, y)
+                    Js[k₀, i, j, k] = tri_quad(func, p[t[k₀, 1:3], :]; degree=4)
+                end
+            end
+        end
+    end
+    return Js
+end
+
+"""
     J = get_J(ψ, ζ)
 
-Compute Jᵢ = ∫ [∂x(ψ)∂y(ζ) - ∂y(ψ)∂x(ζ)] φᵢ. 
+Compute Jᵢ = Jᵢⱼₖ ψₖ ζⱼ + β ψₖ ∂x(φₖ)*φᵢ
 """
 function get_J(ψ, ζ)
-    J = zeros(np) 
+    J = zeros(np)
     for k=1:nt
-        for i=1:n
-            func(x, y) = (∂x(ψ, x, y, k)*∂y(ζ, x, y, k) - ∂y(ψ, x, y, k)*∂x(ζ, x, y, k) + β*∂x(ψ, x, y, k))*shape_func(C₀[k, i, :], x, y)
-            J[t[k, i]] += tri_quad(func, p[t[k, 1:3], :]; degree=4)
-        end
-    end 
+        J[t[k, :]] += reshape(reshape(Js[k, :, :, :], n^2, n)*ψ[t[k, :]], n, n)*ζ[t[k, :]]
+    end
+    J += β*Cx*ψ
     return J
 end
 
 function plots(ψ, ζ, i, time)
     fig, ax, im = plot_horizontal(p, t, ψ; clabel=L"Streamfunction $\psi$")
-    ax.set_title(latexstring(L"$t = $", @sprintf("%.3f", time)))
+    ax.set_title(latexstring(L"$t = $", @sprintf("%df", time)))
     ax.set_yticks(-1:0.5:1)
     savefig(@sprintf("images/psi%03d.png", i), dpi=200)
     # println(@sprintf("images/psi%03d.png", i))
     plt.close()
 
-    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$")
-    ax.set_title(latexstring(L"$t = $", @sprintf("%.3f", time)))
+    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", vext=1, contours=false)
+    ax.set_title(latexstring(L"$t = $", @sprintf("%d", time)))
     ax.set_yticks(-1:0.5:1)
     savefig(@sprintf("images/zeta%03d.png", i), dpi=200)
     # println(@sprintf("images/zeta%03d.png", i))
@@ -120,6 +177,11 @@ function plots(ψ, ζ, i, time)
     return i + 1
 end
 
+"""
+    y, t = advect(f, y, t, Δt)
+
+Apply RK4 timestep with dt(y) = f(t, y).
+"""
 function advect(f, y, t, Δt)
     # RK4
     k₁ = f(t,        y)
@@ -131,6 +193,11 @@ function advect(f, y, t, Δt)
     return y, t
 end
 
+"""
+    f_adv(t, ζ)
+
+RHS of ζ equation.
+"""
 function f_adv(t, ζ)
     ψ = invert(ζ) 
     J = get_J(ψ, ζ)
@@ -138,8 +205,8 @@ function f_adv(t, ζ)
 end
 
 # mesh
-p, t, e = load_mesh("../meshes/circle1.h5")
-# p, t, e = load_mesh("../meshes/circle2.h5")
+# p, t, e = load_mesh("../meshes/circle1.h5")
+p, t, e = load_mesh("../meshes/circle2.h5")
 
 # quad mesh
 # p, t, e = add_midpoints(p, t)
@@ -150,11 +217,12 @@ nt = size(t, 1)
 ne = size(e, 1)
 
 # beta
-β = 1
+# β = 1
+β = 0
 
 # Rossby radius
-λ = 0.5
-# λ = Inf
+# λ = 0.5
+λ = Inf
 
 # number of nodes per triangle
 n = size(t, 2)
@@ -173,12 +241,25 @@ A = get_A()
 M = nuPGCM.get_M(p, t, C₀)
 M_LU = lu(M)
 
+# derivative matrices
+Cx, Cy = nuPGCM.get_Cξ_Cη(p, t, C₀)
+
+# diffusion matrix 
+K = get_K()
+
+# diffusion coefficient
+ν = 1e-5
+
+# J matrices
+Js = get_Js()
+
 function evolve()
     # initial condition
     time = 0
-    ζ = 0.5*randn(np)
-    # Δ = 0.1
-    # ζ = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    # ζ = 0.4*randn(np)
+    Δ = 0.1
+    # ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) + exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
     ψ = invert(ζ)
     i_img = plots(ψ, ζ, 0, time)
 
@@ -186,7 +267,7 @@ function evolve()
     Δt = 1e-1
 
     # step forward
-    @showprogress for i=1:1000
+    @showprogress "Integrating in time..." for i=1:500
         ζ, time = advect(f_adv, ζ, time, Δt)
 
         if i % 10 == 0
