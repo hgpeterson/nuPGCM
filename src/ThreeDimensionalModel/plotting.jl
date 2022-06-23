@@ -36,12 +36,22 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
 end
 
 function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, ncontours=6)
+    # set vmin/vmax
     if vext === nothing
         vext = maximum(abs.(u))
-        extend = "neither"
-    else
-        extend = "both"
     end
+
+    # set extend
+    if maximum(u) > vext && minimum(u) < -vext
+        extend = "both"
+    elseif maximum(u) > vext && minimum(u) > -vext
+        extend = "max"
+    elseif maximum(u) < vext && minimum(u) < -vext
+        extend = "min"
+    else
+        extend = "neither"
+    end
+
     # p = p/1e3 # km
     fig, ax, im = tplot(p, t, u; vext=vext)
     cb = colorbar(im, ax=ax, label=clabel, extend=extend)
