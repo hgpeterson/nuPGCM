@@ -161,13 +161,13 @@ end
 
 function plots(ψ, ζ, i, time)
     fig, ax, im = plot_horizontal(p, t, ψ; clabel=L"Streamfunction $\psi$")
-    ax.set_title(latexstring(L"$t = $", @sprintf("%df", time)))
+    ax.set_title(latexstring(L"$t = $", @sprintf("%d", time)))
     ax.set_yticks(-1:0.5:1)
     savefig(@sprintf("images/psi%03d.png", i), dpi=200)
     # println(@sprintf("images/psi%03d.png", i))
     plt.close()
 
-    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", vext=1, contours=false)
+    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", vext=0.8, contours=false)
     ax.set_title(latexstring(L"$t = $", @sprintf("%d", time)))
     ax.set_yticks(-1:0.5:1)
     savefig(@sprintf("images/zeta%03d.png", i), dpi=200)
@@ -217,12 +217,12 @@ nt = size(t, 1)
 ne = size(e, 1)
 
 # beta
-# β = 1
-β = 0
+β = 1
+# β = 0
 
 # Rossby radius
-# λ = 0.5
-λ = Inf
+λ = 0.5
+# λ = Inf
 
 # number of nodes per triangle
 n = size(t, 2)
@@ -248,7 +248,11 @@ Cx, Cy = nuPGCM.get_Cξ_Cη(p, t, C₀)
 K = get_K()
 
 # diffusion coefficient
-ν = 1e-5
+ν = 1e-1
+
+# timestep
+Δt = 1e-1
+# Δt = 5e-2
 
 # J matrices
 Js = get_Js()
@@ -258,17 +262,31 @@ function evolve()
     time = 0
     # ζ = 0.4*randn(np)
     Δ = 0.1
-    # ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
-    ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) + exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    # ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) + exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
     ψ = invert(ζ)
     i_img = plots(ψ, ζ, 0, time)
 
-    # timestep
-    Δt = 1e-1
+    # timestep left-hand side
+    LHS = lu(I - ν/2*Δt*K)
 
     # step forward
     @showprogress "Integrating in time..." for i=1:500
-        ζ, time = advect(f_adv, ζ, time, Δt)
+
+        # ζ, time = advect(f_adv, ζ, time, Δt)
+
+        ζ_prev = copy(ζ)
+
+        if i == 1
+            # first step: CNAB1
+            RHS = ζ + Δt*(f_adv(time, ζ) + ν/2*K*ζ)
+        else
+            # other steps: CNAB2
+            RHS = ζ + Δt*(3/2*f_adv(time, ζ) - 1/2*f_adv(time, ζ_prev) + ν/2*K*ζ)
+        end
+        # reset_BCs!(RHS)
+        ζ = LHS\RHS
+        time += Δt
 
         if i % 10 == 0
             ψ = invert(ζ)
