@@ -141,6 +141,10 @@ function shape_func(c::AbstractArray{<:Real,1}, ξ::Real, η::Real; dξ=0, dη=0
             return c[2] + 2*c[4]*ξ + c[5]*η
         elseif dξ == 0 && dη == 1
             return c[3] + c[5]*ξ + 2*c[6]*η
+        elseif dξ == 2 && dη == 0
+            return 2*c[4]
+        elseif dξ == 0 && dη == 2
+            return 2*c[6]
         else
             error("Unsupported derivatives of quadratic shape function: dξ = $dξ, dη = $dη.")
         end
