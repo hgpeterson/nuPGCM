@@ -167,7 +167,8 @@ function plots(ψ, ζ, i, time)
     # println(@sprintf("images/psi%03d.png", i))
     plt.close()
 
-    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", vext=0.8, contours=false)
+    # fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", vext=0.8, contours=false)
+    fig, ax, im = plot_horizontal(p, t, ζ; clabel=L"Vorticity $\zeta$", contours=false)
     ax.set_title(latexstring(L"$t = $", @sprintf("%d", time)))
     ax.set_yticks(-1:0.5:1)
     savefig(@sprintf("images/zeta%03d.png", i), dpi=200)
@@ -217,12 +218,12 @@ nt = size(t, 1)
 ne = size(e, 1)
 
 # beta
-β = 1
-# β = 0
+# β = 1
+β = 0
 
 # Rossby radius
-λ = 0.5
-# λ = Inf
+# λ = 0.5
+λ = Inf
 
 # number of nodes per triangle
 n = size(t, 2)
@@ -249,10 +250,10 @@ K = get_K()
 
 # diffusion coefficient
 ν = 1e-1
+# ν = 1e-2
 
 # timestep
 Δt = 1e-1
-# Δt = 5e-2
 
 # J matrices
 Js = get_Js()
@@ -260,9 +261,9 @@ Js = get_Js()
 function evolve()
     # initial condition
     time = 0
-    # ζ = 0.4*randn(np)
-    Δ = 0.1
-    ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    ζ = 0.4*randn(np)
+    # Δ = 0.1
+    # ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
     # ζ = @. (exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) + exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
     ψ = invert(ζ)
     i_img = plots(ψ, ζ, 0, time)
@@ -271,7 +272,7 @@ function evolve()
     LHS = lu(I - ν/2*Δt*K)
 
     # step forward
-    @showprogress "Integrating in time..." for i=1:500
+    @showprogress "Integrating in time..." for i=1:1000
 
         # ζ, time = advect(f_adv, ζ, time, Δt)
 
