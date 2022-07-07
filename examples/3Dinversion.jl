@@ -15,9 +15,10 @@ function get_basin_geometry()
     bath = "tub"
 
     # resolution
-    # res = 1
-    res = 2
-    # res = 3
+    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   # 9062 linear nodes, 35936 quadratic nodes
+    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -83,6 +84,7 @@ function setup_model()
     # ϕ = 0
     f₀ = 2Ω*sin(ϕ)
     β = 2Ω*cos(ϕ)/a
+    # β = 0.
 
     # diffusivity and viscosity
     # κ0 = 6e-5
@@ -157,6 +159,7 @@ function invert3D(m)
     b = zeros(np, m.nσ)
     for j=1:m.nσ
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
+        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
     end
 
     # # plot b slice
@@ -235,19 +238,39 @@ function invert3D(m)
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
 
-    # # Uξ and Uη
-    # Uξ = ∂ξ(m, Ψ)
-    # Uη = ∂η(m, Ψ)
+    # plot Ψ
+    fig, ax, im = plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
+    savefig("images/psi.png")
+    println("images/psi.png")
+    plt.close()
 
-    # # get τ
-    # τ = zeros(2, np, nσ)
-    # for j=1:nσ
-    #     τ[1, :, j] = τ_b[1, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] + τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] + Uη*m.τ_tξ[2, :, j]
-    #     τ[2, :, j] = τ_b[2, :, j] + τξ₀.(ξ, η)*m.τ_wξ[1, :, j] - τη₀.(ξ, η)*m.τ_wξ[2, :, j] + Uξ*m.τ_tξ[1, :, j] - Uη*m.τ_tξ[2, :, j]
-    # end
+    # get τ
+    CCξ, CCη = nuPGCM.get_CCξ_CCη(m)
+    τξ, τη = nuPGCM.get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 
-    # # convert to uξ, uη
-    # u = get_u(m, τ)
+    # convert to uξ, uη
+    uξ, uη = get_uξ_uη(m, τξ, τη)
+    s = ModelState3DPG(b, Ψ, uξ, uη, zeros(2, 2), [1])
+
+    # plot uξ slice
+    ξ_slice = (-Lx + 1e3):Lx/2^5:(Lx - 1e3)
+    η₀ = 0
+    ax = plot_ξ_slice(m, s, uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ (m s$^{-1}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_ylim([-4, 0])
+    savefig("images/u_slice.png")
+    println("images/u_slice.png")
+    plt.close()
+
+    # plot uη slice
+    ξ_slice = (-Lx + 1e3):Lx/2^5:(Lx - 1e3)
+    η₀ = 0
+    ax = plot_ξ_slice(m, s, uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ (m s$^{-1}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_ylim([-4, 0])
+    savefig("images/v_slice.png")
+    println("images/v_slice.png")
+    plt.close()
 
     # # compute uσ
     # div = ∂ξ(m, u[1, :, :]) + ∂η(m, u[2, :, :])
@@ -255,12 +278,6 @@ function invert3D(m)
     # for i=1:np
     #     uσ[i, :] = cumtrapz(-div[i, :], m.σ)
     # end
-
-    # plot Ψ
-    fig, ax, im = plot_horizontal(p, t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
-    savefig("images/psi.png")
-    println("images/psi.png")
-    plt.close()
 
     # # plot wind stress
     # y = -Ly:2*Ly/100:Ly
@@ -276,9 +293,9 @@ function invert3D(m)
     # println("images/tau.png")
     # plt.close()
 
-    s = ModelState3DPG(b, Ψ, zeros(2, 2), zeros(2, 2), zeros(2, 2), [1])
+    # s = ModelState3DPG(b, Ψ, zeros(2, 2), zeros(2, 2), zeros(2, 2), [1])
     return s
 end
 
-m = setup_model()
+# m = setup_model()
 s = invert3D(m)

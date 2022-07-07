@@ -220,7 +220,8 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, baroclinic_RHSs::AbstractArray{<:Real,2})
+function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
+                   baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
@@ -235,15 +236,62 @@ function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackL
     return vξ, vη
 end
 
-function get_uξ_uη(τξ, τη, ρ₀, ν, H, σ)
+function get_uξ_uη(τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2}, ρ₀::Real, ν::AbstractArray{<:Real,2}, 
+                   H::AbstractArray{<:Real,1}, σ::AbstractArray{<:Real,1})
     uξ = zeros(size(τξ))
-    uη = zeros(size(τξ))
-    for i=1:size(uξ, 1)
+    uη = zeros(size(τη))
+    for i=1:size(H, 1)
         uξ[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τξ[i, :], σ)
         uη[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τη[i, :], σ)
     end
     return uξ, uη
 end
-function get_uξ_uη(m, τξ, τη)
+function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
    get_uξ_uη(τξ, τη, m.ρ₀, m.ν, m.H, m.σ) 
+end
+
+"""
+    CCξ, CCη = get_CCξ_CCη(m)
+
+Compute CCξᵢⱼₖ = ∫ ∂ξ(φₖ) φⱼ φᵢ and CCηᵢⱼₖ = ∫ ∂η(φₖ) φⱼ φᵢ. 
+"""
+function get_CCξ_CCη(m)
+    n = size(m.t, 2)
+    CCξ = zeros(m.nt, n, n, n)
+    CCη = zeros(m.nt, n, n, n)
+    @showprogress "Computing CCξ and CCη..." for k₀=1:m.nt
+        for i=1:n
+            for j=1:n
+                for k=1:n
+                    func_ξ(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dξ=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
+                    CCξ[k₀, i, j, k] = tri_quad(func_ξ, m.p[m.t[k₀, 1:3], :]; degree=4)
+
+                    func_η(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dη=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
+                    CCη[k₀, i, j, k] = tri_quad(func_η, m.p[m.t[k₀, 1:3], :]; degree=4)
+                end
+            end
+        end
+    end
+    return CCξ, CCη
+end
+
+"""
+    τξ, τη = get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+"""
+function get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    println("Assuming τ₀ = 0...")
+    vξ = zeros(m.np, m.nσ)
+    vη = zeros(m.np, m.nσ)
+    n = size(m.t, 2)
+    for j=1:m.nσ
+        for k=1:m.nt
+            vξ[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
+                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] +
+                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
+        end
+    end
+    τξ = τξ_b .+ m.M_LU\vξ
+    τη = τη_b .+ m.M_LU\vη
+    return τξ, τη
 end

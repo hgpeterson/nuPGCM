@@ -52,7 +52,7 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, nconto
         extend = "neither"
     end
 
-    # p = p/1e3 # km
+    p = p/1e3 # km
     fig, ax, im = tplot(p, t, u; vext=vext)
     cb = colorbar(im, ax=ax, label=clabel, extend=extend)
     if contours
@@ -60,12 +60,9 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, nconto
         levels = vext*[collect(-(n-1)/n:1/n:-1/n)' collect(1/n:1/n:(n-1)/n)']
         ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, linewidths=0.25, colors="k", linestyles="-", levels=levels)
     end
-    # ax.set_xlabel(L"Zonal coordinate $x$ (km)")
-    # ax.set_ylabel(L"Meridional coordinate $y$ (km)")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Meridional coordinate $y$")
+    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+    ax.set_ylabel(L"Meridional coordinate $y$ (km)")
     ax.axis("equal")
-    # ax.set_yticks(-5000:2500:5000)
     return fig, ax, im
 end
 
