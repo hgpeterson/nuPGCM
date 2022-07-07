@@ -71,7 +71,7 @@ end
 ################################################################################
 
 """
-    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U, Uamp, Uper)
+    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transportConstraint, U)
 
 Construct a ModelSetup1DPG struct using analytical functions of H, Hx, ν, κ, and N.
 """
