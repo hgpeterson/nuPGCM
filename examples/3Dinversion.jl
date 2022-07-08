@@ -16,13 +16,13 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   # 9062 linear nodes, 35936 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 3   # 9062 linear nodes, 35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -83,8 +83,8 @@ function setup_model()
     ϕ = 37*π/180
     # ϕ = 0
     f₀ = 2Ω*sin(ϕ)
-    β = 2Ω*cos(ϕ)/a
-    # β = 0.
+    # β = 2Ω*cos(ϕ)/a
+    β = 0.
 
     # diffusivity and viscosity
     # κ0 = 6e-5
@@ -253,23 +253,23 @@ function invert3D(m)
     s = ModelState3DPG(b, Ψ, uξ, uη, zeros(2, 2), [1])
 
     # plot uξ slice
-    ξ_slice = (-Lx + 1e3):Lx/2^5:(Lx - 1e3)
+    ξ_slice = (-Lx + 1e3):Lx/2^6:(Lx - 1e3)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-4, 0])
-    savefig("images/u_slice.png")
-    println("images/u_slice.png")
+    savefig("images/ux_slice.png")
+    println("images/ux_slice.png")
     plt.close()
 
     # plot uη slice
-    ξ_slice = (-Lx + 1e3):Lx/2^5:(Lx - 1e3)
+    ξ_slice = (-Lx + 1e3):Lx/2^6:(Lx - 1e3)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-4, 0])
-    savefig("images/v_slice.png")
-    println("images/v_slice.png")
+    savefig("images/uy_slice.png")
+    println("images/uy_slice.png")
     plt.close()
 
     # # compute uσ
@@ -297,5 +297,5 @@ function invert3D(m)
     return s
 end
 
-# m = setup_model()
-s = invert3D(m)
+m3D = setup_model()
+s3D = invert3D(m3D)
