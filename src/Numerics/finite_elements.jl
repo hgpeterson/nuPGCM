@@ -75,6 +75,20 @@ function add_midpoints(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}
 end
 
 """
+    t_dict = get_t_dict(p, t)
+
+`t_dict[i]` returns a vector of integer indices for each triangle point `i` is in.
+"""
+function get_t_dict(p, t)
+    t_dict = Dict{Int64, Vector{Int64}}()
+    @showprogress "Creating mesh dictionary..." for i=1:size(p, 1)
+        t_dict[i] = findall(vec(sum(t .== i, dims=2) .== 1))
+    end
+    return t_dict
+end
+
+
+"""
     area = tri_area(p)
 
 Compute area of triangle defined by points `p`.
@@ -175,22 +189,22 @@ function pt_in_tri(ξ::Real, η::Real, v₁::AbstractArray{<:Real,1}, v₂::Abst
 
     return !(has_neg && has_pos)
 end
-function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2})
+function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer, 2}, 
+                 t_dict::AbstractDict{IN, Vector{IN}}) where IN <: Integer
     closest_p = argmin((p[:, 1] .- ξ).^2 + (p[:, 2] .- η).^2)
-    for k=1:size(t, 1)
-        if closest_p in t[k, :]
-            if pt_in_tri(ξ, η, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
-                return k
-            end
+    for k=t_dict[closest_p] # just look at triangles closest_p is in
+        if pt_in_tri(ξ, η, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+            return k
         end
     end
     error("Cannot find triangle; p₀=($ξ, $η) is not inside mesh domain.")
 end
 
 function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-                      t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+                      t::AbstractArray{<:Integer,2}, t_dict::AbstractDict{IN, Vector{IN}}, 
+                      C₀::AbstractArray{<:Real,3}) where IN <: Integer
     # find triangle (ξ, η) is in
-    k = get_tri(ξ, η, p, t)
+    k = get_tri(ξ, η, p, t, t_dict)
     
     # evaluate there
     return fem_evaluate(v, ξ, η, p, t, C₀, k)

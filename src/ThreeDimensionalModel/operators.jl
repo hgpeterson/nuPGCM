@@ -97,14 +97,14 @@ Define FEM evaluation function with ModelSetup3DPG struct (see ../Numerics/finit
 for original definition).
 """
 function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real)
-    return fem_evaluate(v, ξ, η, m.p, m.t, m.C₀)
+    return fem_evaluate(v, ξ, η, m.p, m.t, m.t_dict, m.C₀)
 end
 function fem_evaluate(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer)
     return fem_evaluate(v, ξ, η, m.p, m.t, m.C₀, k)
 end
 
 """
-    ∂ᵢv₀ = fem_evaluate(v, ξ, η, p, t, C₀, i)
+    ∂ᵢv₀ = fem_evaluate(v, ξ, η, p, t, t_dict, C₀, i)
     ∂ᵢv₀ = fem_evaluate(v, ξ, η, k, p, t, C₀, i)
     ∂ᵢv₀ = fem_evaluate(m, v, ξ, η, i)
     ∂ᵢv₀ = fem_evaluate(m, v, ξ, η, k, i)
@@ -112,9 +112,10 @@ end
 Evaluate derivative of `v` in `i` direction at (ξ, η).
 """
 function ∂ᵢ(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-            t::AbstractArray{<:Real,2}, C₀::AbstractArray{<:Real,3}; i::Integer)
+            t::AbstractArray{<:Real,2}, t_dict::AbstractDict{IN, Vector{IN}}, C₀::AbstractArray{<:Real,3}; 
+            i::Integer) where IN <: Integer
     # find triangle p₀ is in
-    k = get_tri(ξ, η, p, t)
+    k = get_tri(ξ, η, p, t, t_dict)
 
     # evaluate there
     return ∂ᵢ(v, ξ, η, k, p, t, C₀; i)
@@ -130,7 +131,7 @@ function ∂ᵢ(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer, p::A
     return ∂v
 end
 function ∂ᵢ(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real; i::Integer)
-    return ∂ᵢ(v, ξ, η, m.p, m.t, m.C₀; i)
+    return ∂ᵢ(v, ξ, η, m.p, m.t, m.t_dict, m.C₀; i)
 end
 function ∂ᵢ(m::ModelSetup3DPG, v::AbstractArray{<:Real,1}, ξ::Real, η::Real, k::Integer; i::Integer)
     return ∂ᵢ(v, ξ, η, k, m.p, m.t, m.C₀; i)

@@ -59,6 +59,9 @@ struct ModelSetup3DPG{FT,IT}
     # e::AbstractArray{IT,1}
     e::Array{IT,1}
 
+    # dictionary of triangles each point is in
+    t_dict::Dict{IT, Vector{IT}}
+
     # shape function coefficients
     C₀::AbstractArray{FT,3}
 
@@ -120,6 +123,9 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     ξ = p[:, 1]
     η = p[:, 2]
 
+    # create dictionary of triangles each point is in
+    t_dict = get_t_dict(p, t)
+
     # shape function coefficients
     C₀ = get_shape_func_coeffs(p, t)
 
@@ -162,7 +168,7 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
 
     println("Setup complete!\n")
 
-    return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, C₀, 
+    return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, t_dict, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
                           M, M_LU, Cξ, Cη, τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
 end
