@@ -30,7 +30,7 @@ export
     tri_area,
     get_shape_func_coeffs,
     shape_func,
-    evaluate,
+    fem_evaluate,
 
     # saving models
     save_setup,
