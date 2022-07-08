@@ -106,7 +106,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = JEBAR(ξ, η, k)*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) = -JEBAR(ξ, η, k)*shape_func(m.C₀[k, i, :], ξ, η)
             barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
@@ -236,18 +236,14 @@ function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackL
     return vξ, vη
 end
 
-function get_uξ_uη(τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2}, ρ₀::Real, ν::AbstractArray{<:Real,2}, 
-                   H::AbstractArray{<:Real,1}, σ::AbstractArray{<:Real,1})
-    uξ = zeros(size(τξ))
-    uη = zeros(size(τη))
-    for i=1:size(H, 1)
-        uξ[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τξ[i, :], σ)
-        uη[i, :] = cumtrapz(H[i]/ρ₀./ν[i, :].*τη[i, :], σ)
+function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
+    uξ = zeros(m.np, m.nσ)
+    uη = zeros(m.np, m.nσ)
+    for i=1:m.np
+        uξ[i, :] = m.H[i]/m.ρ₀*cumtrapz(τξ[i, :]./m.ν[i, :], m.σ)
+        uη[i, :] = m.H[i]/m.ρ₀*cumtrapz(τη[i, :]./m.ν[i, :], m.σ)
     end
     return uξ, uη
-end
-function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
-   get_uξ_uη(τξ, τη, m.ρ₀, m.ν, m.H, m.σ) 
 end
 
 """
@@ -287,8 +283,8 @@ function get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
         for k=1:m.nt
             vξ[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
                                  reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] +
-                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j] +
+                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j]
         end
     end
     τξ = τξ_b .+ m.M_LU\vξ
