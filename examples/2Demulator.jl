@@ -35,8 +35,8 @@ function emulate_2D(; bl = false)
     Hx_func(x) = H₀*Gx(L + x)*G(L - x) - H₀*G(L + x)*Gx(L - x)
 
     # diffusivity
-    κ0 = 1e-1
-    κ1 = 0.
+    κ0 = 6e-5
+    κ1 = 2e-3
     h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 

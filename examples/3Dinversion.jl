@@ -16,8 +16,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   # 9062 linear nodes, 35936 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   # 9062 linear nodes, 35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
@@ -87,17 +87,17 @@ function setup_model()
     β = 0.
 
     # diffusivity and viscosity
-    # κ0 = 6e-5
-    # κ1 = 2e-3
-    # h = 200
-    # μ = 1e0
-    # κ = zeros(np, nσ)
-    # for i=1:nσ
-    #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-    # end
-    # ν = μ*κ
-    ν = 1e-1*ones(np, nσ)
-    κ = 1e-1*ones(np, nσ)
+    κ0 = 6e-5
+    κ1 = 2e-3
+    h = 200
+    μ = 1e0
+    κ = zeros(np, nσ)
+    for i=1:nσ
+        κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
+    end
+    ν = μ*κ
+    # ν = 1e-1*ones(np, nσ)
+    # κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -252,26 +252,6 @@ function invert3D(m)
     uξ, uη = get_uξ_uη(m, τξ, τη)
     s = ModelState3DPG(b, Ψ, uξ, uη, zeros(2, 2), [1])
 
-    # plot uξ slice
-    ξ_slice = (-Lx + 1e3):Lx/2^6:(Lx - 1e3)
-    η₀ = 0
-    ax = plot_ξ_slice(m, s, uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
-    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    ax.set_ylim([-4, 0])
-    savefig("images/ux_slice.png")
-    println("images/ux_slice.png")
-    plt.close()
-
-    # plot uη slice
-    ξ_slice = (-Lx + 1e3):Lx/2^6:(Lx - 1e3)
-    η₀ = 0
-    ax = plot_ξ_slice(m, s, uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
-    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    ax.set_ylim([-4, 0])
-    savefig("images/uy_slice.png")
-    println("images/uy_slice.png")
-    plt.close()
-
     # # compute uσ
     # div = ∂ξ(m, u[1, :, :]) + ∂η(m, u[2, :, :])
     # uσ = zeros(np, nσ)
@@ -297,5 +277,28 @@ function invert3D(m)
     return s
 end
 
-m3D = setup_model()
-s3D = invert3D(m3D)
+function plot_uξ_uη_slice(m, s)
+    # plot uξ slice
+    ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
+    η₀ = 0
+    ax = plot_ξ_slice(m, s, s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_ylim([-4, 0])
+    savefig("images/ux_slice.png")
+    println("images/ux_slice.png")
+    plt.close()
+
+    # plot uη slice
+    ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
+    η₀ = 0
+    ax = plot_ξ_slice(m, s, s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_ylim([-4, 0])
+    savefig("images/uy_slice.png")
+    println("images/uy_slice.png")
+    plt.close()
+end
+
+# m3D = setup_model()
+# s3D = invert3D(m3D)
+plot_uξ_uη_slice(m3D, s3D)

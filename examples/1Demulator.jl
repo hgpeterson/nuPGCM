@@ -26,18 +26,22 @@ function emulate_1D(; bl=false)
     end
     
     # diffusivity
-    κ = 1e-1*ones(nz)
-    κ_z = zeros(nz)
+    κ0 = 6e-5
+    κ1 = 2e-3
+    h = 200
+    κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
+    κ_z_func(z) = -κ1/h*exp(-(z + H)/h)
 
     # viscosity
-    ν = 1e-1*ones(nz)
+    μ = 1e0
+    ν_func(z) = μ*κ_func(z)
     
     # timestepping
     Δt = 1*secs_in_day
     t_save = 3*secs_in_year
     
     # create model struct
-    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transport_constraint, U)
+    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transport_constraint, U)
 
     # set initial state
     b = @. 0.1*N2*H*exp(-(z + H)/(0.1*H))
@@ -68,19 +72,23 @@ for j=1:m3D.nσ
     uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)
 end
 
+# get H
+H = fem_evaluate(m3D, m3D.H, ξ₀, η₀)
+
 # plot u
-fig, ax = subplots(1, 2, figsize=(2*1.955, 3.176), sharey=true)
+fig, ax = subplots(1, 2, figsize=(2*1.955, 3.176))
 ax[1].set_title(latexstring(L"Comparison point: $x = $", @sprintf("%d", ξ₀/1e3), " km")) 
 ax[1].set_xlabel(L"Zonal velocity $u^x$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
 ax[2].set_xlabel(L"Meridional velocity $u^y$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
 ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 ax[1].plot(1e3*s1D.u, m1D.z/1e3, label="1D")
-ax[1].plot(1e3*uξ2D, m1D.z/1e3, label="2D")
-ax[1].plot(1e3*uξ3D, m1D.z/1e3, label="3D", c="k", ls="--", lw=0.5)
+ax[1].plot(1e3*uξ2D, m2D.z[iξ, :]/1e3, label="2D")
+ax[1].plot(1e3*uξ3D, m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
 ax[2].plot(1e3*s1D.v, m1D.z/1e3, label="1D")
-ax[2].plot(1e3*uη2D, m1D.z/1e3, label="2D")
-ax[2].plot(1e3*uη3D, m1D.z/1e3, label="3D", c="k", ls="--", lw=0.5)
+ax[2].plot(1e3*uη2D, m2D.z[iξ, :]/1e3, label="2D")
+ax[2].plot(1e3*uη3D, m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
 ax[1].legend()
+ax[1].set_ylim([m1D.z[1]/1e3, (m1D.z[1] + 100)/1e3])
 savefig("images/ux_uy_column.png")
 println("images/ux_uy_column.png")
 plt.close()
