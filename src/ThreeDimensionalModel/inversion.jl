@@ -253,6 +253,8 @@ Compute CCξᵢⱼₖ = ∫ ∂ξ(φₖ) φⱼ φᵢ and CCηᵢⱼₖ = ∫ ∂
 """
 function get_CCξ_CCη(m)
     n = size(m.t, 2)
+    o = convert(Int64, (-3 + sqrt(1 + 8*n))/2) # order of method
+    d = 3*o - 1 # degree of integration
     CCξ = zeros(m.nt, n, n, n)
     CCη = zeros(m.nt, n, n, n)
     @showprogress "Computing CCξ and CCη..." for k₀=1:m.nt
@@ -260,10 +262,10 @@ function get_CCξ_CCη(m)
             for j=1:n
                 for k=1:n
                     func_ξ(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dξ=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
-                    CCξ[k₀, i, j, k] = tri_quad(func_ξ, m.p[m.t[k₀, 1:3], :]; degree=4)
+                    CCξ[k₀, i, j, k] = tri_quad(func_ξ, m.p[m.t[k₀, 1:3], :]; degree=d)
 
                     func_η(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dη=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
-                    CCη[k₀, i, j, k] = tri_quad(func_η, m.p[m.t[k₀, 1:3], :]; degree=4)
+                    CCη[k₀, i, j, k] = tri_quad(func_η, m.p[m.t[k₀, 1:3], :]; degree=d)
                 end
             end
         end
@@ -279,7 +281,7 @@ function get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
     vξ = zeros(m.np, m.nσ)
     vη = zeros(m.np, m.nσ)
     n = size(m.t, 2)
-    for j=1:m.nσ
+    @showprogress "Computing full τ..." for j=1:m.nσ
         for k=1:m.nt
             vξ[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
                                  reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
