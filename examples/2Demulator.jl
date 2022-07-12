@@ -27,7 +27,8 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     # no_net_transport = false
-    H₀ = 4e3
+    # H₀ = 4e3
+    H₀ = 2e3
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))

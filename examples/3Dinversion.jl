@@ -16,13 +16,13 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   # 9062 linear nodes, 35936 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 3   # 9062 linear nodes, 35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    # p, t, e = add_midpoints(p, t)
+    p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -36,7 +36,8 @@ function get_basin_geometry()
     η = p[:, 2]
 
     # depth H
-    H₀ = 4e3
+    # H₀ = 4e3
+    H₀ = 2e3
     Δ = Lx/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
@@ -73,7 +74,8 @@ function setup_model()
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
     # vertical coordinate
-    nσ = 2^8
+    # nσ = 2^8
+    nσ = 2^7
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
@@ -283,7 +285,7 @@ function plot_uξ_uη_slice(m, s)
     η₀ = 0
     ax = plot_ξ_slice(m, s, s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    ax.set_ylim([-4, 0])
+    ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/ux_slice.png")
     println("images/ux_slice.png")
     plt.close()
@@ -293,12 +295,14 @@ function plot_uξ_uη_slice(m, s)
     η₀ = 0
     ax = plot_ξ_slice(m, s, s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    ax.set_ylim([-4, 0])
+    ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/uy_slice.png")
     println("images/uy_slice.png")
     plt.close()
 end
 
 # m3D = setup_model()
-# s3D = invert3D(m3D)
+s3D = invert3D(m3D)
 plot_uξ_uη_slice(m3D, s3D)
+
+println("Done.")
