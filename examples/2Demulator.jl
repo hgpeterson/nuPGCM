@@ -11,8 +11,8 @@ function emulate_2D(; bl = false)
     # parameters (see `setup.jl`)
     f = 8.753044701640954e-5 
     L = 5e6
-    nξ = 2^8 + 1 
-    nσ = 2^8
+    nξ = 2^7 
+    nσ = 2^7
     coords = "axisymmetric"
     periodic = false
 
@@ -26,14 +26,13 @@ function emulate_2D(; bl = false)
     
     # topography: sine
     no_net_transport = true
-    # no_net_transport = false
     # H₀ = 4e3
     H₀ = 2e3
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    H_func(x) = H₀*G(L + x)*G(L - x) + 40
-    Hx_func(x) = H₀*Gx(L + x)*G(L - x) - H₀*G(L + x)*Gx(L - x)
+    H_func(x) = H₀*G(x - L) + 5
+    Hx_func(x) = H₀*Gx(x - L)
 
     # diffusivity
     κ0 = 6e-5
@@ -53,13 +52,10 @@ function emulate_2D(; bl = false)
     # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    Δt = 10*secs_in_day
+    Δt = 0.
     
     # create model struct
     m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
-
-    # save and log params
-    # save_setup(m)
 
     # set initial state
     b = zeros(nξ, nσ)
@@ -74,6 +70,8 @@ function emulate_2D(; bl = false)
 end
 
 m2D, s2D = emulate_2D()
+# save_setup(m2D, "setup2D.h5")
+# save_state(s2D, "state2D.h5")
 
 ridge_plot(m2D, s2D, s2D.uξ, "", L"Zonal velocity $u^x$ (m s$^{-1}$)"; style="pcolormesh")
 savefig("images/ux2D.png")
@@ -84,3 +82,37 @@ ridge_plot(m2D, s2D, s2D.uη, "", L"Meridional velocity $u^y$ (m s$^{-1}$)"; sty
 savefig("images/uy2D.png")
 println("images/uy2D.png")
 plt.close()
+
+# load 2D
+m2D_hr = load_setup_2D("../output/setup2D.h5")
+s2D_hr = load_state_2D("../output/state2D.h5")
+
+# comparison points
+using Dierckx
+ξ₀s = 0.5e6:0.5e6:4.5e6
+for i=1:size(ξ₀s, 1)
+    ξ₀ = ξ₀s[i]
+
+    # interps
+    H = Spline1D(m2D.ξ, m2D.H)(ξ₀)
+    uξ = Spline2D(m2D.ξ, m2D.σ, s2D.uξ)
+    uη = Spline2D(m2D.ξ, m2D.σ, s2D.uη)
+    uξ_hr = Spline2D(m2D_hr.ξ, m2D_hr.σ, s2D_hr.uξ)
+    uη_hr = Spline2D(m2D_hr.ξ, m2D_hr.σ, s2D_hr.uη)
+
+    # plot
+    fig, ax = subplots(1, 2, figsize=(2*1.955, 3.176))
+    ax[1].set_title(latexstring(L"Comparison point: $x = $", @sprintf("%d", ξ₀/1e3), " km")) 
+    ax[1].set_xlabel(L"Zonal velocity $u^x$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
+    ax[2].set_xlabel(L"Meridional velocity $u^y$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax[1].plot(1e3*uξ_hr.(ξ₀, m2D_hr.σ),  H*m2D_hr.σ/1e3, label="2D HR")
+    ax[1].plot(1e3*uξ.(ξ₀, m2D.σ),  H*m2D.σ/1e3, label="2D", "--")
+    ax[2].plot(1e3*uη_hr.(ξ₀, m2D_hr.σ),  H*m2D_hr.σ/1e3, label="2D HR")
+    ax[2].plot(1e3*uη.(ξ₀, m2D.σ),  H*m2D.σ/1e3, label="2D", "--")
+    ax[1].legend()
+    ax[1].set_ylim([-H/1e3, (-H + 100)/1e3])
+    savefig("images/ux_uy_column$(i)_2D.png")
+    println("images/ux_uy_column$(i)_2D.png")
+    plt.close()
+end
