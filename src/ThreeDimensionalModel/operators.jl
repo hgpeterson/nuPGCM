@@ -90,6 +90,34 @@ function get_Cξ_Cη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, 
 end
 
 """
+    CCξ, CCη = get_CCξ_CCη(m)
+
+Compute CCξᵢⱼₖ = ∫ ∂ξ(φₖ) φⱼ φᵢ and CCηᵢⱼₖ = ∫ ∂η(φₖ) φⱼ φᵢ. 
+"""
+function get_CCξ_CCη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+    nt = size(t, 1)
+    n = size(t, 2)
+    o = convert(Int64, (-3 + sqrt(1 + 8*n))/2) # order of method
+    d = 3*o - 1 # degree of integration
+    CCξ = zeros(nt, n, n, n)
+    CCη = zeros(nt, n, n, n)
+    @showprogress "Computing CCξ and CCη..." for k₀=1:nt
+        for i=1:n
+            for j=1:n
+                for k=1:n
+                    func_ξ(x, y) = shape_func(C₀[k₀, k, :], x, y; dξ=1)*shape_func(C₀[k₀, j, :], x, y)*shape_func(C₀[k₀, i, :], x, y)
+                    CCξ[k₀, i, j, k] = tri_quad(func_ξ, p[t[k₀, 1:3], :]; degree=d)
+
+                    func_η(x, y) = shape_func(C₀[k₀, k, :], x, y; dη=1)*shape_func(C₀[k₀, j, :], x, y)*shape_func(C₀[k₀, i, :], x, y)
+                    CCη[k₀, i, j, k] = tri_quad(func_η, p[t[k₀, 1:3], :]; degree=d)
+                end
+            end
+        end
+    end
+    return CCξ, CCη
+end
+
+"""
     v₀ = fem_evaluate(m, v, ξ, η)
     v₀ = fem_evaluate(m, v, ξ, η, k)
 

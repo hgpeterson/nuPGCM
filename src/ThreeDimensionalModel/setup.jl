@@ -98,6 +98,8 @@ struct ModelSetup3DPG{FT,IT}
     # derivative matrices
     Cξ::SparseArrays.SparseMatrixCSC{FT, IT}
     Cη::SparseArrays.SparseMatrixCSC{FT, IT}
+    CCξ::AbstractArray{FT,4}
+    CCη::AbstractArray{FT,4}
 
     # transport stress
     τξ_tξ::AbstractArray{FT,2}
@@ -145,6 +147,9 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     # compute Cξ = ∫ φᵢ ∂ξ(φⱼ), Cη = ∫ φᵢ ∂η(φⱼ)
     Cξ, Cη = get_Cξ_Cη(p, t, C₀)
 
+    # compute CCξᵢⱼₖ = ∫ ∂ξ(φₖ) φⱼ φᵢ and CCηᵢⱼₖ = ∫ ∂η(φₖ) φⱼ φᵢ. 
+    CCξ, CCη = get_CCξ_CCη(p, t, C₀)
+
     # baroclinic RHSs for wind and transport terms
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
@@ -170,5 +175,5 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
 
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, t_dict, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
-                          M, M_LU, Cξ, Cη, τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
+                          M, M_LU, Cξ, Cη, CCξ, CCη, τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
 end

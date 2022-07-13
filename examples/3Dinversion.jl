@@ -17,12 +17,13 @@ function get_basin_geometry()
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   # 9062 linear nodes, 35936 quadratic nodes
+    res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -54,7 +55,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 40
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -74,7 +75,6 @@ function setup_model()
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
     # vertical coordinate
-    # nσ = 2^8
     nσ = 2^7
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
@@ -226,6 +226,20 @@ function invert3D(m)
     τξ₀ = zeros(np)
     τη₀ = zeros(np)
 
+    # # plot wind stress
+    # y = -Ly:2*Ly/100:Ly
+    # fig, ax = subplots(figsize=(1.955, 3.167))
+    # ax.axvline(0, c="k", lw=0.5, ls="-")
+    # ax.plot(τξ₀.(0, y), y/1e3)
+    # ax.set_xlabel(L"Wind stress $\tau^\xi_0$ (N m$^{-2}$)")
+    # ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
+    # ax.spines["left"].set_visible(false)
+    # ax.set_xlim([-0.15, 0.15])
+    # ax.set_xticks(-0.15:0.05:0.15)
+    # savefig("images/tau.png")
+    # println("images/tau.png")
+    # plt.close()
+
     # bottom stress due to wind stress
     τξ_w_bot = m.τξ_wξ[:, 1]
     τη_w_bot = m.τη_wξ[:, 1]
@@ -247,8 +261,7 @@ function invert3D(m)
     plt.close()
 
     # get τ
-    CCξ, CCη = nuPGCM.get_CCξ_CCη(m)
-    τξ, τη = nuPGCM.get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    τξ, τη = get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 
     # convert to uξ, uη
     uξ, uη = get_uξ_uη(m, τξ, τη)
@@ -261,20 +274,6 @@ function invert3D(m)
     #     uσ[i, :] = cumtrapz(-div[i, :], m.σ)
     # end
 
-    # # plot wind stress
-    # y = -Ly:2*Ly/100:Ly
-    # fig, ax = subplots(figsize=(1.955, 3.167))
-    # ax.axvline(0, c="k", lw=0.5, ls="-")
-    # ax.plot(τξ₀.(0, y), y/1e3)
-    # ax.set_xlabel(L"Wind stress $\tau^\xi_0$ (N m$^{-2}$)")
-    # ax.set_ylabel(L"Horizontal coordinate $\eta$ (km)")
-    # ax.spines["left"].set_visible(false)
-    # ax.set_xlim([-0.15, 0.15])
-    # ax.set_xticks(-0.15:0.05:0.15)
-    # savefig("images/tau.png")
-    # println("images/tau.png")
-    # plt.close()
-
     # s = ModelState3DPG(b, Ψ, zeros(2, 2), zeros(2, 2), zeros(2, 2), [1])
     return s
 end
@@ -283,25 +282,25 @@ function plot_uξ_uη_slice(m, s)
     # plot uξ slice
     ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
-    savefig("images/ux_slice.png")
-    println("images/ux_slice.png")
+    savefig("images/ux3D.png")
+    println("images/ux3D.png")
     plt.close()
 
     # plot uη slice
     ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
-    savefig("images/uy_slice.png")
-    println("images/uy_slice.png")
+    savefig("images/uy3D.png")
+    println("images/uy3D.png")
     plt.close()
 end
 
-# m3D = setup_model()
+m3D = setup_model()
 s3D = invert3D(m3D)
 plot_uξ_uη_slice(m3D, s3D)
 

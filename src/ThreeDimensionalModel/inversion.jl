@@ -247,46 +247,19 @@ function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::Abs
 end
 
 """
-    CCξ, CCη = get_CCξ_CCη(m)
-
-Compute CCξᵢⱼₖ = ∫ ∂ξ(φₖ) φⱼ φᵢ and CCηᵢⱼₖ = ∫ ∂η(φₖ) φⱼ φᵢ. 
+    τξ, τη = get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
-function get_CCξ_CCη(m)
-    n = size(m.t, 2)
-    o = convert(Int64, (-3 + sqrt(1 + 8*n))/2) # order of method
-    d = 3*o - 1 # degree of integration
-    CCξ = zeros(m.nt, n, n, n)
-    CCη = zeros(m.nt, n, n, n)
-    @showprogress "Computing CCξ and CCη..." for k₀=1:m.nt
-        for i=1:n
-            for j=1:n
-                for k=1:n
-                    func_ξ(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dξ=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
-                    CCξ[k₀, i, j, k] = tri_quad(func_ξ, m.p[m.t[k₀, 1:3], :]; degree=d)
-
-                    func_η(x, y) = shape_func(m.C₀[k₀, k, :], x, y; dη=1)*shape_func(m.C₀[k₀, j, :], x, y)*shape_func(m.C₀[k₀, i, :], x, y)
-                    CCη[k₀, i, j, k] = tri_quad(func_η, m.p[m.t[k₀, 1:3], :]; degree=d)
-                end
-            end
-        end
-    end
-    return CCξ, CCη
-end
-
-"""
-    τξ, τη = get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-"""
-function get_full_τξ_τη(m, CCξ, CCη, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+function get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
     println("Assuming τ₀ = 0...")
     vξ = zeros(m.np, m.nσ)
     vη = zeros(m.np, m.nσ)
     n = size(m.t, 2)
     @showprogress "Computing full τ..." for j=1:m.nσ
         for k=1:m.nt
-            vξ[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
-                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += -reshape(reshape(CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j] +
-                                 reshape(reshape(CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j]
+            vξ[m.t[k, :], j] += -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
+                                 reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j] +
+                                 reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j]
         end
     end
     τξ = τξ_b .+ m.M_LU\vξ

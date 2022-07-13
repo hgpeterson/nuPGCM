@@ -105,6 +105,7 @@ export
     get_baroclinic_LHS,
     get_baroclinic_RHS,
     get_vξ_vη,
+    get_full_τξ_τη,
     get_uξ_uη,
 
     # plotting
