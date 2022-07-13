@@ -9,12 +9,12 @@
 # end
 
 """
-    save_setup(m)
+    save_setup(m, save_file)
 
 Save .h5 file for parameters.
 """
-function save_setup(m::ModelSetup2DPG)
-    save_file = string(out_folder, "setup.h5")
+function save_setup(m::ModelSetup2DPG, save_file::String)
+    save_file = string(out_folder, save_file)
     file = h5open(save_file, "w")
     write(file, "bl", m.bl)
     write(file, "f", m.f)
@@ -54,6 +54,9 @@ function save_setup(m::ModelSetup2DPG)
     log_params(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
     close(ofile)
 end
+function save_setup(m)
+    save_setup(m, "setup.h5")
+end
 
 """
     m = load_setup_2D(filename)
@@ -84,12 +87,12 @@ function load_setup_2D(filename::String)
 end
 
 """
-    save_state(s, iSave)
+    save_state(s, save_file)
 
 Save .h5 state file.
 """
-function save_state(s::ModelState2DPG, iSave::Int64)
-    save_file = @sprintf("%sstate%d.h5", out_folder, iSave)
+function save_state(s::ModelState2DPG, save_file::String)
+    save_file = string(out_folder, save_file)
     file = h5open(save_file, "w")
     write(file, "b", s.b)
     write(file, "χ", s.χ)
@@ -99,6 +102,9 @@ function save_state(s::ModelState2DPG, iSave::Int64)
     write(file, "i", s.i)
     close(file)
     println(save_file)
+end
+function save_state(s::ModelState2DPG, iSave::Int64)
+    save_state(s, "state$iSave.h5")
 end
 
 """
