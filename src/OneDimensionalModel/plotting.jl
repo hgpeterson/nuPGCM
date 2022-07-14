@@ -16,22 +16,22 @@ function profile_plot(setup_file::String, state_files::Vector{String})
     inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
     axins21 = inset_locator.inset_axes(ax[2, 1], width="40%", height="40%")
 
-    ax[1, 1].set_xlabel(latexstring(L"Stratification $\partial_\zeta b'$", "\n", L"(s$^{-2}$)"))
+    ax[1, 1].set_xlabel(latexstring(L"Stratification $\partial_\zeta b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
     ax[1, 1].set_ylabel(L"Vertical coordinate $\zeta$ (km)")
 
-    ax[1, 2].set_xlabel(latexstring(L"Streamfunction $\chi$", "\n", L"(m$^2$ s$^{-1}$)"))
+    ax[1, 2].set_xlabel(latexstring(L"Streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
 
-    ax[2, 1].set_xlabel(latexstring(L"Cross-slope velocity $u^\xi$", "\n", L"(m s$^{-1}$)"))
+    ax[2, 1].set_xlabel(latexstring(L"Cross-slope velocity $u^\xi$", "\n", L"($\times 10^{-4}$ m s$^{-1}$)"))
     ax[2, 1].set_ylabel(L"Vertical coordinate $\zeta$ (km)")
 
-    ax[2, 2].set_xlabel(latexstring(L"Along-slope velocity $u^\eta$", "\n", L"(m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(latexstring(L"Along-slope velocity $u^\eta$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
 
     subplots_adjust(hspace=0.5, wspace=0.3)
 
-    for a in ax
-        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-    end
-    axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+    # for a in ax
+    #     a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+    # end
+    # axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
 
     # color map
     pl = pyimport("matplotlib.pylab")
@@ -77,21 +77,21 @@ function profile_plot(setup_file::String, state_files::Vector{String})
             Bz = m.N2 .+ differentiate(b, z)
 
             # plot
-            ax[1, 1].plot(Bz, (z .- z[end])/1e3, c=color, label=label)
-            ax[1, 2].plot(χ,  (z .- z[end])/1e3, c=color, label=label)
-            ax[2, 1].plot(u,  (z .- z[end])/1e3, c=color, label=label)
-            ax[2, 2].plot(v,  (z .- z[end])/1e3, c=color, label=label)
-            axins21.plot(u,   (z .- z[end])/1e3, c=color, label=label)
+            ax[1, 1].plot(1e6*Bz, (z .- z[end])/1e3, c=color, label=label)
+            ax[1, 2].plot(1e3*χ,  (z .- z[end])/1e3, c=color, label=label)
+            ax[2, 1].plot(1e4*u,  (z .- z[end])/1e3, c=color, label=label)
+            ax[2, 2].plot(1e2*v,  (z .- z[end])/1e3, c=color, label=label)
+            axins21.plot(1e4*u,   (z .- z[end])/1e3, c=color, label=label)
         else
             # compute stratification
             Bz = m.N2 .+ differentiate(s.b, m.z)
 
             # plot
-            ax[1, 1].plot(Bz,  m.z/1e3, c=color, label=label)
-            ax[1, 2].plot(s.χ, m.z/1e3, c=color, label=label)
-            ax[2, 1].plot(s.u, m.z/1e3, c=color, label=label)
-            ax[2, 2].plot(s.v, m.z/1e3, c=color, label=label)
-            axins21.plot(s.u,  m.z/1e3, c=color, label=label)
+            ax[1, 1].plot(1e6*Bz,  m.z/1e3, c=color, label=label)
+            ax[1, 2].plot(1e3*s.χ, m.z/1e3, c=color, label=label)
+            ax[2, 1].plot(1e4*s.u, m.z/1e3, c=color, label=label)
+            ax[2, 2].plot(1e2*s.v, m.z/1e3, c=color, label=label)
+            axins21.plot(1e4*s.u,  m.z/1e3, c=color, label=label)
         end
     end
 

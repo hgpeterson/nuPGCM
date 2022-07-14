@@ -13,13 +13,13 @@ function run_single_column(; bl=false)
     N2 = 1e-6
     nz = 2^8
     H = 2e3
-    θ = 2.5e-3                 # ridge
-    # θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
+    # θ = 2.5e-3                 # ridge
+    θ = atan(sqrt(0.5*f^2/N2))   # S = 0.5
     # θ = atan(sqrt(0.001*f^2/N2)) # S = 0.001
     # H = 3673.32793219601       # seamount
     # θ = -0.03639128788776821   # seamount
-    # transport_constraint = true
-    transport_constraint = false
+    transport_constraint = true
+    # transport_constraint = false
     U = [0.0]
     # U = [0.2e-2]
     # U = [1e1]
@@ -54,7 +54,8 @@ function run_single_column(; bl=false)
 
     # set initial state
     b = zeros(nz)
-    χ, u, v = invert(m, b)
+    χ = zeros(nz)
+    χ, u, v = invert(m, b, χ)
     i = [1]
     s = ModelState1DPG(b, χ, u, v, i)
 
@@ -62,7 +63,7 @@ function run_single_column(; bl=false)
     evolve!(m, s, 15*secs_in_year, t_save) 
     
     # solve steady state
-    get_steady_state(m)
+    # get_steady_state(m)
 
     return m, s
 end
@@ -79,8 +80,8 @@ m, s = run_single_column()
 ################################################################################
 
 setup_file = string(out_folder, "setup.h5")
-state_files = string.(out_folder, "state", -1:5, ".h5")
-# state_files = string.(out_folder, "state", 0:5, ".h5")
+# state_files = string.(out_folder, "state", -1:5, ".h5")
+state_files = string.(out_folder, "state", 0:5, ".h5")
 profile_plot(setup_file, state_files)
 
 println("Done.")

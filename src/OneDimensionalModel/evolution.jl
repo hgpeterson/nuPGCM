@@ -52,6 +52,9 @@ function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, t_final::Real, t_save::Re
 
         # invert buoyancy for flow
         invert!(m, s)
+        if any(isnan.(s.χ))
+            error("Broke on iteration $i.")
+        end
 
         if i % n_steps_save == 0
             # log
