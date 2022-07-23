@@ -254,12 +254,12 @@ function get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
     vξ = zeros(m.np, m.nσ)
     vη = zeros(m.np, m.nσ)
     n = size(m.t, 2)
-    @showprogress "Computing full τ..." for j=1:m.nσ
-        for k=1:m.nt
-            vξ[m.t[k, :], j] += -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j] -
-                                 reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τη_tξ[m.t[k, :], j] +
-                                 reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)*m.τξ_tξ[m.t[k, :], j]
+    @showprogress "Computing full τ..." for k=1:m.nt
+        Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        for j=1:m.nσ
+            vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
         end
     end
     τξ = τξ_b .+ m.M_LU\vξ
