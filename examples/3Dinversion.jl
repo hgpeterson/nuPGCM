@@ -16,14 +16,14 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    # p, t, e = add_midpoints(p, t)
+    p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -300,8 +300,60 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 end
 
+function plot_Ψ_slice()
+    # compute effective 2D Ψ
+    Ψ2D = zeros(m2D.nξ)
+    Uη = zeros(m2D.nξ)
+    for i=1:m2D.nξ
+        Uη[i] = m2D.H[i]*trapz(s2D.uη[i, :], m2D.σ)
+    end
+    Ψ2D = cumtrapz(Uη, m2D.ξ) .- trapz(Uη, m2D.ξ)
+
+    # compute 3D Ψ along (ξ, 0) slice
+    Ψ3D = zeros(m2D.nξ)
+    for i=1:m2D.nξ-1
+        Ψ3D[i] = fem_evaluate(m3D, s3D.Ψ, m2D.ξ[i], 0)
+    end
+
+    # error
+    println("Max Abs. Err.: ", maximum(abs.(Ψ3D - Ψ2D))/1e6, " Sv (i = ", argmax(abs.(Ψ3D - Ψ2D)), "/", m2D.nξ, ")")
+    println("Max Rel. Err.: ", maximum(abs.((Ψ3D - Ψ2D)./Ψ2D)), " (i = ", argmax(abs.((Ψ3D - Ψ2D)./Ψ2D)), "/", m2D.nξ, ")")
+    ## linear
+    # res 3
+    # Max Abs. Err.: 0.0035541867089181906 Sv (i = 186/256)
+    # Max Rel. Err.: 7756.983467643481 (i = 255/256)
+    # res 4
+    # Max Abs. Err.: 0.0018396818484691902 Sv (i = 16/256)
+    # Max Rel. Err.: 907.3517644388313 (i = 255/256)
+    ## quad
+    # res 2
+    # Max Abs. Err.: 0.004864460135575267 Sv (i = 166/256)
+    # Max Rel. Err.: 52456.01038583682 (i = 255/256)
+    # res 3
+    # Max Abs. Err.: 0.002084866667112568 Sv (i = 127/256)
+    # Max Rel. Err.: 1204.946281527143 (i = 255/256)
+
+    fig, ax = subplots()
+    ax.plot(m2D.ξ/1e3, Ψ2D/1e6, label="2D")
+    ax.plot(m2D.ξ/1e3, Ψ3D/1e6, "k--", lw=0.5, label="3D")
+    ax.legend()
+    ax.set_xlabel(L"Zonal distance $x$ (km)")
+    ax.set_ylabel(L"Streamfunction $\Psi$ (Sv)")
+    # ax.set_xlim([0, 5e3])
+    # ax.set_xlim([4.8e3, 5e3])
+    # ax.set_ylim([-1e-6, 1e-6])
+    # ax.set_ylim([-1e-5, 1e-5])
+    savefig("images/psi_slice.png")
+    println("images/psi_slice.png")
+    plt.close()
+end
+
 m3D = setup_model()
 s3D = invert3D(m3D)
-plot_uξ_uη_slice(m3D, s3D)
+# plot_uξ_uη_slice(m3D, s3D)
+
+# m2D = load_setup_2D("../output/setup2D.h5")
+# s2D = load_state_2D("../output/state2D.h5")
+plot_Ψ_slice()
 
 println("Done.")
