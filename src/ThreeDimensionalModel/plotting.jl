@@ -35,7 +35,8 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     return fig, ax, im
 end
 
-function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, ncontours=6)
+function plot_horizontal(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, u::AbstractArray{<:Real,1}; 
+                         vext=nothing, clabel="", contours=true, ncontours=6)
     # set vmin/vmax
     if vext === nothing
         vext = maximum(abs.(u))
@@ -64,6 +65,9 @@ function plot_horizontal(p, t, u; vext=nothing, clabel="", contours=true, nconto
     ax.set_ylabel(L"Meridional coordinate $y$ (km)")
     ax.axis("equal")
     return fig, ax, im
+end
+function plot_horizontal(m::ModelSetup3DPG, u::AbstractArray{<:Real,1}; vext=nothing, clabel="", contours=true, ncontours=6)
+    plot_horizontal(m.p, m.t, u; vext=vext, clabel=clabel, contours=contours, ncontours=ncontours)
 end
 
 function plot_ξ_slice(m::ModelSetup3DPG, s::ModelState3DPG, v::AbstractArray{<:Real,2},
