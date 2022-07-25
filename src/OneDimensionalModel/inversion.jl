@@ -13,16 +13,16 @@ function get_inversion_LHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64
     fd_top_zz = mkfdstencil(z[nz-3:nz], z[nz], 2)
 
     # Lower boundary conditions 
-    # # b.c. 1: dz(χ) = 0
-    # push!(A, (1, 1, fd_bot_z[1]))
-    # push!(A, (1, 2, fd_bot_z[2]))
-    # push!(A, (1, 3, fd_bot_z[3]))
-    # b.c. 1: dzz(χ) = -Cd/ν dz(χ)^2
-    fd_bot_zz =  mkfdstencil(z[1:4], z[1],  2)
-    push!(A, (1, 1, fd_bot_zz[1]))
-    push!(A, (1, 2, fd_bot_zz[2]))
-    push!(A, (1, 3, fd_bot_zz[3]))
-    push!(A, (1, 4, fd_bot_zz[4]))
+    # b.c. 1: dz(χ) = 0
+    push!(A, (1, 1, fd_bot_z[1]))
+    push!(A, (1, 2, fd_bot_z[2]))
+    push!(A, (1, 3, fd_bot_z[3]))
+    # # b.c. 1: dzz(χ) = -Cd/ν dz(χ)^2
+    # fd_bot_zz =  mkfdstencil(z[1:4], z[1],  2)
+    # push!(A, (1, 1, fd_bot_zz[1]))
+    # push!(A, (1, 2, fd_bot_zz[2]))
+    # push!(A, (1, 3, fd_bot_zz[3]))
+    # push!(A, (1, 4, fd_bot_zz[4]))
 
     # b.c. 2: χ = 0 
     push!(A, (2, 1, 1.0))
@@ -131,9 +131,9 @@ function get_inversion_RHS(m::ModelSetup1DPG, b::Array{Float64,1}, χ::Vector{Fl
     # boundary conditions require zeros on RHS
     rhs[[1, 2, m.nz-1, m.nz]] .= 0
 
-    # bottom b.c. 1: dzz(χ) = -Cd/ν dz(χ)^2
-    Cd = 2.5e-3
-    rhs[1] = -Cd/m.ν[1]*differentiate_pointwise(χ[1:3], m.z[1:3], m.z[1], 1)^2
+    # # bottom b.c. 1: dzz(χ) = -Cd/ν dz(χ)^2
+    # Cd = 2.5e-3
+    # rhs[1] = -Cd/m.ν[1]*differentiate_pointwise(χ[1:3], m.z[1:3], m.z[1], 1)^2
 
     # if dx(p) ~ 0 then 
     #   (1) set U for transport-constrained 1D solution
