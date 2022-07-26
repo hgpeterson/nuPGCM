@@ -28,16 +28,22 @@ function emulate_2D(; bl = false)
     no_net_transport = true
     # H₀ = 4e3
     H₀ = 2e3
+    # H₀ = 2e2
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
     H_func(x) = H₀*G(x - L) + 5
     Hx_func(x) = H₀*Gx(x - L)
+    # H_func(x) = H₀*G(x - 0) + 2e3
+    # Hx_func(x) = H₀*Gx(x - 0)
 
     # diffusivity
-    κ0 = 6e-5
-    κ1 = 2e-3
-    h = 200
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    # h = 200
+    κ0 = 1e-1
+    κ1 = 0
+    h = 1
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
@@ -73,7 +79,7 @@ m2D, s2D = emulate_2D()
 save_setup(m2D, "setup2D.h5")
 save_state(s2D, "state2D.h5")
 
-ridge_plot(m2D, s2D, s2D.uξ, "", L"Zonal velocity $u^x$ (m s$^{-1}$)"; style="pcolormesh")
+ridge_plot(m2D, s2D, s2D.uξ, "", L"Zonal velocity $u^x$ (m s$^{-1}$)"; style="pcolormesh", vext=1e-6)
 savefig("images/ux2D.png")
 println("images/ux2D.png")
 plt.close()

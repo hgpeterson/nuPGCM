@@ -24,6 +24,9 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     αξ_tξ_bot_func(ξ, η, k) = fem_evaluate(αξ_tξ_bot, ξ, η, p, t, C₀, k)
     αη_tξ_bot_func(ξ, η, k) = fem_evaluate(αη_tξ_bot, ξ, η, p, t, C₀, k)
 
+    τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τξ_tξ_bot, ξ, η, p, t, C₀, k)
+    τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τη_tξ_bot, ξ, η, p, t, C₀, k)
+
     # create global linear system using stamping method
     barotropic_LHS = Tuple{Int64,Int64,Float64}[]
     @showprogress "Building barotropic_LHS..." for k = 1:nt
@@ -31,7 +34,8 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Kᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = -αξ_tξ_bot_func(ξ, η, k)*
+                # func(ξ, η) = -αξ_tξ_bot_func(ξ, η, k)*
+                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
                               shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
@@ -42,7 +46,8 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         K′ᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = αη_tξ_bot_func(ξ, η, k)*
+                # func(ξ, η) = αη_tξ_bot_func(ξ, η, k)*
+                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
                               shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
@@ -53,8 +58,12 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Cᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = ∂η(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                             ∂ξ(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                # func(ξ, η) = ∂η(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+                #              ∂ξ(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                 func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
+                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
+                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
                 Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -92,12 +101,17 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
     H_func(ξ, η, k)  = fem_evaluate(m, m.H,  ξ, η, k)
     Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
     Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
+    τξ_func(ξ, η, k) = fem_evaluate(m, τξ,   ξ, η, k)
+    τη_func(ξ, η, k) = fem_evaluate(m, τη,   ξ, η, k)
+    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
-    # compute curl of τ/ρ₀/H
-    αξ = @. τξ/m.ρ₀/m.H
-    αη = @. τη/m.ρ₀/m.H
-    barotropic_RHS = m.Cξ*αη .- m.Cη*αξ
+    # # compute curl of τ/ρ₀/H
+    # αξ = @. τξ/m.ρ₀/m.H
+    # αη = @. τη/m.ρ₀/m.H
+    # barotropic_RHS = m.Cξ*αη .- m.Cη*αξ
+    barotropic_RHS = zeros(m.np)
 
 	# stamp JEBAR
 	@showprogress "Building barotropic_RHS..." for k=1:m.nt
@@ -106,7 +120,8 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = -JEBAR(ξ, η, k)*shape_func(m.C₀[k, i, :], ξ, η)
+            # func(ξ, η) = -JEBAR(ξ, η, k)*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) = (-JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
             barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
@@ -250,14 +265,15 @@ end
     τξ, τη = get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    println("Assuming τ₀ = 0...")
     vξ = zeros(m.np, m.nσ)
     vη = zeros(m.np, m.nσ)
     n = size(m.t, 2)
-    @showprogress "Computing full τ..." for k=1:m.nt
+    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+        # precompute matrix mult on Ψ
         Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
         Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
         for j=1:m.nσ
+            # now mult τ
             vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
             vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
         end

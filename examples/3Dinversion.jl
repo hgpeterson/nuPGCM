@@ -16,14 +16,14 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -39,6 +39,7 @@ function get_basin_geometry()
     # depth H
     # H₀ = 4e3
     H₀ = 2e3
+    # H₀ = 2e2
     Δ = Lx/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
@@ -58,6 +59,10 @@ function get_basin_geometry()
             H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
             Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+            # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 100
+            # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 2e3
+            # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
         end
     end
 
@@ -89,17 +94,17 @@ function setup_model()
     β = 0.
 
     # diffusivity and viscosity
-    κ0 = 6e-5
-    κ1 = 2e-3
-    h = 200
-    μ = 1e0
-    κ = zeros(np, nσ)
-    for i=1:nσ
-        κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-    end
-    ν = μ*κ
-    # ν = 1e-1*ones(np, nσ)
-    # κ = 1e-1*ones(np, nσ)
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    # h = 200
+    # μ = 1e0
+    # κ = zeros(np, nσ)
+    # for i=1:nσ
+    #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
+    # end
+    # ν = μ*κ
+    ν = 1e-1*ones(np, nσ)
+    κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -280,9 +285,9 @@ end
 
 function plot_uξ_uη_slice(m, s)
     # plot uξ slice
-    ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
+    ξ_slice = (-m.Lx + 1e3):m.Lx/2^7:(m.Lx - 1e3)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false, vext=1e-6)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/ux3D.png")
@@ -290,7 +295,7 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 
     # plot uη slice
-    ξ_slice = (-m.Lx + 1e3):m.Lx/2^8:(m.Lx - 1e3)
+    ξ_slice = (-m.Lx + 1e3):m.Lx/2^7:(m.Lx - 1e3)
     η₀ = 0
     ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
@@ -300,8 +305,10 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 end
 
-function plot_Ψ_slice()
+function plot_Ψ_error()
     # compute effective 2D Ψ
+    m2D = load_setup_2D("../output/setup2D.h5")
+    s2D = load_state_2D("../output/state2D.h5")
     Ψ2D = zeros(m2D.nξ)
     Uη = zeros(m2D.nξ)
     for i=1:m2D.nξ
@@ -317,7 +324,39 @@ function plot_Ψ_slice()
 
     # error
     println("Max Abs. Err.: ", maximum(abs.(Ψ3D - Ψ2D))/1e6, " Sv (i = ", argmax(abs.(Ψ3D - Ψ2D)), "/", m2D.nξ, ")")
-    println("Max Rel. Err.: ", maximum(abs.((Ψ3D - Ψ2D)./Ψ2D)), " (i = ", argmax(abs.((Ψ3D - Ψ2D)./Ψ2D)), "/", m2D.nξ, ")")
+    println("Max Rel. Err.: ", maximum(abs.((Ψ3D[1:end-1] - Ψ2D[1:end-1])./Ψ2D[1:end-1])), " (i = ", argmax(abs.((Ψ3D[1:end-1] - Ψ2D[1:end-1])./Ψ2D[1:end-1])), "/", m2D.nξ, ")")
+
+    # NOTES 
+    # error goes down with sqrt(number of nodes)
+    # - even for quad
+    # - even with const κ
+    # - even for very weak slopes
+    # - even when we don't pre-divide τ and H
+
+    # seamount 
+    
+    ## linear
+    # res 3
+    # Max Abs. Err.: 0.0028340422613117844 Sv (i = 100/256)
+    # Max Rel. Err.: 0.3961581294613164 (i = 255/256)
+    # res 4
+    # Max Abs. Err.: 0.0017572642167164013 Sv (i = 57/256)
+    # Max Rel. Err.: 0.1727665983611179 (i = 255/256)
+    # res 5
+    # Max Abs. Err.: 0.0019686711576948875 Sv (i = 46/256)
+    # Max Rel. Err.: 0.11325594706939067 (i = 255/256)
+
+
+    ## quad
+    # res 2
+    # Max Abs. Err.: 0.004957369499398861 Sv (i = 42/256)
+    # Max Rel. Err.: 0.010027110906775728 (i = 253/256)
+    # res 3
+    # Max Abs. Err.: 0.002522487074864097 Sv (i = 42/256)
+    # Max Rel. Err.: 0.006193164422647504 (i = 251/256)
+
+    # bowl 
+
     ## linear
     # res 3
     # Max Abs. Err.: 0.0035541867089181906 Sv (i = 186/256)
@@ -325,6 +364,7 @@ function plot_Ψ_slice()
     # res 4
     # Max Abs. Err.: 0.0018396818484691902 Sv (i = 16/256)
     # Max Rel. Err.: 907.3517644388313 (i = 255/256)
+
     ## quad
     # res 2
     # Max Abs. Err.: 0.004864460135575267 Sv (i = 166/256)
@@ -333,18 +373,19 @@ function plot_Ψ_slice()
     # Max Abs. Err.: 0.002084866667112568 Sv (i = 127/256)
     # Max Rel. Err.: 1204.946281527143 (i = 255/256)
 
-    fig, ax = subplots()
-    ax.plot(m2D.ξ/1e3, Ψ2D/1e6, label="2D")
-    ax.plot(m2D.ξ/1e3, Ψ3D/1e6, "k--", lw=0.5, label="3D")
-    ax.legend()
-    ax.set_xlabel(L"Zonal distance $x$ (km)")
-    ax.set_ylabel(L"Streamfunction $\Psi$ (Sv)")
-    # ax.set_xlim([0, 5e3])
-    # ax.set_xlim([4.8e3, 5e3])
-    # ax.set_ylim([-1e-6, 1e-6])
-    # ax.set_ylim([-1e-5, 1e-5])
-    savefig("images/psi_slice.png")
-    println("images/psi_slice.png")
+    fig, ax = subplots(3, 1, figsize=(19/6, 3*19/6/1.62), sharex=true)
+    ax[1].set_ylabel(L"Streamfunction $\Psi$ (Sv)")
+    ax[2].set_ylabel("Absolute Error (Sv)")
+    ax[3].set_ylabel("Relative Error (%)")
+    ax[3].set_xlabel(L"Zonal distance $x$ (km)")
+    ax[1].plot(m2D.ξ/1e3, Ψ2D/1e6, "tab:orange", label="2D")
+    ax[1].plot(m2D.ξ/1e3, Ψ3D/1e6, "k--", lw=0.5, label="3D")
+    ax[1].legend()
+    ax[2].semilogy(m2D.ξ/1e3, abs.(Ψ3D - Ψ2D)/1e6)
+    ax[3].semilogy(m2D.ξ/1e3, 100*abs.((Ψ3D - Ψ2D)./Ψ2D))
+    ax[2].set_xlim([0, 5e3])
+    savefig("images/psi_error.png")
+    println("images/psi_error.png")
     plt.close()
 end
 
@@ -352,8 +393,6 @@ m3D = setup_model()
 s3D = invert3D(m3D)
 # plot_uξ_uη_slice(m3D, s3D)
 
-# m2D = load_setup_2D("../output/setup2D.h5")
-# s2D = load_state_2D("../output/state2D.h5")
-plot_Ψ_slice()
+plot_Ψ_error()
 
 println("Done.")
