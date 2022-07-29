@@ -27,22 +27,21 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     # H₀ = 4e3
-    # H₀ = 2e3
-    H₀ = 2e2
+    H₀ = 2e3
+    # H₀ = 2e2
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    heaviside(x) = (1 + sign(x))/2
-    G_bump(x) = -exp(-16*Δ^2/(16*Δ^2 - x^2))*heaviside(4*Δ - x)
-    Gx_bump(x) = 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2
+    G_bump(x) = if x < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - x^2)) else return 0 end 
+    Gx_bump(x) = if x < 4Δ return 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2 else return 0 end
     # H_func(x) = H₀*G(x - L) + 5
     # Hx_func(x) = H₀*Gx(x - L)
     # H_func(x) = H₀*G(x - 0) + 2e3
     # Hx_func(x) = H₀*Gx(x - 0)
-    H_func(x) = H₀*G_bump(x - 0) + 2e3
-    Hx_func(x) = H₀*Gx_bump(x - 0)
-    # H_func(x) = H₀ + 0*x
-    # Hx_func(x) = 0*x
+    # H_func(x) = H₀*G_bump(x - 0) + 2e3
+    # Hx_func(x) = H₀*Gx_bump(x - 0)
+    H_func(x) = H₀ + 0*x
+    Hx_func(x) = 0*x
 
     # plot(ξ, -H_func.(ξ))
     # savefig("debug.png")
@@ -77,23 +76,17 @@ function emulate_2D(; bl = false)
 
     # set initial state
     b = zeros(nξ, nσ)
-    for j=1:nσ
-        b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-    end
-    # for i=1:nξ
-    #     # b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-(m.ξ[i] - m.L/2)^2/2/(m.L/8)^2))
-    #     # if m.L/4 < m.ξ[i] < 3*m.L/4
-    #     #     b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-m.L^2/16/(m.L^2/16 - (m.ξ[i] - m.L/2)^2)))
-    #     # else
-    #     #     b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
-    #     # end
-    #     Δ = 0.9*m.L
-    #     if m.ξ[i] < Δ
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
-    #     else
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
-    #     end
+    # for j=1:nσ
+    #     b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     # end
+    for i=1:nξ
+        Δ = 0.9*m.L
+        if m.ξ[i] < Δ
+            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
+        else
+            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
+        end
+    end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)

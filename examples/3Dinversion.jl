@@ -12,8 +12,8 @@ function get_basin_geometry()
     geo = "circle"
 
     # bathymetry type
-    # bath = "flat"
-    bath = "tub"
+    bath = "flat"
+    # bath = "tub"
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
@@ -24,7 +24,7 @@ function get_basin_geometry()
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    # p, t, e = add_midpoints(p, t)
+    p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -39,14 +39,13 @@ function get_basin_geometry()
 
     # depth H
     # H₀ = 4e3
-    # H₀ = 2e3
-    H₀ = 2e2
+    H₀ = 2e3
+    # H₀ = 2e2
     Δ = Lx/5 # width of gaussian for bathtub
-    G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
-    Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
-    heaviside(x) = (1 + sign(x))/2
-    G_bump(x) = -exp(-16*Δ^2/(16*Δ^2 - x^2))*heaviside(4*Δ - x)
-    Gx_bump(x) = 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2
+    G(r) = 1 - exp(-r^2/(2*Δ^2)) # gaussian for bathtub
+    Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
+    G_bump(r) = if r < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - r^2)) else return 0 end 
+    Gr_bump(r) = if r < 4Δ return 32*r*Δ^2*G_bump(r)/(16*Δ^2 - r^2)^2 else return 0 end
     if bath == "flat"
         # flat bottom
         H = H₀*ones(np)
@@ -56,20 +55,20 @@ function get_basin_geometry()
         if geo == "square"
             # square bathtub
             H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
-            Hx = @. H₀*Gx(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gx(Lx - ξ)*G(Ly + η)*G(Ly - η)
-            Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
+            Hx = @. H₀*Gr(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gr(Lx - ξ)*G(Ly + η)*G(Ly - η)
+            Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
-            # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
-            # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+            # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 100
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 2e3
-            # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
-            # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
+            # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
             H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
-            Hx = @. H₀*Gx_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gx_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
+            Hx = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
+            Hy = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
         end
     end
 
@@ -117,7 +116,7 @@ function setup_model()
     N² = 1e-6*ones(np, nσ)
 
     # model setup struct
-    # m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
+    m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
 
     # plot H
     plot_horizontal(p, t, H; clabel=L"Depth $H$ (m)")
@@ -171,24 +170,18 @@ function invert3D(m)
 
     # buoyancy field
     b = zeros(np, m.nσ)
-    for j=1:m.nσ
-        b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
-    end
-    # for i=1:np
-    #     # b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-(sqrt(ξ[i]^2 + η[i]^2) - m.Lx/2)^2/2/(m.Lx/8)^2))
-    #     # if m.Lx/4 < sqrt(ξ[i]^2 + η[i]^2) < 3*m.Lx/4
-    #     #     b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-m.Lx^2/16/(m.Lx^2/16 - (sqrt(ξ[i]^2 + η[i]^2) - m.Lx/2)^2)))
-    #     # else
-    #     #     b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
-    #     # end
-    #     Δ = 0.9*m.Lx
-    #     if sqrt(ξ[i]^2 + η[i]^2) < Δ
-    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
-    #     else
-    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
-    #     end
+    # for j=1:m.nσ
+    #     b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
+    #     # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
     # end
+    for i=1:np
+        Δ = 0.9*m.Lx
+        if sqrt(ξ[i]^2 + η[i]^2) < Δ
+            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
+        else
+            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
+        end
+    end
 
     # # plot b slice
     # s = ModelState3DPG(b, zeros(1), zeros(1, 1), zeros(1, 1), zeros(1, 1), [1])
@@ -345,15 +338,47 @@ function plot_Ψ_error()
     # error
     abs_err = abs.(Ψ3D - Ψ2D)/1e6
     rel_err = 100*abs.((Ψ3D - Ψ2D)./Ψ2D)
+    println(@sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3))
     println(@sprintf("Max Abs. Err.: %1.1e Sv (i = %d/%d)", maximum(abs_err), argmax(abs_err), m2D.nξ))
     println(@sprintf("Max Rel. Err.: %1.1e %%  (i = %d/%d)", maximum(rel_err[1:end-1]), argmax(rel_err[1:end-1]), m2D.nξ))
 
     # NOTES 
-    # error goes down with sqrt(number of nodes)
-    # - even for quad
-    # - even with const κ
-    # - even for very weak slopes
-    # - even when we don't pre-divide τ and H
+
+    # flat
+
+    ## linear
+
+    ## quad
+    # 66 km
+    # Max Abs. Err.: 7.0e-04 Sv (i = 216/256)
+    # Max Rel. Err.: 2.2e+13 %  (i = 232/256)
+    # 40 km
+    # Max Abs. Err.: 9.7e-05 Sv (i = 202/256)
+    # Max Rel. Err.: 4.2e+11 %  (i = 229/256)
+    # 26 km
+    # Max Abs. Err.: 1.0e-04 Sv (i = 203/256)
+    # Max Rel. Err.: 1.2e+11 %  (i = 230/256)
+
+    # bump
+
+    ## linear 
+    # 79 km
+    # Max Abs. Err.: 8.2e-02 Sv (i = 7/256)
+    # Max Rel. Err.: 6.8e+15 %  (i = 203/256)
+    # 53 km
+    # Max Abs. Err.: 8.3e-02 Sv (i = 16/256)
+    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
+    # 26 km
+    # Max Abs. Err.: 8.3e-02 Sv (i = 7/256)
+    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
+
+    ## quad
+    # 66 km
+    # Max Abs. Err.: 8.3e-02 Sv (i = 9/256)
+    # Max Rel. Err.: 6.8e+15 %  (i = 203/256)
+    # 40 km
+    # Max Abs. Err.: 8.3e-02 Sv (i = 8/256)
+    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
 
     # smooth seamount 
 
@@ -430,6 +455,8 @@ function plot_Ψ_error()
     savefig("images/psi_error.png")
     println("images/psi_error.png")
     plt.close()
+
+    return Ψ2D, Ψ3D
 end
 
 function plot_convergence()
@@ -453,8 +480,17 @@ end
 m3D = setup_model()
 s3D = invert3D(m3D)
 # plot_uξ_uη_slice(m3D, s3D)
-plot_Ψ_error()
+Ψ2D, Ψ3D = plot_Ψ_error()
 
 # plot_convergence()
 
 println("Done.")
+
+# plot(m2D.ξ, m2D.H)
+# H3D = zeros(m2D.nξ-1)
+# for i=1:m2D.nξ-1
+#     H3D[i] = fem_evaluate(m3D, m3D.H, m2D.ξ[i], 0)
+# end
+# plot(m2D.ξ[1:end-1], H3D, "k--", lw=0.5)
+# savefig("debug.png")
+# plt.close()
