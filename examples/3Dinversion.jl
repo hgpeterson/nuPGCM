@@ -1,5 +1,6 @@
 using nuPGCM
 using PyPlot
+using Printf
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -16,8 +17,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
@@ -38,11 +39,14 @@ function get_basin_geometry()
 
     # depth H
     # H₀ = 4e3
-    H₀ = 2e3
-    # H₀ = 2e2
+    # H₀ = 2e3
+    H₀ = 2e2
     Δ = Lx/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
+    heaviside(x) = (1 + sign(x))/2
+    G_bump(x) = -exp(-16*Δ^2/(16*Δ^2 - x^2))*heaviside(4*Δ - x)
+    Gx_bump(x) = 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2
     if bath == "flat"
         # flat bottom
         H = H₀*ones(np)
@@ -56,13 +60,16 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gx(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gx(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
-            Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+            # H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
+            # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 100
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 2e3
             # Hx = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
             # Hy = @. H₀*Gx(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
+            H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
+            Hx = @. H₀*Gx_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
+            Hy = @. H₀*Gx_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
         end
     end
 
@@ -110,7 +117,7 @@ function setup_model()
     N² = 1e-6*ones(np, nσ)
 
     # model setup struct
-    m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
+    # m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
 
     # plot H
     plot_horizontal(p, t, H; clabel=L"Depth $H$ (m)")
@@ -168,6 +175,20 @@ function invert3D(m)
         b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
         # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
     end
+    # for i=1:np
+    #     # b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-(sqrt(ξ[i]^2 + η[i]^2) - m.Lx/2)^2/2/(m.Lx/8)^2))
+    #     # if m.Lx/4 < sqrt(ξ[i]^2 + η[i]^2) < 3*m.Lx/4
+    #     #     b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-m.Lx^2/16/(m.Lx^2/16 - (sqrt(ξ[i]^2 + η[i]^2) - m.Lx/2)^2)))
+    #     # else
+    #     #     b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
+    #     # end
+    #     Δ = 0.9*m.Lx
+    #     if sqrt(ξ[i]^2 + η[i]^2) < Δ
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
+    #     else
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
+    #     end
+    # end
 
     # # plot b slice
     # s = ModelState3DPG(b, zeros(1), zeros(1, 1), zeros(1, 1), zeros(1, 1), [1])
@@ -284,10 +305,11 @@ function invert3D(m)
 end
 
 function plot_uξ_uη_slice(m, s)
-    # plot uξ slice
-    ξ_slice = (-m.Lx + 1e3):m.Lx/2^7:(m.Lx - 1e3)
+    ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
     η₀ = 0
-    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false, vext=1e-6)
+
+    # plot uξ slice
+    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/ux3D.png")
@@ -295,8 +317,6 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 
     # plot uη slice
-    ξ_slice = (-m.Lx + 1e3):m.Lx/2^7:(m.Lx - 1e3)
-    η₀ = 0
     ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -323,8 +343,10 @@ function plot_Ψ_error()
     end
 
     # error
-    println("Max Abs. Err.: ", maximum(abs.(Ψ3D - Ψ2D))/1e6, " Sv (i = ", argmax(abs.(Ψ3D - Ψ2D)), "/", m2D.nξ, ")")
-    println("Max Rel. Err.: ", maximum(abs.((Ψ3D[1:end-1] - Ψ2D[1:end-1])./Ψ2D[1:end-1])), " (i = ", argmax(abs.((Ψ3D[1:end-1] - Ψ2D[1:end-1])./Ψ2D[1:end-1])), "/", m2D.nξ, ")")
+    abs_err = abs.(Ψ3D - Ψ2D)/1e6
+    rel_err = 100*abs.((Ψ3D - Ψ2D)./Ψ2D)
+    println(@sprintf("Max Abs. Err.: %1.1e Sv (i = %d/%d)", maximum(abs_err), argmax(abs_err), m2D.nξ))
+    println(@sprintf("Max Rel. Err.: %1.1e %%  (i = %d/%d)", maximum(rel_err[1:end-1]), argmax(rel_err[1:end-1]), m2D.nξ))
 
     # NOTES 
     # error goes down with sqrt(number of nodes)
@@ -332,6 +354,24 @@ function plot_Ψ_error()
     # - even with const κ
     # - even for very weak slopes
     # - even when we don't pre-divide τ and H
+
+    # smooth seamount 
+
+    ## linear 
+    # 79 km
+    # Max Abs. Err.: 0.002510541020970442 Sv (i = 1/256)
+    # Max Rel. Err.: 49.61509299113088 %  (i = 255/256)
+    # 53 km
+    # Max Abs. Err.: 0.0006460267919953912 Sv (i = 3/256)
+    # Max Rel. Err.: 41.15000796240408 %  (i = 255/256)
+
+    ## quad 
+    # 66 km
+    # Max Abs. Err.: 0.0009615129963078071 Sv (i = 1/256)
+    # Max Rel. Err.: 13.328172536836757 %  (i = 253/256)
+    # 40 km
+    # Max Abs. Err.: 0.0008722602073362796 Sv (i = 1/256)
+    # Max Rel. Err.: 1.2092873735227374 %  (i = 253/256)
 
     # seamount 
     
@@ -378,21 +418,43 @@ function plot_Ψ_error()
     ax[2].set_ylabel("Absolute Error (Sv)")
     ax[3].set_ylabel("Relative Error (%)")
     ax[3].set_xlabel(L"Zonal distance $x$ (km)")
+    ax[1].set_title(latexstring(L"Res $\approx$ ", @sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3)))
     ax[1].plot(m2D.ξ/1e3, Ψ2D/1e6, "tab:orange", label="2D")
     ax[1].plot(m2D.ξ/1e3, Ψ3D/1e6, "k--", lw=0.5, label="3D")
     ax[1].legend()
-    ax[2].semilogy(m2D.ξ/1e3, abs.(Ψ3D - Ψ2D)/1e6)
-    ax[3].semilogy(m2D.ξ/1e3, 100*abs.((Ψ3D - Ψ2D)./Ψ2D))
+    ax[2].semilogy(m2D.ξ/1e3, abs_err)
+    ax[2].annotate(@sprintf("Max = %1.1e Sv", maximum(abs_err)), (0.05, 0.5), xycoords="axes fraction")
+    ax[3].semilogy(m2D.ξ/1e3, rel_err)
+    ax[3].annotate(@sprintf("Max = %1.1e %%", maximum(rel_err)), (0.05, 0.5), xycoords="axes fraction")
     ax[2].set_xlim([0, 5e3])
     savefig("images/psi_error.png")
     println("images/psi_error.png")
     plt.close()
 end
 
+function plot_convergence()
+   fig, ax = subplots() 
+   ax.set_title(L"Flat bottom, Bump function at $x = 0$")
+   ax.set_xlabel("Resolution (km)")
+   ax.set_ylabel("Maximum absolute error (Sv)")
+   ax.loglog([79, 53, 26], [2.8e-3, 1.5e-3, 2.3e-4], "o", label="Linear")
+   ax.loglog([66, 40, 26], [7.0e-4, 9.7e-5, 1.0e-4], "o", label="Quadratic")
+   ax.loglog([60, 40], [9e-4, (40/60)^2*9e-4], "k--")
+   ax.loglog([60, 40], [7e-4, (40/60)^4*7e-4], "k--")
+   ax.annotate(L"$h^2$", (50, 8e-4))
+   ax.annotate(L"$h^4$", (50, 2e-4))
+   ax.set_xlim([20, 90])
+   ax.set_ylim([5e-5, 5e-3])
+   ax.legend(frameon=true, fancybox=false)
+   savefig("images/convergence.png")
+   println("images/convergence.png")
+end
+
 m3D = setup_model()
 s3D = invert3D(m3D)
 # plot_uξ_uη_slice(m3D, s3D)
-
 plot_Ψ_error()
+
+# plot_convergence()
 
 println("Done.")
