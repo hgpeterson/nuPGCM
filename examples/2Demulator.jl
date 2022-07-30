@@ -27,8 +27,8 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     # H₀ = 4e3
-    H₀ = 2e3
-    # H₀ = 2e2
+    # H₀ = 2e3
+    H₀ = 2e2
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
@@ -38,10 +38,10 @@ function emulate_2D(; bl = false)
     # Hx_func(x) = H₀*Gx(x - L)
     # H_func(x) = H₀*G(x - 0) + 2e3
     # Hx_func(x) = H₀*Gx(x - 0)
-    # H_func(x) = H₀*G_bump(x - 0) + 2e3
-    # Hx_func(x) = H₀*Gx_bump(x - 0)
-    H_func(x) = H₀ + 0*x
-    Hx_func(x) = 0*x
+    H_func(x) = H₀*G_bump(x - 0) + 2e3
+    Hx_func(x) = H₀*Gx_bump(x - 0)
+    # H_func(x) = H₀ + 0*x
+    # Hx_func(x) = 0*x
 
     # plot(ξ, -H_func.(ξ))
     # savefig("debug.png")
@@ -76,17 +76,17 @@ function emulate_2D(; bl = false)
 
     # set initial state
     b = zeros(nξ, nσ)
-    # for j=1:nσ
-    #     b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-    # end
-    for i=1:nξ
-        Δ = 0.9*m.L
-        if m.ξ[i] < Δ
-            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
-        else
-            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
-        end
+    for j=1:nσ
+        b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     end
+    # for i=1:nξ
+    #     Δ = 0.9*m.L
+    #     if m.ξ[i] < Δ
+    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
+    #     else
+    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
+    #     end
+    # end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)

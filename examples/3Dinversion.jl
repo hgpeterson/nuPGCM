@@ -12,12 +12,12 @@ function get_basin_geometry()
     geo = "circle"
 
     # bathymetry type
-    bath = "flat"
-    # bath = "tub"
+    # bath = "flat"
+    bath = "tub"
 
     # resolution
-    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 1   #  1452 linear nodes,   5677 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
@@ -39,8 +39,8 @@ function get_basin_geometry()
 
     # depth H
     # H₀ = 4e3
-    H₀ = 2e3
-    # H₀ = 2e2
+    # H₀ = 2e3
+    H₀ = 2e2
     Δ = Lx/5 # width of gaussian for bathtub
     G(r) = 1 - exp(-r^2/(2*Δ^2)) # gaussian for bathtub
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
@@ -170,18 +170,18 @@ function invert3D(m)
 
     # buoyancy field
     b = zeros(np, m.nσ)
-    # for j=1:m.nσ
-    #     b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-    #     # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
-    # end
-    for i=1:np
-        Δ = 0.9*m.Lx
-        if sqrt(ξ[i]^2 + η[i]^2) < Δ
-            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
-        else
-            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
-        end
+    for j=1:m.nσ
+        b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
+        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
     end
+    # for i=1:np
+    #     Δ = 0.9*m.Lx
+    #     if sqrt(ξ[i]^2 + η[i]^2) < Δ
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
+    #     else
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
+    #     end
+    # end
 
     # # plot b slice
     # s = ModelState3DPG(b, zeros(1), zeros(1, 1), zeros(1, 1), zeros(1, 1), [1])
@@ -477,10 +477,58 @@ function plot_convergence()
    println("images/convergence.png")
 end
 
-m3D = setup_model()
-s3D = invert3D(m3D)
-# plot_uξ_uη_slice(m3D, s3D)
-Ψ2D, Ψ3D = plot_Ψ_error()
+function baroclinic_convergence()
+    # params
+    ρ₀ = 1000.
+    nσ = 2^8
+    σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
+    ν = 1e-3*ones(nσ)
+    f = 1e-4
+    H = 1e3
+
+    # numerical solution
+    baroclinic_LHS = get_baroclinic_LHS(ρ₀, ν, f, H, σ)
+    baroclinic_RHS = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
+    sol = baroclinic_LHS\baroclinic_RHS
+    imap = reshape(1:2*nσ, (2, nσ)) 
+    τξ = sol[imap[1, :]]
+    τη = sol[imap[2, :]]
+
+    # analytical solution
+    q = sqrt(f/2/ν[1])
+    z = σ*H
+    c1 = 0.00022360455165964103
+    c2 = 0.00022460903379549558
+    τξ_a = @. exp(-q*(z + H))*(c1*cos(q*(z + H)) + c2*sin(q*(z + H)))
+    τη_a = @. exp(-q*(z + H))*(c2*cos(q*(z + H)) - c1*sin(q*(z + H)))
+
+    # compare 
+    abs_err = abs.(τξ - τξ_a)
+    println(@sprintf("Max Abs Error: %1.1e kg m-3 s-1 (i = %d / %d)", maximum(abs_err), argmax(abs_err), nσ))
+    println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_a))))
+
+    # plot
+    fig, ax = subplots()
+    ax.set_xlabel(L"Stress $\tau$ (kg m$^{-3}$ s$^{-1}$)")
+    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax.plot(τξ, z/1e3, label=L"$\tau^\xi$")
+    ax.plot(τη, z/1e3, label=L"$\tau^\eta$")
+    ax.plot(τξ_a, z/1e3, "k--", lw=0.5, label="Analytical")
+    ax.plot(τη_a, z/1e3, "k--", lw=0.5)
+    ax.legend()
+    # ax.set_xlim([0, 3e-4])
+    # ax.set_ylim([-1, -0.99])
+    ax.set_ylim([-1, -0.9])
+    savefig("images/tau_error.png")
+    println("images/tau_error.png")
+end
+
+baroclinic_convergence()
+
+# m3D = setup_model()
+# s3D = invert3D(m3D)
+# # plot_uξ_uη_slice(m3D, s3D)
+# Ψ2D, Ψ3D = plot_Ψ_error()
 
 # plot_convergence()
 
