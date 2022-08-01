@@ -3,6 +3,7 @@ using PyPlot
 using Printf
 using LinearAlgebra
 using SuiteSparse
+using ProgressMeter
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -14,12 +15,12 @@ function get_basin_geometry()
     geo = "circle"
 
     # bathymetry type
-    # bath = "flat"
-    bath = "tub"
+    bath = "flat"
+    # bath = "tub"
 
     # resolution
-    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 1   #  1452 linear nodes,   5677 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
@@ -503,8 +504,8 @@ function baroclinic_convergence_1D()
     # analytical solution (assuming b = τ₀ = 0)
     q = sqrt(f/2/ν[1])
     z = σ*H
-    c1 = 0.00022360455165964103 # from Mathematica
-    c2 = 0.00022460903379549558
+    c1 = 0.00022460903379549558
+    c2 = 0.00022360455165964103 # from Mathematica
     τξ_a = @. exp(-q*(z + H))*(c1*cos(q*(z + H)) + c2*sin(q*(z + H)))
     τη_a = @. exp(-q*(z + H))*(c2*cos(q*(z + H)) - c1*sin(q*(z + H)))
 
@@ -538,8 +539,9 @@ function baroclinic_convergence_full()
     C₀ = get_shape_func_coeffs(p, t)
 
     # vertical coordinate
-    nσ = 2^7
+    nσ = 2^8
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
+    # σ = -1.:1/(nσ - 1):0
 
     # coriolis parameter f = f₀ + βη
     f₀ = 1e-4
@@ -551,7 +553,7 @@ function baroclinic_convergence_full()
 
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 
-    for i=1:np 
+    @showprogress "Calculating baroclinic LHSs..." for i=1:np 
         baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
     end  
 
@@ -585,12 +587,32 @@ function baroclinic_convergence_full()
     τξ_tξ_a = zeros(np, nσ)
     τη_tξ_a = zeros(np, nσ)
     for i=1:np
-        q = sqrt(abs(f₀ + β*η[i])/2/ν[i, 1])
+        # params
+        νᵢ = ν[i, 1]
+        q = sqrt(abs(f₀ + β*η[i])/2/νᵢ)
+        Hq = H[i]*q
         z = σ*H[i]
-        c1 = 0.00022360455165964103 # from Mathematica
-        c2 = 0.00022460903379549558
-        τξ_tξ_a[i, :] = @. exp(-q*(z + H[i]))*(c1*cos(q*(z + H[i])) + c2*sin(q*(z + H[i])))
-        τη_tξ_a[i, :] = @. exp(-q*(z + H[i]))*(c2*cos(q*(z + H[i])) - c1*sin(q*(z + H[i])))
+        
+        # # approx solution (assuming large H)
+        # denom = 1 + exp(-2*Hq) - 2*Hq + 2*Hq^2 + 2*exp(-Hq)*(Hq - 1)*cos(Hq) - 2*exp(-Hq)*Hq*sin(Hq)
+        # c1 = 0
+        # c2 = 0
+        # c3 = 2*q^2*νᵢ*ρ₀*(Hq     - exp(-Hq)*sin(Hq)) / denom
+        # c4 = 2*q^2*νᵢ*ρ₀*(Hq - 1 + exp(-Hq)*cos(Hq)) / denom
+        # exact solution
+        denom = 1 + exp(-4*Hq) - 2Hq + 2*exp(-4*Hq)*Hq + 2*Hq^2 + 2*exp(-4*Hq)*Hq^2 + 2*exp(-2*Hq)*(2*Hq^2 - 1)cos(2*Hq) - 4*exp(-2*Hq)*Hq*sin(2*Hq)
+        # c1 = -2*exp(-3*Hq)*q^2*νᵢ*ρ₀*((1 + exp(2*Hq))*Hq*cos(Hq) - (1 + Hq - exp(2*Hq)*(Hq - 1))*sin(Hq)) / denom
+        # c2 =  2*exp(-3*Hq)*q^2*νᵢ*ρ₀*((1 + Hq + exp(2*Hq)*(Hq - 1))*cos(Hq) - (exp(2*Hq) - 1)*Hq*sin(Hq)) / denom
+        # c3 =  2*exp(-2*Hq)*q^2*νᵢ*ρ₀*(exp(2*Hq)*Hq + Hq*cos(2*Hq) - (1 + Hq)*sin(2*Hq)) / denom
+        # c4 =  2*exp(-2*Hq)*q^2*νᵢ*ρ₀*(exp(2*Hq)*(Hq - 1) + (1 + Hq)*cos(2*Hq) + Hq*sin(2*Hq)) / denom
+        c1 = -2*q^2*νᵢ*ρ₀*((exp(-3*Hq) + exp(-Hq))*Hq*cos(Hq) - ((1 + Hq)*exp(-3*Hq) - exp(-Hq)*(Hq - 1))*sin(Hq)) / denom
+        c2 =  2*q^2*νᵢ*ρ₀*(((1 + Hq)*exp(-3*Hq) + exp(-Hq)*(Hq - 1))*cos(Hq) - (exp(-Hq) - exp(-3*Hq))*Hq*sin(Hq)) / denom
+        c3 =  2*q^2*νᵢ*ρ₀*(Hq + exp(-2*Hq)*Hq*cos(2*Hq) - exp(-2*Hq)*(1 + Hq)*sin(2*Hq)) / denom
+        c4 =  2*q^2*νᵢ*ρ₀*((Hq - 1) + exp(-2*Hq)*(1 + Hq)*cos(2*Hq) + exp(-2*Hq)*Hq*sin(2*Hq)) / denom
+        
+        # add to array
+        τξ_tξ_a[i, :] = @. exp(q*z)*(c1*cos(q*z) + c2*sin(q*z)) + exp(-q*(z + H[i]))*(c3*cos(q*(z + H[i])) + c4*sin(q*(z + H[i])))
+        τη_tξ_a[i, :] = @. exp(q*z)*(c1*sin(q*z) - c2*cos(q*z)) + exp(-q*(z + H[i]))*(c4*cos(q*(z + H[i])) - c3*sin(q*(z + H[i])))
     end
 
     # plot
@@ -600,9 +622,11 @@ function baroclinic_convergence_full()
     plt.close()
 
     # compare 
-    abs_err = abs.(τξ_tξ_a - τξ_tξ)
+    # abs_err = abs.(τξ_tξ_a - τξ_tξ)
+    abs_err = abs.(τξ_tξ_a[:, 1] - τξ_tξ[:, 1])
     println(@sprintf("Max Abs Error: %1.1e kg m-3 s-1 (%s)", maximum(abs_err), argmax(abs_err)))
-    println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_tξ_a))))
+    # println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_tξ_a))))
+    println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_tξ_a[:, 1]))))
 end
 
 # baroclinic_convergence_1D()
