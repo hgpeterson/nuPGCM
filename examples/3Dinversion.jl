@@ -1,6 +1,8 @@
 using nuPGCM
 using PyPlot
 using Printf
+using LinearAlgebra
+using SuiteSparse
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -16,15 +18,15 @@ function get_basin_geometry()
     bath = "tub"
 
     # resolution
-    res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -39,8 +41,8 @@ function get_basin_geometry()
 
     # depth H
     # H₀ = 4e3
-    # H₀ = 2e3
-    H₀ = 2e2
+    H₀ = 2e3
+    # H₀ = 2e2
     Δ = Lx/5 # width of gaussian for bathtub
     G(r) = 1 - exp(-r^2/(2*Δ^2)) # gaussian for bathtub
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
@@ -59,23 +61,23 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            # H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
-            # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
-            # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
+            Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
+            Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 100
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 2e3
             # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
             # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
-            H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
-            Hx = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
+            # H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
+            # Hx = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
         end
     end
 
     return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
 end
 
-function setup_model()
+function setup_model(; plots=true)
     # use bl theory?
     bl = false
 
@@ -109,8 +111,10 @@ function setup_model()
     #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 1e-1*ones(np, nσ)
-    κ = 1e-1*ones(np, nσ)
+    ν = 1e-3*ones(np, nσ)
+    κ = 1e-3*ones(np, nσ)
+    # ν = 1e-1*ones(np, nσ)
+    # κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -118,48 +122,50 @@ function setup_model()
     # model setup struct
     m = ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², 0.)
 
-    # plot H
-    plot_horizontal(p, t, H; clabel=L"Depth $H$ (m)")
-    savefig("images/H.png")
-    println("images/H.png")
-    plt.close()
+    if plots
+        # plot H
+        plot_horizontal(p, t, H; clabel=L"Depth $H$ (m)")
+        savefig("images/H.png")
+        println("images/H.png")
+        plt.close()
 
-    # plot Hx
-    plot_horizontal(p, t, Hx; clabel=L"Slope $\partial_x H$ (-)")
-    savefig("images/Hx.png")
-    println("images/Hx.png")
-    plt.close()
+        # plot Hx
+        plot_horizontal(p, t, Hx; clabel=L"Slope $\partial_x H$ (-)")
+        savefig("images/Hx.png")
+        println("images/Hx.png")
+        plt.close()
 
-    # plot Hy
-    plot_horizontal(p, t, Hy; clabel=L"Slope $\partial_y H$ (-)")
-    savefig("images/Hy.png")
-    println("images/Hy.png")
-    plt.close()
+        # plot Hy
+        plot_horizontal(p, t, Hy; clabel=L"Slope $\partial_y H$ (-)")
+        savefig("images/Hy.png")
+        println("images/Hy.png")
+        plt.close()
 
-    # plot f/H
-    f_over_H = @. (f₀ + β*η)/(H + eps())
-    plot_horizontal(p, t, f_over_H; vext=1e-7, clabel=L"$f/H$ (s$^{-1}$ m$^{-1}$)")
-    savefig("images/f_over_H.png")
-    println("images/f_over_H.png")
-    plt.close()
+        # plot f/H
+        f_over_H = @. (f₀ + β*η)/(H + eps())
+        plot_horizontal(p, t, f_over_H; vext=1e-7, clabel=L"$f/H$ (s$^{-1}$ m$^{-1}$)")
+        savefig("images/f_over_H.png")
+        println("images/f_over_H.png")
+        plt.close()
 
-    # plot baroclinic components 
-    plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
-    savefig("images/tau_xi_t.png")
-    println("images/tau_xi_t.png")
-    plt.close()
-    plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
-    savefig("images/tau_eta_t.png")
-    println("images/tau_eta_t.png")
-    plt.close()
-    plot_horizontal(p, t, m.τξ_wξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
-    savefig("images/tau_xi_w.png")
-    println("images/tau_xi_w.png")
-    plt.close()
-    plot_horizontal(p, t, m.τη_wξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
-    savefig("images/tau_eta_w.png")
-    println("images/tau_eta_w.png")
-    plt.close()
+        # plot baroclinic components 
+        plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+        savefig("images/tau_xi_t.png")
+        println("images/tau_xi_t.png")
+        plt.close()
+        plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+        savefig("images/tau_eta_t.png")
+        println("images/tau_eta_t.png")
+        plt.close()
+        plot_horizontal(p, t, m.τξ_wξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
+        savefig("images/tau_xi_w.png")
+        println("images/tau_xi_w.png")
+        plt.close()
+        plot_horizontal(p, t, m.τη_wξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
+        savefig("images/tau_eta_w.png")
+        println("images/tau_eta_w.png")
+        plt.close()
+    end
 
     return m
 end
@@ -477,7 +483,7 @@ function plot_convergence()
    println("images/convergence.png")
 end
 
-function baroclinic_convergence()
+function baroclinic_convergence_1D()
     # params
     ρ₀ = 1000.
     nσ = 2^8
@@ -494,10 +500,10 @@ function baroclinic_convergence()
     τξ = sol[imap[1, :]]
     τη = sol[imap[2, :]]
 
-    # analytical solution
+    # analytical solution (assuming b = τ₀ = 0)
     q = sqrt(f/2/ν[1])
     z = σ*H
-    c1 = 0.00022360455165964103
+    c1 = 0.00022360455165964103 # from Mathematica
     c2 = 0.00022460903379549558
     τξ_a = @. exp(-q*(z + H))*(c1*cos(q*(z + H)) + c2*sin(q*(z + H)))
     τη_a = @. exp(-q*(z + H))*(c2*cos(q*(z + H)) - c1*sin(q*(z + H)))
@@ -516,14 +522,91 @@ function baroclinic_convergence()
     ax.plot(τξ_a, z/1e3, "k--", lw=0.5, label="Analytical")
     ax.plot(τη_a, z/1e3, "k--", lw=0.5)
     ax.legend()
-    # ax.set_xlim([0, 3e-4])
-    # ax.set_ylim([-1, -0.99])
     ax.set_ylim([-1, -0.9])
     savefig("images/tau_error.png")
     println("images/tau_error.png")
 end
 
-baroclinic_convergence()
+function baroclinic_convergence_full()
+    # ref density
+    ρ₀ = 1000.
+
+    # basin geo
+    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
+
+    # shape function coefficients
+    C₀ = get_shape_func_coeffs(p, t)
+
+    # vertical coordinate
+    nσ = 2^7
+    σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
+
+    # coriolis parameter f = f₀ + βη
+    f₀ = 1e-4
+    β = 0.
+
+    # diffusivity and viscosity
+    ν = 1e-3*ones(np, nσ)
+    κ = 1e-3*ones(np, nσ)
+
+    # baroclinic LHS matrices
+    baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 
+    for i=1:np 
+        baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
+    end  
+
+    # compute m = ∫ φᵢ 
+    m = nuPGCM.get_m(p, t, C₀)
+
+    # compute M = ∫ φᵢ φⱼ
+    M = nuPGCM.get_M(p, t, C₀)
+    M_LU = lu(M)
+
+    # baroclinic RHSs 
+    baroclinic_RHSs_tξ = zeros(np, 2*nσ)
+    for i=1:np
+        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, m[i], 0)
+    end
+
+    # solve for v = M τ
+    vξ_tξ, vη_tξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_tξ)
+
+    # invert for τ
+    τξ_tξ = M_LU\vξ_tξ
+    τη_tξ = M_LU\vη_tξ
+
+    # plot
+    plot_horizontal(p, t, τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+    savefig("images/tau_xi_t.png")
+    println("images/tau_xi_t.png")
+    plt.close()
+
+    # analytical
+    τξ_tξ_a = zeros(np, nσ)
+    τη_tξ_a = zeros(np, nσ)
+    for i=1:np
+        q = sqrt(abs(f₀ + β*η[i])/2/ν[i, 1])
+        z = σ*H[i]
+        c1 = 0.00022360455165964103 # from Mathematica
+        c2 = 0.00022460903379549558
+        τξ_tξ_a[i, :] = @. exp(-q*(z + H[i]))*(c1*cos(q*(z + H[i])) + c2*sin(q*(z + H[i])))
+        τη_tξ_a[i, :] = @. exp(-q*(z + H[i]))*(c2*cos(q*(z + H[i])) - c1*sin(q*(z + H[i])))
+    end
+
+    # plot
+    plot_horizontal(p, t, τξ_tξ_a[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+    savefig("images/tau_xi_t_a.png")
+    println("images/tau_xi_t_a.png")
+    plt.close()
+
+    # compare 
+    abs_err = abs.(τξ_tξ_a - τξ_tξ)
+    println(@sprintf("Max Abs Error: %1.1e kg m-3 s-1 (%s)", maximum(abs_err), argmax(abs_err)))
+    println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_tξ_a))))
+end
+
+# baroclinic_convergence_1D()
+baroclinic_convergence_full()
 
 # m3D = setup_model()
 # s3D = invert3D(m3D)
