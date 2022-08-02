@@ -15,8 +15,8 @@ function get_basin_geometry()
     geo = "circle"
 
     # bathymetry type
-    bath = "flat"
-    # bath = "tub"
+    # bath = "flat"
+    bath = "tub"
 
     # resolution
     res = 1   #  1452 linear nodes,   5677 quadratic nodes
@@ -62,7 +62,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 5
+            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 3e2 #5
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
             # H = @. H₀*G(sqrt(ξ^2 + η^2) - 0) + 100
@@ -349,102 +349,6 @@ function plot_Ψ_error()
     println(@sprintf("Max Abs. Err.: %1.1e Sv (i = %d/%d)", maximum(abs_err), argmax(abs_err), m2D.nξ))
     println(@sprintf("Max Rel. Err.: %1.1e %%  (i = %d/%d)", maximum(rel_err[1:end-1]), argmax(rel_err[1:end-1]), m2D.nξ))
 
-    # NOTES 
-
-    # flat
-
-    ## linear
-
-    ## quad
-    # 66 km
-    # Max Abs. Err.: 7.0e-04 Sv (i = 216/256)
-    # Max Rel. Err.: 2.2e+13 %  (i = 232/256)
-    # 40 km
-    # Max Abs. Err.: 9.7e-05 Sv (i = 202/256)
-    # Max Rel. Err.: 4.2e+11 %  (i = 229/256)
-    # 26 km
-    # Max Abs. Err.: 1.0e-04 Sv (i = 203/256)
-    # Max Rel. Err.: 1.2e+11 %  (i = 230/256)
-
-    # bump
-
-    ## linear 
-    # 79 km
-    # Max Abs. Err.: 8.2e-02 Sv (i = 7/256)
-    # Max Rel. Err.: 6.8e+15 %  (i = 203/256)
-    # 53 km
-    # Max Abs. Err.: 8.3e-02 Sv (i = 16/256)
-    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
-    # 26 km
-    # Max Abs. Err.: 8.3e-02 Sv (i = 7/256)
-    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
-
-    ## quad
-    # 66 km
-    # Max Abs. Err.: 8.3e-02 Sv (i = 9/256)
-    # Max Rel. Err.: 6.8e+15 %  (i = 203/256)
-    # 40 km
-    # Max Abs. Err.: 8.3e-02 Sv (i = 8/256)
-    # Max Rel. Err.: 6.9e+15 %  (i = 203/256)
-
-    # smooth seamount 
-
-    ## linear 
-    # 79 km
-    # Max Abs. Err.: 0.002510541020970442 Sv (i = 1/256)
-    # Max Rel. Err.: 49.61509299113088 %  (i = 255/256)
-    # 53 km
-    # Max Abs. Err.: 0.0006460267919953912 Sv (i = 3/256)
-    # Max Rel. Err.: 41.15000796240408 %  (i = 255/256)
-
-    ## quad 
-    # 66 km
-    # Max Abs. Err.: 0.0009615129963078071 Sv (i = 1/256)
-    # Max Rel. Err.: 13.328172536836757 %  (i = 253/256)
-    # 40 km
-    # Max Abs. Err.: 0.0008722602073362796 Sv (i = 1/256)
-    # Max Rel. Err.: 1.2092873735227374 %  (i = 253/256)
-
-    # seamount 
-    
-    ## linear
-    # res 3
-    # Max Abs. Err.: 0.0028340422613117844 Sv (i = 100/256)
-    # Max Rel. Err.: 0.3961581294613164 (i = 255/256)
-    # res 4
-    # Max Abs. Err.: 0.0017572642167164013 Sv (i = 57/256)
-    # Max Rel. Err.: 0.1727665983611179 (i = 255/256)
-    # res 5
-    # Max Abs. Err.: 0.0019686711576948875 Sv (i = 46/256)
-    # Max Rel. Err.: 0.11325594706939067 (i = 255/256)
-
-
-    ## quad
-    # res 2
-    # Max Abs. Err.: 0.004957369499398861 Sv (i = 42/256)
-    # Max Rel. Err.: 0.010027110906775728 (i = 253/256)
-    # res 3
-    # Max Abs. Err.: 0.002522487074864097 Sv (i = 42/256)
-    # Max Rel. Err.: 0.006193164422647504 (i = 251/256)
-
-    # bowl 
-
-    ## linear
-    # res 3
-    # Max Abs. Err.: 0.0035541867089181906 Sv (i = 186/256)
-    # Max Rel. Err.: 7756.983467643481 (i = 255/256)
-    # res 4
-    # Max Abs. Err.: 0.0018396818484691902 Sv (i = 16/256)
-    # Max Rel. Err.: 907.3517644388313 (i = 255/256)
-
-    ## quad
-    # res 2
-    # Max Abs. Err.: 0.004864460135575267 Sv (i = 166/256)
-    # Max Rel. Err.: 52456.01038583682 (i = 255/256)
-    # res 3
-    # Max Abs. Err.: 0.002084866667112568 Sv (i = 127/256)
-    # Max Rel. Err.: 1204.946281527143 (i = 255/256)
-
     fig, ax = subplots(3, 1, figsize=(19/6, 3*19/6/1.62), sharex=true)
     ax[1].set_ylabel(L"Streamfunction $\Psi$ (Sv)")
     ax[2].set_ylabel("Absolute Error (Sv)")
@@ -491,7 +395,7 @@ function baroclinic_convergence_1D()
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
     ν = 1e-3*ones(nσ)
     f = 1e-4
-    H = 1e3
+    H = 1e-1
 
     # numerical solution
     baroclinic_LHS = get_baroclinic_LHS(ρ₀, ν, f, H, σ)
@@ -503,11 +407,17 @@ function baroclinic_convergence_1D()
 
     # analytical solution (assuming b = τ₀ = 0)
     q = sqrt(f/2/ν[1])
+    Hq = H*q
     z = σ*H
-    c1 = 0.00022460903379549558
-    c2 = 0.00022360455165964103 # from Mathematica
-    τξ_a = @. exp(-q*(z + H))*(c1*cos(q*(z + H)) + c2*sin(q*(z + H)))
-    τη_a = @. exp(-q*(z + H))*(c2*cos(q*(z + H)) - c1*sin(q*(z + H)))
+    denom = 1 + exp(-4*Hq) - 2Hq + 2*exp(-4*Hq)*Hq + 2*Hq^2 + 2*exp(-4*Hq)*Hq^2 + 2*exp(-2*Hq)*(2*Hq^2 - 1)cos(2*Hq) - 4*exp(-2*Hq)*Hq*sin(2*Hq)
+    c1 = -2*q^2*ν[1]*ρ₀*((exp(-3*Hq) + exp(-Hq))*Hq*cos(Hq) - ((1 + Hq)*exp(-3*Hq) - exp(-Hq)*(Hq - 1))*sin(Hq)) / denom
+    c2 =  2*q^2*ν[1]*ρ₀*(((1 + Hq)*exp(-3*Hq) + exp(-Hq)*(Hq - 1))*cos(Hq) - (exp(-Hq) - exp(-3*Hq))*Hq*sin(Hq)) / denom
+    c3 =  2*q^2*ν[1]*ρ₀*(Hq + exp(-2*Hq)*Hq*cos(2*Hq) - exp(-2*Hq)*(1 + Hq)*sin(2*Hq)) / denom
+    c4 =  2*q^2*ν[1]*ρ₀*((Hq - 1) + exp(-2*Hq)*(1 + Hq)*cos(2*Hq) + exp(-2*Hq)*Hq*sin(2*Hq)) / denom
+    
+    # add to array
+    τξ_a = @. exp(q*z)*(c1*cos(q*z) + c2*sin(q*z)) + exp(-q*(z + H))*(c3*cos(q*(z + H)) + c4*sin(q*(z + H)))
+    τη_a = @. exp(q*z)*(c1*sin(q*z) - c2*cos(q*z)) + exp(-q*(z + H))*(c4*cos(q*(z + H)) - c3*sin(q*(z + H)))
 
     # compare 
     abs_err = abs.(τξ - τξ_a)
@@ -516,14 +426,14 @@ function baroclinic_convergence_1D()
 
     # plot
     fig, ax = subplots()
-    ax.set_xlabel(L"Stress $\tau$ (kg m$^{-3}$ s$^{-1}$)")
-    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-    ax.plot(τξ, z/1e3, label=L"$\tau^\xi$")
-    ax.plot(τη, z/1e3, label=L"$\tau^\eta$")
-    ax.plot(τξ_a, z/1e3, "k--", lw=0.5, label="Analytical")
-    ax.plot(τη_a, z/1e3, "k--", lw=0.5)
+    ax.set_xlabel(L"Stress $\tau H^2$ (kg m$^{-1}$ s$^{-1}$)")
+    ax.set_ylabel(L"Vertical coordinate $z$ (m)")
+    ax.plot(τξ*H^2,   z, label=L"$\tau^\xi$")
+    ax.plot(τη*H^2,   z, label=L"$\tau^\eta$")
+    ax.plot(τξ_a*H^2, z, "k--", lw=0.5, label="Analytical")
+    ax.plot(τη_a*H^2, z, "k--", lw=0.5)
     ax.legend()
-    ax.set_ylim([-1, -0.9])
+    # ax.set_ylim([-1, -0.9])
     savefig("images/tau_error.png")
     println("images/tau_error.png")
 end
@@ -539,7 +449,7 @@ function baroclinic_convergence_full()
     C₀ = get_shape_func_coeffs(p, t)
 
     # vertical coordinate
-    nσ = 2^8
+    nσ = 2^6
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
     # σ = -1.:1/(nσ - 1):0
 
@@ -629,8 +539,8 @@ function baroclinic_convergence_full()
     println(@sprintf("Max τ:         %1.1e kg m-3 s-1", maximum(abs.(τξ_tξ_a[:, 1]))))
 end
 
-# baroclinic_convergence_1D()
-baroclinic_convergence_full()
+baroclinic_convergence_1D()
+# baroclinic_convergence_full()
 
 # m3D = setup_model()
 # s3D = invert3D(m3D)
