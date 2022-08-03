@@ -9,7 +9,8 @@ set_out_folder("../output/")
 
 function emulate_2D(; bl = false)
     # parameters (see `setup.jl`)
-    f = 8.753044701640954e-5 
+    # f = 8.753044701640954e-5 
+    f = 1e-4
     L = 5e6
     nξ = 2^8 
     nσ = 2^8
@@ -27,19 +28,19 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     # H₀ = 4e3
-    # H₀ = 2e3
-    H₀ = 2e2
+    H₀ = 2e3
+    # H₀ = 2e2
     Δ = L/5 # width of gaussian for bathtub
     G(x) = 1 - exp(-x^2/(2*Δ^2)) # gaussian for bathtub
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
     G_bump(x) = if x < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - x^2)) else return 0 end 
     Gx_bump(x) = if x < 4Δ return 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2 else return 0 end
-    # H_func(x) = H₀*G(x - L) + 5
-    # Hx_func(x) = H₀*Gx(x - L)
+    H_func(x) = H₀*G(x - L) + eps()
+    Hx_func(x) = H₀*Gx(x - L)
     # H_func(x) = H₀*G(x - 0) + 2e3
     # Hx_func(x) = H₀*Gx(x - 0)
-    H_func(x) = H₀*G_bump(x - 0) + 2e3
-    Hx_func(x) = H₀*Gx_bump(x - 0)
+    # H_func(x) = H₀*G_bump(x - 0) + 2e3
+    # Hx_func(x) = H₀*Gx_bump(x - 0)
     # H_func(x) = H₀ + 0*x
     # Hx_func(x) = 0*x
 
@@ -98,14 +99,14 @@ m2D, s2D = emulate_2D()
 save_setup(m2D, "setup2D.h5")
 save_state(s2D, "state2D.h5")
 
-ridge_plot(m2D, s2D, s2D.uξ, "", L"Zonal velocity $u^x$ (m s$^{-1}$)"; style="pcolormesh")
-savefig("images/ux2D.png")
-println("images/ux2D.png")
+ridge_plot(m2D, s2D, 1e3*s2D.uξ, "", L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
+savefig("images/uxi2D.png")
+println("images/uxi2D.png")
 plt.close()
 
-ridge_plot(m2D, s2D, s2D.uη, "", L"Meridional velocity $u^y$ (m s$^{-1}$)"; style="pcolormesh")
-savefig("images/uy2D.png")
-println("images/uy2D.png")
+ridge_plot(m2D, s2D, 1e3*s2D.uη, "", L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
+savefig("images/ueta2D.png")
+println("images/ueta2D.png")
 plt.close()
 
 # # load 2D

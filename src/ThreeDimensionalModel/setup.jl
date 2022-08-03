@@ -154,19 +154,13 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     for i=1:np
-        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0,    0, m[i], 0)
-        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), m[i], 0, 0,    0) 
+        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
+        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0) 
     end
 
-    # solve for v = M τ
-    vξ_tξ, vη_tξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_tξ)
-    vξ_wξ, vη_wξ = get_vξ_vη(baroclinic_LHSs, baroclinic_RHSs_wξ)
-
-    # invert for τ
-    τξ_tξ = M_LU\vξ_tξ
-    τη_tξ = M_LU\vη_tξ
-    τξ_wξ = M_LU\vξ_wξ
-    τη_wξ = M_LU\vη_wξ
+    # solve for τ at each column
+    τξ_tξ, τη_tξ = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_tξ)
+    τξ_wξ, τη_wξ = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τξ_tξ[:, 1], τη_tξ[:, 1])

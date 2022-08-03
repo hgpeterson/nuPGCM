@@ -151,7 +151,7 @@ function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 end
 
 function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
-    # convention: vξ is variable 1, vη is variable 2
+    # convention: τξ is variable 1, τη is variable 2
     nσ = size(σ, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
@@ -162,7 +162,7 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
         # ∂σσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
 
-        # eqtn 1: ν/f/H² ∂σσ(vξ) + vη = bˣ
+        # eqtn 1: ν/f/H² ∂σσ(τξ) + τη = rhs_x
         row = imap[1, j]
         # term 1
         push!(baroclinic_LHS, (row, imap[1, j-1], ν[j]/f/H^2 * fd_σσ[1]))
@@ -171,7 +171,7 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
         # term 2
         push!(baroclinic_LHS, (row, imap[2, j], 1))
 
-        # eqtn 2: ν/f/H² ∂σσ(vη) - vξ = bʸ
+        # eqtn 2: ν/f/H² ∂σσ(τη) - τξ = rhs_y
         row = imap[2, j]
         # term 1
         push!(baroclinic_LHS, (row, imap[2, j-1], ν[j]/f/H^2 * fd_σσ[1]))
@@ -182,19 +182,19 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
     end
 
     # Upper boundary conditions: wind stress
-    # b.c. 1: vξ = vξ₀ at σ = 0
+    # b.c. 1: τξ = τξ₀ at σ = 0
     push!(baroclinic_LHS, (imap[1, nσ], imap[1, nσ], 1))
-    # b.c. 2: vη = vη₀ at σ = 0
+    # b.c. 2: τη = τη₀ at σ = 0
     push!(baroclinic_LHS, (imap[2, nσ], imap[2, nσ], 1))
 
     # Integral boundary conditions: transport
-    # b.c. 1: -H² ∫ σ vξ/ρ₀/ν dσ = Uξφ
+    # b.c. 1: -H² ∫ σ τξ/ρ₀/ν dσ = Uξφ
     for j=1:nσ-1
         # trapezoidal rule
         push!(baroclinic_LHS, (imap[1, 1], imap[1, j],   -H^2/ρ₀/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
         push!(baroclinic_LHS, (imap[1, 1], imap[1, j+1], -H^2/ρ₀/ν[j+1] * σ[j+1] * (σ[j+1] - σ[j])/2))
     end
-    # b.c. 1: -H² ∫ σ vη/ρ₀/ν dσ = Uηφ
+    # b.c. 1: -H² ∫ σ τη/ρ₀/ν dσ = Uη
     for j=1:nσ-1
         # trapezoidal rule
         push!(baroclinic_LHS, (imap[2, 1], imap[2, j],   -H^2/ρ₀/ν[j]   * σ[j]   * (σ[j+1] - σ[j])/2))
@@ -208,47 +208,47 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
 end
 
 function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray{<:Real,1}, 
-                            vξ₀::Real, vη₀::Real, Uξφ::Real, Uηφ::Real)
+                            τξ₀::Real, τη₀::Real, Uξ::Real, Uη::Real)
     nσ = size(rhs_x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
     baroclinic_RHS = zeros(nvar*nσ)
 
     # eqtns:
-    # eqtn 1: ν/f/H² ∂σσ(vξ) + vη = bˣ
+    # eqtn 1: ν/f/H² ∂σσ(τξ) + τη = rhs_x
     baroclinic_RHS[imap[1, 2:nσ-1]] = rhs_x[2:nσ-1] 
-    # eqtn 2: ν/f/H² ∂σσ(vη) - vξ = bʸ
+    # eqtn 2: ν/f/H² ∂σσ(τη) - τξ = rhs_y
     baroclinic_RHS[imap[2, 2:nσ-1]] = rhs_y[2:nσ-1] 
 
     # top b.c.:
-    # b.c. 1: vξ = vξ₀ at σ = 0
-    baroclinic_RHS[imap[1, nσ]] = vξ₀
-    # b.c. 2: vη = vη₀ at σ = 0
-    baroclinic_RHS[imap[2, nσ]] = vη₀
+    # b.c. 1: τξ = τξ₀ at σ = 0
+    baroclinic_RHS[imap[1, nσ]] = τξ₀
+    # b.c. 2: τη = τη₀ at σ = 0
+    baroclinic_RHS[imap[2, nσ]] = τη₀
     
     # integral b.c.:
-    # b.c. 1: -H² ∫ σ vξ/ρ₀/ν dσ = Uξφ
-    baroclinic_RHS[imap[1, 1]] = Uξφ
-    # b.c. 2: -H² ∫ σ vη/ρ₀/ν dσ = Uηφ
-    baroclinic_RHS[imap[2, 1]] = Uηφ
+    # b.c. 1: -H² ∫ σ τξ/ρ₀/ν dσ = Uξ
+    baroclinic_RHS[imap[1, 1]] = Uξ
+    # b.c. 2: -H² ∫ σ τη/ρ₀/ν dσ = Uη
+    baroclinic_RHS[imap[2, 1]] = Uη
 
     return baroclinic_RHS
 end
 
-function get_vξ_vη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
+function get_τξ_τη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
                    baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    vξ = zeros(np, nσ)
-    vη = zeros(np, nσ)
+    τξ = zeros(np, nσ)
+    τη = zeros(np, nσ)
     for i=1:np
         sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
-        vξ[i, :] = sol[imap[1, :]]
-        vη[i, :] = sol[imap[2, :]]
+        τξ[i, :] = sol[imap[1, :]]
+        τη[i, :] = sol[imap[2, :]]
     end
-    return vξ, vη
+    return τξ, τη
 end
 
 function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
