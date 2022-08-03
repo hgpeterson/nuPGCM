@@ -152,7 +152,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
 
     # weighted sum
     integral = 0
-    for i=1:size(w, 1)
+    for i in eachindex(w)
         # transform integration points
         x′ = @. p[1, :] + (p[2, :] - p[1, :])*x[i, 1] + (p[3, :] - p[1, :])*x[i, 2]
 
