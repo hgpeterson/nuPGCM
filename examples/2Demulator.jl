@@ -9,7 +9,6 @@ set_out_folder("../output/")
 
 function emulate_2D(; bl = false)
     # parameters (see `setup.jl`)
-    # f = 8.753044701640954e-5 
     f = 1e-4
     L = 5e6
     nξ = 2^8 
@@ -35,14 +34,12 @@ function emulate_2D(; bl = false)
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
     G_bump(x) = if x < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - x^2)) else return 0 end 
     Gx_bump(x) = if x < 4Δ return 32*x*Δ^2*G_bump(x)/(16*Δ^2 - x^2)^2 else return 0 end
-    H_func(x) = H₀*G(x - L) + eps()
-    Hx_func(x) = H₀*Gx(x - L)
-    # H_func(x) = H₀*G(x - 0) + 2e3
-    # Hx_func(x) = H₀*Gx(x - 0)
+    H_func(x) = H₀ + 0*x
+    Hx_func(x) = 0*x
+    # H_func(x) = H₀*G(x - L) + eps()
+    # Hx_func(x) = H₀*Gx(x - L)
     # H_func(x) = H₀*G_bump(x - 0) + 2e3
     # Hx_func(x) = H₀*Gx_bump(x - 0)
-    # H_func(x) = H₀ + 0*x
-    # Hx_func(x) = 0*x
 
     # plot(ξ, -H_func.(ξ))
     # savefig("debug.png")
@@ -77,17 +74,17 @@ function emulate_2D(; bl = false)
 
     # set initial state
     b = zeros(nξ, nσ)
-    for j=1:nσ
-        b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-    end
-    # for i=1:nξ
-    #     Δ = 0.9*m.L
-    #     if m.ξ[i] < Δ
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
-    #     else
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
-    #     end
+    # for j=1:nσ
+    #     b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     # end
+    for i=1:nξ
+        Δ = 0.9*m.L
+        if m.ξ[i] < Δ
+            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
+        else
+            b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
+        end
+    end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
