@@ -36,6 +36,47 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
 
     return M
 end
+function get_M_dirichlet(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1}, C₀::AbstractArray{<:Real,3})
+    # indices
+	np = size(p, 1)
+	nt = size(t, 1)
+
+    # number of shape functions per triangle
+    n = size(t, 2)
+
+	# create global linear system using stamping method
+    M = Tuple{Int64,Int64,Float64}[]  
+	for k=1:nt
+		# calculate contribution to M from element k
+        Mᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
+                func(ξ, η) = shape_func(C₀[k, j, :], ξ, η)*shape_func(C₀[k, i, :], ξ, η)
+                Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+            end
+        end
+
+		# add to global system
+		for i=1:n
+			for j=1:n
+                if t[k, i] in e
+                    continue
+                else
+                    push!(M, (t[k, i], t[k, j], Mᵏ[i, j]))
+                end
+			end
+		end
+	end
+
+    for i in e
+        push!(M, (i, i, 1))
+    end
+
+    # make CSC matrix
+    M = sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), np, np)
+
+    return lu(M)
+end
 
 """
     Cξ, Cη = get_Cξ_Cη(p, t, C₀)
