@@ -9,76 +9,6 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function get_basin_geometry()
-    # geometry type
-    # geo = "square"
-    geo = "circle"
-
-    # bathymetry type
-    bath = "flat"
-    # bath = "tub"
-    # bath = "bump"
-
-    # resolution
-    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
-    # res = 5   # 74035 linear nodes, 295233 quadratic nodes
-
-    # load horizontal mesh
-    p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    # p, t, e = add_midpoints(p, t)
-    np = size(p, 1)
-
-    # widths of basin
-    Lx = 5e6
-    Ly = 5e6
-
-    # rescale p
-    p[:, 1] *= Lx
-    p[:, 2] *= Ly
-    ξ = p[:, 1]
-    η = p[:, 2]
-
-    # depth H
-    # H₀ = 4e3
-    H₀ = 2e3
-    # H₀ = 2e2
-    Δ = Lx/5 # width of gaussian for bathtub
-    G(r) = 1 - exp(-r^2/(2*Δ^2)) # gaussian for bathtub
-    Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
-    G_bump(r) = if r < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - r^2)) else return 0 end 
-    Gr_bump(r) = if r < 4Δ return 32*r*Δ^2*G_bump(r)/(16*Δ^2 - r^2)^2 else return 0 end
-    if bath == "flat"
-        # flat bottom
-        H = H₀*ones(np)
-        Hx = zeros(np)
-        Hy = zeros(np)
-    elseif bath == "tub"
-        if geo == "square"
-            # square bathtub
-            H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
-            Hx = @. H₀*Gr(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gr(Lx - ξ)*G(Ly + η)*G(Ly - η)
-            Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
-        elseif geo == "circle"
-            # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + eps()
-            Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
-        end
-    elseif bath == "bump"
-        if geo == "circle"
-            # circular bump
-            H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
-            Hx = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
-        end
-    end
-
-    return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
-end
-
 function plot_convergence()
    fig, ax = subplots() 
    ax.set_title(L"Flat bottom, Bump function at $x = 0$")
@@ -231,16 +161,20 @@ function derivative_convergence()
     fξ0 = M\b
 
     plot_horizontal(p, t, fξ; contours=false)
-    savefig("fx.png")
+    savefig("images/fx.png")
+    println("images/fx.png")
     plt.close()
     plot_horizontal(p, t, fξ0; contours=false)
-    savefig("fx0.png")
+    savefig("images/fx0.png")
+    println("images/fx0.png")
     plt.close()
     plot_horizontal(p, t, fξ - fξ0; contours=false)
-    savefig("abs_err.png")
+    savefig("images/abs_err.png")
+    println("images/abs_err.png")
     plt.close()
     plot_horizontal(p, t, (fξ - fξ0)./fξ; contours=false)
-    savefig("rel_err.png")
+    savefig("images/rel_err.png")
+    println("images/rel_err.png")
     plt.close()
 
     # absolute error
