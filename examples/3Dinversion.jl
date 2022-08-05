@@ -15,14 +15,14 @@ function get_basin_geometry()
     geo = "circle"
 
     # bathymetry type
-    bath = "flat"
+    # bath = "flat"
     # bath = "tub"
-    # bath = "bump"
+    bath = "bump"
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
@@ -41,15 +41,21 @@ function get_basin_geometry()
     ξ = p[:, 1]
     η = p[:, 2]
 
-    # depth H
-    # H₀ = 4e3
+    # depth scale
     H₀ = 2e3
-    # H₀ = 2e2
-    Δ = Lx/5 # width of gaussian for bathtub
-    G(r) = 1 - exp(-r^2/(2*Δ^2)) # gaussian for bathtub
+
+    # gaussian 
+    Δ = Lx/5 
+    G(r) = 1 - exp(-r^2/(2*Δ^2)) 
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
-    G_bump(r) = if r < 4Δ return -exp(-16*Δ^2/(16*Δ^2 - r^2)) else return 0 end 
-    Gr_bump(r) = if r < 4Δ return 32*r*Δ^2*G_bump(r)/(16*Δ^2 - r^2)^2 else return 0 end
+
+    # bump function
+    w = 4*Δ
+    c = 0
+    G_bump(r) = if c - w < r < c + w return exp(1 - w^2/(w^2 - (r - c)^2)) else return 0 end 
+    Gr_bump(r) = -2*(r - c)*w^2*G_bump(r)/(w^2 - (r - c)^2)^2
+
+    # calculate H(x, y)
     if bath == "flat"
         # flat bottom
         H = H₀*ones(np)
@@ -58,21 +64,21 @@ function get_basin_geometry()
     elseif bath == "tub"
         if geo == "square"
             # square bathtub
-            H = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
+            H  = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
             Hx = @. H₀*Gr(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gr(Lx - ξ)*G(Ly + η)*G(Ly - η)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + eps()
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + eps()
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
     elseif bath == "bump"
         if geo == "circle"
             # circular bump
-            H = @. H₀*G_bump(sqrt(ξ^2 + η^2) - 0) + 2e3
-            Hx = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*ξ/sqrt(ξ^2 + η^2)
-            Hy = @. H₀*Gr_bump(sqrt(ξ^2 + η^2) - 0)*η/sqrt(ξ^2 + η^2)
+            H  = @. H₀ - 2e2*G_bump(sqrt(ξ^2 + η^2))
+            Hx = @.    - 2e2*Gr_bump(sqrt(ξ^2 + η^2))*ξ/sqrt(ξ^2 + η^2)
+            Hy = @.    - 2e2*Gr_bump(sqrt(ξ^2 + η^2))*η/sqrt(ξ^2 + η^2)
         end
     end
 
@@ -179,18 +185,18 @@ function invert3D(m)
 
     # buoyancy field
     b = zeros(np, m.nσ)
-    # for j=1:m.nσ
-    #     b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
-    #     # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
-    # end
-    for i=1:np
-        Δ = 0.9*m.Lx
-        if sqrt(ξ[i]^2 + η[i]^2) < Δ
-            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
-        else
-            b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
-        end
+    for j=1:m.nσ
+        b[:, j] .= m.N²[:, j].*m.H*m.σ[j] + 0.1*m.N²[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
+        # b[:, j] .= m.N²[:, j].*m.H*m.σ[j] 
     end
+    # for i=1:np
+    #     Δ = 0.9*m.Lx
+    #     if sqrt(ξ[i]^2 + η[i]^2) < Δ
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - ξ[i]^2 - η[i]^2)))
+    #     else
+    #         b[i, :] .= m.N²[i, :]*m.H[i].*m.σ
+    #     end
+    # end
 
     # # plot b slice
     # s = ModelState3DPG(b, zeros(1), zeros(1, 1), zeros(1, 1), zeros(1, 1), [1])
@@ -208,8 +214,8 @@ function invert3D(m)
     bσ_x = zeros(np, m.nσ)
     bσ_y = zeros(np, m.nσ)
     for i=1:np
-        bσ_x[i, :] = -m.σ*Hx[i].*differentiate(b[i, :], m.σ)/H[i] 
-        bσ_y[i, :] = -m.σ*Hy[i].*differentiate(b[i, :], m.σ)/H[i]
+        bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
+        bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
     end
     rhs_x = m.Cξ*b + m.M*bσ_x
     rhs_y = m.Cη*b + m.M*bσ_y
@@ -370,10 +376,11 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
+m3D = setup_model()
 # m3D = setup_model(; plots=false)
-# s3D = invert3D(m3D)
-# plot_uξ_uη_slice(m3D, s3D)
-# Ψ2D, Ψ3D = plot_Ψ_error()
+s3D = invert3D(m3D)
+Ψ2D, Ψ3D = plot_Ψ_error()
+plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")
 
