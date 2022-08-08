@@ -104,9 +104,10 @@ export
     get_barotropic_RHS,
     get_baroclinic_LHS,
     get_baroclinic_RHS,
-    get_τξ_τη,
-    get_full_τξ_τη,
-    get_uξ_uη,
+    solve_baroclinic_systems,
+    get_τ_b,
+    get_full_τ,
+    get_u,
 
     # plotting
     tplot,

@@ -159,8 +159,8 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     end
 
     # solve for τ at each column
-    τξ_tξ, τη_tξ = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_tξ)
-    τξ_wξ, τη_wξ = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_wξ)
+    τξ_tξ, τη_tξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_tξ)
+    τξ_wξ, τη_wξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τξ_tξ[:, 1], τη_tξ[:, 1])

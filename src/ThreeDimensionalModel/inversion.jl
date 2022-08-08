@@ -235,8 +235,8 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function get_τξ_τη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
-                   baroclinic_RHSs::AbstractArray{<:Real,2})
+function solve_baroclinic_systems(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
+                                  baroclinic_RHSs::AbstractArray{<:Real,2})
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
@@ -251,7 +251,102 @@ function get_τξ_τη(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.Umfpac
     return τξ, τη
 end
 
-function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
+"""
+    τξ_b, τη_b = get_τ_b(m, b)
+"""
+function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
+    # rhs_x = zeros(np, m.nσ)
+    # rhs_y = zeros(np, m.nσ)
+    # for j=1:m.nσ
+    #     # bξ = (0.1 + m.σ[j])*N²*m.Hx*exp(-(m.σ[j] + 1)/0.1)
+    #     # bη = (0.1 + m.σ[j])*N²*m.Hy*exp(-(m.σ[j] + 1)/0.1)
+    #     bξ = m.Hx./m.H.*b[:, j]
+    #     bη = m.Hy./m.H.*b[:, j]
+    #     bσ = N²*m.H*(1 - exp(-(m.σ[j] + 1)/0.1))
+    #     bx = bξ - m.σ[j]*m.Hx./m.H.*bσ
+    #     by = bη - m.σ[j]*m.Hy./m.H.*bσ
+    #     rhs_x[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*bx
+    #     rhs_y[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*by
+    # end
+    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    # for i=1:np
+    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+    # end
+    # τξ_b, τη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
+
+    # # integrals of buoyancy gradients on rhs
+    # bσ_x = zeros(np, m.nσ)
+    # bσ_y = zeros(np, m.nσ)
+    # for i=1:np
+    #     bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
+    #     bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
+    # end
+    # rhs_x = m.Cξ*b + m.M*bσ_x
+    # rhs_y = m.Cη*b + m.M*bσ_y
+    # for i=1:np
+    #     rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+    #     rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+    # end
+    # # stress due to buoyancy gradients
+    # baroclinic_RHSs_b = zeros(np, 2*m.nσ)
+    # for i=1:np
+    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+    # end
+    # vξ_b, vη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    # τξ_b = m.M_LU\vξ_b
+    # τη_b = m.M_LU\vη_b
+
+    # pointwise buoyancy gradients
+    b_x = m.M_LU\(m.Cξ*b)
+    b_y = m.M_LU\(m.Cη*b)
+    for i=1:m.np
+        b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
+        b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+    end
+    # stress due to buoyancy gradients
+    baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    for i=1:m.np
+        coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+    end
+    τξ_b, τη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    return τξ_b, τη_b
+end
+
+"""
+    τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+"""
+function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    # vξ = zeros(m.np, m.nσ)
+    # vη = zeros(m.np, m.nσ)
+    # n = size(m.t, 2)
+    # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+    #     # precompute matrix mult on Ψ
+    #     Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     for j=1:m.nσ
+    #         # now mult τ
+    #         vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
+    #         vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
+    #     end
+    # end
+    # τξ = τξ_b + m.M_LU\vξ
+    # τη = τη_b + m.M_LU\vη
+    Uξ = -(m.M_LU\(m.Cη*Ψ))
+    Uη =  m.M_LU\(m.Cξ*Ψ)
+    τξ = zeros(m.np, m.nσ)
+    τη = zeros(m.np, m.nσ)
+    for j=1:m.nσ
+        τξ[:, j] = τξ_b[:, j] + Uξ.*m.τξ_tξ[:, j] - Uη.*m.τη_tξ[:, j]
+        τη[:, j] = τη_b[:, j] + Uξ.*m.τη_tξ[:, j] + Uη.*m.τξ_tξ[:, j]
+    end
+    return τξ, τη
+end
+
+"""
+    uξ, uη = get_u(m, τξ, τη)
+"""
+function get_u(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
     uξ = zeros(m.np, m.nσ)
     uη = zeros(m.np, m.nσ)
     for i=1:m.np
@@ -262,23 +357,71 @@ function get_uξ_uη(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::Abs
 end
 
 """
-    τξ, τη = get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    Ψ, uξ, uη, uσ = invert(m, τξ₀, τη₀, b)
 """
-function get_full_τξ_τη(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    vξ = zeros(m.np, m.nσ)
-    vη = zeros(m.np, m.nσ)
-    n = size(m.t, 2)
-    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
-        # precompute matrix mult on Ψ
-        Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        for j=1:m.nσ
-            # now mult τ
-            vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
-        end
+function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::AbstractArray{<:Real,1}, 
+                b::AbstractArray{<:Real,2}; plots=false)
+    # solve for stress due to buoyancy gradients
+    τξ_b, τη_b = get_τ_b(m, b)
+
+    # bottom stress 
+    τξ_b_bot = τξ_b[:, 1]
+    τη_b_bot = τη_b[:, 1]
+
+    # buoyancy integral for JEBAR term
+    γ = zeros(m.np)
+    for i=1:m.np
+        γ[i] = -m.H[i]^2*trapz(m.σ.*b[i, :], m.σ)
     end
-    τξ = τξ_b .+ m.M_LU\vξ
-    τη = τη_b .+ m.M_LU\vη
-    return τξ, τη
+
+    # bottom stress due to wind stress
+    τξ_w_bot = m.τξ_wξ[:, 1]
+    τη_w_bot = m.τη_wξ[:, 1]
+
+    # full τ
+    τξ = τξ₀ - (τξ₀.*τξ_w_bot + τη₀.*τξ_w_bot) - τξ_b_bot
+    τη = τη₀ - (τξ₀.*τη_w_bot - τη₀.*τη_w_bot) - τη_b_bot
+
+    # get barotropic_RHS
+    barotropic_RHS = get_barotropic_RHS(m, γ, τξ, τη)
+
+    # solve
+    Ψ = m.barotropic_LHS\barotropic_RHS
+
+    # get τ
+    τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+
+    # convert to uξ, uη
+    uξ, uη = get_u(m, τξ, τη)
+
+    # compute uσ
+    div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
+    uσ = zeros(m.np, m.nσ)
+    for i=1:m.np
+        uσ[i, :] = cumtrapz(-div[i, :]/m.H[i], m.σ)
+    end
+
+    if plots
+        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
+        savefig("images/tau_xi_b.png")
+        println("images/tau_xi_b.png")
+        plt.close()
+        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
+        savefig("images/tau_eta_b.png")
+        println("images/tau_eta_b.png")
+        plt.close()
+        plot_horizontal(m.p, m.t, γ; clabel=L"Buoyancy integral $\gamma$ (m$^{3}$ s$^{-2}$)")
+        savefig("images/gamma.png")
+        println("images/gamma.png")
+        plt.close()
+    end
+
+    return Ψ, uξ, uη, uσ
 end
+# function invert!(m::ModelSetup3DPG, s::ModelState3DPG)
+#     Ψ, uξ, uη, uσ = invert(m, τξ₀, τη₀, b)
+#     s.Ψ[:] = Ψ
+#     s.uξ[:, :] = uξ
+#     s.uη[:, :] = uη
+#     s.uσ[:, :] = uσ
+# end
