@@ -20,15 +20,15 @@ function get_basin_geometry()
     # bath = "bump"
 
     # resolution
-    res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
-    p, t, e = add_midpoints(p, t)
+    # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
     # widths of basin
@@ -203,49 +203,49 @@ function invert3D(m)
     # plt.close()
     # error()
 
-    # analytical buoyancy gradients
-    rhs_x = zeros(np, m.nσ)
-    rhs_y = zeros(np, m.nσ)
-    for j=1:m.nσ
-        # bξ = (0.1 + m.σ[j])*N²*m.Hx*exp(-(m.σ[j] + 1)/0.1)
-        # bη = (0.1 + m.σ[j])*N²*m.Hy*exp(-(m.σ[j] + 1)/0.1)
-        bξ = m.Hx./m.H.*b[:, j]
-        bη = m.Hy./m.H.*b[:, j]
-        bσ = N²*m.H*(1 - exp(-(m.σ[j] + 1)/0.1))
-        bx = bξ - m.σ[j]*m.Hx./m.H.*bσ
-        by = bη - m.σ[j]*m.Hy./m.H.*bσ
-        rhs_x[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*bx
-        rhs_y[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*by
-    end
-    baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
-    for i=1:np
-        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
-    end
-    τξ_b, τη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
-
-    # # integrals of buoyancy gradients on rhs
-    # bσ_x = zeros(np, m.nσ)
-    # bσ_y = zeros(np, m.nσ)
-    # for i=1:np
-    #     bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
-    #     bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
+    # # analytical buoyancy gradients
+    # rhs_x = zeros(np, m.nσ)
+    # rhs_y = zeros(np, m.nσ)
+    # for j=1:m.nσ
+    #     # bξ = (0.1 + m.σ[j])*N²*m.Hx*exp(-(m.σ[j] + 1)/0.1)
+    #     # bη = (0.1 + m.σ[j])*N²*m.Hy*exp(-(m.σ[j] + 1)/0.1)
+    #     bξ = m.Hx./m.H.*b[:, j]
+    #     bη = m.Hy./m.H.*b[:, j]
+    #     bσ = N²*m.H*(1 - exp(-(m.σ[j] + 1)/0.1))
+    #     bx = bξ - m.σ[j]*m.Hx./m.H.*bσ
+    #     by = bη - m.σ[j]*m.Hy./m.H.*bσ
+    #     rhs_x[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*bx
+    #     rhs_y[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*η).*by
     # end
-    # rhs_x = m.Cξ*b + m.M*bσ_x
-    # rhs_y = m.Cη*b + m.M*bσ_y
-    # for i=1:np
-    #     rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-    #     rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-    # end
-    # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(np, 2*m.nσ)
+    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
     # for i=1:np
     #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     # end
-    # vξ_b, vη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
-    # τξ_b = m.M_LU\vξ_b
-    # τη_b = m.M_LU\vη_b
+    # τξ_b, τη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
-    # # buoyancy gradients
+    # integrals of buoyancy gradients on rhs
+    bσ_x = zeros(np, m.nσ)
+    bσ_y = zeros(np, m.nσ)
+    for i=1:np
+        bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
+        bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
+    end
+    rhs_x = m.Cξ*b + m.M*bσ_x
+    rhs_y = m.Cη*b + m.M*bσ_y
+    for i=1:np
+        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+    end
+    # stress due to buoyancy gradients
+    baroclinic_RHSs_b = zeros(np, 2*m.nσ)
+    for i=1:np
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+    end
+    vξ_b, vη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    τξ_b = m.M_LU\vξ_b
+    τη_b = m.M_LU\vη_b
+
+    # # pointwise buoyancy gradients
     # b_x = m.M_LU\(m.Cξ*b)
     # b_y = m.M_LU\(m.Cη*b)
     # for i=1:m.np
@@ -416,24 +416,19 @@ println("Done.")
 # 66: 8.6e-4
 # 40: 4.9e-4
 
-### bowl (5 m) (all pointwise)
+### bowl (all pointwise bx, by)
+## linear
+# 79: 9.7e-3
+# 53: 3.7e-3
+# 26: 4.8e-4
+
+### bowl (all global bx, by)
 ## linear
 # 79: 5.7e-3
 # 53: 2.0e-3
-# 26: 1.1e-3 
-## quad
-# 66: 2.2e-3 
-# 40: 1.4e-3
+# 26: 1.1e-3
 
-### bowl (5 m) (all global)
-## linear
-# 79: 3.2e-2
-# 53: 9.1e-3
-## quad
-# 66: 3.8e-1 
-# 40: 2.3e-3
-
-### bowl (eps()) (analytical bx, by)
+### bowl (analytical bx, by)
 ## linear
 # 79: 1.1e-2
 # 53: 4.8e-3 
