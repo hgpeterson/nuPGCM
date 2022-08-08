@@ -21,9 +21,9 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    res = 4   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
@@ -387,10 +387,10 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
-# m3D = setup_model()
-m3D = setup_model(; plots=false)
-s3D = invert3D(m3D)
-Ψ2D, Ψ3D = plot_Ψ_error()
+m3D = setup_model()
+# m3D = setup_model(; plots=false)
+# s3D = invert3D(m3D)
+# Ψ2D, Ψ3D = plot_Ψ_error()
 # plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")

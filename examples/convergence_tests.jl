@@ -10,6 +10,75 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+function get_basin_geometry(res)
+    # geometry type
+    # geo = "square"
+    geo = "circle"
+
+    # bathymetry type
+    # bath = "flat"
+    bath = "tub"
+    # bath = "bump"
+
+    # load horizontal mesh
+    p, t, e = load_mesh("../meshes/$(geo)$res.h5")
+    # p, t, e = add_midpoints(p, t)
+    np = size(p, 1)
+
+    # widths of basin
+    Lx = 5e6
+    Ly = 5e6
+
+    # rescale p
+    p[:, 1] *= Lx
+    p[:, 2] *= Ly
+    ξ = p[:, 1]
+    η = p[:, 2]
+
+    # depth scale
+    H₀ = 2e3
+
+    # gaussian 
+    Δ = Lx/5 
+    G(r) = 1 - exp(-r^2/(2*Δ^2)) 
+    Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
+
+    # bump function
+    w = 4*Δ
+    c = 0
+    G_bump(r) = if c - w < r < c + w return exp(1 - w^2/(w^2 - (r - c)^2)) else return 0 end 
+    Gr_bump(r) = -2*(r - c)*w^2*G_bump(r)/(w^2 - (r - c)^2)^2
+
+    # calculate H(x, y)
+    if bath == "flat"
+        # flat bottom
+        H = H₀*ones(np)
+        Hx = zeros(np)
+        Hy = zeros(np)
+    elseif bath == "tub"
+        if geo == "square"
+            # square bathtub
+            H  = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
+            Hx = @. H₀*Gr(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gr(Lx - ξ)*G(Ly + η)*G(Ly - η)
+            Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
+        elseif geo == "circle"
+            # circular bathtub (radius = Lx)
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + eps()
+            Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
+            Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+        end
+    elseif bath == "bump"
+        if geo == "circle"
+            # circular bump
+            H  = @. H₀ - 2e2*G_bump(sqrt(ξ^2 + η^2))
+            Hx = @.    - 2e2*Gr_bump(sqrt(ξ^2 + η^2))*ξ/sqrt(ξ^2 + η^2)
+            Hy = @.    - 2e2*Gr_bump(sqrt(ξ^2 + η^2))*η/sqrt(ξ^2 + η^2)
+        end
+    end
+
+    return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
+end
+
 function plot_convergence()
    fig, ax = subplots() 
    ax.set_xlabel(L"Resolution $h$ (km)")
@@ -80,7 +149,7 @@ function baroclinic_convergence_full()
     ρ₀ = 1000.
 
     # basin geo
-    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
+    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry(4)
 
     # shape function coefficients
     C₀ = get_shape_func_coeffs(p, t)
@@ -98,49 +167,84 @@ function baroclinic_convergence_full()
 
     # baroclinic LHS matrices
     baroclinic_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU}(undef, np) 
-    @showprogress "Calculating baroclinic LHSs..." for i=1:np 
+    for i=1:np 
         baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
     end  
 
     # buoyancy field
     b = zeros(np, nσ)
+    N² = 1e-6
     for j=1:nσ
-        b[:, j] .= 1e-6*H*σ[j] + 0.1*1e-6*H*exp(-(σ[j] + 1)/0.1)
+        b[:, j] .= N²*H*σ[j] + 0.1*N²*H*exp(-(σ[j] + 1)/0.1)
     end
 
     # buoyancy gradients
     M = nuPGCM.get_M(p, t, C₀)
     M_LU = lu(M)
     Cξ, Cη = nuPGCM.get_Cξ_Cη(p, t, C₀)
-    b_x = M_LU\(Cξ*b)
-    b_y = M_LU\(Cη*b)
+    bx = M_LU\(Cξ*b)
+    by = M_LU\(Cη*b)
     for i=1:np
-        b_x[i, :] += -σ*Hx[i].*differentiate(b[i, :], σ)/H[i] 
-        b_y[i, :] += -σ*Hy[i].*differentiate(b[i, :], σ)/H[i]
+        bx[i, :] += -σ*Hx[i].*differentiate(b[i, :], σ)/H[i] 
+        by[i, :] += -σ*Hy[i].*differentiate(b[i, :], σ)/H[i]
     end
-
-    # stress due to buoyancy gradients
+    rhs_x = zeros(np, nσ)
+    rhs_y = zeros(np, nσ)
+    for j=1:nσ
+        rhs_x[:, j] = ρ₀*ν[:, j]./(f₀ .+ β*η).*bx[:, j]
+        rhs_y[:, j] = ρ₀*ν[:, j]./(f₀ .+ β*η).*by[:, j]
+    end
     baroclinic_RHSs_b = zeros(np, 2*nσ)
     for i=1:np
-        coeff = ρ₀*ν[i, :]./(f₀ .+ β*η[i])
-        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
     τξ_b, τη_b = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_b)
 
-    # plot
-    plot_horizontal(p, t, τξ_b[:, 1]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
-    savefig("images/tau_xi_b_pointwise.png")
-    println("images/tau_xi_b_pointwise.png")
-    plt.close()
-    plot_horizontal(p, t, τη_b[:, 1]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
-    savefig("images/tau_eta_b_pointwise.png")
-    println("images/tau_eta_b_pointwise.png")
-    plt.close()
+    # analytical buoyancy gradients
+    rhs_x = zeros(np, nσ)
+    rhs_y = zeros(np, nσ)
+    for j=1:nσ
+        bξ = Hx./H.*b[:, j]
+        bη = Hy./H.*b[:, j]
+        bσ = N²*H*(1 - exp(-(σ[j] + 1)/0.1))
+        bx = bξ - σ[j]*Hx./H.*bσ
+        by = bη - σ[j]*Hy./H.*bσ
+        rhs_x[:, j] = ρ₀*ν[:, j]./(f₀ .+ β*η).*bx
+        rhs_y[:, j] = ρ₀*ν[:, j]./(f₀ .+ β*η).*by
+    end
+    baroclinic_RHSs_b = zeros(np, 2*nσ)
+    for i=1:np
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
+    end
+    τξ_b_a, τη_b_a = get_τξ_τη(baroclinic_LHSs, baroclinic_RHSs_b)
+
+    # # plot
+    # plot_horizontal(p, t, τξ_b[:, 1]; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
+    # savefig("images/tau_xi_b_pointwise.png")
+    # println("images/tau_xi_b_pointwise.png")
+    # plt.close()
+    # plot_horizontal(p, t, τη_b[:, 1]; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
+    # savefig("images/tau_eta_b_pointwise.png")
+    # println("images/tau_eta_b_pointwise.png")
+    # plt.close()
+
+    println(@sprintf("%d km", Lx/sqrt(np)/1e3))
+    abs_err = abs.(τξ_b - τξ_b_a)
+    println(@sprintf("Max Abs. Err.: %1.1e", maximum(abs_err)))
+    println(@sprintf("Max τξ:        %1.1e", maximum(τξ_b_a)))
+    abs_err = abs.(τη_b - τη_b_a)
+    println(@sprintf("Max Abs. Err.: %1.1e", maximum(abs_err)))
+    println(@sprintf("Max τη:        %1.1e", maximum(τη_b_a)))
+
+    # O(h^2):
+    # 79: 2.4e-6
+    # 53: 4.6e-7 
+    # 26: 1.1e-7 
 end
 
 function derivative_convergence()
     # basin geo
-    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
+    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry(2)
 
     # shape function coefficients
     C₀ = get_shape_func_coeffs(p, t)
@@ -330,9 +434,9 @@ end
 # derivative_convergence()
 
 # baroclinic_convergence_1D()
-# baroclinic_convergence_full()
+baroclinic_convergence_full()
 
-plot_convergence()
+# plot_convergence()
 
 # poisson_convergence()
 
