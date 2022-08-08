@@ -42,12 +42,11 @@ function emulate_2D(; bl = false)
     # Hx_func(x) =    - 2e2*Gx_bump(x)
 
     # diffusivity
-    # κ0 = 6e-5
-    # κ1 = 2e-3
-    # h = 200
-    κ0 = 1e-1
-    κ1 = 0
-    h = 1
+    κ0 = 6e-5
+    κ1 = 2e-3
+    # κ0 = 1e-1
+    # κ1 = 0
+    h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
