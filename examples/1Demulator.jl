@@ -11,7 +11,7 @@ set_out_folder("../output/")
 
 function emulate_1D(ξ₀, η₀; bl=false)
     # parameters (see `setup.jl`)
-    f = 8.753044701640954e-5 
+    f = 1e-4
     N2 = 1e-6
     nz = 2^8
     H = fem_evaluate(m3D, m3D.H, ξ₀, η₀)
@@ -27,8 +27,10 @@ function emulate_1D(ξ₀, η₀; bl=false)
     end
     
     # diffusivity
-    κ0 = 6e-5
-    κ1 = 2e-3
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    κ0 = 1e-1
+    κ1 = 0
     h = 200
     κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
     κ_z_func(z) = -κ1/h*exp(-(z + H)/h)
@@ -45,7 +47,8 @@ function emulate_1D(ξ₀, η₀; bl=false)
 
     # set initial state
     b = @. 0.1*N2*H*exp(-(z + H)/(0.1*H))
-    χ, u, v = invert(m, b)
+    χ = zeros(nz)
+    χ, u, v = invert(m, b, χ)
     i = [1]
     s = ModelState1DPG(b, χ, u, v, i)
 
@@ -58,7 +61,7 @@ s2D = load_state_2D("../output/state2D.h5")
 
 # comparison points
 ξ₀s = 0.75e6:0.5e6:4.75e6
-for i=1:size(ξ₀s, 1)
+for i in eachindex(ξ₀s)
     ξ₀ = ξ₀s[i]
     η₀ = 0
     m1D, s1D = emulate_1D(ξ₀, η₀)
@@ -91,7 +94,8 @@ for i=1:size(ξ₀s, 1)
     ax[2].plot(1e3*uη2D,  H*m2D.σ/1e3, label="2D")
     ax[2].plot(1e3*uη3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
     ax[1].legend()
-    ax[1].set_ylim([-H/1e3, (-H + 100)/1e3])
+    # ax[1].set_ylim([-H/1e3, (-H + 100)/1e3])
+    ax[1].set_ylim([-H/1e3, 0])
     savefig("images/ux_uy_column$i.png")
     println("images/ux_uy_column$i.png")
     plt.close()

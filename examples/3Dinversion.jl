@@ -21,9 +21,9 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
+    res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
     # load horizontal mesh
@@ -223,42 +223,42 @@ function invert3D(m)
     # end
     # τξ_b, τη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
-    # integrals of buoyancy gradients on rhs
-    bσ_x = zeros(np, m.nσ)
-    bσ_y = zeros(np, m.nσ)
-    for i=1:np
-        bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
-        bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
-    end
-    rhs_x = m.Cξ*b + m.M*bσ_x
-    rhs_y = m.Cη*b + m.M*bσ_y
-    for i=1:np
-        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-    end
-    # stress due to buoyancy gradients
-    baroclinic_RHSs_b = zeros(np, 2*m.nσ)
-    for i=1:np
-        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
-    end
-    vξ_b, vη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
-    τξ_b = m.M_LU\vξ_b
-    τη_b = m.M_LU\vη_b
-
-    # # pointwise buoyancy gradients
-    # b_x = m.M_LU\(m.Cξ*b)
-    # b_y = m.M_LU\(m.Cη*b)
-    # for i=1:m.np
-    #     b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
-    #     b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+    # # integrals of buoyancy gradients on rhs
+    # bσ_x = zeros(np, m.nσ)
+    # bσ_y = zeros(np, m.nσ)
+    # for i=1:np
+    #     bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
+    #     bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
+    # end
+    # rhs_x = m.Cξ*b + m.M*bσ_x
+    # rhs_y = m.Cη*b + m.M*bσ_y
+    # for i=1:np
+    #     rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
+    #     rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
     # end
     # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    # baroclinic_RHSs_b = zeros(np, 2*m.nσ)
     # for i=1:np
-    #     coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
-    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     # end
-    # τξ_b, τη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    # vξ_b, vη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    # τξ_b = m.M_LU\vξ_b
+    # τη_b = m.M_LU\vη_b
+
+    # pointwise buoyancy gradients
+    b_x = m.M_LU\(m.Cξ*b)
+    b_y = m.M_LU\(m.Cη*b)
+    for i=1:m.np
+        b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
+        b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+    end
+    # stress due to buoyancy gradients
+    baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    for i=1:np
+        coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+    end
+    τξ_b, τη_b = get_τξ_τη(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
     # bottom stress due buoyancy gradients
     τξ_b_bot = τξ_b[:, 1]
@@ -387,53 +387,10 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
-m3D = setup_model()
-# m3D = setup_model(; plots=false)
-# s3D = invert3D(m3D)
+# m3D = setup_model()
+m3D = setup_model(; plots=false)
+s3D = invert3D(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
 # plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")
-
-# res (km) | max abs err (Sv)
-
-### flat bottom, bump in b
-## linear
-# 79: 2.4293494638453e-03 (2.4293494638451e-03 "pointwise" b gradients)
-# 53: 1.3e-3 (1.3e-3)
-# 26: 2.0e-4 (2.0e-4)
-## quad
-# 66: 6.2e-4 (6.2e-4)
-# 40: 8.5e-5 (8.5e-5)
-# 26: 9.0e-5 (9.0e-5)
-
-### bump in H
-## linear
-# 79: 1.5e-3
-# 53: 7.0e-4
-# 26: 4.6e-4
-## quad
-# 66: 8.6e-4
-# 40: 4.9e-4
-
-### bowl (all pointwise bx, by)
-## linear
-# 79: 9.7e-3
-# 53: 3.7e-3
-# 26: 4.8e-4
-
-### bowl (all global bx, by)
-## linear
-# 79: 5.7e-3
-# 53: 2.0e-3
-# 26: 1.1e-3
-
-### bowl (analytical bx, by)
-## linear
-# 79: 1.1e-2
-# 53: 4.8e-3 
-# 26: 9.2e-4
-## quad
-# 66: 1.8e-3
-# 40: 7.6e-4
-# 26: 4.1e-4
