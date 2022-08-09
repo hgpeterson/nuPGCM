@@ -317,43 +317,52 @@ end
     τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    # vξ = zeros(m.np, m.nσ)
-    # vη = zeros(m.np, m.nσ)
-    # n = size(m.t, 2)
-    # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
-    #     # precompute matrix mult on Ψ
-    #     Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-    #     Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-    #     for j=1:m.nσ
-    #         # now mult τ
-    #         vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
-    #         vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
-    #     end
-    # end
-    # τξ = τξ_b + m.M_LU\vξ
-    # τη = τη_b + m.M_LU\vη
-    Uξ = -(m.M_LU\(m.Cη*Ψ))
-    Uη =  m.M_LU\(m.Cξ*Ψ)
-    τξ = zeros(m.np, m.nσ)
-    τη = zeros(m.np, m.nσ)
-    for j=1:m.nσ
-        τξ[:, j] = τξ_b[:, j] + Uξ.*m.τξ_tξ[:, j] - Uη.*m.τη_tξ[:, j]
-        τη[:, j] = τη_b[:, j] + Uξ.*m.τη_tξ[:, j] + Uη.*m.τξ_tξ[:, j]
+    vξ = zeros(m.np, m.nσ)
+    vη = zeros(m.np, m.nσ)
+    n = size(m.t, 2)
+    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+        # precompute matrix mult on Ψ
+        Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        for j=1:m.nσ
+            # now mult τ
+            vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
+        end
     end
+    τξ = τξ_b + m.M_LU\vξ
+    τη = τη_b + m.M_LU\vη
+    # Uξ = -(m.M_LU\(m.Cη*Ψ))
+    # Uη =  m.M_LU\(m.Cξ*Ψ)
+    # τξ = zeros(m.np, m.nσ)
+    # τη = zeros(m.np, m.nσ)
+    # for j=1:m.nσ
+    #     τξ[:, j] = τξ_b[:, j] + Uξ.*m.τξ_tξ[:, j] - Uη.*m.τη_tξ[:, j]
+    #     τη[:, j] = τη_b[:, j] + Uξ.*m.τη_tξ[:, j] + Uη.*m.τξ_tξ[:, j]
+    # end
     return τξ, τη
 end
 
 """
-    uξ, uη = get_u(m, τξ, τη)
+    uξ, uη, uσ = get_u(m, τξ, τη)
 """
 function get_u(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
+    # integrate τξ and τη to get uξ and uη
     uξ = zeros(m.np, m.nσ)
     uη = zeros(m.np, m.nσ)
     for i=1:m.np
         uξ[i, :] = m.H[i]/m.ρ₀*cumtrapz(τξ[i, :]./m.ν[i, :], m.σ)
         uη[i, :] = m.H[i]/m.ρ₀*cumtrapz(τη[i, :]./m.ν[i, :], m.σ)
     end
-    return uξ, uη
+
+    # integrate divergence of uξ and uη to get uσ
+    div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
+    uσ = zeros(m.np, m.nσ)
+    for i=1:m.np
+        uσ[i, :] = 1/m.H[i]*cumtrapz(-div[i, :], m.σ)
+    end
+
+    return uξ, uη, uσ
 end
 
 """
@@ -391,15 +400,8 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     # get τ
     τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 
-    # convert to uξ, uη
-    uξ, uη = get_u(m, τξ, τη)
-
-    # compute uσ
-    div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
-    uσ = zeros(m.np, m.nσ)
-    for i=1:m.np
-        uσ[i, :] = cumtrapz(-div[i, :]/m.H[i], m.σ)
-    end
+    # convert to uξ, uη, uσ
+    uξ, uη, uσ = get_u(m, τξ, τη)
 
     if plots
         plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")

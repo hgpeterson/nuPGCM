@@ -96,12 +96,15 @@ function setup_model(; plots=true)
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
     # vertical coordinate
-    nσ = 2^7
+    # nσ = 2^7
+    nσ = 2^8
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
     f₀ = 1e-4
     β = 0.
+    # f₀ = 0.
+    # β = 2e-11
 
     # diffusivity and viscosity
     κ0 = 6e-5
@@ -205,11 +208,14 @@ function quick_invert(m)
 end
 
 function plot_uξ_uη_slice(m, s)
-    ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
-    η₀ = 0
+    # ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
+    # η₀ = 0
+    ξ₀ = 0
+    η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
 
     # plot uξ slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/uxi3D.png")
@@ -217,7 +223,8 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 
     # plot uη slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/ueta3D.png")
@@ -266,10 +273,50 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
-# m3D = setup_model()
+function plot_u_error()
+    # load 2D
+    m2D = load_setup_2D("../output/setup2D.h5")
+    s2D = load_state_2D("../output/state2D.h5")
+
+    # compute 3D u along (ξ, 0) slice
+    uξ3D = zeros(m2D.nξ, m2D.nσ)
+    uη3D = zeros(m2D.nξ, m2D.nσ)
+    uσ3D = zeros(m2D.nξ, m2D.nσ)
+    @showprogress "Evaluating 3D u on 2D grid..." for i=1:m2D.nξ-1
+        for j=1:m2D.nσ
+            uξ3D[i, j] = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
+            uη3D[i, j] = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
+            uσ3D[i, j] = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
+        end
+    end
+
+    # error
+    abs_err_uξ = abs.(uξ3D - s2D.uξ)
+    abs_err_uη = abs.(uη3D - s2D.uη)
+    abs_err_uσ = abs.(uσ3D - s2D.uσ)
+    println(@sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3))
+    println(@sprintf("Max Err. uξ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uξ),   m2D.ξ[argmax(abs_err_uξ)[1]]/1e3))
+    println(@sprintf("Max uξ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uξ)), m2D.ξ[argmax(s2D.uξ)[1]]/1e3))
+    println(@sprintf("Max Err. uη: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uη),   m2D.ξ[argmax(abs_err_uη)[1]]/1e3))
+    println(@sprintf("Max uη:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uη)), m2D.ξ[argmax(s2D.uη)[1]]/1e3))
+    println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs_err_uσ)[1]]/1e3))
+    println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(s2D.uξ)[1]]/1e3))
+
+    fig, ax = subplots()
+    ax.plot(s2D.uσ[188, :], m3D.σ)
+    ax.plot(uσ3D[188, :], m3D.σ, "--")
+    savefig("images/debug.png")
+    plt.close()
+
+    return uξ3D, uη3D, uσ3D
+end
+
+m3D = setup_model()
 # m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
+uξ3D, uη3D, uσ3D = plot_u_error()
 # plot_uξ_uη_slice(m3D, s3D)
+
 
 println("Done.")
