@@ -29,8 +29,6 @@ function emulate_1D(ξ₀, η₀; bl=false)
     # diffusivity
     κ0 = 6e-5
     κ1 = 2e-3
-    # κ0 = 1e-1
-    # κ1 = 0
     h = 200
     κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
     κ_z_func(z) = -κ1/h*exp(-(z + H)/h)
@@ -60,43 +58,61 @@ m2D = load_setup_2D("../output/setup2D.h5")
 s2D = load_state_2D("../output/state2D.h5")
 
 # comparison points
-ξ₀s = 0.75e6:0.5e6:4.75e6
-for i in eachindex(ξ₀s)
-    ξ₀ = ξ₀s[i]
+iξs = [10, 64, 128, 192, 250]
+for i=iξs
+    ξ₀ = m2D.ξ[i]
     η₀ = 0
     m1D, s1D = emulate_1D(ξ₀, η₀)
 
-    # get 2D ux, uy
-    uξ2D = Spline2D(m2D.ξ, m2D.σ, s2D.uξ).(ξ₀, m2D.σ)
-    uη2D = Spline2D(m2D.ξ, m2D.σ, s2D.uη).(ξ₀, m2D.σ)
+    # get 2D u
+    uξ2D = s2D.uξ[i, :]
+    uη2D = s2D.uη[i, :]
+    uσ2D = s2D.uσ[i, :]
 
-    # get 3D ux, uy
+    # get 3D u
     uξ3D = zeros(m3D.nσ)
     uη3D = zeros(m3D.nσ)
+    uσ3D = zeros(m3D.nσ)
     for j=1:m3D.nσ
         uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)
         uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)
+        uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)
     end
 
     # get H
     H = fem_evaluate(m3D, m3D.H, ξ₀, η₀)
 
     # plot u
-    fig, ax = subplots(1, 2, figsize=(2*1.955, 3.176))
-    ax[1].set_title(latexstring(L"Comparison point: $x = $", @sprintf("%d", ξ₀/1e3), " km")) 
-    ax[1].set_xlabel(L"Zonal velocity $u^x$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
-    ax[2].set_xlabel(L"Meridional velocity $u^y$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
+    fig, ax = subplots(1, 3, figsize=(3*1.955, 3.176))
+
+    ax[2].set_title(latexstring(L"$x = $", @sprintf("%d", ξ₀/1e3), " km")) 
+    ax[1].set_xlabel(latexstring("Zonal velocity\n", L"$u^x$ (m s$^{-1}$)"))
+    ax[2].set_xlabel(latexstring("Meridional velocity\n", L"$u^y$ (m s$^{-1}$)"))
+    ax[3].set_xlabel(latexstring("Vertical velocity\n", L"$u^\sigma$ (s$^{-1}$)"))
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
-    ax[1].plot(1e3*s1D.u, m1D.z/1e3,   label="1D")
-    ax[1].plot(1e3*uξ2D,  H*m2D.σ/1e3, label="2D")
-    ax[1].plot(1e3*uξ3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
-    ax[2].plot(1e3*s1D.v, m1D.z/1e3,   label="1D")
-    ax[2].plot(1e3*uη2D,  H*m2D.σ/1e3, label="2D")
-    ax[2].plot(1e3*uη3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
-    ax[1].legend()
+
+    for a in ax
+        a.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    end
+
+    ax[1].plot(s1D.u,   m1D.z/1e3, label="1D")
+    ax[1].plot(uξ2D,  H*m2D.σ/1e3, label="2D")
+    ax[1].plot(uξ3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
+
+    ax[2].plot(s1D.v,   m1D.z/1e3, label="1D")
+    ax[2].plot(uη2D,  H*m2D.σ/1e3, label="2D")
+    ax[2].plot(uη3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
+
+    # ax[3].plot(s1D.u*tan(m1D.θ),   m1D.z/1e3, label="1D")
+    ax[3].plot(uσ2D,             H*m2D.σ/1e3, label="2D")
+    ax[3].plot(uσ3D,             H*m3D.σ/1e3, label="3D", c="k", ls="--", lw=0.5)
+
     ax[1].set_ylim([-H/1e3, minimum([(-H + 100)/1e3, 0])])
-    # ax[1].set_ylim([-H/1e3, 0])
-    savefig("images/ux_uy_column$i.png")
-    println("images/ux_uy_column$i.png")
+    # ax[3].set_ylim([-H/1e3, minimum([(-H + 100)/1e3, 0])])
+    ax[2].legend()
+
+    plt.subplots_adjust(wspace=0.3)
+    savefig("images/u_column$i.png")
+    println("images/u_column$i.png")
     plt.close()
 end
