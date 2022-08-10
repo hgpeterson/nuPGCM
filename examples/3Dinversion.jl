@@ -21,8 +21,8 @@ function get_basin_geometry()
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
+    res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 36268 linear nodes, 144433 quadratic nodes
     # res = 5   # 74035 linear nodes, 295233 quadratic nodes
 
@@ -96,8 +96,8 @@ function setup_model(; plots=true)
     p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
 
     # vertical coordinate
-    # nσ = 2^7
-    nσ = 2^8
+    nσ = 2^7
+    # nσ = 2^8
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
@@ -118,8 +118,6 @@ function setup_model(; plots=true)
     ν = μ*κ
     # ν = 1e-3*ones(np, nσ)
     # κ = 1e-3*ones(np, nσ)
-    # ν = 1e-1*ones(np, nσ)
-    # κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -198,24 +196,18 @@ function quick_invert(m)
     # save state
     s = ModelState3DPG(b, Ψ, uξ, uη, uσ, [1])
 
-    # plot Ψ
-    fig, ax, im = plot_horizontal(m.p, m.t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
-    savefig("images/psi.png")
-    println("images/psi.png")
-    plt.close()
-
     return s
 end
 
 function plot_uξ_uη_slice(m, s)
-    # ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
-    # η₀ = 0
-    ξ₀ = 0
-    η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
+    ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
+    η₀ = 0
+    # ξ₀ = 0
+    # η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
 
     # plot uξ slice
-    # ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/uxi3D.png")
@@ -223,8 +215,8 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 
     # plot uη slice
-    # ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_ylim([-maximum(m.H)/1e3, 0])
     savefig("images/ueta3D.png")
@@ -300,7 +292,7 @@ function plot_u_error()
     println(@sprintf("Max Err. uη: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uη),   m2D.ξ[argmax(abs_err_uη)[1]]/1e3))
     println(@sprintf("Max uη:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uη)), m2D.ξ[argmax(s2D.uη)[1]]/1e3))
     println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs_err_uσ)[1]]/1e3))
-    println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(s2D.uξ)[1]]/1e3))
+    println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(s2D.uσ)[1]]/1e3))
 
     fig, ax = subplots()
     ax.plot(s2D.uσ[188, :], m3D.σ)
@@ -311,12 +303,11 @@ function plot_u_error()
     return uξ3D, uη3D, uσ3D
 end
 
-m3D = setup_model()
+# m3D = setup_model()
 # m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
-uξ3D, uη3D, uσ3D = plot_u_error()
+# uξ3D, uη3D, uσ3D = plot_u_error()
 # plot_uξ_uη_slice(m3D, s3D)
-
 
 println("Done.")
