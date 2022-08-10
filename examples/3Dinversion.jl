@@ -4,6 +4,7 @@ using Printf
 using LinearAlgebra
 using SuiteSparse
 using ProgressMeter
+using Dierckx
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -22,9 +23,9 @@ function get_basin_geometry()
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 36268 linear nodes, 144433 quadratic nodes
-    # res = 5   # 74035 linear nodes, 295233 quadratic nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 4   # 16114 linear nodes
+    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -152,11 +153,11 @@ function setup_model(; plots=true)
         plt.close()
 
         # plot baroclinic components 
-        plot_horizontal(p, t, m.H.^2 .*m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $H^2 \tau^\xi_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
         savefig("images/tau_xi_t.png")
         println("images/tau_xi_t.png")
         plt.close()
-        plot_horizontal(p, t, m.H.^2 .*m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $H^2 \tau^\eta_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
         savefig("images/tau_eta_t.png")
         println("images/tau_eta_t.png")
         plt.close()
@@ -265,27 +266,35 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
-function plot_u_error()
+function print_u_error()
     # load 2D
     m2D = load_setup_2D("../output/setup2D.h5")
     s2D = load_state_2D("../output/state2D.h5")
 
-    # compute 3D u along (ξ, 0) slice
-    uξ3D = zeros(m2D.nξ, m2D.nσ)
-    uη3D = zeros(m2D.nξ, m2D.nσ)
-    uσ3D = zeros(m2D.nξ, m2D.nσ)
-    @showprogress "Evaluating 3D u on 2D grid..." for i=1:m2D.nξ-1
-        for j=1:m2D.nσ
-            uξ3D[i, j] = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
-            uη3D[i, j] = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
-            uσ3D[i, j] = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
+    # compute error between 2D and 3D at each ξ point on the 2D grid and σ point on the 3D grid
+    abs_err_uξ = zeros(m2D.nξ, m2D.nσ)
+    abs_err_uη = zeros(m2D.nξ, m2D.nσ)
+    abs_err_uσ = zeros(m2D.nξ, m2D.nσ)
+    @showprogress "Evaluating errors..." for i=1:m2D.nξ-1
+        # interpolate 2D in σ
+        uξ2D = Spline1D(m2D.σ, s2D.uξ[i, :])
+        uη2D = Spline1D(m2D.σ, s2D.uη[i, :])
+        uσ2D = Spline1D(m2D.σ, s2D.uσ[i, :])
+
+        for j=1:m3D.nσ
+            # compute 3D u at (m2D.ξ[i], m3D.σ[j])
+            uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
+            uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
+            uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
+
+            # evaluate 2D interpolation at m3D.σ[j], save error
+            abs_err_uξ[i, j] = abs(uξ3D - uξ2D(m3D.σ[j]))
+            abs_err_uη[i, j] = abs(uη3D - uη2D(m3D.σ[j]))
+            abs_err_uσ[i, j] = abs(uσ3D - uσ2D(m3D.σ[j]))
         end
     end
 
-    # error
-    abs_err_uξ = abs.(uξ3D - s2D.uξ)
-    abs_err_uη = abs.(uη3D - s2D.uη)
-    abs_err_uσ = abs.(uσ3D - s2D.uσ)
+    # print results
     println(@sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3))
     println(@sprintf("Max Err. uξ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uξ),   m2D.ξ[argmax(abs_err_uξ)[1]]/1e3))
     println(@sprintf("Max uξ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uξ)), m2D.ξ[argmax(s2D.uξ)[1]]/1e3))
@@ -294,20 +303,18 @@ function plot_u_error()
     println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs_err_uσ)[1]]/1e3))
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(s2D.uσ)[1]]/1e3))
 
-    fig, ax = subplots()
-    ax.plot(s2D.uσ[188, :], m3D.σ)
-    ax.plot(uσ3D[188, :], m3D.σ, "--")
-    savefig("images/debug.png")
-    plt.close()
-
-    return uξ3D, uη3D, uσ3D
+    # fig, ax = subplots()
+    # ax.plot(s2D.uσ[188, :], m3D.σ)
+    # ax.plot(uσ3D[188, :], m3D.σ, "--")
+    # savefig("images/debug.png")
+    # plt.close()
 end
 
-# m3D = setup_model()
+m3D = setup_model()
 # m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
-# uξ3D, uη3D, uσ3D = plot_u_error()
+print_u_error()
 # plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")
