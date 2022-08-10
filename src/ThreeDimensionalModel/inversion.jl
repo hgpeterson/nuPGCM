@@ -277,32 +277,33 @@ end
     τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    vξ = zeros(m.np, m.nσ)
-    vη = zeros(m.np, m.nσ)
-    n = size(m.t, 2)
-    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
-        # precompute matrix mult on Ψ
-        Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        for j=1:m.nσ
-            # now mult τ
-            vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
-        end
-    end
-    τξ = τξ_b + m.M_LU\vξ
-    τη = τη_b + m.M_LU\vη
+    # vξ = zeros(m.np, m.nσ)
+    # vη = zeros(m.np, m.nσ)
+    # n = size(m.t, 2)
+    # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+    #     # precompute matrix mult on Ψ
+    #     Uη =  reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     Uξ = -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     for j=1:m.nσ
+    #         # now mult τ
+    #         vξ[m.t[k, :], j] += Uξ*m.τξ_tξ[m.t[k, :], j] - Uη*m.τη_tξ[m.t[k, :], j]
+    #         vη[m.t[k, :], j] += Uξ*m.τη_tξ[m.t[k, :], j] + Uη*m.τξ_tξ[m.t[k, :], j]
+    #     end
+    # end
+    # τξ = τξ_b + m.M_LU\vξ
+    # τη = τη_b + m.M_LU\vη
 
-    # Uξ = -(m.M_LU\(m.Cη*Ψ))
-    # Uη =  m.M_LU\(m.Cξ*Ψ)
-    # # plot_horizontal(m.p, m.t, Uξ)
-    # # savefig("images/Uxi.png")
-    # # plt.close()
-    # # plot_horizontal(m.p, m.t, Uη)
-    # # savefig("images/Ueta.png")
-    # # plt.close()
-    # τξ = @. τξ_b #+ Uξ*m.τξ_tξ - Uη*m.τη_tξ
-    # τη = @. τη_b #+ Uξ*m.τη_tξ + Uη*m.τξ_tξ
+    Uξ = -(m.M_LU\(m.Cη*Ψ))
+    # Uξ = zeros(m.np)
+    Uη =  m.M_LU\(m.Cξ*Ψ)
+    # plot_horizontal(m.p, m.t, Uξ)
+    # savefig("images/Uxi.png")
+    # plt.close()
+    # plot_horizontal(m.p, m.t, Uη)
+    # savefig("images/Ueta.png")
+    # plt.close()
+    τξ = @. τξ_b + Uξ*m.τξ_tξ - Uη*m.τη_tξ
+    τη = @. τη_b + Uξ*m.τη_tξ + Uη*m.τξ_tξ
     return τξ, τη
 end
 
@@ -319,19 +320,39 @@ function get_u(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractA
     end
 
     # integrate divergence of uξ and uη to get uσ
-    # div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
-    # uσ = zeros(m.np, m.nσ)
-    # for i=1:m.np
-    #     uσ[i, :] = 1/m.H[i]*cumtrapz(-div[i, :], m.σ)
+    # div = zeros(m.np, m.nσ)
+    # n = size(m.t, 2)
+    # @showprogress "Computing divergence..." for k=1:m.nt
+    #     # precompute matrix mult on H
+    #     H_ξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*m.H[m.t[k, :]], n, n)
+    #     H_η = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*m.H[m.t[k, :]], n, n)
+
+    #     for j=1:m.nσ
+    #         # matrix mult on u
+    #         uξ_ξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*uξ[m.t[k, :], j], n, n)
+    #         uη_η = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*uη[m.t[k, :], j], n, n)
+
+    #         # put together
+    #         div[m.t[k, :], j] += H_ξ*uξ[m.t[k, :], j] + uξ_ξ*m.H[m.t[k, :]] + H_η*uη[m.t[k, :], j] + uη_η*m.H[m.t[k, :]]
+    #     end
     # end
-    Dσσ = get_Dσσ(m.σ)
-    rhs = -(m.M_LU\(m.Cξ*(m.H.^2/m.ρ₀./m.ν.*τξ) + m.Cη*(m.H.^2/m.ρ₀./m.ν.*τη)))
-    rhs[:, 1] .= 0
-    rhs[:, m.nσ] .= 0
+    # div = m.M_LU\div
+    # div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
+    div = m.M_LU\(m.H.*(m.Cξ*uξ) + m.Hx.*uξ + m.H.*(m.Cη*uη) + m.Hy.*uη)
     uσ = zeros(m.np, m.nσ)
     for i=1:m.np
-        uσ[i, :] = 1/m.H[i]*(Dσσ\rhs[i, :])
+        uσ[i, :] = 1/m.H[i]*cumtrapz(-div[i, :], m.σ)
     end
+
+    # # take vertical derivative of continuity equation, then solve
+    # Dσσ = get_Dσσ(m.σ)
+    # rhs = -(m.M_LU\(m.Cξ*(m.H.^2/m.ρ₀./m.ν.*τξ) + m.Cη*(m.H.^2/m.ρ₀./m.ν.*τη)))
+    # rhs[:, 1] .= 0
+    # rhs[:, m.nσ] .= 0
+    # uσ = zeros(m.np, m.nσ)
+    # for i=1:m.np
+    #     uσ[i, :] = 1/m.H[i]*(Dσσ\rhs[i, :])
+    # end
 
     return uξ, uη, uσ
 end

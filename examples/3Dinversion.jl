@@ -24,8 +24,8 @@ function get_basin_geometry()
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    res = 4   # 16114 linear nodes
-    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 4   # 16114 linear nodes
+    res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -70,7 +70,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + eps()
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 1000 #+ eps()
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -296,12 +296,12 @@ function print_u_error()
 
     # print results
     println(@sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3))
-    println(@sprintf("Max Err. uξ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uξ),   m2D.ξ[argmax(abs_err_uξ)[1]]/1e3))
-    println(@sprintf("Max uξ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uξ)), m2D.ξ[argmax(s2D.uξ)[1]]/1e3))
-    println(@sprintf("Max Err. uη: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uη),   m2D.ξ[argmax(abs_err_uη)[1]]/1e3))
-    println(@sprintf("Max uη:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uη)), m2D.ξ[argmax(s2D.uη)[1]]/1e3))
-    println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs_err_uσ)[1]]/1e3))
-    println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(s2D.uσ)[1]]/1e3))
+    println(@sprintf("Max Err. uξ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uξ),   m2D.ξ[argmax(abs.(abs_err_uξ))[1]]/1e3))
+    println(@sprintf("Max uξ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uξ)), m2D.ξ[argmax(abs.(s2D.uξ))[1]]/1e3))
+    println(@sprintf("Max Err. uη: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uη),   m2D.ξ[argmax(abs.(abs_err_uη))[1]]/1e3))
+    println(@sprintf("Max uη:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uη)), m2D.ξ[argmax(abs.(s2D.uη))[1]]/1e3))
+    println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs.(abs_err_uσ))[1]]/1e3))
+    println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
 
     # fig, ax = subplots()
     # ax.plot(s2D.uσ[188, :], m3D.σ)
@@ -310,9 +310,9 @@ function print_u_error()
     # plt.close()
 end
 
-m3D = setup_model()
+# m3D = setup_model()
 # m3D = setup_model(; plots=false)
-s3D = quick_invert(m3D)
+# s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
 print_u_error()
 # plot_uξ_uη_slice(m3D, s3D)

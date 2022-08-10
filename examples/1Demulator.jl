@@ -96,11 +96,11 @@ for i=iξs
     end
 
     ax[1].plot(s1D.u,   m1D.z/1e3, label="1D")
-    ax[1].plot(uξ2D,  H*m2D.σ/1e3, label="2D")
+    ax[1].plot(uξ2D,  m2D.σ*H/1e3, label="2D")
     ax[1].plot(uξ3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
 
     ax[2].plot(s1D.v,   m1D.z/1e3, label="1D")
-    ax[2].plot(uη2D,  H*m2D.σ/1e3, label="2D")
+    ax[2].plot(uη2D,  m2D.σ*H/1e3, label="2D")
     ax[2].plot(uη3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
 
     # ax[3].plot(s1D.u*tan(m1D.θ),   m1D.z/1e3, label="1D")
