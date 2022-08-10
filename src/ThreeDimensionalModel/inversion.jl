@@ -10,20 +10,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     # number of shape functions per triangle
     n = size(t, 2)
 
-    # α = τ/ρ₀/H
-    αξ_tξ_bot = @. τξ_tξ_bot/ρ₀/H
-    αη_tξ_bot = @. τη_tξ_bot/ρ₀/H
-    
-    # f/H
-    f_over_H = (f₀ .+ β*p[:, 2])./H
-
     # functions
     H_func(ξ, η, k)         = fem_evaluate(H,         ξ, η, p, t, C₀, k)
     Hx_func(ξ, η, k)        = fem_evaluate(Hx,        ξ, η, p, t, C₀, k)
     Hy_func(ξ, η, k)        = fem_evaluate(Hy,        ξ, η, p, t, C₀, k)
-    αξ_tξ_bot_func(ξ, η, k) = fem_evaluate(αξ_tξ_bot, ξ, η, p, t, C₀, k)
-    αη_tξ_bot_func(ξ, η, k) = fem_evaluate(αη_tξ_bot, ξ, η, p, t, C₀, k)
-
     τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τξ_tξ_bot, ξ, η, p, t, C₀, k)
     τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τη_tξ_bot, ξ, η, p, t, C₀, k)
 
@@ -34,7 +24,6 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Kᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = -αξ_tξ_bot_func(ξ, η, k)*
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
                               shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
@@ -46,7 +35,6 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         K′ᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = αη_tξ_bot_func(ξ, η, k)*
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
                              (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
                               shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
@@ -58,8 +46,6 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Cᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                # func(ξ, η) = ∂η(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                #              ∂ξ(f_over_H, ξ, η, k, p, t, C₀)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
                  func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
                              -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
@@ -107,47 +93,21 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                       (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
-    # # compute curl of τ/ρ₀/H
-    # αξ = @. τξ/m.ρ₀/m.H
-    # αη = @. τη/m.ρ₀/m.H
-    # barotropic_RHS = m.Cξ*αη .- m.Cη*αξ
-    barotropic_RHS = zeros(m.np)
 
 	# stamp JEBAR
+    barotropic_RHS = zeros(m.np)
 	@showprogress "Building barotropic_RHS..." for k=1:m.nt
         for i=1:n
             if m.t[k, i] in m.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            # func(ξ, η) = -JEBAR(ξ, η, k)*shape_func(m.C₀[k, i, :], ξ, η)
             func(ξ, η) = (-JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
             barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
 
     return barotropic_RHS
-end
-
-function get_m(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
-    # indices
-	np = size(p, 1)
-	nt = size(t, 1)
-
-    # number of shape functions per triangle
-    n = size(t, 2)
-
-	# create global linear system using stamping method
-    m = zeros(np)
-	for k=1:nt
-		# add contribution to m from element k
-        for i=1:n
-            func(ξ, η) = shape_func(C₀[k, i, :], ξ, η)
-            m[t[k, i]] += tri_quad(func, p[t[k, 1:3], :]; degree=4)
-        end
-	end
-
-    return m
 end
 
 function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
@@ -317,32 +277,32 @@ end
     τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    # vξ = zeros(m.np, m.nσ)
-    # vη = zeros(m.np, m.nσ)
-    # n = size(m.t, 2)
-    # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
-    #     # precompute matrix mult on Ψ
-    #     Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-    #     Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-    #     for j=1:m.nσ
-    #         # now mult τ
-    #         vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
-    #         vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
-    #     end
-    # end
-    # τξ = τξ_b + m.M_LU\vξ
-    # τη = τη_b + m.M_LU\vη
+    vξ = zeros(m.np, m.nσ)
+    vη = zeros(m.np, m.nσ)
+    n = size(m.t, 2)
+    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+        # precompute matrix mult on Ψ
+        Aξ = reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        Aη = reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+        for j=1:m.nσ
+            # now mult τ
+            vξ[m.t[k, :], j] += -Aη*m.τξ_tξ[m.t[k, :], j] - Aξ*m.τη_tξ[m.t[k, :], j]
+            vη[m.t[k, :], j] += -Aη*m.τη_tξ[m.t[k, :], j] + Aξ*m.τξ_tξ[m.t[k, :], j]
+        end
+    end
+    τξ = τξ_b + m.M_LU\vξ
+    τη = τη_b + m.M_LU\vη
 
-    Uξ = -(m.M_LU\(m.Cη*Ψ))
-    Uη =  m.M_LU\(m.Cξ*Ψ)
-    # plot_horizontal(m.p, m.t, Uξ)
-    # savefig("images/Uxi.png")
-    # plt.close()
-    # plot_horizontal(m.p, m.t, Uη)
-    # savefig("images/Ueta.png")
-    # plt.close()
-    τξ = @. τξ_b #+ Uξ*m.τξ_tξ - Uη*m.τη_tξ
-    τη = @. τη_b #+ Uξ*m.τη_tξ + Uη*m.τξ_tξ
+    # Uξ = -(m.M_LU\(m.Cη*Ψ))
+    # Uη =  m.M_LU\(m.Cξ*Ψ)
+    # # plot_horizontal(m.p, m.t, Uξ)
+    # # savefig("images/Uxi.png")
+    # # plt.close()
+    # # plot_horizontal(m.p, m.t, Uη)
+    # # savefig("images/Ueta.png")
+    # # plt.close()
+    # τξ = @. τξ_b #+ Uξ*m.τξ_tξ - Uη*m.τη_tξ
+    # τη = @. τη_b #+ Uξ*m.τη_tξ + Uη*m.τξ_tξ
     return τξ, τη
 end
 

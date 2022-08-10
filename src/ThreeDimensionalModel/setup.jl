@@ -137,9 +137,6 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
         baroclinic_LHSs[i] = get_baroclinic_LHS(ρ₀, ν[i, :], f₀ + β*η[i], H[i], σ)
     end  
 
-    # compute m = ∫ φᵢ 
-    m = get_m(p, t, C₀)
-
     # compute M = ∫ φᵢ φⱼ
     M = get_M(p, t, C₀)
     M_LU = lu(M)
