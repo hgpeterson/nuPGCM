@@ -117,6 +117,90 @@ function get_CCξ_CCη(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}
     return CCξ, CCη
 end
 
+# function get_Ds(κ::AbstractArray{<:Real,2}, σ::AbstractArray{<:Real,1}, Δt)
+#     # indices
+#     nσ = size(σ, 1)
+
+#     # interior nodes
+#     D_LHS = Tuple{Int64,Int64,Float64}[]
+#     D_RHS = Tuple{Int64,Int64,Float64}[]
+#     for j=2:nσ-1
+#         fσσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
+#         push!(D_RHS, (j, j-1, fσσ[1]))
+#         push!(D_RHS, (j, j,   fσσ[2]))
+#         push!(D_RHS, (j, j+1, fσσ[3]))
+#         push!(D_LHS, (j, j-1, 1 - Δt/2*fσσ[1]))
+#         push!(D_LHS, (j, j,   1 - Δt/2*fσσ[2]))
+#         push!(D_LHS, (j, j+1, 1 - Δt/2*fσσ[3]))
+#     end
+
+#     # flux boundary conditions at σ = -1, 0
+#     fσ_bot = mkfdstencil(σ[1:3], σ[1], 1)
+#     push!(D_LHS, (1, 1, fσ_bot[1]))
+#     push!(D_LHS, (1, 2, fσ_bot[2]))
+#     push!(D_LHS, (1, 3, fσ_bot[3]))
+#     fσ_top = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+#     push!(D_LHS, (nσ, nσ-2, fσ_top[1]))
+#     push!(D_LHS, (nσ, nσ-1, fσ_top[2]))
+#     push!(D_LHS, (nσ, nσ,   fσ_top[3]))
+
+#     D_LHS = sparse((x->x[1]).(D_LHS), (x->x[2]).(D_LHS), (x->x[3]).(D_LHS), nσ, nσ)
+#     D_RHS = sparse((x->x[1]).(D_RHS), (x->x[2]).(D_RHS), (x->x[3]).(D_RHS), nσ, nσ)
+#     return lu(D_LHS), D_RHS
+# end
+function get_D_LHS(κ::AbstractArray{<:Real,2}, σ::AbstractArray{<:Real,1}, H::AbstractArray{<:Real,1}, Δt::Real)
+    # indices
+    np = size(H, 1)
+    nσ = size(σ, 1)
+    imap = reshape(1:np*nσ, np, nσ)
+
+    # interior nodes
+    D = Tuple{Int64,Int64,Float64}[]
+    for i=1:np
+        # interior diffusion
+        for j=2:nσ-1
+            fσ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+            κσ = dot(fσ, κ[i, j-1:j+1])
+            fσσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
+            # (κ_σ*b_σ + κ*b_σσ)/H^2
+            push!(D, (imap[i, j], imap[i, j-1], 1 - Δt/2*(κσ*fσ[1] + κ[i, j]*fσσ[1])/H[i]^2))
+            push!(D, (imap[i, j], imap[i, j],   1 - Δt/2*(κσ*fσ[2] + κ[i, j]*fσσ[2])/H[i]^2))
+            push!(D, (imap[i, j], imap[i, j+1], 1 - Δt/2*(κσ*fσ[3] + κ[i, j]*fσσ[3])/H[i]^2))
+        end
+
+        # flux boundary conditions at σ = -1, 0
+        fσ_bot = mkfdstencil(σ[1:3], σ[1], 1)
+        push!(D, (imap[i, 1], imap[i, 1], fσ_bot[1]/H[i]))
+        push!(D, (imap[i, 1], imap[i, 2], fσ_bot[2]/H[i]))
+        push!(D, (imap[i, 1], imap[i, 3], fσ_bot[3]/H[i]))
+        fσ_top = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+        push!(D, (imap[i, nσ], imap[i, nσ-2], fσ_top[1]/H[i]))
+        push!(D, (imap[i, nσ], imap[i, nσ-1], fσ_top[2]/H[i]))
+        push!(D, (imap[i, nσ], imap[i, nσ],   fσ_top[3]/H[i]))
+    end
+
+    D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), np*nσ, np*nσ)
+    return D
+end
+function get_Dσ(σ::AbstractArray{<:Real,1})
+    nσ = size(σ, 1)
+    Dσσ = Tuple{Int64,Int64,Float64}[]
+    for j=2:nσ-1
+        fσ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+        push!(Dσσ, (j, j-1, fσσ[1]))
+        push!(Dσσ, (j, j,   fσσ[2]))
+        push!(Dσσ, (j, j+1, fσσ[3]))
+    end
+    fσ = mkfdstencil(σ[1:3], σ[1], 1)
+    push!(Dσσ, (1, 1, fσ[1]))
+    push!(Dσσ, (1, 2, fσ[2]))
+    push!(Dσσ, (1, 3, fσ[3]))
+    fσ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+    push!(Dσσ, (nσ, nσ-2, fσ[1]))
+    push!(Dσσ, (nσ, nσ-1, fσ[2]))
+    push!(Dσσ, (nσ, nσ,   fσ[3]))
+    return sparse((x->x[1]).(Dσ), (x->x[2]).(Dσ), (x->x[3]).(Dσ), nσ, nσ)
+end
 function get_Dσσ(σ::AbstractArray{<:Real,1})
     nσ = size(σ, 1)
     Dσσ = Tuple{Int64,Int64,Float64}[]
