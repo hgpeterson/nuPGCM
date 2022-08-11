@@ -180,25 +180,25 @@ function get_D_LHS(κ::AbstractArray{<:Real,2}, σ::AbstractArray{<:Real,1}, H::
     end
 
     D = sparse((x->x[1]).(D), (x->x[2]).(D), (x->x[3]).(D), np*nσ, np*nσ)
-    return D
+    return lu(D)
 end
 function get_Dσ(σ::AbstractArray{<:Real,1})
     nσ = size(σ, 1)
-    Dσσ = Tuple{Int64,Int64,Float64}[]
+    Dσ = Tuple{Int64,Int64,Float64}[]
     for j=2:nσ-1
         fσ = mkfdstencil(σ[j-1:j+1], σ[j], 1)
-        push!(Dσσ, (j, j-1, fσσ[1]))
-        push!(Dσσ, (j, j,   fσσ[2]))
-        push!(Dσσ, (j, j+1, fσσ[3]))
+        push!(Dσ, (j, j-1, fσ[1]))
+        push!(Dσ, (j, j,   fσ[2]))
+        push!(Dσ, (j, j+1, fσ[3]))
     end
     fσ = mkfdstencil(σ[1:3], σ[1], 1)
-    push!(Dσσ, (1, 1, fσ[1]))
-    push!(Dσσ, (1, 2, fσ[2]))
-    push!(Dσσ, (1, 3, fσ[3]))
+    push!(Dσ, (1, 1, fσ[1]))
+    push!(Dσ, (1, 2, fσ[2]))
+    push!(Dσ, (1, 3, fσ[3]))
     fσ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
-    push!(Dσσ, (nσ, nσ-2, fσ[1]))
-    push!(Dσσ, (nσ, nσ-1, fσ[2]))
-    push!(Dσσ, (nσ, nσ,   fσ[3]))
+    push!(Dσ, (nσ, nσ-2, fσ[1]))
+    push!(Dσ, (nσ, nσ-1, fσ[2]))
+    push!(Dσ, (nσ, nσ,   fσ[3]))
     return sparse((x->x[1]).(Dσ), (x->x[2]).(Dσ), (x->x[3]).(Dσ), nσ, nσ)
 end
 function get_Dσσ(σ::AbstractArray{<:Real,1})
@@ -213,6 +213,7 @@ function get_Dσσ(σ::AbstractArray{<:Real,1})
     push!(Dσσ, (1, 1, 1))
     push!(Dσσ, (nσ, nσ, 1))
     Dσσ = sparse((x->x[1]).(Dσσ), (x->x[2]).(Dσσ), (x->x[3]).(Dσσ), nσ, nσ)
+    return lu(Dσσ)
 end
 
 """

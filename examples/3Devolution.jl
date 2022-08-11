@@ -23,7 +23,8 @@ function setup_circle_bathtub()
     Δ = Lx/5 
     G(r) = 1 - exp(-r^2/(2*Δ^2)) 
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
-    H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
+    # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
+    H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 1000
     Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
     Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
 
@@ -35,28 +36,32 @@ function setup_circle_bathtub()
 
     # vertical coordinate
     nσ = 2^7
-    σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
+    # σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
+    σ = collect(-1:1/(nσ-1):0)
 
     # coriolis parameter f = f₀ + βη
     f₀ = 1e-4
     β = 0.
 
-    # diffusivity and viscosity
-    κ0 = 6e-5
-    κ1 = 2e-3
-    h = 200
-    μ = 1e0
-    κ = zeros(np, nσ)
-    for i=1:nσ
-        κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-    end
-    ν = μ*κ
+    # # diffusivity and viscosity
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    # h = 200
+    # μ = 1e0
+    # κ = zeros(np, nσ)
+    # for i=1:nσ
+    #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
+    # end
+    # ν = μ*κ
+    ν = 1e-1*ones(np, nσ)
+    κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
 
     # timestep
-    Δt = 10. *secs_in_day
+    # Δt = 10. *secs_in_day
+    Δt = 0.1 *secs_in_day
 
     # model setup struct
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
@@ -77,16 +82,18 @@ function run_circle_bathtub(m)
     uσ = zeros(m.np, m.nσ)
     s = ModelState3DPG(b, Ψ, uξ, uη, uσ, [1])
 
-    # ax = plot_ξ_slice(m, s, s.b, ξ_slice, η₀; clabel=L"Buoyancy $b$ (m s$^{-2}$)", contours=false)
-    # ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    # ax.set_ylim([-maximum(m.H)/1e3, 0])
-    # savefig("images/b.png")
-    # println("images/b.png")
-    # plt.close()
+    ax = plot_ξ_slice(m, s, s.b, ξ_slice, η₀; clabel=L"Buoyancy $b$ (m s$^{-2}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_ylim([-maximum(m.H)/1e3, 0])
+    savefig("images/b.png")
+    println("images/b.png")
+    plt.close()
 
     # evolve
-    evolve!(m, s, m.Δt, m.Δt)
+    evolve!(m, s, 20*m.Δt, 10*m.Δt)
+
+    return s
 end
 
-# m = setup_circle_bathtub()
-run_circle_bathtub(m)
+m = setup_circle_bathtub()
+s = run_circle_bathtub(m)

@@ -1,14 +1,3 @@
-function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2})
-    # boundary fluxes: dσ(b)/H at σ = -1, 0
-    if m.bl
-        RHS[:, 1] = s.χ[:, 1].*∂ξ(m, s.b[:, 1])./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*∂ξ(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
-    else
-        RHS[:, 1] .= 0
-        RHS[:, m.nσ] .= m.N2[:, m.nσ]
-    end
-end
-
 function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Real)
     # timestep
     n_steps = Int64(t_final/m.Δt)
@@ -24,10 +13,21 @@ function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Re
     t = 0
     i_img = 0
     for i=1:n_steps
-        diff = (Dσ*(m.κ.*(Dσ*(s.b'))')')'
+        # rhs diffusion
+        # diff = (Dσ*(m.κ.*(Dσ*s.b')')')'./m.H.^2
+        bz = (Dσ*s.b')'./m.H
+        bzz = (Dσ*bz')'./m.H
+        κz = (Dσ*m.κ')'./m.H
+        diff = κz.*bz + m.κ.*bzz
+
+        # I + Δt/2*D
         RHS = s.b + m.Δt/2*diff
+
+        # reset b.c.
         RHS[:, 1] .= 0
         RHS[:, m.nσ] .= m.N²[:, m.nσ]
+
+        # solve
         s.b[:, :] = reshape(D_LHS\RHS[:], m.np, m.nσ)
         s.i[1] = i + 1
         t += m.Δt
@@ -42,6 +42,22 @@ function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Re
             println("images/b$i_img.png")
             plt.close()
             i_img += 1
+
+            ξ₀ = 2500e3
+            η₀ = 0
+            b = zeros(m.nσ)
+            for j=1:m.nσ
+                b[j] = fem_evaluate(m, s.b[:, j], ξ₀, η₀)
+            end
+            H = fem_evaluate(m, m.H, ξ₀, η₀)
+            bz = Dσ*b/H
+            fig, ax = subplots()
+            ax.plot(bz, m.σ*H/1e3)
+            ax.set_xlabel(L"Stratification $\partial_z b$ (s$^{-2}$)")
+            ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+            savefig("images/bz$i_img.png")
+            println("images/bz$i_img.png")
+            plt.close()
         end
     end
 end
