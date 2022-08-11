@@ -70,7 +70,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 1000 #+ eps()
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -310,11 +310,11 @@ function print_u_error()
     # plt.close()
 end
 
-# m3D = setup_model()
+m3D = setup_model()
 # m3D = setup_model(; plots=false)
-# s3D = quick_invert(m3D)
+s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
-print_u_error()
+# print_u_error()
 # plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")
