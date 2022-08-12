@@ -64,9 +64,9 @@ end
 """
     Dσ = get_Dσ(σ)
 
-Compute the 2D σ derivative matrix.
+Compute the σ derivative matrix.
 """
-function get_Dσ(σ::Array{Float64,1})
+function get_Dσ(σ::AbstractArray{<:Real,1})
     nσ = size(σ, 1)
 
     Dσ = Tuple{Int64,Int64,Float64}[]

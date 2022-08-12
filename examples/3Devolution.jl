@@ -35,7 +35,7 @@ function setup_circle_bathtub()
     ρ₀ = 1000.
 
     # vertical coordinate
-    nσ = 2^7
+    nσ = 2^8
     # σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
     σ = collect(-1:1/(nσ-1):0)
 
@@ -53,15 +53,14 @@ function setup_circle_bathtub()
     #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     # end
     # ν = μ*κ
-    ν = 1e-1*ones(np, nσ)
-    κ = 1e-1*ones(np, nσ)
+    ν = 1e-3*ones(np, nσ)
+    κ = 1e-3*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
 
     # timestep
-    # Δt = 10. *secs_in_day
-    Δt = 0.1 *secs_in_day
+    Δt = 10. *secs_in_day
 
     # model setup struct
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
@@ -90,7 +89,7 @@ function run_circle_bathtub(m)
     plt.close()
 
     # evolve
-    evolve!(m, s, 20*m.Δt, 10*m.Δt)
+    evolve!(m, s, 2*m.Δt, m.Δt)
 
     return s
 end

@@ -7,7 +7,7 @@ function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Re
     D_LHS = nuPGCM.get_D_LHS(m.κ, m.σ, m.H, m.Δt)
 
     # get derivative matrix
-    Dσ = nuPGCM.get_Dσ(m.σ)
+    Dσ = get_Dσ(m.σ)
 
     # main loop
     t = 0
@@ -41,7 +41,6 @@ function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Re
             savefig("images/b$i_img.png")
             println("images/b$i_img.png")
             plt.close()
-            i_img += 1
 
             ξ₀ = 2500e3
             η₀ = 0
@@ -58,6 +57,8 @@ function evolve!(m::ModelSetup3DPG, s::ModelState3DPG, t_final::Real, t_plot::Re
             savefig("images/bz$i_img.png")
             println("images/bz$i_img.png")
             plt.close()
+
+            i_img += 1
         end
     end
 end
