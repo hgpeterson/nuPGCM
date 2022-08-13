@@ -151,8 +151,8 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     baroclinic_RHSs_tξ = zeros(np, 2*nσ)
     baroclinic_RHSs_wξ = zeros(np, 2*nσ)
     for i=1:np
-        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, 1, 0)
-        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 1, 0, 0, 0) 
+        baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, H[i]^2, 0)
+        baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), H[i]^2, 0, 0, 0) 
     end
 
     # solve for τ at each column

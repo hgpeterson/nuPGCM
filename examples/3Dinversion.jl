@@ -24,8 +24,8 @@ function get_basin_geometry()
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 16114 linear nodes
-    res = 5   # 36268 linear nodes, 144433 quadratic nodes
+    res = 4   # 16114 linear nodes
+    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -153,11 +153,11 @@ function setup_model(; plots=true)
         plt.close()
 
         # plot baroclinic components 
-        plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
         savefig("images/tau_xi_t.png")
         println("images/tau_xi_t.png")
         plt.close()
-        plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-3}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
         savefig("images/tau_eta_t.png")
         println("images/tau_eta_t.png")
         plt.close()
@@ -183,7 +183,6 @@ function quick_invert(m)
     N² = m.N²[1, 1] # constant 
     for j=1:m.nσ
         b[:, j] .= N²*m.H*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
-        # b[:, j] .= N²*m.H*m.σ[j] 
     end
 
     # wind stress
@@ -192,10 +191,10 @@ function quick_invert(m)
     τη₀ = zeros(m.np)
 
     # invert
-    Ψ, uξ, uη, uσ = invert(m, τξ₀, τη₀, b; plots=true)
+    Ψ, Huξ, Huη, Huσ = invert(m, τξ₀, τη₀, b; plots=true)
 
     # save state
-    s = ModelState3DPG(b, Ψ, uξ, uη, uσ, [1])
+    s = ModelState3DPG(b, Ψ, Huξ, Huη, Huσ, [1])
 
     return s
 end
@@ -207,21 +206,23 @@ function plot_uξ_uη_slice(m, s)
     # η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
 
     # plot uξ slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uξ, ξ_slice, η₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
-    savefig("images/uxi3D.png")
-    println("images/uxi3D.png")
+    savefig("images/ux3D.png")
+    println("images/ux3D.png")
     plt.close()
 
     # plot uη slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uη, ξ_slice, η₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^\eta$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, 1e3*s.uη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
-    savefig("images/ueta3D.png")
-    println("images/ueta3D.png")
+    savefig("images/uy3D.png")
+    println("images/uy3D.png")
     plt.close()
 end
 
@@ -302,19 +303,13 @@ function print_u_error()
     println(@sprintf("Max uη:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uη)), m2D.ξ[argmax(abs.(s2D.uη))[1]]/1e3))
     println(@sprintf("Max Err. uσ: %1.1e m s⁻¹ (%d km)", maximum(abs_err_uσ),   m2D.ξ[argmax(abs.(abs_err_uσ))[1]]/1e3))
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
-
-    # fig, ax = subplots()
-    # ax.plot(s2D.uσ[188, :], m3D.σ)
-    # ax.plot(uσ3D[188, :], m3D.σ, "--")
-    # savefig("images/debug.png")
-    # plt.close()
 end
 
-m3D = setup_model()
+# m3D = setup_model()
 # m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error()
 # print_u_error()
-# plot_uξ_uη_slice(m3D, s3D)
+plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")

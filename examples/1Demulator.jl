@@ -89,26 +89,26 @@ for i=iξs
     ax[1].set_xlabel(latexstring("Zonal velocity\n", L"$u^x$ (m s$^{-1}$)"))
     ax[2].set_xlabel(latexstring("Meridional velocity\n", L"$u^y$ (m s$^{-1}$)"))
     ax[3].set_xlabel(latexstring("Vertical velocity\n", L"$u^\sigma$ (s$^{-1}$)"))
-    ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax[1].set_ylabel(L"Vertical coordinate $z$ (m)")
 
     for a in ax
         a.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     end
 
-    ax[1].plot(s1D.u,   m1D.z/1e3, label="1D")
-    ax[1].plot(uξ2D,  m2D.σ*H/1e3, label="2D")
-    ax[1].plot(uξ3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
+    ax[1].plot(s1D.u,   m1D.z, label="1D")
+    ax[1].plot(uξ2D,  m2D.σ*H, label="2D")
+    ax[1].plot(uξ3D,  m3D.σ*H, label="3D", c="k", ls="--", lw=0.5)
 
-    ax[2].plot(s1D.v,   m1D.z/1e3, label="1D")
-    ax[2].plot(uη2D,  m2D.σ*H/1e3, label="2D")
-    ax[2].plot(uη3D,  m3D.σ*H/1e3, label="3D", c="k", ls="--", lw=0.5)
+    ax[2].plot(s1D.v,   m1D.z, label="1D")
+    ax[2].plot(uη2D,  m2D.σ*H, label="2D")
+    ax[2].plot(uη3D,  m3D.σ*H, label="3D", c="k", ls="--", lw=0.5)
 
-    # ax[3].plot(s1D.u*tan(m1D.θ),   m1D.z/1e3, label="1D")
-    ax[3].plot(uσ2D,             H*m2D.σ/1e3, label="2D", c="tab:orange")
-    ax[3].plot(uσ3D,             H*m3D.σ/1e3, label="3D", c="k", ls="--", lw=0.5)
+    # ax[3].plot(s1D.u*tan(m1D.θ),   m1D.z, label="1D")
+    ax[3].plot(uσ2D,             H*m2D.σ, label="2D", c="tab:orange")
+    ax[3].plot(uσ3D,             H*m3D.σ, label="3D", c="k", ls="--", lw=0.5)
 
-    ax[1].set_ylim([-H/1e3, minimum([(-H + 100)/1e3, 0])])
-    # ax[3].set_ylim([-H/1e3, minimum([(-H + 100)/1e3, 0])])
+    ax[1].set_ylim([-H, minimum([(-H + 100), 0])])
+    # ax[3].set_ylim([-H, minimum([(-H + 100), 0])])
     ax[2].legend()
 
     plt.subplots_adjust(wspace=0.3)

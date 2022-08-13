@@ -24,7 +24,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         Kᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
+                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
                              (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
                               shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
@@ -35,7 +35,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         K′ᵏ = zeros(n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)*
+                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
                              (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
                               shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
@@ -265,7 +265,7 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     # stress due to buoyancy gradients
     baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
     for i=1:m.np
-        coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
+        coeff = m.ρ₀*m.ν[i, :]*m.H[i]^2 ./ (m.f₀ .+ m.β*m.p[i, 2])
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
     end
     τξ_b, τη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
@@ -274,49 +274,58 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
 end
 
 """
-    τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    vξ = zeros(m.np, m.nσ)
-    vη = zeros(m.np, m.nσ)
-    n = size(m.t, 2)
-    @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
-        # precompute matrix mult on Ψ
-        Uη =  reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        Uξ = -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
-        for j=1:m.nσ
-            # now mult τ
-            vξ[m.t[k, :], j] += Uξ*m.τξ_tξ[m.t[k, :], j] - Uη*m.τη_tξ[m.t[k, :], j]
-            vη[m.t[k, :], j] += Uξ*m.τη_tξ[m.t[k, :], j] + Uη*m.τξ_tξ[m.t[k, :], j]
-        end
-    end
-    τξ = τξ_b + m.M_LU\vξ
-    τη = τη_b + m.M_LU\vη
+# function get_full_τ(m, b, Ψ)
+    # vξ = zeros(m.np, m.nσ)
+    # vη = zeros(m.np, m.nσ)
+    # n = size(m.t, 2)
+    # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
+    #     # precompute matrix mult on Ψ
+    #     Uη =  reshape(reshape(m.CCξ[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     Uξ = -reshape(reshape(m.CCη[k, :, :, :], n^2, n)*Ψ[m.t[k, :]], n, n)
+    #     for j=1:m.nσ
+    #         # now mult τ
+    #         vξ[m.t[k, :], j] += Uξ*m.τξ_tξ[m.t[k, :], j] - Uη*m.τη_tξ[m.t[k, :], j]
+    #         vη[m.t[k, :], j] += Uξ*m.τη_tξ[m.t[k, :], j] + Uη*m.τξ_tξ[m.t[k, :], j]
+    #     end
+    # end
+    # τξ = τξ_b + m.M_LU\(vξ./m.H.^2)
+    # τη = τη_b + m.M_LU\(vη./m.H.^2)
 
-    # Uξ = -(m.M_LU\(m.Cη*Ψ))
-    # # Uξ = zeros(m.np)
-    # Uη =  m.M_LU\(m.Cξ*Ψ)
-    # # plot_horizontal(m.p, m.t, Uξ)
-    # # savefig("images/Uxi.png")
-    # # plt.close()
-    # # plot_horizontal(m.p, m.t, Uη)
-    # # savefig("images/Ueta.png")
-    # # plt.close()
-    # τξ = @. τξ_b + Uξ*m.τξ_tξ - Uη*m.τη_tξ
-    # τη = @. τη_b + Uξ*m.τη_tξ + Uη*m.τξ_tξ
-    return τξ, τη
+    Uξ = -(m.M_LU\(m.Cη*Ψ))
+    Uη =  m.M_LU\(m.Cξ*Ψ)
+    H²τξ = @. τξ_b + Uξ*m.τξ_tξ - Uη*m.τη_tξ
+    H²τη = @. τη_b + Uξ*m.τη_tξ + Uη*m.τξ_tξ
+    # plot_horizontal(m.p, m.t, Uξ; vext=0.01)
+    # savefig("images/debug.png")
+    # plt.close()
+    # b_x = m.M_LU\(m.Cξ*b)
+    # b_y = m.M_LU\(m.Cη*b)
+    # for i=1:m.np
+    #     b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
+    #     b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+    # end
+    # baroclinic_RHSs = zeros(m.np, 2*m.nσ)
+    # for i=1:m.np
+    #     coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
+    #     baroclinic_RHSs[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, Uξ[i], Uη[i])
+    # end
+    # τξ, τη = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs)
+    return H²τξ, H²τη
 end
 
 """
-    uξ, uη, uσ = get_u(m, τξ, τη)
+    Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 """
-function get_u(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractArray{<:Real,2})
+function get_u(m::ModelSetup3DPG, H²τξ::AbstractArray{<:Real,2}, H²τη::AbstractArray{<:Real,2})
     # integrate τξ and τη to get uξ and uη
-    uξ = zeros(m.np, m.nσ)
-    uη = zeros(m.np, m.nσ)
+    Huξ = zeros(m.np, m.nσ)
+    Huη = zeros(m.np, m.nσ)
     for i=1:m.np
-        uξ[i, :] = m.H[i]/m.ρ₀*cumtrapz(τξ[i, :]./m.ν[i, :], m.σ)
-        uη[i, :] = m.H[i]/m.ρ₀*cumtrapz(τη[i, :]./m.ν[i, :], m.σ)
+        Huξ[i, :] = 1/m.ρ₀*cumtrapz(H²τξ[i, :]./m.ν[i, :], m.σ)
+        Huη[i, :] = 1/m.ρ₀*cumtrapz(H²τη[i, :]./m.ν[i, :], m.σ)
     end
 
     # integrate divergence of uξ and uη to get uσ
@@ -337,24 +346,24 @@ function get_u(m::ModelSetup3DPG, τξ::AbstractArray{<:Real,2}, τη::AbstractA
     #     end
     # end
     # div = m.M_LU\div
-    # div = m.M_LU\(m.Cξ*(m.H.*uξ) + m.Cη*(m.H.*uη))
+    div = m.M_LU\(m.Cξ*Huξ + m.Cη*Huη)
     # div = m.M_LU\(m.H.*(m.Cξ*uξ) + m.Hx.*uξ + m.H.*(m.Cη*uη) + m.Hy.*uη)
-    # uσ = zeros(m.np, m.nσ)
-    # for i=1:m.np
-    #     uσ[i, :] = 1/m.H[i]*cumtrapz(-div[i, :], m.σ)
-    # end
-
-    # take vertical derivative of continuity equation, then solve
-    Dσσ = get_Dσσ(m.σ)
-    rhs = -(m.M_LU\(m.Cξ*(m.H.^2/m.ρ₀./m.ν.*τξ) + m.Cη*(m.H.^2/m.ρ₀./m.ν.*τη)))
-    rhs[:, 1] .= 0
-    rhs[:, m.nσ] .= 0
-    uσ = zeros(m.np, m.nσ)
+    Huσ = zeros(m.np, m.nσ)
     for i=1:m.np
-        uσ[i, :] = 1/m.H[i]*(Dσσ\rhs[i, :])
+        Huσ[i, :] = cumtrapz(-div[i, :], m.σ)
     end
 
-    return uξ, uη, uσ
+    # # take vertical derivative of continuity equation, then solve
+    # Dσσ = get_Dσσ(m.σ)
+    # rhs = -(m.M_LU\(m.Cξ*(m.H.^2/m.ρ₀./m.ν.*τξ) + m.Cη*(m.H.^2/m.ρ₀./m.ν.*τη)))
+    # rhs[:, 1] .= 0
+    # rhs[:, m.nσ] .= 0
+    # uσ = zeros(m.np, m.nσ)
+    # for i=1:m.np
+    #     uσ[i, :] = 1/m.H[i]*(Dσσ\rhs[i, :])
+    # end
+
+    return Huξ, Huη, Huσ
 end
 
 """
@@ -380,8 +389,8 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     τη_wξ_bot = m.τη_wξ[:, 1]
 
     # rhs τ
-    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot) - τξ_b_bot
-    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot) - τη_b_bot
+    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot)./m.H.^2 - τξ_b_bot./m.H.^2
+    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot)./m.H.^2 - τη_b_bot./m.H.^2
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τξ_rhs, τη_rhs)
@@ -389,11 +398,12 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
 
-    # get τ
-    τξ, τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    # get H²τ
+    H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    # H²τξ, H²τη = get_full_τ(m, b, Ψ)
 
-    # convert to uξ, uη, uσ
-    uξ, uη, uσ = get_u(m, τξ, τη)
+    # convert to Huξ, Huη, Huσ
+    Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 
     if plots
         plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
@@ -414,7 +424,7 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
         plt.close()
     end
 
-    return Ψ, uξ, uη, uσ
+    return Ψ, Huξ, Huη, Huσ
 end
 # function invert!(m::ModelSetup3DPG, s::ModelState3DPG)
 #     Ψ, uξ, uη, uσ = invert(m, τξ₀, τη₀, b)

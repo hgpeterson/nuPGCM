@@ -44,8 +44,6 @@ function emulate_2D(; bl = false)
     # diffusivity
     κ0 = 6e-5
     κ1 = 2e-3
-    # κ0 = 1e-1
-    # κ1 = 0
     h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
@@ -90,14 +88,14 @@ m2D, s2D = emulate_2D()
 save_setup(m2D, "setup2D.h5")
 save_state(s2D, "state2D.h5")
 
-ridge_plot(m2D, s2D, 1e3*s2D.uξ, "", L"Zonal velocity $u^\xi$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
-savefig("images/uxi2D.png")
-println("images/uxi2D.png")
+ridge_plot(m2D, s2D, 1e3*s2D.uξ, "", L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
+savefig("images/ux2D.png")
+println("images/ux2D.png")
 plt.close()
 
 ridge_plot(m2D, s2D, 1e3*s2D.uη, "", L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
-savefig("images/ueta2D.png")
-println("images/ueta2D.png")
+savefig("images/uy2D.png")
+println("images/uy2D.png")
 plt.close()
 
 # # load 2D
