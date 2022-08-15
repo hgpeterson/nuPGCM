@@ -36,16 +36,16 @@ function emulate_2D(; bl = false)
     Gx_bump(x) = -2*(x - c)*w^2*G_bump(x)/(w^2 - (x - c)^2)^2
     # H_func(x)  = H₀ + 0*x
     # Hx_func(x) = 0*x
-    # H_func(x)  = H₀*G(x - L) + 100
-    # Hx_func(x) = H₀*Gx(x - L)
-    H_func(x)  = H₀ - 2e2*G_bump(x) 
-    Hx_func(x) =    - 2e2*Gx_bump(x)
+    H_func(x)  = H₀*G(x - L) + 0.01
+    Hx_func(x) = H₀*Gx(x - L)
+    # H_func(x)  = H₀ - 2e2*G_bump(x) 
+    # Hx_func(x) =    - 2e2*Gx_bump(x)
 
     # diffusivity
-    # κ0 = 6e-5
-    # κ1 = 2e-3
-    κ0 = 1e-1
-    κ1 = 0
+    κ0 = 6e-5
+    κ1 = 2e-3
+    # κ0 = 1e-1
+    # κ1 = 0
     h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 

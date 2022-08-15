@@ -89,10 +89,8 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
     Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
     τξ_func(ξ, η, k) = fem_evaluate(m, τξ,   ξ, η, k)
     τη_func(ξ, η, k) = fem_evaluate(m, τη,   ξ, η, k)
-    # curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
-    #                   (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
-    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k)^3 - 3*τη_func(ξ, η, k)/H_func(ξ, η, k)^4*Hx_func(ξ, η, k) -
-                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k)^3 - 3*τξ_func(ξ, η, k)/H_func(ξ, η, k)^4*Hy_func(ξ, η, k))
+    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
 
@@ -217,45 +215,24 @@ end
     τξ_b, τη_b = get_τ_b(m, b)
 """
 function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
+    # # analytical buoyancy gradients
     # rhs_x = zeros(m.np, m.nσ)
     # rhs_y = zeros(m.np, m.nσ)
-    # N² = m.N²[1, 1]
+    # N² = m.N²[1, 1] # constant
     # for j=1:m.nσ
     #     bξ = m.Hx./m.H.*b[:, j]
     #     bη = m.Hy./m.H.*b[:, j]
     #     bσ = N²*m.H*(1 - exp(-(m.σ[j] + 1)/0.1))
     #     bx = bξ - m.σ[j]*m.Hx./m.H.*bσ
     #     by = bη - m.σ[j]*m.Hy./m.H.*bσ
-    #     rhs_x[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*m.p[:, 2]).*bx
-    #     rhs_y[:, j] = m.ρ₀*m.ν[:, j]./(m.f₀ .+ m.β*m.p[:, 2]).*by
+    #     rhs_x[:, j] = m.ρ₀*m.ν[:, j].*m.H.^2 ./(m.f₀ .+ m.β*m.p[:, 2]).*bx
+    #     rhs_y[:, j] = m.ρ₀*m.ν[:, j].*m.H.^2 ./(m.f₀ .+ m.β*m.p[:, 2]).*by
     # end
     # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
     # for i=1:m.np
     #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     # end
-    # τξ_b, τη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
-
-    # # integrals of buoyancy gradients on rhs
-    # bσ_x = zeros(np, m.nσ)
-    # bσ_y = zeros(np, m.nσ)
-    # for i=1:np
-    #     bσ_x[i, :] = -m.σ*Hx[i]/H[i].*differentiate(b[i, :], m.σ) 
-    #     bσ_y[i, :] = -m.σ*Hy[i]/H[i].*differentiate(b[i, :], m.σ)
-    # end
-    # rhs_x = m.Cξ*b + m.M*bσ_x
-    # rhs_y = m.Cη*b + m.M*bσ_y
-    # for i=1:np
-    #     rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-    #     rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]/(m.f₀ + m.β*η[i])
-    # end
-    # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(np, 2*m.nσ)
-    # for i=1:np
-    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
-    # end
-    # vξ_b, vη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
-    # τξ_b = m.M_LU\vξ_b
-    # τη_b = m.M_LU\vη_b
+    # return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
     # pointwise buoyancy gradients
     b_x = m.M_LU\(m.Cξ*b)
@@ -270,9 +247,7 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
         coeff = m.ρ₀*m.ν[i, :]*m.H[i]^2 ./ (m.f₀ .+ m.β*m.p[i, 2])
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
     end
-    τξ_b, τη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
-
-    return τξ_b, τη_b
+    return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
 end
 
 """
@@ -376,8 +351,8 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     τη_wξ_bot = m.τη_wξ[:, 1]
 
     # rhs τ
-    τξ_rhs = m.H.^2 .*τξ₀ - τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot - τξ_b_bot
-    τη_rhs = m.H.^2 .*τη₀ - τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot - τη_b_bot
+    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot + τη₀.*τη_wξ_bot + τξ_b_bot)./m.H.^2
+    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot - τη₀.*τξ_wξ_bot + τη_b_bot)./m.H.^2
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τξ_rhs, τη_rhs)

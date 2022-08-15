@@ -17,15 +17,15 @@ function get_basin_geometry()
 
     # bathymetry type
     # bath = "flat"
-    # bath = "tub"
-    bath = "bump"
-
+    bath = "tub"
+    # bath = "bump"
+ 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 3   #  9062 linear nodes,  35936 quadratic nodes
     # res = 4   # 16114 linear nodes
-    res = 5   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -70,7 +70,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 100
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -107,19 +107,19 @@ function setup_model(; plots=true)
     # β = 2e-11
 
     # diffusivity and viscosity
-    # κ0 = 6e-5
-    # κ1 = 2e-3
-    # h = 200
-    # μ = 1e0
-    # κ = zeros(np, nσ)
-    # for i=1:nσ
-    #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-    # end
-    # ν = μ*κ
+    κ0 = 6e-5
+    κ1 = 2e-3
+    h = 200
+    μ = 1e0
+    κ = zeros(np, nσ)
+    for i=1:nσ
+        κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
+    end
+    ν = μ*κ
     # ν = 1e-3*ones(np, nσ)
     # κ = 1e-3*ones(np, nσ)
-    ν = 1e-1*ones(np, nσ)
-    κ = 1e-1*ones(np, nσ)
+    # ν = 1e-1*ones(np, nσ)
+    # κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -176,15 +176,38 @@ function setup_model(; plots=true)
 end
 
 function quick_invert(m)
-    # basin geo
-    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
-
     # buoyancy field
     b = zeros(m.np, m.nσ)
     N² = m.N²[1, 1] # constant 
-    for j=1:m.nσ
-        b[:, j] .= N²*m.H*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+    Δ = m.Lx/10
+    c = 3e6
+    smooth_heaviside(r) = -(tanh((r - c)/Δ) - 1)/2
+    # r = 0:1e5:m.Lx
+    # plot(r, smooth_heaviside.(r))
+    # savefig("images/debug.png")
+    # plt.close()
+    # error()
+    for i=1:m.np
+        for j=1:m.nσ
+            z = m.σ[j]*m.H[i]
+            # b[i, j] = N²*(z + 200*exp(-(z + m.H[i])/200)*smooth_heaviside(norm(m.p[i, :])))
+            b[i, j] = N²*z
+        end
     end
+
+    # ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
+    # η₀ = 0
+    # Ψ = zeros(m.np)
+    # uξ = zeros(m.np, m.nσ)
+    # uη = zeros(m.np, m.nσ)
+    # uσ = zeros(m.np, m.nσ)
+    # s = ModelState3DPG(b, Ψ, uξ, uη, uσ, [1])
+    # ax = plot_ξ_slice(m, s, b, ξ_slice, η₀; clabel=L"Buoyancy $b$ (m s$^{-2}$)", contours=false)
+    # ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    # ax.set_ylim([-maximum(m.H)/1e3, 0])
+    # savefig("images/b.png")
+    # println("images/b.png")
+    # plt.close()
 
     # wind stress
     # τξ₀ = @. -0.1*cos(π*η/Ly)
@@ -200,7 +223,7 @@ function quick_invert(m)
     return s
 end
 
-function plot_uξ_uη_slice(m, s)
+function plot_u_slice(m, s)
     ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
     η₀ = 0
     # ξ₀ = 0
@@ -225,9 +248,18 @@ function plot_uξ_uη_slice(m, s)
     savefig("images/uy3D.png")
     println("images/uy3D.png")
     plt.close()
+
+    # plot uσ slice
+    ax = plot_ξ_slice(m, s, s.uσ./m.H, ξ_slice, η₀; clabel=L"Vertical velocity $u^σ$ (s$^{-1}$)", contours=false)
+    ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
+    ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
+    ax.set_ylim([-maximum(m.H)/1e3, 0])
+    savefig("images/us3D.png")
+    println("images/us3D.png")
+    plt.close()
 end
 
-function plot_Ψ_error()
+function plot_Ψ_error(m3D, s3D)
     # compute effective 2D Ψ
     m2D = load_setup_2D("../output/setup2D.h5")
     s2D = load_state_2D("../output/state2D.h5")
@@ -248,7 +280,7 @@ function plot_Ψ_error()
     abs_err = abs.(Ψ3D - Ψ2D)/1e6
     println(@sprintf("%d km", m3D.Lx/sqrt(m3D.np)/1e3))
     println(@sprintf("Max Abs. Err.: %1.1e Sv (%d km)", maximum(abs_err), m2D.ξ[argmax(abs_err)]/1e3))
-    println(@sprintf("Max Abs. Ψ:    %1.1e Sv (%d km)", maximum(abs.(Ψ2D))/1e6, m2D.ξ[argmax(Ψ2D)]/1e3))
+    println(@sprintf("Max Abs. Ψ:    %1.1e Sv (%d km)", maximum(abs.(Ψ2D))/1e6, m2D.ξ[argmax(abs.(Ψ2D))]/1e3))
 
     fig, ax = subplots(2, 1, figsize=(19/6, 2*19/6/1.62), sharex=true)
     ax[1].set_ylabel(L"Streamfunction $\Psi$ (Sv)")
@@ -268,7 +300,7 @@ function plot_Ψ_error()
     return Ψ2D, Ψ3D
 end
 
-function print_u_error()
+function print_u_error(m3D, s3D)
     # load 2D
     m2D = load_setup_2D("../output/setup2D.h5")
     s2D = load_state_2D("../output/state2D.h5")
@@ -311,31 +343,10 @@ function print_u_error()
 end
 
 # m3D = setup_model()
-m3D = setup_model(; plots=false)
+# m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
-Ψ2D, Ψ3D = plot_Ψ_error()
-# print_u_error()
-# plot_uξ_uη_slice(m3D, s3D)
+# Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
+# print_u_error(m3D, s3D)
+plot_u_slice(m3D, s3D)
 
 println("Done.")
-
-
-## tub
-
-# H: 0.01, ν: 1e-3, nσ: 2^7
-# 53: 2.6e-3
-# 26: 1.5e-3
-
-# H: 0.01, ν: 1e-1, nσ: 2^7
-# 53: 2.0e-3
-# 26: 1.2e-3
-
-# H: 100, ν: 1e-1, nσ: 2^7
-# 53: 2.2e-3 
-# 26: 1.5e-3
-
-## bump
-
-# H: 200, ν: 1e-1
-# 53: 6.9e-4
-# 26: 4.6e-4
