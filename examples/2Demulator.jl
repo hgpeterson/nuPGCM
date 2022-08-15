@@ -36,14 +36,16 @@ function emulate_2D(; bl = false)
     Gx_bump(x) = -2*(x - c)*w^2*G_bump(x)/(w^2 - (x - c)^2)^2
     # H_func(x)  = H₀ + 0*x
     # Hx_func(x) = 0*x
-    H_func(x)  = H₀*G(x - L) + 0.01
-    Hx_func(x) = H₀*Gx(x - L)
-    # H_func(x)  = H₀ - 2e2*G_bump(x) 
-    # Hx_func(x) =    - 2e2*Gx_bump(x)
+    # H_func(x)  = H₀*G(x - L) + 100
+    # Hx_func(x) = H₀*Gx(x - L)
+    H_func(x)  = H₀ - 2e2*G_bump(x) 
+    Hx_func(x) =    - 2e2*Gx_bump(x)
 
     # diffusivity
-    κ0 = 6e-5
-    κ1 = 2e-3
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    κ0 = 1e-1
+    κ1 = 0
     h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
@@ -88,12 +90,12 @@ m2D, s2D = emulate_2D()
 save_setup(m2D, "setup2D.h5")
 save_state(s2D, "state2D.h5")
 
-ridge_plot(m2D, s2D, 1e3*s2D.uξ, "", L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
+ridge_plot(m2D, s2D, s2D.uξ, "", L"Zonal velocity $u^x$ (m s$^{-1}$)"; style="pcolormesh")
 savefig("images/ux2D.png")
 println("images/ux2D.png")
 plt.close()
 
-ridge_plot(m2D, s2D, 1e3*s2D.uη, "", L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)"; style="pcolormesh")
+ridge_plot(m2D, s2D, s2D.uη, "", L"Meridional velocity $u^y$ (m s$^{-1}$)"; style="pcolormesh")
 savefig("images/uy2D.png")
 println("images/uy2D.png")
 plt.close()

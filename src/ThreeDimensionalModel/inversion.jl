@@ -89,8 +89,10 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
     Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
     τξ_func(ξ, η, k) = fem_evaluate(m, τξ,   ξ, η, k)
     τη_func(ξ, η, k) = fem_evaluate(m, τη,   ξ, η, k)
-    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
-                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
+    # curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+    #                   (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
+    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k)^3 - 3*τη_func(ξ, η, k)/H_func(ξ, η, k)^4*Hx_func(ξ, η, k) -
+                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k)^3 - 3*τξ_func(ξ, η, k)/H_func(ξ, η, k)^4*Hy_func(ξ, η, k))
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
 
@@ -277,7 +279,6 @@ end
     H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
 function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-# function get_full_τ(m, b, Ψ)
     # vξ = zeros(m.np, m.nσ)
     # vη = zeros(m.np, m.nσ)
     # n = size(m.t, 2)
@@ -291,28 +292,13 @@ function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
     #         vη[m.t[k, :], j] += Uξ*m.τη_tξ[m.t[k, :], j] + Uη*m.τξ_tξ[m.t[k, :], j]
     #     end
     # end
-    # τξ = τξ_b + m.M_LU\(vξ./m.H.^2)
-    # τη = τη_b + m.M_LU\(vη./m.H.^2)
+    # H²τξ = τξ_b + m.M_LU\vξ
+    # H²τη = τη_b + m.M_LU\vη
 
     Uξ = -(m.M_LU\(m.Cη*Ψ))
     Uη =  m.M_LU\(m.Cξ*Ψ)
     H²τξ = @. τξ_b + Uξ*m.τξ_tξ - Uη*m.τη_tξ
     H²τη = @. τη_b + Uξ*m.τη_tξ + Uη*m.τξ_tξ
-    # plot_horizontal(m.p, m.t, Uξ; vext=0.01)
-    # savefig("images/debug.png")
-    # plt.close()
-    # b_x = m.M_LU\(m.Cξ*b)
-    # b_y = m.M_LU\(m.Cη*b)
-    # for i=1:m.np
-    #     b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
-    #     b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
-    # end
-    # baroclinic_RHSs = zeros(m.np, 2*m.nσ)
-    # for i=1:m.np
-    #     coeff = m.ρ₀*m.ν[i, :]./(m.f₀ .+ m.β*m.p[i, 2])
-    #     baroclinic_RHSs[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, Uξ[i], Uη[i])
-    # end
-    # τξ, τη = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs)
     return H²τξ, H²τη
 end
 
@@ -346,22 +332,23 @@ function get_u(m::ModelSetup3DPG, H²τξ::AbstractArray{<:Real,2}, H²τη::Abs
     #     end
     # end
     # div = m.M_LU\div
-    div = m.M_LU\(m.Cξ*Huξ + m.Cη*Huη)
-    # div = m.M_LU\(m.H.*(m.Cξ*uξ) + m.Hx.*uξ + m.H.*(m.Cη*uη) + m.Hy.*uη)
+
+    # div = m.M_LU\(m.Cξ*Huξ + m.Cη*Huη)
+
+    # Huσ = zeros(m.np, m.nσ)
+    # for i=1:m.np
+    #     Huσ[i, :] = cumtrapz(-div[i, :], m.σ)
+    # end
+
+    # take vertical derivative of continuity equation, then solve
+    Dσσ = get_Dσσ(m.σ)
+    rhs = -(m.M_LU\(m.Cξ*(H²τξ/m.ρ₀./m.ν) + m.Cη*(H²τη/m.ρ₀./m.ν)))
+    rhs[:, 1] .= 0
+    rhs[:, m.nσ] .= 0
     Huσ = zeros(m.np, m.nσ)
     for i=1:m.np
-        Huσ[i, :] = cumtrapz(-div[i, :], m.σ)
+        Huσ[i, :] = Dσσ\rhs[i, :]
     end
-
-    # # take vertical derivative of continuity equation, then solve
-    # Dσσ = get_Dσσ(m.σ)
-    # rhs = -(m.M_LU\(m.Cξ*(m.H.^2/m.ρ₀./m.ν.*τξ) + m.Cη*(m.H.^2/m.ρ₀./m.ν.*τη)))
-    # rhs[:, 1] .= 0
-    # rhs[:, m.nσ] .= 0
-    # uσ = zeros(m.np, m.nσ)
-    # for i=1:m.np
-    #     uσ[i, :] = 1/m.H[i]*(Dσσ\rhs[i, :])
-    # end
 
     return Huξ, Huη, Huσ
 end
@@ -389,8 +376,8 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     τη_wξ_bot = m.τη_wξ[:, 1]
 
     # rhs τ
-    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot)./m.H.^2 - τξ_b_bot./m.H.^2
-    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot)./m.H.^2 - τη_b_bot./m.H.^2
+    τξ_rhs = m.H.^2 .*τξ₀ - τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot - τξ_b_bot
+    τη_rhs = m.H.^2 .*τη₀ - τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot - τη_b_bot
 
     # get barotropic_RHS
     barotropic_RHS = get_barotropic_RHS(m, γ, τξ_rhs, τη_rhs)
@@ -400,7 +387,6 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
 
     # get H²τ
     H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    # H²τξ, H²τη = get_full_τ(m, b, Ψ)
 
     # convert to Huξ, Huη, Huσ
     Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)

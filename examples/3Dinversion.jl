@@ -17,15 +17,15 @@ function get_basin_geometry()
 
     # bathymetry type
     # bath = "flat"
-    bath = "tub"
-    # bath = "bump"
+    # bath = "tub"
+    bath = "bump"
 
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
     # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    res = 4   # 16114 linear nodes
-    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
+    # res = 4   # 16114 linear nodes
+    res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -70,7 +70,7 @@ function get_basin_geometry()
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 100
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -98,7 +98,6 @@ function setup_model(; plots=true)
 
     # vertical coordinate
     nσ = 2^7
-    # nσ = 2^8
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
@@ -108,17 +107,19 @@ function setup_model(; plots=true)
     # β = 2e-11
 
     # diffusivity and viscosity
-    κ0 = 6e-5
-    κ1 = 2e-3
-    h = 200
-    μ = 1e0
-    κ = zeros(np, nσ)
-    for i=1:nσ
-        κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
-    end
-    ν = μ*κ
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    # h = 200
+    # μ = 1e0
+    # κ = zeros(np, nσ)
+    # for i=1:nσ
+    #     κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
+    # end
+    # ν = μ*κ
     # ν = 1e-3*ones(np, nσ)
     # κ = 1e-3*ones(np, nσ)
+    ν = 1e-1*ones(np, nσ)
+    κ = 1e-1*ones(np, nσ)
 
     # stratification
     N² = 1e-6*ones(np, nσ)
@@ -206,8 +207,8 @@ function plot_uξ_uη_slice(m, s)
     # η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
 
     # plot uξ slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, 1e3*s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^x$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, s.uξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -216,8 +217,8 @@ function plot_uξ_uη_slice(m, s)
     plt.close()
 
     # plot uη slice
-    ax = plot_ξ_slice(m, s, 1e3*s.uη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, 1e3*s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^y$ ($\times 10^{-3}$ m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, s.uη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
+    # ax = plot_η_slice(m, s, s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -284,9 +285,13 @@ function print_u_error()
 
         for j=1:m3D.nσ
             # compute 3D u at (m2D.ξ[i], m3D.σ[j])
-            uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
-            uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
-            uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
+            # uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
+            # uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
+            # uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
+            H = fem_evaluate(m3D, m3D.H, m2D.ξ[i], 0)
+            uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)/H
+            uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)/H
+            uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)/H
 
             # evaluate 2D interpolation at m3D.σ[j], save error
             abs_err_uξ[i, j] = abs(uξ3D - uξ2D(m3D.σ[j]))
@@ -306,10 +311,31 @@ function print_u_error()
 end
 
 # m3D = setup_model()
-# m3D = setup_model(; plots=false)
+m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
-# Ψ2D, Ψ3D = plot_Ψ_error()
+Ψ2D, Ψ3D = plot_Ψ_error()
 # print_u_error()
-plot_uξ_uη_slice(m3D, s3D)
+# plot_uξ_uη_slice(m3D, s3D)
 
 println("Done.")
+
+
+## tub
+
+# H: 0.01, ν: 1e-3, nσ: 2^7
+# 53: 2.6e-3
+# 26: 1.5e-3
+
+# H: 0.01, ν: 1e-1, nσ: 2^7
+# 53: 2.0e-3
+# 26: 1.2e-3
+
+# H: 100, ν: 1e-1, nσ: 2^7
+# 53: 2.2e-3 
+# 26: 1.5e-3
+
+## bump
+
+# H: 200, ν: 1e-1
+# 53: 6.9e-4
+# 26: 4.6e-4

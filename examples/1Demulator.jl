@@ -27,8 +27,10 @@ function emulate_1D(ξ₀, η₀; bl=false)
     end
     
     # diffusivity
-    κ0 = 6e-5
-    κ1 = 2e-3
+    # κ0 = 6e-5
+    # κ1 = 2e-3
+    κ0 = 1e-3
+    κ1 = 0
     h = 200
     κ_func(z) = κ0 + κ1*exp(-(z + H)/h)
     κ_z_func(z) = -κ1/h*exp(-(z + H)/h)
@@ -64,6 +66,9 @@ for i=iξs
     η₀ = 0
     m1D, s1D = emulate_1D(ξ₀, η₀)
 
+    # get H
+    H = fem_evaluate(m3D, m3D.H, ξ₀, η₀)
+
     # get 2D u
     uξ2D = s2D.uξ[i, :]
     uη2D = s2D.uη[i, :]
@@ -74,13 +79,13 @@ for i=iξs
     uη3D = zeros(m3D.nσ)
     uσ3D = zeros(m3D.nσ)
     for j=1:m3D.nσ
-        uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)
-        uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)
-        uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)
+        # uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)
+        # uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)
+        # uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)
+        uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)/H
+        uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)/H
+        uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)/H
     end
-
-    # get H
-    H = fem_evaluate(m3D, m3D.H, ξ₀, η₀)
 
     # plot u
     fig, ax = subplots(1, 3, figsize=(3*1.955, 3.176))
