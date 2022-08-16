@@ -27,7 +27,8 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     H₀ = 2e3
-    Δ = L/5 
+    # Δ = L/5 
+    Δ = L/10
     G(x) = 1 - exp(-x^2/(2*Δ^2)) 
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
     w = 4*Δ
@@ -36,8 +37,10 @@ function emulate_2D(; bl = false)
     Gx_bump(x) = -2*(x - c)*w^2*G_bump(x)/(w^2 - (x - c)^2)^2
     # H_func(x)  = H₀ + 0*x
     # Hx_func(x) = 0*x
-    H_func(x)  = H₀*G(x - L) + 0.01
-    Hx_func(x) = H₀*Gx(x - L)
+    # H_func(x)  = H₀*G(x - L) + 0.01
+    # Hx_func(x) = H₀*Gx(x - L)
+    H_func(x)  = H₀*G(x - L/2) + 500
+    Hx_func(x) = H₀*Gx(x - L/2)
     # H_func(x)  = H₀ - 2e2*G_bump(x) 
     # Hx_func(x) =    - 2e2*Gx_bump(x)
 

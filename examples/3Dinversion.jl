@@ -23,8 +23,8 @@ function get_basin_geometry()
     # resolution
     # res = 1   #  1452 linear nodes,   5677 quadratic nodes
     # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    # res = 4   # 16114 linear nodes
+    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
+    res = 4   # 16114 linear nodes
     # res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
@@ -47,6 +47,7 @@ function get_basin_geometry()
 
     # gaussian 
     Δ = Lx/5 
+    # Δ = Lx/10 
     G(r) = 1 - exp(-r^2/(2*Δ^2)) 
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
 
@@ -73,6 +74,9 @@ function get_basin_geometry()
             H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
+            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx/2) + 500
+            # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx/2)*ξ/sqrt(ξ^2 + η^2)
+            # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx/2)*η/sqrt(ξ^2 + η^2)
         end
     elseif bath == "bump"
         if geo == "circle"
@@ -179,9 +183,9 @@ function quick_invert(m)
     # buoyancy field
     b = zeros(m.np, m.nσ)
     N² = m.N²[1, 1] # constant 
-    Δ = m.Lx/10
-    c = 3e6
-    smooth_heaviside(r) = -(tanh((r - c)/Δ) - 1)/2
+    # Δ = m.Lx/10
+    # c = 3e6
+    # smooth_heaviside(r) = -(tanh((r - c)/Δ) - 1)/2
     # r = 0:1e5:m.Lx
     # plot(r, smooth_heaviside.(r))
     # savefig("images/debug.png")
@@ -189,9 +193,10 @@ function quick_invert(m)
     # error()
     for i=1:m.np
         for j=1:m.nσ
-            z = m.σ[j]*m.H[i]
+            # b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+            b[i, j] = N²*m.H[i]*m.σ[j]
+            # z = m.σ[j]*m.H[i]
             # b[i, j] = N²*(z + 200*exp(-(z + m.H[i])/200)*smooth_heaviside(norm(m.p[i, :])))
-            b[i, j] = N²*z
         end
     end
 
@@ -343,10 +348,37 @@ function print_u_error(m3D, s3D)
 end
 
 # m3D = setup_model()
-# m3D = setup_model(; plots=false)
+m3D = setup_model(; plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
-plot_u_slice(m3D, s3D)
+# plot_u_slice(m3D, s3D)
 
 println("Done.")
+
+## central hill
+# h   Ψ       uξ
+# 53  1.5e-4  1.1e-7
+# 39  4.7e-5  3.4e-8
+
+## bowl
+
+# pointwise b_x
+# h   Ψ       uξ      Uξ      τξ_b   b_x    
+# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  6.2e-11
+# 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  4.6e-11
+# 26  4.9e-4  5.2e-5  1.3e-2  6.2e0  3.2e-11
+#     3.1     1.4     1.8     1.5    1.4    
+
+# integrated b_x
+# h   Ψ       uξ      Uξ      τξ_b   b_x
+# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  1.6e-1
+# 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  6.9e-2
+# 26                                 2.0e-2
+#                                    3.5
+
+## ring
+# h   Ψ       uξ
+# 53  3.1e-3  4.2e-5 
+# 39  7.5e-4  1.3e-5
+# 26  2.3e-4  2.5e-6

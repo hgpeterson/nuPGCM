@@ -234,20 +234,43 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     # end
     # return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
-    # pointwise buoyancy gradients
-    b_x = m.M_LU\(m.Cξ*b)
-    b_y = m.M_LU\(m.Cη*b)
+    # integrals of buoyancy gradients on rhs
+    bσ_x = zeros(m.np, m.nσ)
+    bσ_y = zeros(m.np, m.nσ)
     for i=1:m.np
-        b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
-        b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+        bσ_x[i, :] = -m.σ*m.Hx[i]/m.H[i].*differentiate(b[i, :], m.σ) 
+        bσ_y[i, :] = -m.σ*m.Hy[i]/m.H[i].*differentiate(b[i, :], m.σ)
+    end
+    rhs_x = m.Cξ*b + m.M*bσ_x
+    rhs_y = m.Cη*b + m.M*bσ_y
+    for i=1:m.np
+        rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]*m.H[i]^2/(m.f₀ + m.β*m.p[i, 2])
+        rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]*m.H[i]^2/(m.f₀ + m.β*m.p[i, 2])
     end
     # stress due to buoyancy gradients
     baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
     for i=1:m.np
-        coeff = m.ρ₀*m.ν[i, :]*m.H[i]^2 ./ (m.f₀ .+ m.β*m.p[i, 2])
-        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+        baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
-    return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    vξ_b, vη_b = solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
+    τξ_b = m.M_LU\vξ_b
+    τη_b = m.M_LU\vη_b
+    return τξ_b, τη_b
+
+    # # pointwise buoyancy gradients
+    # b_x = m.M_LU\(m.Cξ*b)
+    # b_y = m.M_LU\(m.Cη*b)
+    # for i=1:m.np
+    #     b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
+    #     b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
+    # end
+    # # stress due to buoyancy gradients
+    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    # for i=1:m.np
+    #     coeff = m.ρ₀*m.ν[i, :]*m.H[i]^2 ./ (m.f₀ .+ m.β*m.p[i, 2])
+    #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
+    # end
+    # return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
 end
 
 """
@@ -271,6 +294,7 @@ function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
     # H²τη = τη_b + m.M_LU\vη
 
     Uξ = -(m.M_LU\(m.Cη*Ψ))
+    println("Uξ: ", maximum(abs.(Uξ)))
     Uη =  m.M_LU\(m.Cξ*Ψ)
     H²τξ = @. τξ_b + Uξ*m.τξ_tξ - Uη*m.τη_tξ
     H²τη = @. τη_b + Uξ*m.τη_tξ + Uη*m.τξ_tξ
@@ -288,6 +312,7 @@ function get_u(m::ModelSetup3DPG, H²τξ::AbstractArray{<:Real,2}, H²τη::Abs
         Huξ[i, :] = 1/m.ρ₀*cumtrapz(H²τξ[i, :]./m.ν[i, :], m.σ)
         Huη[i, :] = 1/m.ρ₀*cumtrapz(H²τη[i, :]./m.ν[i, :], m.σ)
     end
+    println("uξ: ", maximum(abs.(Huξ./m.H)))
 
     # integrate divergence of uξ and uη to get uσ
     # div = zeros(m.np, m.nσ)
@@ -335,6 +360,7 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
                 b::AbstractArray{<:Real,2}; plots=false)
     # solve for stress due to buoyancy gradients
     τξ_b, τη_b = get_τ_b(m, b)
+    println("τξ_b: ", maximum(abs.(τξ_b)))
 
     # bottom stress 
     τξ_b_bot = τξ_b[:, 1]
@@ -359,6 +385,7 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
+    println("Ψ: ", maximum(abs.(Ψ/1e6)))
 
     # get H²τ
     H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
@@ -367,11 +394,11 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 
     if plots
-        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)")
+        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false, vext=1)
         savefig("images/tau_xi_b.png")
         println("images/tau_xi_b.png")
         plt.close()
-        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)")
+        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false, vext=1)
         savefig("images/tau_eta_b.png")
         println("images/tau_eta_b.png")
         plt.close()
