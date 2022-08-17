@@ -3,7 +3,7 @@
 
 Compute CSC sparse mass matrix `M` where M_ij = ∫ φᵢ φⱼ.
 """
-function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+function get_M(p::AbstractArray{FT,2}, t::AbstractArray{IT,2}, C₀::AbstractArray{FT,3}) where {FT <: Real, IT <: Integer}
     # indices
 	np = size(p, 1)
 	nt = size(t, 1)
@@ -12,7 +12,7 @@ function get_M(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, C₀::
     n = size(t, 2)
 
 	# create global linear system using stamping method
-    M = Tuple{Int64,Int64,Float64}[]  
+    M = Tuple{IT,IT,FT}[]  
 	for k=1:nt
 		# calculate contribution to M from element k
         Mᵏ = zeros(n, n)

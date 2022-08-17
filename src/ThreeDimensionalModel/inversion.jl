@@ -243,6 +243,8 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     end
     rhs_x = m.Cξ*b + m.M*bσ_x
     rhs_y = m.Cη*b + m.M*bσ_y
+    println("b_x: ", maximum(abs.(rhs_x)))
+    println("M⁻¹b_x: ", maximum(abs.(m.M_LU\rhs_x)))
     for i=1:m.np
         rhs_x[i, :] .*= m.ρ₀*m.ν[i, :]*m.H[i]^2/(m.f₀ + m.β*m.p[i, 2])
         rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]*m.H[i]^2/(m.f₀ + m.β*m.p[i, 2])
@@ -264,6 +266,7 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     #     b_x[i, :] += -m.σ*m.Hx[i].*differentiate(b[i, :], m.σ)/m.H[i] 
     #     b_y[i, :] += -m.σ*m.Hy[i].*differentiate(b[i, :], m.σ)/m.H[i]
     # end
+    # println("b_x: ", maximum(abs.(b_x)))
     # # stress due to buoyancy gradients
     # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
     # for i=1:m.np

@@ -10,7 +10,20 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function get_basin_geometry()
+"""
+    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry(res=res)
+
+Generate basin geometry. 
+
+Resolution notes for circle:
+    res  nodes   quadratic nodes
+    1     1452     5677 
+    2     4027    15899 
+    3     9062    35936 
+    4    16114 
+    5    36268   144433 
+"""
+function get_basin_geometry(; res=3)
     # geometry type
     # geo = "square"
     geo = "circle"
@@ -19,13 +32,6 @@ function get_basin_geometry()
     # bath = "flat"
     bath = "tub"
     # bath = "bump"
- 
-    # resolution
-    # res = 1   #  1452 linear nodes,   5677 quadratic nodes
-    # res = 2   #  4027 linear nodes,  15899 quadratic nodes
-    # res = 3   #  9062 linear nodes,  35936 quadratic nodes
-    res = 4   # 16114 linear nodes
-    # res = 5   # 36268 linear nodes, 144433 quadratic nodes
 
     # load horizontal mesh
     p, t, e = load_mesh("../meshes/$(geo)$res.h5")
@@ -33,8 +39,10 @@ function get_basin_geometry()
     np = size(p, 1)
 
     # widths of basin
-    Lx = 5e6
-    Ly = 5e6
+    # Lx = 5e6
+    # Ly = 5e6
+    Lx = 1e2
+    Ly = 1e2
 
     # rescale p
     p[:, 1] *= Lx
@@ -90,7 +98,7 @@ function get_basin_geometry()
     return p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy
 end
 
-function setup_model(; plots=true)
+function setup_model(; res=3, plots=true)
     # use bl theory?
     bl = false
 
@@ -98,7 +106,7 @@ function setup_model(; plots=true)
     ρ₀ = 1000.
 
     # basin geo
-    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry()
+    p, t, e, np, Lx, Ly, ξ, η, H, Hx, Hy = get_basin_geometry(res=res)
 
     # vertical coordinate
     nσ = 2^7
@@ -348,37 +356,26 @@ function print_u_error(m3D, s3D)
 end
 
 # m3D = setup_model()
-m3D = setup_model(; plots=false)
-s3D = quick_invert(m3D)
+m3D = setup_model(res=1, plots=false)
+# s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
 # plot_u_slice(m3D, s3D)
 
 println("Done.")
 
-## central hill
-# h   Ψ       uξ
-# 53  1.5e-4  1.1e-7
-# 39  4.7e-5  3.4e-8
-
 ## bowl
 
 # pointwise b_x
 # h   Ψ       uξ      Uξ      τξ_b   b_x    
-# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  6.2e-11
+# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  6.2e-11 
 # 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  4.6e-11
-# 26  4.9e-4  5.2e-5  1.3e-2  6.2e0  3.2e-11
-#     3.1     1.4     1.8     1.5    1.4    
+# 26  4.9e-4  5.2e-5  1.3e-2  6.2e0  3.2e-11 
+#     3.1     1.4     1.8     1.5    1.4      (2.25)
 
 # integrated b_x
-# h   Ψ       uξ      Uξ      τξ_b   b_x
-# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  1.6e-1
-# 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  6.9e-2
-# 26                                 2.0e-2
-#                                    3.5
-
-## ring
-# h   Ψ       uξ
-# 53  3.1e-3  4.2e-5 
-# 39  7.5e-4  1.3e-5
-# 26  2.3e-4  2.5e-6
+# h   Ψ       uξ      Uξ      τξ_b   ∫b_x    M⁻¹∫b_x
+# 53  2.6e-3  1.1e-4  3.4e-2  1.2e1  1.6e-1  6.2e-11
+# 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  6.9e-2  4.7e-11
+# 26  4.9e-4  5.3e-5  1.3e-2  6.2e0  2.0e-2  3.2e-11
+#                                    3.5     1.5      (2.25)
