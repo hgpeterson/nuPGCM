@@ -1,7 +1,7 @@
-function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2}, e::AbstractArray{<:Integer,1},
-    C₀::AbstractArray{<:Real,3}, ρ₀::Real, f₀::Real, β::Real, H::AbstractArray{<:Real,1}, 
-    Hx::AbstractArray{<:Real,1}, Hy::AbstractArray{<:Real,1}, τξ_tξ_bot::AbstractArray{<:Real,1}, 
-    τη_tξ_bot::AbstractArray{<:Real,1})
+function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
+    C₀::AbstractArray{FT,3}, ρ₀::FT, f₀::FT, β::FT, H::AbstractVector{FT}, 
+    Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, τξ_tξ_bot::AbstractVector{FT}, 
+    τη_tξ_bot::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -18,10 +18,10 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τη_tξ_bot, ξ, η, p, t, C₀, k)
 
     # create global linear system using stamping method
-    barotropic_LHS = Tuple{Int64,Int64,Float64}[]
+    barotropic_LHS = Tuple{IT,IT,FT}[]
     @showprogress "Building barotropic_LHS..." for k = 1:nt
         # calculate contribution to K from element k
-        Kᵏ = zeros(n, n)
+        Kᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
                 func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
@@ -32,7 +32,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         end
 
         # calculate contribution to K′ from element k
-        K′ᵏ = zeros(n, n)
+        K′ᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
                 func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
@@ -43,7 +43,7 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
         end
 
         # calculate contribution to C from element k
-        Cᵏ = zeros(n, n)
+        Cᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
                  func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
@@ -78,8 +78,8 @@ function get_barotropic_LHS(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integ
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ::AbstractArray{<:Real,1},
-                            τη::AbstractArray{<:Real,1})
+function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::AbstractVector{FT},
+                            τη::AbstractVector{FT}) where FT <: Real
     # number of shape functions per triangle
     n = size(m.t, 2)
 
@@ -93,9 +93,8 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
                       (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
     JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
-
 	# stamp JEBAR
-    barotropic_RHS = zeros(m.np)
+    barotropic_RHS = zeros(FT, m.np)
 	@showprogress "Building barotropic_RHS..." for k=1:m.nt
         for i=1:n
             if m.t[k, i] in m.e
@@ -110,15 +109,15 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractArray{<:Real,1}, τξ
     return barotropic_RHS
 end
 
-function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H::Real, σ::AbstractArray{<:Real,1})
+function get_baroclinic_LHS(ρ₀::FT, ν::AbstractVector{FT}, f::FT, H::FT, σ::AbstractVector{FT}) where FT <: Real
     # convention: τξ is variable 1, τη is variable 2
     nσ = size(σ, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    baroclinic_LHS = Tuple{Int64,Int64,Float64}[]  
+    baroclinic_LHS = Tuple{Int64,Int64,FT}[]  
 
     # Interior nodes
-    @inbounds for j=2:nσ-1 
+    for j=2:nσ-1 
         # ∂σσ stencil
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
 
@@ -167,12 +166,12 @@ function get_baroclinic_LHS(ρ₀::Real, ν::AbstractArray{<:Real,1}, f::Real, H
     return lu(baroclinic_LHS)
 end
 
-function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray{<:Real,1}, 
-                            τξ₀::Real, τη₀::Real, Uξ::Real, Uη::Real)
+function get_baroclinic_RHS(rhs_x::AbstractVector{FT}, rhs_y::AbstractVector{FT}, 
+                            τξ₀::Real, τη₀::Real, Uξ::Real, Uη::Real) where FT <: Real
     nσ = size(rhs_x, 1)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    baroclinic_RHS = zeros(nvar*nσ)
+    baroclinic_RHS = zeros(FT, nvar*nσ)
 
     # eqtns:
     # eqtn 1: ν/f/H² ∂σσ(τξ) + τη = rhs_x
@@ -195,14 +194,14 @@ function get_baroclinic_RHS(rhs_x::AbstractArray{<:Real,1}, rhs_y::AbstractArray
     return baroclinic_RHS
 end
 
-function solve_baroclinic_systems(baroclinic_LHSs::AbstractArray{SuiteSparse.UMFPACK.UmfpackLU,1}, 
-                                  baroclinic_RHSs::AbstractArray{<:Real,2})
+function solve_baroclinic_systems(baroclinic_LHSs::AbstractVector{SuiteSparse.UMFPACK.UmfpackLU}, 
+                                  baroclinic_RHSs::AbstractMatrix{FT}) where FT <: Real
     np = size(baroclinic_RHSs, 1)
     nσ = Int64(size(baroclinic_RHSs, 2)/2)
     nvar = 2
     imap = reshape(1:nvar*nσ, (nvar, nσ)) 
-    τξ = zeros(np, nσ)
-    τη = zeros(np, nσ)
+    τξ = zeros(FT, np, nσ)
+    τη = zeros(FT, np, nσ)
     for i=1:np
         sol = baroclinic_LHSs[i]\baroclinic_RHSs[i, :]
         τξ[i, :] = sol[imap[1, :]]
@@ -214,10 +213,10 @@ end
 """
     τξ_b, τη_b = get_τ_b(m, b)
 """
-function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
+function get_τ_b(m::ModelSetup3DPG, b::AbstractMatrix{FT}) where FT <: Real
     # # analytical buoyancy gradients
-    # rhs_x = zeros(m.np, m.nσ)
-    # rhs_y = zeros(m.np, m.nσ)
+    # rhs_x = zeros(FT, m.np, m.nσ)
+    # rhs_y = zeros(FT, m.np, m.nσ)
     # N² = m.N²[1, 1] # constant
     # for j=1:m.nσ
     #     bξ = m.Hx./m.H.*b[:, j]
@@ -228,15 +227,15 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     #     rhs_x[:, j] = m.ρ₀*m.ν[:, j].*m.H.^2 ./(m.f₀ .+ m.β*m.p[:, 2]).*bx
     #     rhs_y[:, j] = m.ρ₀*m.ν[:, j].*m.H.^2 ./(m.f₀ .+ m.β*m.p[:, 2]).*by
     # end
-    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    # baroclinic_RHSs_b = zeros(FT, m.np, 2*m.nσ)
     # for i=1:m.np
     #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     # end
     # return solve_baroclinic_systems(m.baroclinic_LHSs, baroclinic_RHSs_b)
 
     # integrals of buoyancy gradients on rhs
-    bσ_x = zeros(m.np, m.nσ)
-    bσ_y = zeros(m.np, m.nσ)
+    bσ_x = zeros(FT, m.np, m.nσ)
+    bσ_y = zeros(FT, m.np, m.nσ)
     for i=1:m.np
         bσ_x[i, :] = -m.σ*m.Hx[i]/m.H[i].*differentiate(b[i, :], m.σ) 
         bσ_y[i, :] = -m.σ*m.Hy[i]/m.H[i].*differentiate(b[i, :], m.σ)
@@ -250,7 +249,7 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
         rhs_y[i, :] .*= m.ρ₀*m.ν[i, :]*m.H[i]^2/(m.f₀ + m.β*m.p[i, 2])
     end
     # stress due to buoyancy gradients
-    baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    baroclinic_RHSs_b = zeros(FT, m.np, 2*m.nσ)
     for i=1:m.np
         baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(rhs_x[i, :], rhs_y[i, :], 0, 0, 0, 0)
     end
@@ -268,7 +267,7 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractArray{<:Real,2})
     # end
     # println("b_x: ", maximum(abs.(b_x)))
     # # stress due to buoyancy gradients
-    # baroclinic_RHSs_b = zeros(m.np, 2*m.nσ)
+    # baroclinic_RHSs_b = zeros(FT, m.np, 2*m.nσ)
     # for i=1:m.np
     #     coeff = m.ρ₀*m.ν[i, :]*m.H[i]^2 ./ (m.f₀ .+ m.β*m.p[i, 2])
     #     baroclinic_RHSs_b[i, :] = get_baroclinic_RHS(coeff.*b_x[i, :], coeff.*b_y[i, :], 0, 0, 0, 0)
@@ -279,9 +278,10 @@ end
 """
     H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
 """
-function get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
-    # vξ = zeros(m.np, m.nσ)
-    # vη = zeros(m.np, m.nσ)
+function get_full_τ(m::ModelSetup3DPG, τξ_b::AbstractMatrix{FT}, τη_b::AbstractMatrix{FT}, 
+                    τξ₀::AbstractVector{FT}, τη₀::AbstractVector{FT}, Ψ::AbstractVector{FT}) where FT <: Real
+    # vξ = zeros(FT, m.np, m.nσ)
+    # vη = zeros(FT, m.np, m.nσ)
     # n = size(m.t, 2)
     # @showprogress "Computing full τ (assuming τ₀ = 0)..." for k=1:m.nt
     #     # precompute matrix mult on Ψ
@@ -307,10 +307,10 @@ end
 """
     Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 """
-function get_u(m::ModelSetup3DPG, H²τξ::AbstractArray{<:Real,2}, H²τη::AbstractArray{<:Real,2})
+function get_u(m::ModelSetup3DPG, H²τξ::AbstractMatrix{FT}, H²τη::AbstractMatrix{FT}) where FT <: Real
     # integrate τξ and τη to get uξ and uη
-    Huξ = zeros(m.np, m.nσ)
-    Huη = zeros(m.np, m.nσ)
+    Huξ = zeros(FT, m.np, m.nσ)
+    Huη = zeros(FT, m.np, m.nσ)
     for i=1:m.np
         Huξ[i, :] = 1/m.ρ₀*cumtrapz(H²τξ[i, :]./m.ν[i, :], m.σ)
         Huη[i, :] = 1/m.ρ₀*cumtrapz(H²τη[i, :]./m.ν[i, :], m.σ)
@@ -348,7 +348,7 @@ function get_u(m::ModelSetup3DPG, H²τξ::AbstractArray{<:Real,2}, H²τη::Abs
     rhs = -(m.M_LU\(m.Cξ*(H²τξ/m.ρ₀./m.ν) + m.Cη*(H²τη/m.ρ₀./m.ν)))
     rhs[:, 1] .= 0
     rhs[:, m.nσ] .= 0
-    Huσ = zeros(m.np, m.nσ)
+    Huσ = zeros(FT, m.np, m.nσ)
     for i=1:m.np
         Huσ[i, :] = Dσσ\rhs[i, :]
     end
@@ -359,8 +359,8 @@ end
 """
     Ψ, uξ, uη, uσ = invert(m, τξ₀, τη₀, b)
 """
-function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::AbstractArray{<:Real,1}, 
-                b::AbstractArray{<:Real,2}; plots=false)
+function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::AbstractVector{FT}, 
+                b::AbstractMatrix{FT}; plots=false) where FT <: Real
     # solve for stress due to buoyancy gradients
     τξ_b, τη_b = get_τ_b(m, b)
     println("τξ_b: ", maximum(abs.(τξ_b)))
@@ -370,7 +370,7 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractArray{<:Real,1}, τη₀::Ab
     τη_b_bot = τη_b[:, 1]
 
     # buoyancy integral for JEBAR term
-    γ = zeros(m.np)
+    γ = zeros(FT, m.np)
     for i=1:m.np
         γ[i] = -m.H[i]^2*trapz(m.σ.*b[i, :], m.σ)
     end
