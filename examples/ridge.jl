@@ -8,7 +8,7 @@ pygui(false)
 set_out_folder("../output/")
 
 function run_ridge(; bl = false)
-    # parameters (see `setup.jl`)
+    # parameters
     f = -5.5e-5
     L = 2e6
     nξ = 2^8 + 1 
@@ -26,7 +26,6 @@ function run_ridge(; bl = false)
     
     # topography: sine
     no_net_transport = true
-    # no_net_transport = false
     H0 = 2e3
     amp = 0.4*H0
     H_func(x) = H0 + amp*cos(2*π*x/L)
@@ -39,19 +38,15 @@ function run_ridge(; bl = false)
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
 
     # viscosity
-    μ = 2e2
+    μ = 1e0
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
     N2 = 1e-6
     N2_func(ξ, σ) = N2
-    # δ = 1000 # decay scale (m)
-    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
-    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
-    # Δt = 10*secs_in_day
-    Δt = 1*secs_in_day
+    Δt = 10*secs_in_day
     t_plot = 3*secs_in_year
     t_save = 3*secs_in_year
     
