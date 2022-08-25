@@ -357,7 +357,7 @@ end
 
 # m3D = setup_model()
 m3D = setup_model(res=1, plots=false)
-# s3D = quick_invert(m3D)
+s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
 # plot_u_slice(m3D, s3D)
