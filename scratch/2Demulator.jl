@@ -27,8 +27,7 @@ function emulate_2D(; bl = false)
     # topography: sine
     no_net_transport = true
     H₀ = 2e3
-    # Δ = L/5 
-    Δ = L/10
+    Δ = L/5 
     G(x) = 1 - exp(-x^2/(2*Δ^2)) 
     Gx(x) = x/Δ^2*exp(-x^2/(2*Δ^2))
     w = 4*Δ
@@ -37,10 +36,8 @@ function emulate_2D(; bl = false)
     Gx_bump(x) = -2*(x - c)*w^2*G_bump(x)/(w^2 - (x - c)^2)^2
     # H_func(x)  = H₀ + 0*x
     # Hx_func(x) = 0*x
-    # H_func(x)  = H₀*G(x - L) + 0.01
-    # Hx_func(x) = H₀*Gx(x - L)
-    H_func(x)  = H₀*G(x - L/2) + 500
-    Hx_func(x) = H₀*Gx(x - L/2)
+    H_func(x)  = H₀*G(x - L) + 0.01
+    Hx_func(x) = H₀*Gx(x - L)
     # H_func(x)  = H₀ - 2e2*G_bump(x) 
     # Hx_func(x) =    - 2e2*Gx_bump(x)
 
@@ -59,9 +56,6 @@ function emulate_2D(; bl = false)
     # stratification
     N2 = 1e-6
     N2_func(ξ, σ) = N2
-    # δ = 1000 # decay scale (m)
-    # N2 = 1e-6*exp(H_func(L/4)/δ) # match bottom strat with const N2 at center of ridge flank
-    # N2_func(ξ, σ) = N2*exp(H_func(ξ)*σ/δ)
     
     # timestepping
     Δt = 0.
@@ -74,14 +68,6 @@ function emulate_2D(; bl = false)
     for j=1:nσ
         b[:, j] .= m.N2[:, j].*m.H*m.σ[j] + 0.1*m.N2[:, j].*m.H*exp(-(m.σ[j] + 1)/0.1)
     end
-    # for i=1:nξ
-    #     Δ = 0.9*m.L
-    #     if m.ξ[i] < Δ
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ * (1 - 0.1*exp(-Δ^2/(Δ^2 - m.ξ[i]^2)))
-    #     else
-    #         b[i, :] .= m.N2[i, :]*m.H[i].*m.σ
-    #     end
-    # end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
@@ -102,37 +88,3 @@ ridge_plot(m2D, s2D, s2D.uη, "", L"Meridional velocity $u^y$ (m s$^{-1}$)"; sty
 savefig("images/uy2D.png")
 println("images/uy2D.png")
 plt.close()
-
-# # load 2D
-# m2D_hr = load_setup_2D("../output/setup2D.h5")
-# s2D_hr = load_state_2D("../output/state2D.h5")
-
-# # comparison points
-# using Dierckx
-# ξ₀s = 0.5e6:0.5e6:4.5e6
-# for i=1:size(ξ₀s, 1)
-#     ξ₀ = ξ₀s[i]
-
-#     # interps
-#     H = Spline1D(m2D.ξ, m2D.H)(ξ₀)
-#     uξ = Spline2D(m2D.ξ, m2D.σ, s2D.uξ)
-#     uη = Spline2D(m2D.ξ, m2D.σ, s2D.uη)
-#     uξ_hr = Spline2D(m2D_hr.ξ, m2D_hr.σ, s2D_hr.uξ)
-#     uη_hr = Spline2D(m2D_hr.ξ, m2D_hr.σ, s2D_hr.uη)
-
-#     # plot
-#     fig, ax = subplots(1, 2, figsize=(2*1.955, 3.176))
-#     ax[1].set_title(latexstring(L"Comparison point: $x = $", @sprintf("%d", ξ₀/1e3), " km")) 
-#     ax[1].set_xlabel(L"Zonal velocity $u^x$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
-#     ax[2].set_xlabel(L"Meridional velocity $u^y$ ($\times$ 10$^{-3}$ m s$^{-1}$)")
-#     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
-#     ax[1].plot(1e3*uξ_hr.(ξ₀, m2D_hr.σ),  H*m2D_hr.σ/1e3, label="2D HR")
-#     ax[1].plot(1e3*uξ.(ξ₀, m2D.σ),  H*m2D.σ/1e3, label="2D", "--")
-#     ax[2].plot(1e3*uη_hr.(ξ₀, m2D_hr.σ),  H*m2D_hr.σ/1e3, label="2D HR")
-#     ax[2].plot(1e3*uη.(ξ₀, m2D.σ),  H*m2D.σ/1e3, label="2D", "--")
-#     ax[1].legend()
-#     ax[1].set_ylim([-H/1e3, (-H + 100)/1e3])
-#     savefig("images/ux_uy_column$(i)_2D.png")
-#     println("images/ux_uy_column$(i)_2D.png")
-#     plt.close()
-# end

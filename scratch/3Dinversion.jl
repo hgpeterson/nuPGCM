@@ -39,10 +39,8 @@ function get_basin_geometry(; res=3)
     np = size(p, 1)
 
     # widths of basin
-    # Lx = 5e6
-    # Ly = 5e6
-    Lx = 1e2
-    Ly = 1e2
+    Lx = 5e6
+    Ly = 5e6
 
     # rescale p
     p[:, 1] *= Lx
@@ -55,7 +53,6 @@ function get_basin_geometry(; res=3)
 
     # gaussian 
     Δ = Lx/5 
-    # Δ = Lx/10 
     G(r) = 1 - exp(-r^2/(2*Δ^2)) 
     Gr(r) = r/Δ^2*exp(-r^2/(2*Δ^2))
 
@@ -79,12 +76,10 @@ function get_basin_geometry(; res=3)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
+            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
             H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
-            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx/2) + 500
-            # Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx/2)*ξ/sqrt(ξ^2 + η^2)
-            # Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx/2)*η/sqrt(ξ^2 + η^2)
         end
     elseif bath == "bump"
         if geo == "circle"
@@ -128,8 +123,6 @@ function setup_model(; res=3, plots=true)
         κ[:, i] = @. κ0 + κ1*exp(-H*(σ[i] + 1)/h)
     end
     ν = μ*κ
-    # ν = 1e-3*ones(np, nσ)
-    # κ = 1e-3*ones(np, nσ)
     # ν = 1e-1*ones(np, nσ)
     # κ = 1e-1*ones(np, nσ)
 
@@ -191,39 +184,15 @@ function quick_invert(m)
     # buoyancy field
     b = zeros(m.np, m.nσ)
     N² = m.N²[1, 1] # constant 
-    # Δ = m.Lx/10
-    # c = 3e6
-    # smooth_heaviside(r) = -(tanh((r - c)/Δ) - 1)/2
-    # r = 0:1e5:m.Lx
-    # plot(r, smooth_heaviside.(r))
-    # savefig("images/debug.png")
-    # plt.close()
-    # error()
     for i=1:m.np
         for j=1:m.nσ
-            # b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
-            b[i, j] = N²*m.H[i]*m.σ[j]
-            # z = m.σ[j]*m.H[i]
-            # b[i, j] = N²*(z + 200*exp(-(z + m.H[i])/200)*smooth_heaviside(norm(m.p[i, :])))
+            b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+            # b[i, j] = N²*m.H[i]*m.σ[j]
         end
     end
 
-    # ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
-    # η₀ = 0
-    # Ψ = zeros(m.np)
-    # uξ = zeros(m.np, m.nσ)
-    # uη = zeros(m.np, m.nσ)
-    # uσ = zeros(m.np, m.nσ)
-    # s = ModelState3DPG(b, Ψ, uξ, uη, uσ, [1])
-    # ax = plot_ξ_slice(m, s, b, ξ_slice, η₀; clabel=L"Buoyancy $b$ (m s$^{-2}$)", contours=false)
-    # ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
-    # ax.set_ylim([-maximum(m.H)/1e3, 0])
-    # savefig("images/b.png")
-    # println("images/b.png")
-    # plt.close()
-
     # wind stress
-    # τξ₀ = @. -0.1*cos(π*η/Ly)
+    # τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
     τξ₀ = zeros(m.np)
     τη₀ = zeros(m.np)
 
@@ -239,12 +208,9 @@ end
 function plot_u_slice(m, s)
     ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
     η₀ = 0
-    # ξ₀ = 0
-    # η_slice = (-m.Ly + 1e4):m.Ly/2^7:(m.Ly - 1e4)
 
     # plot uξ slice
     ax = plot_ξ_slice(m, s, s.uξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, s.uξ, η_slice, ξ₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -254,7 +220,6 @@ function plot_u_slice(m, s)
 
     # plot uη slice
     ax = plot_ξ_slice(m, s, s.uη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
-    # ax = plot_η_slice(m, s, s.uη, η_slice, ξ₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -355,8 +320,8 @@ function print_u_error(m3D, s3D)
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
 end
 
-# m3D = setup_model()
-m3D = setup_model(res=1, plots=false)
+m3D = setup_model(res=4)
+# m3D = setup_model(res=4, plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)

@@ -1,7 +1,7 @@
 function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
     C₀::AbstractArray{FT,3}, ρ₀::FT, f₀::FT, β::FT, H::AbstractVector{FT}, 
-    Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, τξ_tξ_bot::AbstractVector{FT}, 
-    τη_tξ_bot::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
+    Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, r_sym::AbstractVector{FT}, 
+    r_asym::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -11,11 +11,11 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
     n = size(t, 2)
 
     # functions
-    H_func(ξ, η, k)         = fem_evaluate(H,         ξ, η, p, t, C₀, k)
-    Hx_func(ξ, η, k)        = fem_evaluate(Hx,        ξ, η, p, t, C₀, k)
-    Hy_func(ξ, η, k)        = fem_evaluate(Hy,        ξ, η, p, t, C₀, k)
-    τξ_tξ_bot_func(ξ, η, k) = fem_evaluate(τξ_tξ_bot, ξ, η, p, t, C₀, k)
-    τη_tξ_bot_func(ξ, η, k) = fem_evaluate(τη_tξ_bot, ξ, η, p, t, C₀, k)
+    H_func(ξ, η, k)         = fem_evaluate(H,      ξ, η, p, t, C₀, k)
+    Hx_func(ξ, η, k)        = fem_evaluate(Hx,     ξ, η, p, t, C₀, k)
+    Hy_func(ξ, η, k)        = fem_evaluate(Hy,     ξ, η, p, t, C₀, k)
+    r_sym_func(ξ, η, k)     = fem_evaluate(r_sym,  ξ, η, p, t, C₀, k)
+    r_asym_func(ξ, η, k)    = fem_evaluate(r_asym, ξ, η, p, t, C₀, k)
 
     # create global linear system using stamping method
     barotropic_LHS = Tuple{IT,IT,FT}[]
@@ -24,9 +24,13 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         Kᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = -τξ_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
+                func(ξ, η) = -r_sym_func(ξ, η, k)/ρ₀*(
                              (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
-                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
+                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
+                             2/H_func(ξ, η, k)*
+                             (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) + 
+                              Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η))
+                            )
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -35,9 +39,13 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         K′ᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = τη_tξ_bot_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
+                func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀*(
                              (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
-                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
+                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
+                             2/H_func(ξ, η, k)*
+                             (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η) - 
+                              Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η))
+                            )
                 K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -46,10 +54,7 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         Cᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                 func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
-                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                             -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
-                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                func(ξ, η) = β*H_func(ξ, η, k)^2*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η)
                 Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -78,20 +83,15 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
     return lu(barotropic_LHS)
 end
 
-function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::AbstractVector{FT},
-                            τη::AbstractVector{FT}) where FT <: Real
+function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::AbstractVector{FT}) where FT <: Real
     # number of shape functions per triangle
     n = size(m.t, 2)
 
     # functions
-    H_func(ξ, η, k)  = fem_evaluate(m, m.H,  ξ, η, k)
-    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
-    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
-    τξ_func(ξ, η, k) = fem_evaluate(m, τξ,   ξ, η, k)
-    τη_func(ξ, η, k) = fem_evaluate(m, τη,   ξ, η, k)
-    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
-                      (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
-    JEBAR(ξ, η, k)   = 1/H_func(ξ, η, k)^2 * (Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
+    H_func(ξ, η, k)  = fem_evaluate(m, m.H, ξ, η, k)
+    τξ_func(ξ, η, k) = fem_evaluate(m, τξ,  ξ, η, k)
+    τη_func(ξ, η, k) = fem_evaluate(m, τη,  ξ, η, k)
+    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k) - ∂η(m, τξ, ξ, η, k)
 
 	# stamp JEBAR
     barotropic_RHS = zeros(FT, m.np)
@@ -101,7 +101,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::Abs
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (-JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) =  curl_τ(ξ, η, k)/m.ρ₀*H_func(ξ, η, k)^2*shape_func(m.C₀[k, i, :], ξ, η)
             barotropic_RHS[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
@@ -369,22 +369,16 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::Abstrac
     τξ_b_bot = τξ_b[:, 1]
     τη_b_bot = τη_b[:, 1]
 
-    # buoyancy integral for JEBAR term
-    γ = zeros(FT, m.np)
-    for i=1:m.np
-        γ[i] = -m.H[i]^2*trapz(m.σ.*b[i, :], m.σ)
-    end
-
     # bottom stress due to wind stress
     τξ_wξ_bot = m.τξ_wξ[:, 1]
     τη_wξ_bot = m.τη_wξ[:, 1]
 
     # rhs τ
-    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot + τη₀.*τη_wξ_bot + τξ_b_bot)./m.H.^2
-    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot - τη₀.*τξ_wξ_bot + τη_b_bot)./m.H.^2
+    τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot + τξ_b_bot)./m.H.^2
+    τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot + τη_b_bot)./m.H.^2
 
     # get barotropic_RHS
-    barotropic_RHS = get_barotropic_RHS(m, γ, τξ_rhs, τη_rhs)
+    barotropic_RHS = get_barotropic_RHS(m, τξ_rhs, τη_rhs)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
@@ -397,17 +391,13 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::Abstrac
     Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 
     if plots
-        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false, vext=1)
+        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
         savefig("images/tau_xi_b.png")
         println("images/tau_xi_b.png")
         plt.close()
-        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false, vext=1)
+        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
         savefig("images/tau_eta_b.png")
         println("images/tau_eta_b.png")
-        plt.close()
-        plot_horizontal(m.p, m.t, γ; clabel=L"Buoyancy integral $\gamma$ (m$^{3}$ s$^{-2}$)")
-        savefig("images/gamma.png")
-        println("images/gamma.png")
         plt.close()
         fig, ax, im = plot_horizontal(m.p, m.t, Ψ/1e6; clabel=L"Streamfunction $\Psi$ (Sv)")
         savefig("images/psi.png")
