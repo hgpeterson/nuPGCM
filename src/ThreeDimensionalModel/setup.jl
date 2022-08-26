@@ -11,10 +11,12 @@ struct ModelState3DPG{FT,IT}
     # barotropic streamfunction
     Ψ::AbstractArray{FT,1}
 
-    # velocities (m s⁻¹)
-	uξ::AbstractArray{FT,2}
-	uη::AbstractArray{FT,2}
-	uσ::AbstractArray{FT,2}
+    # horizontal velocities (m² s⁻¹)
+	Huξ::AbstractArray{FT,2}
+	Huη::AbstractArray{FT,2}
+
+    # vertical velocity (m s⁻¹)
+	Huσ::AbstractArray{FT,2}
 
     # iteration
     i::AbstractArray{IT,1}
