@@ -79,12 +79,9 @@ for i=iξs
     uη3D = zeros(m3D.nσ)
     uσ3D = zeros(m3D.nσ)
     for j=1:m3D.nσ
-        # uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)
-        # uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)
-        # uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)
-        uξ3D[j] = fem_evaluate(m3D, s3D.uξ[:, j], ξ₀, η₀)/H
-        uη3D[j] = fem_evaluate(m3D, s3D.uη[:, j], ξ₀, η₀)/H
-        uσ3D[j] = fem_evaluate(m3D, s3D.uσ[:, j], ξ₀, η₀)/H
+        uξ3D[j] = fem_evaluate(m3D, s3D.Huξ[:, j], ξ₀, η₀)/H
+        uη3D[j] = fem_evaluate(m3D, s3D.Huη[:, j], ξ₀, η₀)/H
+        uσ3D[j] = fem_evaluate(m3D, s3D.Huσ[:, j], ξ₀, η₀)/H
     end
 
     # plot u
