@@ -25,8 +25,8 @@ Resolution notes for circle:
 """
 function get_basin_geometry(; res=3)
     # geometry type
-    # geo = "square"
-    geo = "circle"
+    geo = "square"
+    # geo = "circle"
 
     # bathymetry type
     # bath = "flat"
@@ -71,13 +71,13 @@ function get_basin_geometry(; res=3)
     elseif bath == "tub"
         if geo == "square"
             # square bathtub
-            H  = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 100
+            H  = @. H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) + 0.01
             Hx = @. H₀*Gr(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*Gr(Lx - ξ)*G(Ly + η)*G(Ly - η)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
+            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -108,10 +108,10 @@ function setup_model(; res=3, plots=true)
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    f₀ = 1e-4
-    β = 0.
-    # f₀ = 0.
-    # β = 2e-11
+    # f₀ = 1e-4
+    # β = 0.
+    f₀ = 0.
+    β = 2e-11
 
     # diffusivity and viscosity
     κ0 = 6e-5
@@ -186,14 +186,14 @@ function quick_invert(m)
     N² = m.N²[1, 1] # constant 
     for i=1:m.np
         for j=1:m.nσ
-            b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+            # b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
             # b[i, j] = N²*m.H[i]*m.σ[j]
         end
     end
 
     # wind stress
-    # τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
-    τξ₀ = zeros(m.np)
+    τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
+    # τξ₀ = zeros(m.np)
     τη₀ = zeros(m.np)
 
     # invert
@@ -207,10 +207,11 @@ end
 
 function plot_u_slice(m, s)
     ξ_slice = (-m.Lx + 1e4):m.Lx/2^7:(m.Lx - 1e4)
-    η₀ = 0
+    # η₀ = 0
+    η₀ = 2500e3
 
     # plot uξ slice
-    ax = plot_ξ_slice(m, s, s.uξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, s.Huξ./m.H, ξ_slice, η₀; clabel=L"Zonal velocity $u^x$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -219,7 +220,7 @@ function plot_u_slice(m, s)
     plt.close()
 
     # plot uη slice
-    ax = plot_ξ_slice(m, s, s.uη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, s.Huη./m.H, ξ_slice, η₀; clabel=L"Meridional velocity $u^y$ (m s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -228,7 +229,7 @@ function plot_u_slice(m, s)
     plt.close()
 
     # plot uσ slice
-    ax = plot_ξ_slice(m, s, s.uσ./m.H, ξ_slice, η₀; clabel=L"Vertical velocity $u^σ$ (s$^{-1}$)", contours=false)
+    ax = plot_ξ_slice(m, s, s.Huσ./m.H, ξ_slice, η₀; clabel=L"Vertical velocity $u^σ$ (s$^{-1}$)", contours=false)
     ax.set_xlim([-m.Lx/1e3, m.Lx/1e3])
     ax.set_xticks(-m.Lx/1e3:2500:m.Lx/1e3)
     ax.set_ylim([-maximum(m.H)/1e3, 0])
@@ -295,13 +296,10 @@ function print_u_error(m3D, s3D)
 
         for j=1:m3D.nσ
             # compute 3D u at (m2D.ξ[i], m3D.σ[j])
-            # uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)
-            # uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)
-            # uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)
             H = fem_evaluate(m3D, m3D.H, m2D.ξ[i], 0)
-            uξ3D = fem_evaluate(m3D, s3D.uξ[:, j], m2D.ξ[i], 0)/H
-            uη3D = fem_evaluate(m3D, s3D.uη[:, j], m2D.ξ[i], 0)/H
-            uσ3D = fem_evaluate(m3D, s3D.uσ[:, j], m2D.ξ[i], 0)/H
+            uξ3D = fem_evaluate(m3D, s3D.Huξ[:, j], m2D.ξ[i], 0)/H
+            uη3D = fem_evaluate(m3D, s3D.Huη[:, j], m2D.ξ[i], 0)/H
+            uσ3D = fem_evaluate(m3D, s3D.Huσ[:, j], m2D.ξ[i], 0)/H
 
             # evaluate 2D interpolation at m3D.σ[j], save error
             abs_err_uξ[i, j] = abs(uξ3D - uξ2D(m3D.σ[j]))
@@ -320,8 +318,8 @@ function print_u_error(m3D, s3D)
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
 end
 
-m3D = setup_model(res=4)
-# m3D = setup_model(res=4, plots=false)
+# m3D = setup_model(res=2)
+m3D = setup_model(res=2, plots=false)
 s3D = quick_invert(m3D)
 # Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
@@ -344,3 +342,9 @@ println("Done.")
 # 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  6.9e-2  4.7e-11
 # 26  4.9e-4  5.3e-5  1.3e-2  6.2e0  2.0e-2  3.2e-11
 #                                    3.5     1.5      (2.25)
+
+
+# 0.01 bowl
+# 53 2.4e-2
+# 39 3.8e-3
+# 26 1.4e-3
