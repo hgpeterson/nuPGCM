@@ -104,19 +104,22 @@ struct ModelSetup3DPG{FT,IT}
     CCη::AbstractArray{FT,4}
 
     # transport stress
-    τξ_tξ::AbstractArray{FT,2}
-    τη_tξ::AbstractArray{FT,2}
+    H²τξ_tξ::AbstractArray{FT,2}
+    H²τη_tξ::AbstractArray{FT,2}
 
     # wind stress
-    τξ_wξ::AbstractArray{FT,2}
-    τη_wξ::AbstractArray{FT,2}
+    H²τξ_wξ::AbstractArray{FT,2}
+    H²τη_wξ::AbstractArray{FT,2}
 end
 
 ################################################################################
 # Constructors for ModelSetup3DPG
 ################################################################################
 
-function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν, κ, N², Δt)
+function ModelSetup3DPG(bl::Bool, ρ₀::FT, f₀::FT, β::FT, Lx::FT, Ly::FT, p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, 
+                        e::AbstractVector{IT}, σ::AbstractVector{FT}, H::AbstractVector{FT}, Hx::AbstractVector{FT}, 
+                        Hy::AbstractVector{FT}, ν::AbstractMatrix{FT}, κ::AbstractMatrix{FT}, N²::AbstractMatrix{FT}, 
+                        Δt::FT) where {FT <: Real, IT <: Integer}
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -150,23 +153,31 @@ function ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, p, t, e, σ, H, Hx, Hy, ν,
     CCξ, CCη = get_CCξ_CCη(p, t, C₀)
 
     # baroclinic RHSs for wind and transport terms
-    baroclinic_RHSs_tξ = zeros(np, 2*nσ)
-    baroclinic_RHSs_wξ = zeros(np, 2*nσ)
+    baroclinic_RHSs_tξ = zeros(FT, np, 2*nσ)
+    baroclinic_RHSs_wξ = zeros(FT, np, 2*nσ)
     for i=1:np
         baroclinic_RHSs_tξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), 0, 0, H[i]^2, 0)
         baroclinic_RHSs_wξ[i, :] = get_baroclinic_RHS(zeros(nσ), zeros(nσ), H[i]^2, 0, 0, 0) 
     end
 
     # solve for τ at each column
-    τξ_tξ, τη_tξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_tξ)
-    τξ_wξ, τη_wξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_wξ)
+    H²τξ_tξ, H²τη_tξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_tξ)
+    H²τξ_wξ, H²τη_wξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, τξ_tξ[:, 1], τη_tξ[:, 1])
+    r_sym = H²τξ_tξ[:, 1]
+    r_asym = H²τη_tξ[:, 1]
+    r_sym_z = zeros(FT, np)
+    r_asym_z = zeros(FT, np)
+    for i=1:np
+        r_sym_z[i]  = differentiate_pointwise(H²τξ_tξ[i, 1:3], H[i]*σ[1:3], -H[i], 1)
+        r_asym_z[i] = differentiate_pointwise(H²τη_tξ[i, 1:3], H[i]*σ[1:3], -H[i], 1)
+    end
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, β, H, Hx, Hy, r_sym, r_asym, r_sym_z, r_asym_z)
 
     println("Setup complete!\n")
 
     return ModelSetup3DPG(bl, ρ₀, f₀, β, Lx, Ly, np, nt, ne, nσ, p, t, e, t_dict, C₀, 
                           σ, H, Hx, Hy, ν, κ, N², Δt, baroclinic_LHSs, barotropic_LHS, 
-                          M, M_LU, Cξ, Cη, CCξ, CCη, τξ_tξ, τη_tξ, τξ_wξ, τη_wξ)
+                          M, M_LU, Cξ, Cη, CCξ, CCη, H²τξ_tξ, H²τη_tξ, H²τξ_wξ, H²τη_wξ)
 end

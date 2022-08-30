@@ -15,18 +15,23 @@ pygui(false)
 
 Generate basin geometry. 
 
-Resolution notes for circle:
-    res  nodes   quadratic nodes
+Resolutions for square:
+   res   nodes 
+    1     1906
+    2     5162
+    3    46318
+Resolutions for circle:
+   res   nodes   with midpoints
     1     1452     5677 
     2     4027    15899 
     3     9062    35936 
-    4    16114 
+    4    16114    64036
     5    36268   144433 
 """
 function get_basin_geometry(; res=3)
     # geometry type
-    geo = "square"
-    # geo = "circle"
+    # geo = "square"
+    geo = "circle"
 
     # bathymetry type
     # bath = "flat"
@@ -108,10 +113,10 @@ function setup_model(; res=3, plots=true)
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    # f₀ = 1e-4
-    # β = 0.
-    f₀ = 0.
-    β = 2e-11
+    f₀ = 1e-4
+    β = 0.
+    # f₀ = 0.
+    # β = 2e-11
 
     # diffusivity and viscosity
     κ0 = 6e-5
@@ -159,19 +164,19 @@ function setup_model(; res=3, plots=true)
         plt.close()
 
         # plot baroclinic components 
-        plot_horizontal(p, t, m.τξ_tξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.H²τξ_tξ[:, 1]; clabel=L"Transport stress $H^2 \tau^\xi_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
         savefig("images/tau_xi_t.png")
         println("images/tau_xi_t.png")
         plt.close()
-        plot_horizontal(p, t, m.τη_tξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
+        plot_horizontal(p, t, m.H²τη_tξ[:, 1]; clabel=L"Transport stress $H^2 \tau^\eta_{t\xi}$ (kg m$^{-1}$ s$^{-1}$)", contours=false)
         savefig("images/tau_eta_t.png")
         println("images/tau_eta_t.png")
         plt.close()
-        plot_horizontal(p, t, m.τξ_wξ[:, 1]; clabel=L"Symmetric bottom stress $\tau^\xi_{w\xi}$ (-)", contours=false)
+        plot_horizontal(p, t, m.H²τξ_wξ[:, 1]; clabel=L"Wind stress $H^2 \tau^\xi_{w\xi}$ (m$^2$)", contours=false)
         savefig("images/tau_xi_w.png")
         println("images/tau_xi_w.png")
         plt.close()
-        plot_horizontal(p, t, m.τη_wξ[:, 1]; clabel=L"Anti-symmetric bottom stress $\tau^\eta_{w\xi}$ (-)", contours=false)
+        plot_horizontal(p, t, m.H²τη_wξ[:, 1]; clabel=L"Wind stress $H^2 \tau^\eta_{w\xi}$ (m$^2$)", contours=false)
         savefig("images/tau_eta_w.png")
         println("images/tau_eta_w.png")
         plt.close()
@@ -186,14 +191,14 @@ function quick_invert(m)
     N² = m.N²[1, 1] # constant 
     for i=1:m.np
         for j=1:m.nσ
-            # b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+            b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
             # b[i, j] = N²*m.H[i]*m.σ[j]
         end
     end
 
     # wind stress
-    τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
-    # τξ₀ = zeros(m.np)
+    # τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
+    τξ₀ = zeros(m.np)
     τη₀ = zeros(m.np)
 
     # invert
@@ -318,10 +323,10 @@ function print_u_error(m3D, s3D)
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
 end
 
-# m3D = setup_model(res=2)
-m3D = setup_model(res=2, plots=false)
+# m3D = setup_model(res=3)
+# m3D = setup_model(res=2, plots=false)
 s3D = quick_invert(m3D)
-# Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
+Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
 # plot_u_slice(m3D, s3D)
 

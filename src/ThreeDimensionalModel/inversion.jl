@@ -1,14 +1,15 @@
 """
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, r_sym, r_asym)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, β, H, Hx, Hy, r_sym, r_asym, r_sym_z, r_asym_z)
 
 Construct FE LHS matrix for barotropic vorticity equation
     ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
 with Dirichlet boundary condition Ψ = 0 on the boundary. Returns LU-factored matrix.
 """
 function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
-    C₀::AbstractArray{FT,3}, ρ₀::FT, f₀::FT, β::FT, H::AbstractVector{FT}, 
-    Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, r_sym::AbstractVector{FT}, 
-    r_asym::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
+                            C₀::AbstractArray{FT,3}, ρ₀::FT, β::FT, H::AbstractVector{FT}, 
+                            Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, r_sym::AbstractVector{FT}, 
+                            r_asym::AbstractVector{FT}, r_sym_z::AbstractVector{FT}, 
+                            r_asym_z::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -18,11 +19,13 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
     n = size(t, 2)
 
     # functions
-    H_func(ξ, η, k)      = fem_evaluate(H,      ξ, η, p, t, C₀, k)
-    Hx_func(ξ, η, k)     = fem_evaluate(Hx,     ξ, η, p, t, C₀, k)
-    Hy_func(ξ, η, k)     = fem_evaluate(Hy,     ξ, η, p, t, C₀, k)
-    r_sym_func(ξ, η, k)  = fem_evaluate(r_sym,  ξ, η, p, t, C₀, k)
-    r_asym_func(ξ, η, k) = fem_evaluate(r_asym, ξ, η, p, t, C₀, k)
+    H_func(ξ, η, k)        = fem_evaluate(H,        ξ, η, p, t, C₀, k)
+    Hx_func(ξ, η, k)       = fem_evaluate(Hx,       ξ, η, p, t, C₀, k)
+    Hy_func(ξ, η, k)       = fem_evaluate(Hy,       ξ, η, p, t, C₀, k)
+    r_sym_func(ξ, η, k)    = fem_evaluate(r_sym,    ξ, η, p, t, C₀, k)
+    r_asym_func(ξ, η, k)   = fem_evaluate(r_asym,   ξ, η, p, t, C₀, k)
+    r_sym_z_func(ξ, η, k)  = fem_evaluate(r_sym_z,  ξ, η, p, t, C₀, k)
+    r_asym_z_func(ξ, η, k) = fem_evaluate(r_asym_z, ξ, η, p, t, C₀, k)
 
     # create global linear system using stamping method
     A = Tuple{IT,IT,FT}[]
@@ -66,6 +69,21 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
             end
         end
 
+        # calculate contribution to C′ from element k
+        C′ᵏ = zeros(FT, n, n)
+        for i=1:n
+            for j=1:n
+                func(ξ, η) = r_sym_z_func(ξ, η, k)/ρ₀*(
+                    Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) +
+                    Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                ) + r_asym_z_func(ξ, η, k)/ρ₀*(
+                    Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+                    Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+                )
+                C′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+            end
+        end
+
         # add to global system
         for i=1:n
             for j=1:n
@@ -76,6 +94,7 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
                 push!(A, (t[k, i], t[k, j], Kᵏ[i, j]))
                 push!(A, (t[k, i], t[k, j], K′ᵏ[i, j]))
                 push!(A, (t[k, i], t[k, j], Cᵏ[i, j]))
+                push!(A, (t[k, i], t[k, j], C′ᵏ[i, j]))
             end
         end
     end
@@ -97,13 +116,17 @@ Construct FE RHS vector for barotropic vorticity equation
     ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
 with Dirichlet boundary condition Ψ = 0 on the boundary.
 """
-function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::AbstractVector{FT}) where FT <: Real
+function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::AbstractVector{FT},
+                            τξ_z::AbstractVector{FT}, τη_z::AbstractVector{FT}) where FT <: Real
     # number of shape functions per triangle
     n = size(m.t, 2)
 
     # functions
     H_func(ξ, η, k)  = fem_evaluate(m, m.H, ξ, η, k)
+    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
+    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
     curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k) - ∂η(m, τξ, ξ, η, k)
+    τ_z(ξ, η, k)     = Hy_func(ξ, η, k)*fem_evaluate(m, τξ_z, ξ, η, k) - Hx_func(ξ, η, k)*fem_evaluate(m, τη_z, ξ, η, k)
 
 	# stamp curl_τ
     b = zeros(FT, m.np)
@@ -113,7 +136,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::A
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = curl_τ(ξ, η, k)/m.ρ₀*H_func(ξ, η, k)^2*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) = (curl_τ(ξ, η, k) + τ_z(ξ, η, k))/m.ρ₀*H_func(ξ, η, k)^2*shape_func(m.C₀[k, i, :], ξ, η)
             b[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
@@ -244,11 +267,11 @@ function solve_baroclinic_systems(baroclinic_LHSs::AbstractVector{SuiteSparse.UM
 end
 
 """
-    τξ_b, τη_b = get_τ_b(m, b)
+    H²τξ_b, H²τη_b = get_H²τ_b(m, b)
 
 Compute the baroclinic stress due to buoyancy gradients.
 """
-function get_τ_b(m::ModelSetup3DPG, b::AbstractMatrix{FT}) where FT <: Real
+function get_H²τ_b(m::ModelSetup3DPG, b::AbstractMatrix{FT}) where FT <: Real
     # # analytical buoyancy gradients
     # rhs_x = zeros(FT, m.np, m.nσ)
     # rhs_y = zeros(FT, m.np, m.nσ)
@@ -311,17 +334,17 @@ function get_τ_b(m::ModelSetup3DPG, b::AbstractMatrix{FT}) where FT <: Real
 end
 
 """
-    H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    H²τξ, H²τη = get_full_τ(m, H²τξ_b, H²τη_b, τξ₀, τη₀, Ψ)
 
 Reconstruct full stress given the buoyancy, wind, and transport components.
 """
-function get_full_τ(m::ModelSetup3DPG, τξ_b::AbstractMatrix{FT}, τη_b::AbstractMatrix{FT}, 
+function get_full_τ(m::ModelSetup3DPG, H²τξ_b::AbstractMatrix{FT}, H²τη_b::AbstractMatrix{FT}, 
                     τξ₀::AbstractVector{FT}, τη₀::AbstractVector{FT}, Ψ::AbstractVector{FT}) where FT <: Real
     Uξ = -(m.M_LU\(m.Cη*Ψ))
     println("Uξ: ", maximum(abs.(Uξ)))
     Uη =  m.M_LU\(m.Cξ*Ψ)
-    H²τξ = @. τξ_b + τξ₀*m.τξ_wξ - τη₀*m.τη_wξ + Uξ*m.τξ_tξ - Uη*m.τη_tξ
-    H²τη = @. τη_b + τξ₀*m.τη_wξ + τη₀*m.τξ_wξ + Uξ*m.τη_tξ + Uη*m.τξ_tξ
+    H²τξ = @. H²τξ_b + τξ₀*m.H²τξ_wξ - τη₀*m.H²τη_wξ + Uξ*m.H²τξ_tξ - Uη*m.H²τη_tξ
+    H²τη = @. H²τη_b + τξ₀*m.H²τη_wξ + τη₀*m.H²τξ_wξ + Uξ*m.H²τη_tξ + Uη*m.H²τξ_tξ
     return H²τξ, H²τη
 end
 
@@ -361,42 +384,50 @@ Solve full 3D PG inversion equations given wind stress and buoyancy field.
 function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::AbstractVector{FT}, 
                 b::AbstractMatrix{FT}; plots=false) where FT <: Real
     # solve for stress due to buoyancy gradients
-    τξ_b, τη_b = get_τ_b(m, b)
-    println("τξ_b: ", maximum(abs.(τξ_b)))
+    H²τξ_b, H²τη_b = get_H²τ_b(m, b)
+    println("H²τξ_b: ", maximum(abs.(H²τξ_b)))
 
     # bottom stress 
-    τξ_b_bot = τξ_b[:, 1]
-    τη_b_bot = τη_b[:, 1]
+    H²τξ_b_bot = H²τξ_b[:, 1]
+    H²τη_b_bot = H²τη_b[:, 1]
 
     # bottom stress due to wind stress
-    τξ_wξ_bot = m.τξ_wξ[:, 1]
-    τη_wξ_bot = m.τη_wξ[:, 1]
+    H²τξ_wξ_bot = m.H²τξ_wξ[:, 1]
+    H²τη_wξ_bot = m.H²τη_wξ[:, 1]
 
     # rhs τ
-    # τξ_rhs = τξ₀ - (τξ₀.*τξ_wξ_bot - τη₀.*τη_wξ_bot + τξ_b_bot)./m.H.^2
-    # τη_rhs = τη₀ - (τξ₀.*τη_wξ_bot + τη₀.*τξ_wξ_bot + τη_b_bot)./m.H.^2
-    τξ_rhs = τξ₀ - τξ_b_bot./m.H.^2
-    τη_rhs = τη₀ - τη_b_bot./m.H.^2
+    τξ_rhs = τξ₀ - (τξ₀.*H²τξ_wξ_bot - τη₀.*H²τη_wξ_bot + H²τξ_b_bot)./m.H.^2
+    τη_rhs = τη₀ - (τξ₀.*H²τη_wξ_bot + τη₀.*H²τξ_wξ_bot + H²τη_b_bot)./m.H.^2
+
+    # rhs τ_z
+    τξ_z_rhs = zeros(FT, m.np)
+    τη_z_rhs = zeros(FT, m.np)
+    for i=1:m.np
+        τξᵢ = (H²τξ_b[i, :] + τξ₀[i]*m.H²τξ_wξ[i, :] - τη₀[i]*m.H²τη_wξ[i, :])/m.H[i]^2
+        τηᵢ = (H²τη_b[i, :] + τξ₀[i]*m.H²τη_wξ[i, :] + τη₀[i]*m.H²τξ_wξ[i, :])/m.H[i]^2
+        τξ_z_rhs[i] = differentiate_pointwise(τξᵢ[1:3], m.H[i]*m.σ[1:3], -m.H[i], 1)
+        τη_z_rhs[i] = differentiate_pointwise(τηᵢ[1:3], m.H[i]*m.σ[1:3], -m.H[i], 1)
+    end
 
     # get barotropic_RHS
-    barotropic_RHS = get_barotropic_RHS(m, τξ_rhs, τη_rhs)
+    barotropic_RHS = get_barotropic_RHS(m, τξ_rhs, τη_rhs, τξ_z_rhs, τη_z_rhs)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS
     println("Ψ: ", maximum(abs.(Ψ/1e6)))
 
     # get H²τ
-    H²τξ, H²τη = get_full_τ(m, τξ_b, τη_b, τξ₀, τη₀, Ψ)
+    H²τξ, H²τη = get_full_τ(m, H²τξ_b, H²τη_b, τξ₀, τη₀, Ψ)
 
     # convert to Huξ, Huη, Huσ
     Huξ, Huη, Huσ = get_u(m, H²τξ, H²τη)
 
     if plots
-        plot_horizontal(m.p, m.t, τξ_b_bot; clabel=L"Buoyancy bottom stress $\tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+        plot_horizontal(m.p, m.t, H²τξ_b_bot; clabel=L"Buoyancy bottom stress $H^2 \tau^\xi_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
         savefig("images/tau_xi_b.png")
         println("images/tau_xi_b.png")
         plt.close()
-        plot_horizontal(m.p, m.t, τη_b_bot; clabel=L"Buoyancy bottom stress $\tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
+        plot_horizontal(m.p, m.t, H²τη_b_bot; clabel=L"Buoyancy bottom stress $H^2 \tau^\eta_b$ (kg m$^{-1}$ s$^{-2}$)", contours=false)
         savefig("images/tau_eta_b.png")
         println("images/tau_eta_b.png")
         plt.close()
