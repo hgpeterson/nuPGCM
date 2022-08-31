@@ -199,12 +199,28 @@ function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArra
     end
     error("Cannot find triangle; p₀=($ξ, $η) is not inside mesh domain.")
 end
+function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer, 2})
+    for k=1:size(t, 1) 
+        if pt_in_tri(ξ, η, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+            return k
+        end
+    end
+    error("Cannot find triangle; p₀=($ξ, $η) is not inside mesh domain.")
+end
 
 function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
                       t::AbstractArray{<:Integer,2}, t_dict::AbstractDict{IN, Vector{IN}}, 
                       C₀::AbstractArray{<:Real,3}) where IN <: Integer
     # find triangle (ξ, η) is in
     k = get_tri(ξ, η, p, t, t_dict)
+    
+    # evaluate there
+    return fem_evaluate(v, ξ, η, p, t, C₀, k)
+end
+function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
+                      t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+    # find triangle (ξ, η) is in
+    k = get_tri(ξ, η, p, t)
     
     # evaluate there
     return fem_evaluate(v, ξ, η, p, t, C₀, k)
