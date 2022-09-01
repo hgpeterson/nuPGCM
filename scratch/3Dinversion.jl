@@ -81,8 +81,7 @@ function get_basin_geometry(; res=3)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -113,10 +112,10 @@ function setup_model(; res=3, plots=true)
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2  
 
     # coriolis parameter f = f₀ + βη
-    f₀ = 1e-4
-    β = 0.
-    # f₀ = 0.
-    # β = 2e-11
+    # f₀ = 1e-4
+    # β = 0.
+    f₀ = 0.
+    β = 2e-11
 
     # diffusivity and viscosity
     κ0 = 6e-5
@@ -191,14 +190,14 @@ function quick_invert(m)
     N² = m.N²[1, 1] # constant 
     for i=1:m.np
         for j=1:m.nσ
-            b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
+            # b[i, j] = N²*m.H[i]*(m.σ[j] + 0.1*exp(-(m.σ[j] + 1)/0.1))
             # b[i, j] = N²*m.H[i]*m.σ[j]
         end
     end
 
     # wind stress
-    # τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
-    τξ₀ = zeros(m.np)
+    τξ₀ = @. -0.1*cos(π*m.p[:, 2]/m.Ly)
+    # τξ₀ = zeros(m.np)
     τη₀ = zeros(m.np)
 
     # invert
@@ -324,9 +323,9 @@ function print_u_error(m3D, s3D)
 end
 
 # m3D = setup_model(res=4)
-m3D = setup_model(res=4, plots=false)
+m3D = setup_model(res=3, plots=false)
 s3D = quick_invert(m3D)
-Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
+# Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
 # plot_u_slice(m3D, s3D)
 
@@ -347,10 +346,3 @@ println("Done.")
 # 39  1.5e-3  7.4e-5  2.3e-2  9.2e0  6.9e-2  4.7e-11
 # 26  4.9e-4  5.3e-5  1.3e-2  6.2e0  2.0e-2  3.2e-11
 #                                    3.5     1.5      (2.25)
-
-
-# 0.01 bowl
-# 79 5.6e-3
-# 53 4.5e-3
-# 39 4.1e-3
-# 26 

@@ -33,13 +33,9 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         Kᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = -r_sym_func(ξ, η, k)/ρ₀*(
+                func(ξ, η) = -r_sym_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
                             (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
-                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
-                            3/H_func(ξ, η, k)*
-                            (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) + 
-                             Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η))
-                            )
+                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -48,13 +44,9 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         K′ᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀*(
+                func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
                             (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
-                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
-                            3/H_func(ξ, η, k)*
-                            (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η) - 
-                             Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η))
-                            )
+                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
                 K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -63,9 +55,9 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         Cᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = (β*H_func(ξ, η, k)^2 - (f₀ + β*η)*Hy_func(ξ, η, k)*H_func(ξ, η, k))*
+                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                            -(f₀ + β*η)*Hx_func(ξ, η, k)*H_func(ξ, η, k)*
+                            -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
                 Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
@@ -113,9 +105,9 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::Abs
     Hy_func(ξ, η, k)  = fem_evaluate(m, m.Hy, ξ, η, k)
     τξ_func(ξ, η, k)  = fem_evaluate(m, τξ,   ξ, η, k)
     τη_func(ξ, η, k)  = fem_evaluate(m, τη,   ξ, η, k)
-    H³curl_τ(ξ, η, k) = ∂ξ(m, τη, ξ, η, k)*H_func(ξ, η, k)^2 - τη_func(ξ, η, k)*H_func(ξ, η, k)*Hx_func(ξ, η, k) -
-                       (∂η(m, τξ, ξ, η, k)*H_func(ξ, η, k)^2 - τξ_func(ξ, η, k)*H_func(ξ, η, k)*Hy_func(ξ, η, k))
-    H³JEBAR(ξ, η, k)  = H_func(ξ, η, k)*(Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
+    curl_τ(ξ, η, k)   = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
+                       (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
+    JEBAR(ξ, η, k)    = 1/H_func(ξ, η, k)^2*(Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
 	# stamp curl_τ
     b = zeros(FT, m.np)
@@ -125,7 +117,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::Abs
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (-H³JEBAR(ξ, η, k) + H³curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) = (-JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
             b[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
