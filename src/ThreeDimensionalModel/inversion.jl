@@ -2,7 +2,7 @@
     barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, r_sym, r_asym)
 
 Construct FE LHS matrix for barotropic vorticity equation
-    ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
+    ∇⋅(r/ρ₀/H^3∇Ψ) - σ⋅(∇r'/ρ₀/H^3×∇Ψ) - J(f/H, Ψ) = -J(1/H, γ) + σ⋅∇×[(τ₀ - τ_w - τ_b)/ρ₀/H]
 with Dirichlet boundary condition Ψ = 0 on the boundary. Returns LU-factored matrix.
 """
 function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
@@ -91,7 +91,7 @@ end
     barotropic_RHS = get_barotropic_RHS(m, τξ, τη)
 
 Construct FE RHS vector for barotropic vorticity equation
-    ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
+    ∇⋅(r/ρ₀/H^3∇Ψ) - σ⋅(∇r'/ρ₀/H^3×∇Ψ) - J(f/H, Ψ) = -J(1/H, γ) + σ⋅∇×[(τ₀ - τ_w - τ_b)/ρ₀/H]
 with Dirichlet boundary condition Ψ = 0 on the boundary.
 """
 function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::AbstractVector{FT}, 
