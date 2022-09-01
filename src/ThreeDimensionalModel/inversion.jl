@@ -1,15 +1,14 @@
 """
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, β, H, Hx, Hy, r_sym, r_asym, r_sym_z, r_asym_z)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, r_sym, r_asym)
 
 Construct FE LHS matrix for barotropic vorticity equation
     ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
 with Dirichlet boundary condition Ψ = 0 on the boundary. Returns LU-factored matrix.
 """
 function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
-                            C₀::AbstractArray{FT,3}, ρ₀::FT, β::FT, H::AbstractVector{FT}, 
+                            C₀::AbstractArray{FT,3}, ρ₀::FT, f₀::FT, β::FT, H::AbstractVector{FT}, 
                             Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, r_sym::AbstractVector{FT}, 
-                            r_asym::AbstractVector{FT}, r_sym_z::AbstractVector{FT}, 
-                            r_asym_z::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
+                            r_asym::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -35,11 +34,11 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         for i=1:n
             for j=1:n
                 func(ξ, η) = -r_sym_func(ξ, η, k)/ρ₀*(
-                             (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
-                              shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
-                             2/H_func(ξ, η, k)*
-                             (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) + 
-                              Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η))
+                            (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
+                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
+                            3/H_func(ξ, η, k)*
+                            (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) + 
+                             Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η))
                             )
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
@@ -50,11 +49,11 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         for i=1:n
             for j=1:n
                 func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀*(
-                             (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
-                              shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
-                             2/H_func(ξ, η, k)*
-                             (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η) - 
-                              Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η))
+                            (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
+                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)) +
+                            3/H_func(ξ, η, k)*
+                            (Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η) - 
+                             Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η))
                             )
                 K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
@@ -64,23 +63,11 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
         Cᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = β*H_func(ξ, η, k)^2*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η)
+                func(ξ, η) = (β*H_func(ξ, η, k)^2 - (f₀ + β*η)*Hy_func(ξ, η, k)*H_func(ξ, η, k))*
+                            shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+                            -(f₀ + β*η)*Hx_func(ξ, η, k)*H_func(ξ, η, k)*
+                            shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
                 Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
-            end
-        end
-
-        # calculate contribution to C′ from element k
-        C′ᵏ = zeros(FT, n, n)
-        for i=1:n
-            for j=1:n
-                func(ξ, η) = r_sym_z_func(ξ, η, k)/ρ₀*(
-                    Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) +
-                    Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                ) + r_asym_z_func(ξ, η, k)/ρ₀*(
-                    Hy_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                    Hx_func(ξ, η, k)*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                )
-                C′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
 
@@ -94,7 +81,6 @@ function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::Abs
                 push!(A, (t[k, i], t[k, j], Kᵏ[i, j]))
                 push!(A, (t[k, i], t[k, j], K′ᵏ[i, j]))
                 push!(A, (t[k, i], t[k, j], Cᵏ[i, j]))
-                push!(A, (t[k, i], t[k, j], C′ᵏ[i, j]))
             end
         end
     end
@@ -116,17 +102,20 @@ Construct FE RHS vector for barotropic vorticity equation
     ∇⋅(r∇Ψ) - z⋅(∇r'×∇Ψ) + β ∂ξ(Ψ) = 1/ρ₀ curl(τ)
 with Dirichlet boundary condition Ψ = 0 on the boundary.
 """
-function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::AbstractVector{FT},
-                            τξ_z::AbstractVector{FT}, τη_z::AbstractVector{FT}) where FT <: Real
+function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::AbstractVector{FT}, 
+                            τη::AbstractVector{FT}) where FT <: Real
     # number of shape functions per triangle
     n = size(m.t, 2)
 
     # functions
-    H_func(ξ, η, k)  = fem_evaluate(m, m.H, ξ, η, k)
-    Hx_func(ξ, η, k) = fem_evaluate(m, m.Hx, ξ, η, k)
-    Hy_func(ξ, η, k) = fem_evaluate(m, m.Hy, ξ, η, k)
-    curl_τ(ξ, η, k)  = ∂ξ(m, τη, ξ, η, k) - ∂η(m, τξ, ξ, η, k)
-    τ_z(ξ, η, k)     = Hy_func(ξ, η, k)*fem_evaluate(m, τξ_z, ξ, η, k) - Hx_func(ξ, η, k)*fem_evaluate(m, τη_z, ξ, η, k)
+    H_func(ξ, η, k)   = fem_evaluate(m, m.H,  ξ, η, k)
+    Hx_func(ξ, η, k)  = fem_evaluate(m, m.Hx, ξ, η, k)
+    Hy_func(ξ, η, k)  = fem_evaluate(m, m.Hy, ξ, η, k)
+    τξ_func(ξ, η, k)  = fem_evaluate(m, τξ,   ξ, η, k)
+    τη_func(ξ, η, k)  = fem_evaluate(m, τη,   ξ, η, k)
+    H³curl_τ(ξ, η, k) = ∂ξ(m, τη, ξ, η, k)*H_func(ξ, η, k)^2 - τη_func(ξ, η, k)*H_func(ξ, η, k)*Hx_func(ξ, η, k) -
+                       (∂η(m, τξ, ξ, η, k)*H_func(ξ, η, k)^2 - τξ_func(ξ, η, k)*H_func(ξ, η, k)*Hy_func(ξ, η, k))
+    H³JEBAR(ξ, η, k)  = H_func(ξ, η, k)*(Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
 
 	# stamp curl_τ
     b = zeros(FT, m.np)
@@ -136,7 +125,7 @@ function get_barotropic_RHS(m::ModelSetup3DPG, τξ::AbstractVector{FT}, τη::A
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (curl_τ(ξ, η, k) + τ_z(ξ, η, k))/m.ρ₀*H_func(ξ, η, k)^2*shape_func(m.C₀[k, i, :], ξ, η)
+            func(ξ, η) = (-H³JEBAR(ξ, η, k) + H³curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
             b[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
         end
 	end
@@ -391,6 +380,12 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::Abstrac
     H²τξ_b_bot = H²τξ_b[:, 1]
     H²τη_b_bot = H²τη_b[:, 1]
 
+    # buoyancy integral for JEBAR term
+    γ = zeros(FT, m.np)
+    for i=1:m.np
+        γ[i] = -m.H[i]^2*trapz(m.σ.*b[i, :], m.σ)
+    end
+
     # bottom stress due to wind stress
     H²τξ_wξ_bot = m.H²τξ_wξ[:, 1]
     H²τη_wξ_bot = m.H²τη_wξ[:, 1]
@@ -399,18 +394,8 @@ function invert(m::ModelSetup3DPG, τξ₀::AbstractVector{FT}, τη₀::Abstrac
     τξ_rhs = τξ₀ - (τξ₀.*H²τξ_wξ_bot - τη₀.*H²τη_wξ_bot + H²τξ_b_bot)./m.H.^2
     τη_rhs = τη₀ - (τξ₀.*H²τη_wξ_bot + τη₀.*H²τξ_wξ_bot + H²τη_b_bot)./m.H.^2
 
-    # rhs τ_z
-    τξ_z_rhs = zeros(FT, m.np)
-    τη_z_rhs = zeros(FT, m.np)
-    for i=1:m.np
-        τξᵢ = (H²τξ_b[i, :] + τξ₀[i]*m.H²τξ_wξ[i, :] - τη₀[i]*m.H²τη_wξ[i, :])/m.H[i]^2
-        τηᵢ = (H²τη_b[i, :] + τξ₀[i]*m.H²τη_wξ[i, :] + τη₀[i]*m.H²τξ_wξ[i, :])/m.H[i]^2
-        τξ_z_rhs[i] = differentiate_pointwise(τξᵢ[1:3], m.H[i]*m.σ[1:3], -m.H[i], 1)
-        τη_z_rhs[i] = differentiate_pointwise(τηᵢ[1:3], m.H[i]*m.σ[1:3], -m.H[i], 1)
-    end
-
     # get barotropic_RHS
-    barotropic_RHS = get_barotropic_RHS(m, τξ_rhs, τη_rhs, τξ_z_rhs, τη_z_rhs)
+    barotropic_RHS = get_barotropic_RHS(m, γ, τξ_rhs, τη_rhs)
 
     # solve
     Ψ = m.barotropic_LHS\barotropic_RHS

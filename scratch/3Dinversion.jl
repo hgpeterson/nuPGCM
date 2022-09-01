@@ -81,8 +81,8 @@ function get_basin_geometry(; res=3)
             Hy = @. H₀*G(Lx + ξ)*G(Lx - ξ)*Gr(Ly + η)*G(Ly - η) - H₀*G(Lx + ξ)*G(Lx - ξ)*G(Ly + η)*Gr(Ly - η)
         elseif geo == "circle"
             # circular bathtub (radius = Lx)
-            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
-            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
+            # H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 0.01
+            H  = @. H₀*G(sqrt(ξ^2 + η^2) - Lx) + 500
             Hx = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*ξ/sqrt(ξ^2 + η^2)
             Hy = @. H₀*Gr(sqrt(ξ^2 + η^2) - Lx)*η/sqrt(ξ^2 + η^2)
         end
@@ -323,8 +323,8 @@ function print_u_error(m3D, s3D)
     println(@sprintf("Max uσ:      %1.1e m s⁻¹ (%d km)", maximum(abs.(s2D.uσ)), m2D.ξ[argmax(abs.(s2D.uσ))[1]]/1e3))
 end
 
-# m3D = setup_model(res=3)
-# m3D = setup_model(res=2, plots=false)
+# m3D = setup_model(res=4)
+m3D = setup_model(res=4, plots=false)
 s3D = quick_invert(m3D)
 Ψ2D, Ψ3D = plot_Ψ_error(m3D, s3D)
 # print_u_error(m3D, s3D)
@@ -350,6 +350,7 @@ println("Done.")
 
 
 # 0.01 bowl
-# 53 2.4e-2
-# 39 3.8e-3
-# 26 1.4e-3
+# 79 5.6e-3
+# 53 4.5e-3
+# 39 4.1e-3
+# 26 

@@ -165,15 +165,7 @@ function ModelSetup3DPG(bl::Bool, ρ₀::FT, f₀::FT, β::FT, Lx::FT, Ly::FT, p
     H²τξ_wξ, H²τη_wξ = solve_baroclinic_systems(baroclinic_LHSs, baroclinic_RHSs_wξ)
 
     # compute barotropic LHS matrix
-    r_sym = H²τξ_tξ[:, 1]
-    r_asym = H²τη_tξ[:, 1]
-    r_sym_z = zeros(FT, np)
-    r_asym_z = zeros(FT, np)
-    for i=1:np
-        r_sym_z[i]  = differentiate_pointwise(H²τξ_tξ[i, 1:3], H[i]*σ[1:3], -H[i], 1)
-        r_asym_z[i] = differentiate_pointwise(H²τη_tξ[i, 1:3], H[i]*σ[1:3], -H[i], 1)
-    end
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, β, H, Hx, Hy, r_sym, r_asym, r_sym_z, r_asym_z)
+    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, H²τξ_tξ[:, 1], H²τη_tξ[:, 1])
 
     println("Setup complete!\n")
 
