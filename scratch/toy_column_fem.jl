@@ -9,16 +9,60 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+"""
+    t = delaunay(p)
+
+Delaunay triangulation `t` of N x 2 node array `p`.
+"""
+function delaunay(p)
+    tri = pyimport("matplotlib.tri")
+    t = tri[:Triangulation](p[:,1], p[:,2])
+    return Int64.(t[:triangles] .+ 1)
+end
+
+"""
+    inside = inpolygon(p, pv)
+
+Determine if each point in the N x 2 node array `p` is inside the polygon
+described by the NE x 2 node array `pv`.
+"""
+function inpolygon(p::Array{Float64,2}, pv::Array{Float64,2})
+    path = pyimport("matplotlib.path")
+    poly = path[:Path](pv)
+    return [poly[:contains_point](p[ip,:]) for ip = 1:size(p,1)]
+end
+
+function edge_midpoints(p, t)
+    pmid = reshape(p[t,:] + p[t[:,[2,3,1]],:], :, 2) / 2
+    return unique(pmid, dims=1)
+end
+
+function remove_tiny_tris(p, t)
+    areas = zeros(size(t, 1))
+    for i in eachindex(areas)
+        areas[i] = tri_area(p[t[i, :], :])
+    end
+    return t[areas .> 1e-14,:]
+end
+
+function remove_outside_tris(p, t, pv)
+    pmid = dropdims(sum(p[t,:], dims=2), dims=2) / 3
+    is_inside = inpolygon(pmid, pv)
+    return t[is_inside,:]
+end
+
 function lerp(x, x₁, y₁, x₂, y₂)
     return y₁*(x - x₂)/(x₁ - x₂) + y₂*(x - x₁)/(x₂ - x₁)
 end
 
 function get_grid(L::FT, H₀::FT; res=1, vm=false) where FT <: Real
-    if vm
-        p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
-    else
-        p, t, e = load_mesh("../meshes/bowl$res.h5")
-    end
+    # if vm
+    #     p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
+    # else
+    #     p, t, e = load_mesh("../meshes/bowl$res.h5")
+    # end
+    p, t, e = load_mesh("../meshes/mesh.h5")
+
     p[:, 1] *= L
     p[:, 2] *= H₀
     C₀ = get_shape_func_coeffs(p, t)
@@ -93,6 +137,35 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
 end
 
 function convergence()
+    p, t, e = load_mesh("../meshes/mesh.h5")
+    # h_min = Inf;
+    # h_max = 0;
+    # for i in eachindex(t[:, 1])
+    #     h₀ = sqrt(4/sqrt(3)*tri_area(p[t[i, :], :]))
+    #     if h₀ < h_min
+    #         h_min = h₀
+    #     elseif h₀ > h_max
+    #         h_max = h₀
+    #     end
+    # end
+    # println(h_min)
+    # println(h_max)
+    # error()
+    pv = p[e, :]
+    pv = pv[pv[:, 2] .< 0, :]
+    pv = sort(pv, dims=1) #FIXME
+    pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
+    p = [p; edge_midpoints(p, t)]
+    t = delaunay(p)
+    t = remove_tiny_tris(p, t)
+    t = remove_outside_tris(p, t, pv)
+    tplot(p, t)
+    plot(pv[:, 1], pv[:, 2], ".", ms=0.5)
+    axis("equal")
+    savefig("images/debug.png")
+    println("images/debug.png")
+    error()
+
     # params
     δ = 10.
     L = 5e6
@@ -158,11 +231,15 @@ function convergence()
     # error
     Δ = L/5
     G(x) = 1 - exp(-x^2/(2*Δ^2)) 
-    H = @. H₀*G(p[:, 1] - L)*G(p[:, 1] + L)
+    H = @. H₀*(0.02/20 + (1 - 0.02/20)*G(p[:, 1] - L)*G(p[:, 1] + L))
     u_exact = @. 1 - exp(-(p[:, 2] + H)/δ) - exp(p[:, 2]/δ)
     abs_err = abs.(u - u_exact)
     abs_err[e] .= 0
     println("Max Abs. Err.: ", maximum(abs_err))
+    println(argmax(abs_err))
+    println(p[argmax(abs_err), :])
+    println(u[argmax(abs_err)])
+    println(u_exact[argmax(abs_err)])
 end
 
 convergence()
