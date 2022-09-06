@@ -68,8 +68,8 @@ function generate_bowl_mesh(lc, bdy_ref)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", lc/bdy_ref)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", lc)
-    gmsh.model.mesh.field.setNumber(2, "DistMin",  5*lc/bdy_ref)
-    gmsh.model.mesh.field.setNumber(2, "DistMax", 10*lc/bdy_ref)
+    gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
+    gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
 
     gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
@@ -86,7 +86,7 @@ function generate_bowl_mesh(lc, bdy_ref)
     gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
     # use different mesh algorithm (better for variable mesh size)
-    gmsh.option.setNumber("Mesh.Algorithm", 5)
+    # gmsh.option.setNumber("Mesh.Algorithm", 5)
     
     # sync and generate
     gmsh.model.geo.synchronize()
@@ -202,7 +202,7 @@ function load_gmesh(; h5save=false)
     return p, t, e
 end
 
-generate_bowl_mesh(0.2, 4)
+generate_bowl_mesh(0.05, 4)
 # generate_square_mesh()
 p, t, e = load_gmesh(h5save=true)
 tplot(p, t)

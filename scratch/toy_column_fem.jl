@@ -21,6 +21,16 @@ function delaunay(p)
 end
 
 """
+    e = boundary_nodes(t)
+
+Find all boundary nodes `e` in the triangulation `t`.
+"""
+function boundary_nodes(t)
+    edges, boundary_indices = nuPGCM.all_edges(t)
+    return unique(edges[boundary_indices,:][:])
+end
+
+"""
     inside = inpolygon(p, pv)
 
 Determine if each point in the N x 2 node array `p` is inside the polygon
@@ -55,17 +65,45 @@ function lerp(x, x₁, y₁, x₂, y₂)
     return y₁*(x - x₂)/(x₁ - x₂) + y₂*(x - x₁)/(x₂ - x₁)
 end
 
-function get_grid(L::FT, H₀::FT; res=1, vm=false) where FT <: Real
-    # if vm
-    #     p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
-    # else
-    #     p, t, e = load_mesh("../meshes/bowl$res.h5")
-    # end
-    p, t, e = load_mesh("../meshes/mesh.h5")
+function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where FT <: Real
+    if debug
+        p, t, e = load_mesh("../meshes/mesh.h5")
+    else
+        if vm
+            p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
+        else
+            p, t, e = load_mesh("../meshes/bowl$res.h5")
+        end
+    end
 
+    # refinements
+    
+    # get edge nodes (in proper order)
+    pv = p[e, :]
+    pv = pv[pv[:, 2] .< 0, :]
+    pv = sortslices(pv, dims=1)
+    pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
+    for i=1:nref
+        # add midpoints
+        p = [p; edge_midpoints(p, t)]
+
+        # retriangulate
+        t = delaunay(p)
+        t = remove_tiny_tris(p, t)
+        t = remove_outside_tris(p, t, pv)
+
+        # recompute boundary nodes
+        e = boundary_nodes(t)
+    end
+
+    # rescale
     p[:, 1] *= L
     p[:, 2] *= H₀
+
+    # shape function coefficients
     C₀ = get_shape_func_coeffs(p, t)
+
+    # t dictionary
     # t_dict = get_t_dict(p, t)
     t_dict = nothing
     return p, t, e, C₀, t_dict
@@ -137,7 +175,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
 end
 
 function convergence()
-    p, t, e = load_mesh("../meshes/mesh.h5")
+    # p, t, e = load_mesh("../meshes/mesh.h5")
     # h_min = Inf;
     # h_max = 0;
     # for i in eachindex(t[:, 1])
@@ -151,95 +189,99 @@ function convergence()
     # println(h_min)
     # println(h_max)
     # error()
-    pv = p[e, :]
-    pv = pv[pv[:, 2] .< 0, :]
-    pv = sort(pv, dims=1) #FIXME
-    pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
-    p = [p; edge_midpoints(p, t)]
-    t = delaunay(p)
-    t = remove_tiny_tris(p, t)
-    t = remove_outside_tris(p, t, pv)
-    tplot(p, t)
-    plot(pv[:, 1], pv[:, 2], ".", ms=0.5)
-    axis("equal")
-    savefig("images/debug.png")
-    println("images/debug.png")
-    error()
 
     # params
-    δ = 10.
+    δ = 100.
     L = 5e6
     H₀ = 2e3
 
-    # grid
-    p, t, e, C₀, t_dict = get_grid(L, H₀; res=4, vm=true)
-    # fig, ax, im = tplot(p/1e3, t)
-    # # ax.scatter(p[e, 1]/1e3, p[e, 2]/1e3, 0.5)
-    # ax.set_xlabel(L"Zonal coordinate $x$ (km)")
-    # ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-    # savefig("images/mesh.png")
-    # println("images/mesh.png")
-    # plt.close()
+    # save errors
+    hs = zeros(3)
+    errors = zeros(4, 3)
+    for nref=0:2
+        println("refinement ", nref)
 
-    # solve
-    A, b = get_A_b(p, t, e, C₀, δ)
-    u = A\b
-    fig, ax, im = tplot(p/1e3, t, u)
-    cb = colorbar(im, ax=ax, label=L"$u$")
-    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
-    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-    savefig("images/u.png")
-    println("images/u.png")
-    plt.close()
+        # grid
+        p, t, e, C₀, t_dict = get_grid(L, H₀; debug=true, nref=nref)
+        # println("np = ", size(p, 1))
+        hs[nref+1] = sqrt(size(p, 1))
 
-    # profiles
-    ξ₀s = 1e6*(1:4)
-    bot_e = p[e, :]
-    bot_e = bot_e[bot_e[:, 2] .< -1e-4, :]
-    ξ = bot_e[:, 1]
-    Hs = -bot_e[:, 2]
-    for i in eachindex(ξ₀s)
-        ξ₀ = ξ₀s[i]
-        i₁ = argmin(abs.(ξ .- ξ₀))
-        if (ξ[i₁] > ξ₀) i₁ -= 1 end
-        ξ₁ = ξ[i₁]
-        H₁ = Hs[i₁]
-        ξ₂ = ξ[i₁ + 1]
-        H₂ = Hs[i₁ + 1]
-        H = lerp(ξ₀, ξ₁, H₁, ξ₂, H₂)
-        nz = 2^7
-        z = @. -H*(cos(π*((1:nz)-1)/(nz-1)) + 1)/2
-        u_profile = zeros(nz)
-        for j=2:nz-1
-            # u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, t_dict, C₀)
-            u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, C₀)
-        end
-        u_exact = @. 1 - exp(-(z + H)/δ) - exp(z/δ)
-        fig, ax = subplots(figsize=(1.955, 3.167))
-        ax.plot(u_profile, z/1e3)
-        ax.plot(u_exact, z/1e3, "k--", lw=0.5)
-        ax.legend(["Numerical", "Exact"])
-        ax.set_xlim(0, 1.1)
-        ax.set_xlabel(L"$u$")
+        # solve
+        A, b = get_A_b(p, t, e, C₀, δ)
+        u = A\b
+        fig, ax, im = tplot(p/1e3, t, u)
+        cb = colorbar(im, ax=ax, label=L"$u$")
+        ax.set_xlabel(L"Zonal coordinate $x$ (km)")
         ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-        ax.set_title(latexstring(L"$x =$", @sprintf("%d km", ξ₀/1e3)))
-        savefig("images/u_profile$i.png")
-        println("images/u_profile$i.png")
+        savefig("images/u.png")
+        println("images/u.png")
         plt.close()
+
+        # profiles
+        ξ₀s = 1e6*(1:4)
+        bot_e = p[e, :]
+        bot_e = bot_e[bot_e[:, 2] .< 0, :]
+        ξ = bot_e[:, 1]
+        Hs = -bot_e[:, 2]
+        for i in eachindex(ξ₀s)
+            println("profile ", i)
+            ξ₀ = ξ₀s[i]
+            i₁ = argmin(abs.(ξ .- ξ₀))
+            if (ξ[i₁] > ξ₀) i₁ -= 1 end
+            ξ₁ = ξ[i₁]
+            H₁ = Hs[i₁]
+            ξ₂ = ξ[i₁ + 1]
+            H₂ = Hs[i₁ + 1]
+            H = lerp(ξ₀, ξ₁, H₁, ξ₂, H₂)
+            nz = 2^7
+            z = @. -H*(cos(π*((1:nz)-1)/(nz-1)) + 1)/2
+            u_profile = zeros(nz)
+            for j=2:nz-1
+                # u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, t_dict, C₀)
+                u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, C₀)
+            end
+            u_exact = @. 1 - exp(-(z + H)/δ) - exp(z/δ)
+            fig, ax = subplots(figsize=(1.955, 3.167))
+            ax.plot(u_profile, z/1e3)
+            ax.plot(u_exact, z/1e3, "k--", lw=0.5)
+            ax.legend(["Numerical", "Exact"])
+            ax.set_xlim(0, 1.1)
+            ax.set_xlabel(L"$u$")
+            ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+            ax.set_title(latexstring(L"$x =$", @sprintf("%d km", ξ₀/1e3)))
+            savefig("images/u_profile$i.png")
+            println("images/u_profile$i.png")
+            plt.close()
+            errors[i, nref+1] = maximum(abs.(u_profile - u_exact))
+        end
     end
 
-    # error
-    Δ = L/5
-    G(x) = 1 - exp(-x^2/(2*Δ^2)) 
-    H = @. H₀*(0.02/20 + (1 - 0.02/20)*G(p[:, 1] - L)*G(p[:, 1] + L))
-    u_exact = @. 1 - exp(-(p[:, 2] + H)/δ) - exp(p[:, 2]/δ)
-    abs_err = abs.(u - u_exact)
-    abs_err[e] .= 0
-    println("Max Abs. Err.: ", maximum(abs_err))
-    println(argmax(abs_err))
-    println(p[argmax(abs_err), :])
-    println(u[argmax(abs_err)])
-    println(u_exact[argmax(abs_err)])
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"$\sqrt{N}$")
+    ax.set_ylabel("Error")
+    for i=1:4
+        ax.loglog(hs, errors[i, :], "o-", label=string(1000*i, " km"))
+    end
+    ax.legend()
+    savefig("images/conv.png")
+    println("images/conv.png")
+    plt.close()
+
+
+    return errors
+
+    # # error
+    # Δ = L/5
+    # G(x) = 1 - exp(-x^2/(2*Δ^2)) 
+    # H = @. H₀*(0.02/20 + (1 - 0.02/20)*G(p[:, 1] - L)*G(p[:, 1] + L))
+    # u_exact = @. 1 - exp(-(p[:, 2] + H)/δ) - exp(p[:, 2]/δ)
+    # abs_err = abs.(u - u_exact)
+    # abs_err[e] .= 0
+    # println("Max Abs. Err.: ", maximum(abs_err))
+    # println(argmax(abs_err))
+    # println(p[argmax(abs_err), :])
+    # println(u[argmax(abs_err)])
+    # println(u_exact[argmax(abs_err)])
 end
 
-convergence()
+errors = convergence()
