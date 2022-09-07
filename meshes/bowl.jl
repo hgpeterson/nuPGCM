@@ -34,56 +34,73 @@ function generate_bowl_mesh(lc, bdy_ref)
     gmsh.model.add("bowl_mesh")
 
     # depth function
-    Δ = 1/5
-    G(x) = 1 - exp(-x^2/(2*Δ^2)) 
-    H(x) = lc/bdy_ref + (1 - lc/bdy_ref)*G(x - 1)*G(x + 1)
+    z(x) = x^2 - 1
+    ∂ₓz(x) = 2*x
     
-    # edge points
-    x = -1:lc/bdy_ref:1
-    n = size(x, 1)
-    for i=1:n
-        gmsh.model.geo.addPoint(x[i], -H(x[i]), 0, lc)
-    end
-    for i=n:-1:1
-        gmsh.model.geo.addPoint(x[i], 0, 0, lc)
-    end
-    N = 2*n
     
-    # connect edge points by lines
-    for i=1:N-1
-        gmsh.model.geo.addLine(i, i + 1)
+    # # edge points
+    # x = -1:lc/bdy_ref:1
+    # n = size(x, 1)
+    # for i=1:n
+    #     gmsh.model.geo.addPoint(x[i], -H(x[i]), 0, lc)
+    # end
+    # for i=n:-1:1
+    #     gmsh.model.geo.addPoint(x[i], 0, 0, lc)
+    # end
+    # N = 2*n
+
+    # # edge points
+    # x = -1
+    # N = 0
+    # while z(x) <= 0
+    #     if x > 0 && z(x) > -lc/bdy_ref/2
+    #         break
+    #     end
+    #     gmsh.model.geo.addPoint(x, z(x), 0, lc)
+    #     x += lc/bdy_ref/sqrt(1 + ∂ₓz(x)^2)
+    #     N += 1
+    # end
+    # gmsh.model.geo.addPoint(1, 0, 0, lc)
+    # N += 1
+    
+    # # connect edge points by lines
+    # for i=1:N-1
+    #     gmsh.model.geo.addLine(i, i + 1)
+    # end
+    # gmsh.model.geo.addLine(N, 1)
+
+    for x=-1:0.5:1
+        gmsh.model.geo.addPoint(x, z(x), 0, lc)
     end
-    gmsh.model.geo.addLine(N, 1)
+    gmsh.model.geo.addSpline(1:5, 1)
+    gmsh.model.geo.addLine(5, 1, 2)
+    N = 2
     
     # loop curves together and define surface
     gmsh.model.geo.addCurveLoop(1:N, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
-    # refine mesh near boundary nodes
-    gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
-    gmsh.model.mesh.field.setNumber(1, "Sampling", 10)
+    # # refine mesh near boundary nodes
+    # gmsh.model.mesh.field.add("Distance", 1)
+    # gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
+    # gmsh.model.mesh.field.setNumber(1, "Sampling", 10)
 
-    gmsh.model.mesh.field.add("Threshold", 2)
-    gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    gmsh.model.mesh.field.setNumber(2, "SizeMin", lc/bdy_ref)
-    gmsh.model.mesh.field.setNumber(2, "SizeMax", lc)
-    gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
-    gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
+    # gmsh.model.mesh.field.add("Threshold", 2)
+    # gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMin", lc/bdy_ref)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMax", lc)
+    # gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
+    # gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
 
-    gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    # gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
     # sync
     gmsh.model.geo.synchronize()
     
-    # # make left bdy copy of right
-    # translation = [1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-    # gmsh.model.mesh.setPeriodic(1, [curves[1]], [curves[end-1]], translation)
-
-    # turn off the usual ways the mesh size is determined
-    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    # # turn off the usual ways the mesh size is determined
+    # gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    # gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    # gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
     # use different mesh algorithm (better for variable mesh size)
     # gmsh.option.setNumber("Mesh.Algorithm", 5)
@@ -94,63 +111,6 @@ function generate_bowl_mesh(lc, bdy_ref)
     
     # save and show
     gmsh.write("mesh.msh")
-    gmsh.finalize()
-end
-
-function generate_square_mesh()
-    gmsh.initialize()
-
-    gmsh.model.add("t10")
-
-    lc = .05
-    gmsh.model.geo.addPoint(-1.0, 0.0, 0, lc, 1)
-    gmsh.model.geo.addPoint(-1.0, -1.0, 0, lc, 2)
-    gmsh.model.geo.addPoint(1.0, -1.0, 0, lc, 3)
-    gmsh.model.geo.addPoint(1.0, 0.0, 0, lc, 4)
-
-    gmsh.model.geo.addLine(1, 2, 1)
-    gmsh.model.geo.addLine(2, 3, 2)
-    gmsh.model.geo.addLine(3, 4, 3)
-    gmsh.model.geo.addLine(4, 1, 4)
-
-    gmsh.model.geo.addCurveLoop([1, 2, 3, 4], 1)
-    gmsh.model.geo.addPlaneSurface([1], 1)
-
-    gmsh.model.geo.synchronize()
-
-
-    gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:4)
-    gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
-
-    # gmsh.model.mesh.field.add("Distance", 1)
-    # gmsh.model.mesh.field.setNumbers(1, "PointsList", 1:4)
-
-    gmsh.model.mesh.field.add("Threshold", 2)
-    gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    gmsh.model.mesh.field.setNumber(2, "SizeMin", lc/20)
-    gmsh.model.mesh.field.setNumber(2, "SizeMax", lc)
-    gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
-    gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
-
-    gmsh.model.mesh.field.setAsBackgroundMesh(2)
-
-    # function meshSizeCallback(dim, tag, x, y, z, lc)
-    #     lc_min = 0.005
-    #     slope = 0.2
-    #     return min(lc, slope*x + lc_min, slope*(1 - x) + lc_min, slope*y + lc_min, slope*(1 - y) + lc_min)
-    # end
-    # gmsh.model.mesh.setSizeCallback(meshSizeCallback)
-
-    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-
-    gmsh.option.setNumber("Mesh.Algorithm", 5)
-
-    gmsh.model.mesh.generate(2)
-    gmsh.write("mesh.msh")
-
     gmsh.finalize()
 end
 
@@ -202,8 +162,7 @@ function load_gmesh(; h5save=false)
     return p, t, e
 end
 
-generate_bowl_mesh(0.05, 4)
-# generate_square_mesh()
+generate_bowl_mesh(0.02, 1)
 p, t, e = load_gmesh(h5save=true)
 tplot(p, t)
 plt.axis("equal")
