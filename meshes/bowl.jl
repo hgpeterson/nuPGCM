@@ -35,19 +35,19 @@ function generate_bowl_mesh(lc, bdy_ref)
 
     # depth function
     z(x) = x^2 - 1
-    ∂ₓz(x) = 2*x
+    # ∂ₓz(x) = 2*x
+    # z(x) = -1
     
-    
-    # # edge points
-    # x = -1:lc/bdy_ref:1
-    # n = size(x, 1)
-    # for i=1:n
-    #     gmsh.model.geo.addPoint(x[i], -H(x[i]), 0, lc)
-    # end
-    # for i=n:-1:1
-    #     gmsh.model.geo.addPoint(x[i], 0, 0, lc)
-    # end
-    # N = 2*n
+    # edge points
+    x = -1:lc/bdy_ref:1
+    n = size(x, 1)
+    for i=1:n
+        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, lc)
+    end
+    for i=(n-1):-1:2
+        gmsh.model.geo.addPoint(x[i], 0, 0, lc)
+    end
+    N = 2*n - 2
 
     # # edge points
     # x = -1
@@ -63,18 +63,22 @@ function generate_bowl_mesh(lc, bdy_ref)
     # gmsh.model.geo.addPoint(1, 0, 0, lc)
     # N += 1
     
-    # # connect edge points by lines
-    # for i=1:N-1
-    #     gmsh.model.geo.addLine(i, i + 1)
-    # end
-    # gmsh.model.geo.addLine(N, 1)
-
-    for x=-1:0.5:1
-        gmsh.model.geo.addPoint(x, z(x), 0, lc)
+    # connect edge points by lines
+    for i=1:N-1
+        gmsh.model.geo.addLine(i, i + 1)
     end
-    gmsh.model.geo.addSpline(1:5, 1)
-    gmsh.model.geo.addLine(5, 1, 2)
-    N = 2
+    gmsh.model.geo.addLine(N, 1)
+
+    # for x=-1:0.5:1
+    #     gmsh.model.geo.addPoint(x, z(x), 0, lc)
+    # end
+    # gmsh.model.geo.addPoint(1, 0, 0, lc)
+    # gmsh.model.geo.addPoint(-1, 0, 0, lc)
+    # gmsh.model.geo.addSpline(1:5, 1)
+    # gmsh.model.geo.addLine(5, 6, 2)
+    # gmsh.model.geo.addLine(6, 7, 3)
+    # gmsh.model.geo.addLine(7, 1, 4)
+    # N = 4
     
     # loop curves together and define surface
     gmsh.model.geo.addCurveLoop(1:N, 1)
@@ -157,14 +161,17 @@ function load_gmesh(; h5save=false)
         write(file, "t", t)
         write(file, "e", e)
         close(file)
+        println("mesh.h5")
     end
 
     return p, t, e
 end
 
-generate_bowl_mesh(0.02, 1)
+generate_bowl_mesh(0.08, 1)
 p, t, e = load_gmesh(h5save=true)
 tplot(p, t)
+plot(p[e, 1], p[e, 2], "o", ms=1)
 plt.axis("equal")
 savefig("mesh.png")
 println("mesh.png")
+plt.close()
