@@ -127,8 +127,8 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         Kᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(x, z) = δ_x^2*shape_func(j, p[t[k, :], :], [x, z]; d1=1)*shape_func(i, p[t[k, :], :], [x, z]; d1=1) +
-                             δ_z^2*shape_func(j, p[t[k, :], :], [x, z]; d2=1)*shape_func(i, p[t[k, :], :], [x, z]; d2=1)
+                func(ξ, η) = δ_x^2*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) +
+                             δ_z^2*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1)
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -137,7 +137,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         Mᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(x, z) = shape_func(j, p[t[k, :], :], [x, z])*shape_func(i, p[t[k, :], :], [x, z])
+                func(ξ, η) = shape_func(C₀[k, j, :], ξ, η)*shape_func(C₀[k, i, :], ξ, η)
                 Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -145,7 +145,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         # calculate contribution to b from element k
         bᵏ = zeros(FT, n)
         for i=1:n
-            func(x, z) = 1*shape_func(i, p[t[k, :], :], [x, z])
+            func(ξ, η) = 1*shape_func(C₀[k, i, :], ξ, η)
             bᵏ[i] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
         end
 
