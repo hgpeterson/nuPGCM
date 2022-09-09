@@ -87,7 +87,6 @@ function get_t_dict(p, t)
     return t_dict
 end
 
-
 """
     area = tri_area(p)
 
@@ -95,6 +94,30 @@ Compute area of triangle defined by points `p`.
 """
 function tri_area(p::AbstractArray{<:Real,2})
 	return 1/2*abs(p[1, 1]*(p[2, 2] - p[3, 2]) + p[2, 1]*(p[3, 2] - p[1, 2]) + p[3, 1]*(p[1, 2] - p[2, 2]))
+end
+
+"""
+    x = transform_from_std_tri(x̃, p)
+
+Transform point `x̃` defined on standard triangle [0 0; 1 0; 0 1] to x defined on 
+triangle with vertices `p`.
+"""
+function transform_from_std_tri(x̃::AbstractVector{<:Real}, p::AbstractMatrix{<:Real})
+    return p[1, :] + (p[2, :] - p[1, :])*x̃[1] + (p[3, :] - p[1, :])*x̃[2]
+end
+
+"""
+    x̃ = transform_to_std_tri(x, p)
+
+Transform point `x` defined on triangle with vertices `p` to standard triangle [0 0; 1 0; 0 1].
+"""
+function transform_to_std_tri(x::AbstractVector{<:Real}, p::AbstractMatrix{<:Real})
+    D = -p[1, 2]*p[2, 1] + p[1, 1]*p[2, 2] + p[1, 2]*p[3, 1] - p[2, 2]*p[3, 1] - p[1, 1]*p[3, 2] + p[2, 1]*p[3, 2]
+    v = 1/D * [p[1, 2]*p[3, 1] - p[1, 1]*p[3, 2]  p[1, 1]*p[2, 2] - p[1, 2]*p[2, 1]
+               p[3, 2] - p[1, 2]                  p[1, 2] - p[2, 2]
+               p[1, 1] - p[3, 1]                  p[2, 1] - p[1, 1]
+              ]
+    return v[1, :] + v[2, :]*x[1] + v[3, :]*x[2]
 end
 
 """
@@ -131,37 +154,54 @@ function get_shape_func_coeffs(p::AbstractArray{<:Real,2}, t::AbstractArray{<:In
 end
 
 """
-    ϕ = shape_func(c, ξ, η)
+    ϕ = shape_func(i, p, x; d1=d1, d2=d2)
 
-Evaluate shape function defined by coefficients matrix (or vector) `c` at point (ξ, η).
+Evaluate shape function `i` on triangle defined by points `p` at point `x`.
+`d1` and `d2` denote the order of diffentiation in directions 1 and 2 (default: 0).
 """
-function shape_func(c::AbstractArray{<:Real,1}, ξ::Real, η::Real; dξ=0, dη=0)
-    if size(c, 1) == 3
+function shape_func(i::Integer, p::AbstractMatrix{FT}, x::AbstractVector{FT}; d1=0, d2=0) where FT <: Real
+    if size(p, 1) == 3
         # first order = linear
-        if dξ == 0 && dη == 0
-            return c[1] + c[2]*ξ + c[3]*η
-        elseif dξ == 1 && dη == 0
-            return c[2]
-        elseif dξ == 0 && dη == 1
-            return c[3]
+        C = [1.0  -1.0  -1.0
+             0.0   1.0   0.0
+             0.0   0.0   1.0]
+        c = C[i, :]
+        x̃ = transform_to_std_tri(x, p)
+        D = -p[1, 2]*p[2, 1] + p[1, 1]*p[2, 2] + p[1, 2]*p[3, 1] - p[2, 2]*p[3, 1] - p[1, 1]*p[3, 2] + p[2, 1]*p[3, 2]
+        v = 1/D * [p[1, 2]*p[3, 1] - p[1, 1]*p[3, 2]  p[1, 1]*p[2, 2] - p[1, 2]*p[2, 1]
+                   p[3, 2] - p[1, 2]                  p[1, 2] - p[2, 2]
+                   p[1, 1] - p[3, 1]                  p[2, 1] - p[1, 1]
+                  ]
+        if d1 == 0 && d2 == 0
+            return c[1] + c[2]*x̃[1] + c[3]*x̃[2]
+        elseif d1 == 1 && d2 == 0
+            return c[2]*v[2, 1] + c[3]*v[2, 2]
+        elseif d1 == 0 && d2 == 1
+            return c[2]*v[3, 1] + c[3]*v[3, 1]
         else
-            error("Unsupported derivatives of linear shape function: dξ = $dξ, dη = $dη.")
+            error("Unsupported derivatives of linear shape function: d1 = $d1, d2 = $d2.")
         end
-    elseif size(c, 1) == 6
-        # second order = quadratic
-        if dξ == 0 && dη == 0
-            return c[1] + c[2]*ξ + c[3]*η + c[4]*ξ^2 + c[5]*ξ*η + c[6]*η^2 
-        elseif dξ == 1 && dη == 0
-            return c[2] + 2*c[4]*ξ + c[5]*η
-        elseif dξ == 0 && dη == 1
-            return c[3] + c[5]*ξ + 2*c[6]*η
-        elseif dξ == 2 && dη == 0
-            return 2*c[4]
-        elseif dξ == 0 && dη == 2
-            return 2*c[6]
-        else
-            error("Unsupported derivatives of quadratic shape function: dξ = $dξ, dη = $dη.")
-        end
+    # elseif size(p, 1) == 6
+    #     # second order = quadratic
+    #     C = [1.0  -3.0  -3.0   2.0   4.0   2.0
+    #          0.0   4.0   0.0  -4.0  -4.0   0.0
+    #          0.0  -1.0  -0.0   2.0   0.0   0.0
+    #          0.0   0.0   0.0   0.0   4.0   0.0
+    #          0.0   0.0  -1.0   0.0   0.0   2.0
+    #          0.0   0.0   4.0   0.0  -4.0  -4.0]
+    #     if dξ == 0 && dη == 0
+    #         return c[1] + c[2]*ξ + c[3]*η + c[4]*ξ^2 + c[5]*ξ*η + c[6]*η^2 
+    #     elseif dξ == 1 && dη == 0
+    #         return c[2] + 2*c[4]*ξ + c[5]*η
+    #     elseif dξ == 0 && dη == 1
+    #         return c[3] + c[5]*ξ + 2*c[6]*η
+    #     elseif dξ == 2 && dη == 0
+    #         return 2*c[4]
+    #     elseif dξ == 0 && dη == 2
+    #         return 2*c[6]
+    #     else
+    #         error("Unsupported derivatives of quadratic shape function: dξ = $dξ, dη = $dη.")
+    #     end
     else
         error("Invalid coefficient vector. Only first and second degree polynomials supported.")
     end

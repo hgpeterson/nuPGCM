@@ -40,12 +40,9 @@ Compute ∫ f(x, y) dA over a triangle defined by the points `p` using quadratur
 of degree `d` (meaning that the integration is exact for polynomials of this degree).
 """
 function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
-    # area of triangle
-    area = tri_area(p)
-
     # integration points and weights (see https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tri/quadrature_rules_tri.html)
     if degree == 2
-        x = [0.66666666666666666667  0.16666666666666666667
+        x̃ = [0.66666666666666666667  0.16666666666666666667
              0.16666666666666666667  0.66666666666666666667
              0.16666666666666666667  0.16666666666666666667]
 
@@ -53,7 +50,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
              0.33333333333333333333
              0.33333333333333333333]
     elseif degree == 3
-        x = [0.33333333333333333333  0.33333333333333333333
+        x̃ = [0.33333333333333333333  0.33333333333333333333
              0.60000000000000000000  0.20000000000000000000
              0.20000000000000000000  0.60000000000000000000
              0.20000000000000000000  0.20000000000000000000]
@@ -63,7 +60,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
               0.52083333333333333333
               0.52083333333333333333]
     elseif degree == 4
-        x = [0.816847572980459  0.091576213509771
+        x̃ = [0.816847572980459  0.091576213509771
              0.091576213509771  0.816847572980459
              0.091576213509771  0.091576213509771
              0.108103018168070  0.445948490915965
@@ -77,7 +74,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
              0.223381589678011
              0.223381589678011]
     elseif degree == 5
-        x = [0.33333333333333333  0.33333333333333333
+        x̃ = [0.33333333333333333  0.33333333333333333
              0.79742698535308720  0.10128650732345633
              0.10128650732345633  0.79742698535308720
              0.10128650732345633  0.10128650732345633
@@ -93,7 +90,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
              0.13239415278850616
              0.13239415278850616]
     elseif degree == 6
-        x = [0.124949503233232  0.437525248383384
+        x̃ = [0.124949503233232  0.437525248383384
              0.437525248383384  0.124949503233232
              0.437525248383384  0.437525248383384
              0.797112651860071  0.165409927389841
@@ -113,7 +110,7 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
              0.063691414286223
              0.063691414286223]
     elseif degree == 7
-        x = [0.0571041961  0.06546699455602246
+        x̃ = [0.0571041961  0.06546699455602246
              0.2768430136  0.05021012321401679
              0.5835904324  0.02891208422223085
              0.8602401357  0.009703785123906346
@@ -154,12 +151,12 @@ function tri_quad(f::Function, p::Array{<:Real,2}; degree=2)
     integral = 0
     for i in eachindex(w)
         # transform integration points
-        x′ = @. p[1, :] + (p[2, :] - p[1, :])*x[i, 1] + (p[3, :] - p[1, :])*x[i, 2]
+        x = transform_from_std_tri(x̃[i, :], p)
 
         # evaluate
-        integral += w[i]*f(x′[1], x′[2])
+        integral += w[i]*f(x[1], x[2])
     end
 
     # multiply by area of triangle
-    return area*integral
+    return tri_area(p)*integral
 end

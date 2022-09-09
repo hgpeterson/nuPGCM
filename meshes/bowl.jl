@@ -18,12 +18,12 @@ function boundary_nodes(t)
 end
 
 """
-    generateMesh(lc, bdy_ref)
+    generateMesh(h₀, r)
 
-Creates 2D mesh of bowl with characteristic length `lc` and boundary refinement
-factor `bdy_ref`. Data saved to "mesh.msh".
+Creates 2D mesh of bowl with characteristic length `h₀` and boundary refinement
+factor `r`. Data saved to "mesh.msh".
 """
-function generate_bowl_mesh(lc, bdy_ref)
+function generate_bowl_mesh(h₀, r)
     # init
     gmsh.initialize()
     
@@ -33,19 +33,26 @@ function generate_bowl_mesh(lc, bdy_ref)
     # model
     gmsh.model.add("bowl_mesh")
 
+    # # quick square
+    # gmsh.model.geo.addPoint(-1, 0, 0, h₀)
+    # gmsh.model.geo.addPoint(-1, -1, 0, h₀)
+    # gmsh.model.geo.addPoint(1, -1, 0, h₀)
+    # gmsh.model.geo.addPoint(1, 0, 0, h₀)
+    # N = 4
+
     # depth function
     z(x) = x^2 - 1
     # ∂ₓz(x) = 2*x
     # z(x) = -1
     
     # edge points
-    x = -1:lc/bdy_ref:1
+    x = -1:h₀/r:1
     n = size(x, 1)
     for i=1:n
-        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, lc)
+        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀)
     end
     for i=(n-1):-1:2
-        gmsh.model.geo.addPoint(x[i], 0, 0, lc)
+        gmsh.model.geo.addPoint(x[i], 0, 0, h₀)
     end
     N = 2*n - 2
 
@@ -53,14 +60,14 @@ function generate_bowl_mesh(lc, bdy_ref)
     # x = -1
     # N = 0
     # while z(x) <= 0
-    #     if x > 0 && z(x) > -lc/bdy_ref/2
+    #     if x > 0 && z(x) > -h₀/r/2
     #         break
     #     end
-    #     gmsh.model.geo.addPoint(x, z(x), 0, lc)
-    #     x += lc/bdy_ref/sqrt(1 + ∂ₓz(x)^2)
+    #     gmsh.model.geo.addPoint(x, z(x), 0, h₀)
+    #     x += h₀/r/sqrt(1 + ∂ₓz(x)^2)
     #     N += 1
     # end
-    # gmsh.model.geo.addPoint(1, 0, 0, lc)
+    # gmsh.model.geo.addPoint(1, 0, 0, h₀)
     # N += 1
     
     # connect edge points by lines
@@ -70,10 +77,10 @@ function generate_bowl_mesh(lc, bdy_ref)
     gmsh.model.geo.addLine(N, 1)
 
     # for x=-1:0.5:1
-    #     gmsh.model.geo.addPoint(x, z(x), 0, lc)
+    #     gmsh.model.geo.addPoint(x, z(x), 0, h₀)
     # end
-    # gmsh.model.geo.addPoint(1, 0, 0, lc)
-    # gmsh.model.geo.addPoint(-1, 0, 0, lc)
+    # gmsh.model.geo.addPoint(1, 0, 0, h₀)
+    # gmsh.model.geo.addPoint(-1, 0, 0, h₀)
     # gmsh.model.geo.addSpline(1:5, 1)
     # gmsh.model.geo.addLine(5, 6, 2)
     # gmsh.model.geo.addLine(6, 7, 3)
@@ -91,15 +98,12 @@ function generate_bowl_mesh(lc, bdy_ref)
 
     # gmsh.model.mesh.field.add("Threshold", 2)
     # gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    # gmsh.model.mesh.field.setNumber(2, "SizeMin", lc/bdy_ref)
-    # gmsh.model.mesh.field.setNumber(2, "SizeMax", lc)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
     # gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
     # gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
 
     # gmsh.model.mesh.field.setAsBackgroundMesh(2)
-    
-    # sync
-    gmsh.model.geo.synchronize()
     
     # # turn off the usual ways the mesh size is determined
     # gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)

@@ -29,6 +29,8 @@ export
     add_midpoints,
     get_t_dict,
     tri_area,
+    transform_from_std_tri,
+    transform_to_std_tri,
     get_shape_func_coeffs,
     shape_func,
     fem_evaluate,

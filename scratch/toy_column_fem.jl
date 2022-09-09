@@ -4,6 +4,7 @@ using PyCall
 using SparseArrays
 using LinearAlgebra
 using Printf
+using ProgressMeter
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -61,10 +62,6 @@ function remove_outside_tris(p, t, pv)
     return t[is_inside,:]
 end
 
-function lerp(x, x₁, y₁, x₂, y₂)
-    return y₁*(x - x₂)/(x₁ - x₂) + y₂*(x - x₁)/(x₂ - x₁)
-end
-
 function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where FT <: Real
     if debug
         p, t, e = load_mesh("../meshes/mesh.h5")
@@ -115,11 +112,11 @@ end
     A, b = get_A_b(p, t, e, C₀, δ)
 
 Get matrix A and vector b to solve linear system representing the problem
-    δ² u_zz + u = 1
+    -δ² u_zz + u = 1
 in a finite element basis.
 """
 function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
-                 C₀::AbstractArray{FT,3}, δ::FT) where {FT <: Real, IT <: Integer}
+                 C₀::AbstractArray{FT,3}, δ_x::FT, δ_z::FT) where {FT <: Real, IT <: Integer}
     np = size(p, 1)
     nt = size(t, 1)
     n = size(t, 2)
@@ -130,7 +127,8 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         Kᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = δ^2*shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1) #+ δ^2*shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1)
+                func(x, z) = δ_x^2*shape_func(j, p[t[k, :], :], [x, z]; d1=1)*shape_func(i, p[t[k, :], :], [x, z]; d1=1) +
+                             δ_z^2*shape_func(j, p[t[k, :], :], [x, z]; d2=1)*shape_func(i, p[t[k, :], :], [x, z]; d2=1)
                 Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -139,7 +137,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         Mᵏ = zeros(FT, n, n)
         for i=1:n
             for j=1:n
-                func(ξ, η) = shape_func(C₀[k, j, :], ξ, η)*shape_func(C₀[k, i, :], ξ, η)
+                func(x, z) = shape_func(j, p[t[k, :], :], [x, z])*shape_func(i, p[t[k, :], :], [x, z])
                 Mᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
             end
         end
@@ -147,7 +145,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
         # calculate contribution to b from element k
         bᵏ = zeros(FT, n)
         for i=1:n
-            func(ξ, η) = 1*shape_func(C₀[k, i, :], ξ, η)
+            func(x, z) = 1*shape_func(i, p[t[k, :], :], [x, z])
             bᵏ[i] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
         end
 
@@ -177,30 +175,41 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
     return A, b
 end
 
-function solve(p, t, e, C₀, δ)
-    A, b = get_A_b(p, t, e, C₀, δ)
+function solve(p, t, e, C₀, δ_x, δ_z)
+    A, b = get_A_b(p, t, e, C₀, δ_x, δ_z)
     return A\b
 end
 
 function convergence(nrefs; plots=false)
     # params
-    δ = 200.
     L = 5e6
     H₀ = 2e3
+    δ_x = L/10
+    # δ_x = 0.
+    δ_z = H₀/10
+
+    # highest resolution
+    p_fine, t_fine, e_fine, C₀_fine, t_dict_fine = get_grid(L, H₀; debug=true, nref=nrefs[end])
+    u_fine = solve(p_fine, t_fine, e_fine, C₀_fine, δ_x, δ_z)
+
+    # np of coarsest resolution
+    p_coarse, t_coarse, e_coarse, C₀_coarse, t_dict_coarse = get_grid(L, H₀; debug=true, nref=0)
+    np_coarse = size(p_coarse, 1)
 
     # save errors
-    hs = zeros(size(nrefs, 1))
-    errors = zeros(4, size(nrefs, 1))
-    for k in eachindex(nrefs)
+    hs = zeros(size(nrefs, 1) - 1)
+    errors = zeros(size(nrefs, 1) - 1)
+    for k=1:size(nrefs, 1)-1
         nref = nrefs[k]
         println("refinement ", nref)
 
         # grid
         p, t, e, C₀, t_dict = get_grid(L, H₀; debug=true, nref=nref)
-        hs[k] = sqrt(size(p, 1))
+        np = size(p, 1)
+        hs[k] = sqrt(np)
 
         # solve
-        u = solve(p, t, e, C₀, δ)
+        u = solve(p, t, e, C₀, δ_x, δ_z)
         if plots
             fig, ax, im = tplot(p/1e3, t, u)
             cb = colorbar(im, ax=ax, label=L"$u$")
@@ -211,62 +220,31 @@ function convergence(nrefs; plots=false)
             plt.close()
         end
 
-        # profiles
-        ξ₀s = 1e6*(1:4)
-        bot_e = p[e, :]
-        bot_e = bot_e[bot_e[:, 2] .< 0, :]
-        ξ = bot_e[:, 1]
-        Hs = -bot_e[:, 2]
-        for i in eachindex(ξ₀s)
-            println("profile ", i)
-            ξ₀ = ξ₀s[i]
-            i₁ = argmin(abs.(ξ .- ξ₀))
-            if (ξ[i₁] > ξ₀) i₁ -= 1 end
-            ξ₁ = ξ[i₁]
-            H₁ = Hs[i₁]
-            ξ₂ = ξ[i₁ + 1]
-            H₂ = Hs[i₁ + 1]
-            H = lerp(ξ₀, ξ₁, H₁, ξ₂, H₂)
-            nz = 2^7
-            z = @. -H*(cos(π*((1:nz)-1)/(nz-1)) + 1)/2
-            u_profile = zeros(nz)
-            for j=2:nz-1
-                # u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, t_dict, C₀)
-                u_profile[j] = fem_evaluate(u, ξ₀, z[j], p, t, C₀)
-            end
-            u_e = u_exact.(z, δ, H)
-            errors[i, k] = maximum(abs.(u_profile - u_e))
-            if plots
-                fig, ax = subplots(figsize=(1.955, 3.167))
-                ax.plot(u_profile, z/1e3)
-                ax.plot(u_e, z/1e3, "k--", lw=0.5)
-                ax.legend(["Numerical", "Exact"])
-                ax.set_xlim(0, 1.1)
-                ax.set_xlabel(L"$u$")
-                ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-                ax.set_title(latexstring(L"$x =$", @sprintf("%d km", ξ₀/1e3)))
-                savefig("images/u_profile$i.png")
-                println("images/u_profile$i.png")
-                plt.close()
-            end
+        # compute error
+        # abs_err = zeros(np)
+        # @showprogress "Evaluating error..." for i=1:np
+        #     abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
+        # end
+        abs_err = abs.(u - u_fine[1:np])
+        errors[k] = maximum(abs_err)
+        if plots
+            fig, ax, im = tplot(p/1e3, t, abs_err)
+            cb = colorbar(im, ax=ax, label="Absolute error")
+            ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+            ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+            savefig("images/abs_err.png")
+            println("images/abs_err.png")
+            plt.close()
         end
-        # # total error
-        # Δ = L/5
-        # G(x) = 1 - exp(-x^2/(2*Δ^2)) 
-        # H = @. H₀*(0.08/1 + (1 - 0.08/1)*G(p[:, 1] - L)*G(p[:, 1] + L))
-        # u_e = u_exact.(p[:, 2], δ, H) 
-        # abs_err = abs.(u - u_e)
-        # abs_err[e] .= 0
-        # println("Max Abs. Err.: ", maximum(abs_err))
     end
 
     if size(nrefs, 1) > 1
         fig, ax = subplots(1)
         ax.set_xlabel(L"$\sqrt{N}$")
         ax.set_ylabel("Error")
-        for i=1:4
-            ax.loglog(hs, errors[i, :], "o-", label=@sprintf("%d km (order: %1.1f)", 1000*i, log2(errors[i, end-1]) - log2(errors[i, end])))
-        end
+        conv = log2(errors[end-1]) - log2(errors[end])
+        println(@sprintf("\nConvergence: O(h^%1.1f)\n", conv))
+        ax.loglog(hs, errors, "o-", label=@sprintf("order: %1.1f", conv))
         ax.legend()
         savefig("images/conv.png")
         println("images/conv.png")
@@ -281,4 +259,4 @@ function u_exact(z, δ, H)
 end
 
 # errors = convergence(2; plots=true)
-errors = convergence(0:2)
+errors = convergence(0:3; plots=true)
