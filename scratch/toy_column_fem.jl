@@ -64,8 +64,10 @@ end
 
 function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where FT <: Real
     if debug
-        p, t, e = load_mesh("../meshes/mesh.h5")
-        # p, t, e = load_mesh("../meshes/mesh$nref.h5")
+        # p, t, e = load_mesh("../meshes/gmsh/mesh0.h5")
+        p, t, e = load_mesh("../meshes/distmesh/mesh0.h5")
+        # p, t, e = load_mesh("../meshes/gmsh/mesh$nref.h5")
+        # p, t, e = load_mesh("../meshes/distmesh/mesh$nref.h5")
     else
         if vm
             p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
@@ -94,6 +96,9 @@ function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where F
         # recompute boundary nodes
         e = boundary_nodes(t)
     end
+
+    # second order?
+    p, t, e = add_midpoints(p, t)
 
     # rescale
     p[:, 1] *= L
@@ -184,15 +189,15 @@ function convergence(nrefs; plots=false)
     # params
     L = 5e6
     H₀ = 2e3
-    δ_x = L/10
-    # δ_x = 0.
-    δ_z = H₀/10
+    # δ_x = L/10
+    δ_x = 0.
+    δ_z = H₀/2
 
     # highest resolution
     p_fine, t_fine, e_fine, C₀_fine, t_dict_fine = get_grid(L, H₀; debug=true, nref=nrefs[end])
     u_fine = solve(p_fine, t_fine, e_fine, C₀_fine, δ_x, δ_z)
 
-    # np of coarsest resolution
+    # coarsest resolution
     p_coarse, t_coarse, e_coarse, C₀_coarse, t_dict_coarse = get_grid(L, H₀; debug=true, nref=0)
     np_coarse = size(p_coarse, 1)
 
@@ -223,12 +228,16 @@ function convergence(nrefs; plots=false)
         # compute error
         # abs_err = zeros(np)
         # @showprogress "Evaluating error..." for i=1:np
+        #     if i in e
+        #         continue
+        #     end
         #     abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
         # end
-        abs_err = abs.(u - u_fine[1:np])
+        # abs_err = abs.(u - u_fine[1:np])
+        abs_err = abs.(u[1:np_coarse] - u_fine[1:np_coarse])
         errors[k] = maximum(abs_err)
         if plots
-            fig, ax, im = tplot(p/1e3, t, abs_err)
+            fig, ax, im = tplot(p_coarse/1e3, t_coarse, abs_err)
             cb = colorbar(im, ax=ax, label="Absolute error")
             ax.set_xlabel(L"Zonal coordinate $x$ (km)")
             ax.set_ylabel(L"Vertical coordinate $z$ (km)")
@@ -260,3 +269,24 @@ end
 
 # errors = convergence(2; plots=true)
 errors = convergence(0:3; plots=true)
+
+
+# NOTES
+
+# linear convergence:
+
+## refinement of coarse mesh
+#          | u_xx + u_zz | u_zz  
+# gmsh     | 2.1         | 1.9
+# distmesh | 2.2         | 1.8
+
+## separate meshes 
+#          | u_xx + u_zz | u_zz  
+# gmsh     | 1.6         | 2.4
+# distmesh | 1.5         | 1.2
+
+# quadratice convergence:
+
+## refinement of coarse mesh
+#          | u_xx + u_zz | u_zz  
+# distmesh | 3.5         | 1.2

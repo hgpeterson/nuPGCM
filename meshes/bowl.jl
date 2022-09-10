@@ -113,11 +113,17 @@ function generate_bowl_mesh(h₀, r)
     # use different mesh algorithm (better for variable mesh size)
     # gmsh.option.setNumber("Mesh.Algorithm", 5)
     
-    # sync and generate
+    # sync 
     gmsh.model.geo.synchronize()
+
+    # define boundary and interior physical groups
+    gmsh.model.addPhysicalGroup(1, 1:N, 1, "boundary")
+    gmsh.model.addPhysicalGroup(2, [1], 2, "surface")
+
+    # generate mesh
     gmsh.model.mesh.generate(2)
     
-    # save and show
+    # save
     gmsh.write("mesh.msh")
     gmsh.finalize()
 end
@@ -171,7 +177,7 @@ function load_gmesh(; h5save=false)
     return p, t, e
 end
 
-generate_bowl_mesh(0.08, 1)
+generate_bowl_mesh(0.02, 1)
 p, t, e = load_gmesh(h5save=true)
 tplot(p, t)
 plot(p[e, 1], p[e, 2], "o", ms=1)
