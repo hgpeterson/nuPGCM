@@ -62,43 +62,36 @@ function remove_outside_tris(p, t, pv)
     return t[is_inside,:]
 end
 
-function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where FT <: Real
-    if debug
-        # p, t, e = load_mesh("../meshes/gmsh/mesh0.h5")
-        # p, t, e = load_mesh("../meshes/distmesh/mesh0.h5")
-        # p, t, e = load_mesh("../meshes/gmsh/mesh$nref.h5")
-        p, t, e = load_mesh("../meshes/distmesh/mesh$nref.h5")
-    else
-        if vm
-            p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
-        else
-            p, t, e = load_mesh("../meshes/bowl$res.h5")
+function get_grid(L::FT, H₀::FT; nref=0, mesh_type="distmesh", refine=false, degree=1) where FT <: Real
+    # load
+    p, t, e = load_mesh("../meshes/$mesh_type/mesh$nref.h5")
+    
+    # refine manually?
+    if refine
+        # get edge nodes (in proper order)
+        pv = p[e, :]
+        pv = pv[pv[:, 2] .< 0, :]
+        pv = sortslices(pv, dims=1)
+        pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
+
+        for i=1:nref
+            # add midpoints
+            p = [p; edge_midpoints(p, t)]
+
+            # retriangulate
+            t = delaunay(p)
+            t = remove_tiny_tris(p, t)
+            t = remove_outside_tris(p, t, pv)
+
+            # recompute boundary nodes
+            e = boundary_nodes(t)
         end
     end
 
-    # # refinements
-    
-    # # get edge nodes (in proper order)
-    # pv = p[e, :]
-    # pv = pv[pv[:, 2] .< 0, :]
-    # pv = sortslices(pv, dims=1)
-    # pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
-
-    # for i=1:nref
-    #     # add midpoints
-    #     p = [p; edge_midpoints(p, t)]
-
-    #     # retriangulate
-    #     t = delaunay(p)
-    #     t = remove_tiny_tris(p, t)
-    #     t = remove_outside_tris(p, t, pv)
-
-    #     # recompute boundary nodes
-    #     e = boundary_nodes(t)
-    # end
-
-    # # second order?
-    # p, t, e = add_midpoints(p, t)
+    # second order?
+    if degree == 2
+        p, t, e = add_midpoints(p, t)
+    end
 
     # rescale
     p[:, 1] *= L
@@ -162,7 +155,7 @@ function get_A_b(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector
                     continue
                 end
                 push!(A, (t[k, i], t[k, j], Kᵏ[i, j]))
-                push!(A, (t[k, i], t[k, j], Mᵏ[i, j]))
+                # push!(A, (t[k, i], t[k, j], Mᵏ[i, j]))
             end
             b[t[k, i]] += bᵏ[i]
         end
@@ -187,31 +180,41 @@ end
 
 function convergence(nrefs; plots=false)
     # params
-    L = 5e6
-    H₀ = 2e3
+    # L = 5e6
+    # H₀ = 2e3
+    L = H₀ = 1.
     # δ_x = L/10
-    δ_x = 0.
-    δ_z = H₀/10
+    # δ_x = 0.
+    # δ_z = H₀/10
+    δ_x = δ_z = 1.
+    # mesh_type = "jc"
+    # mesh_type = "gmsh"
+    mesh_type = "circle"
+    refine = false
+    # degree = 1
+    degree = 2
 
     # highest resolution
-    p_fine, t_fine, e_fine, C₀_fine, t_dict_fine = get_grid(L, H₀; debug=true, nref=nrefs[end])
+    p_fine, t_fine, e_fine, C₀_fine, t_dict_fine = get_grid(L, H₀; nref=nrefs[end], mesh_type=mesh_type, degree=degree)
+    np_fine = size(p_fine, 1)
     u_fine = solve(p_fine, t_fine, e_fine, C₀_fine, δ_x, δ_z)
 
-    # coarsest resolution
-    p_coarse, t_coarse, e_coarse, C₀_coarse, t_dict_coarse = get_grid(L, H₀; debug=true, nref=0)
-    np_coarse = size(p_coarse, 1)
+    # # coarsest resolution
+    # p_coarse, t_coarse, e_coarse, C₀_coarse, t_dict_coarse = get_grid(L, H₀; nref=0, mesh_type=mesh_type)
+    # np_coarse = size(p_coarse, 1)
 
     # save errors
-    hs = zeros(size(nrefs, 1) - 1)
-    errors = zeros(size(nrefs, 1) - 1)
-    for k=1:size(nrefs, 1)-1
+    N = size(nrefs, 1)
+    nps = zeros(N - 1)
+    errors = zeros(N - 1)
+    for k=1:N-1
         nref = nrefs[k]
         println("refinement ", nref)
 
         # grid
-        p, t, e, C₀, t_dict = get_grid(L, H₀; debug=true, nref=nref)
+        p, t, e, C₀, t_dict = get_grid(L, H₀; nref=nref, mesh_type=mesh_type, refine=refine, degree=degree)
         np = size(p, 1)
-        hs[k] = sqrt(np)
+        nps[k] = np
 
         # solve
         u = solve(p, t, e, C₀, δ_x, δ_z)
@@ -226,20 +229,25 @@ function convergence(nrefs; plots=false)
         end
 
         # compute error
-        # abs_err = zeros(np)
-        # @showprogress "Evaluating error..." for i=1:np
-        abs_err = zeros(size(p_fine, 1))
-        @showprogress "Evaluating error..." for i=1:size(p_fine, 1)
-            # if i in e
-            if i in e_fine
+        abs_err = zeros(np)
+        @showprogress "Evaluating error..." for i=1:np
+            if i in e
                 continue
             end
-            # abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
-            abs_err[i] = abs(fem_evaluate(u, p_fine[i, 1], p_fine[i, 2], p, t, C₀) - u_fine[i])
+            abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
         end
-        # abs_err = abs.(u - u_fine[1:np])
+
         # abs_err = abs.(u[1:np_coarse] - u_fine[1:np_coarse])
+
+        # if mesh_type == "jc"
+        #     H = H₀*(sqrt.(2 .- (p[:, 1]/L).^2) .- 1)
+        # else
+        #     H = H₀*(1 .- (p[:, 1]/L).^2)
+        # end
+        # abs_err = abs.(u - u_exact.(p[:, 2], δ_z, H))
+
         errors[k] = maximum(abs_err)
+
         # if plots
         #     fig, ax, im = tplot(p_coarse/1e3, t_coarse, abs_err)
         #     cb = colorbar(im, ax=ax, label="Absolute error")
@@ -253,11 +261,11 @@ function convergence(nrefs; plots=false)
 
     if size(nrefs, 1) > 1
         fig, ax = subplots(1)
-        ax.set_xlabel(L"$\sqrt{N}$")
+        ax.set_xlabel(L"Number of nodes $N$")
         ax.set_ylabel("Error")
-        conv = log2(errors[end-1]) - log2(errors[end])
-        println(@sprintf("\nConvergence: O(h^%1.1f)\n", conv))
-        ax.loglog(hs, errors, "o-", label=@sprintf("order: %1.1f", conv))
+        ax.plot([nps[1], nps[end]], [errors[1], errors[1]*nps[1]/nps[end]], "k-", label=L"$N^{-1}$")
+        ax.loglog(nps, errors, "o", label="Data")
+        ax.set_ylim(0.9*errors[end], 1.1*errors[1])
         ax.legend()
         savefig("images/conv.png")
         println("images/conv.png")
@@ -272,25 +280,4 @@ function u_exact(z, δ, H)
 end
 
 # errors = convergence(2; plots=true)
-errors = convergence(0:3; plots=true)
-
-
-# NOTES
-
-# linear convergence:
-
-## refinement of coarse mesh
-#          | u_xx + u_zz | u_zz  
-# gmsh     | 2.1         | 1.9
-# distmesh | 2.2         | 1.8
-
-## separate meshes 
-#          | u_xx + u_zz | u_zz  
-# gmsh     | 1.6 (1.7)   | 2.4 (1.9)
-# distmesh | 1.5 (1.9)   | 1.2 (1.8)
-
-# quadratic convergence:
-
-## refinement of coarse mesh
-#          | u_xx + u_zz | u_zz  
-# distmesh | 3.5         | 1.2
+errors = convergence(0:4; plots=true)
