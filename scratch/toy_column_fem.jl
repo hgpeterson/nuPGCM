@@ -65,9 +65,9 @@ end
 function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where FT <: Real
     if debug
         # p, t, e = load_mesh("../meshes/gmsh/mesh0.h5")
-        p, t, e = load_mesh("../meshes/distmesh/mesh0.h5")
+        # p, t, e = load_mesh("../meshes/distmesh/mesh0.h5")
         # p, t, e = load_mesh("../meshes/gmsh/mesh$nref.h5")
-        # p, t, e = load_mesh("../meshes/distmesh/mesh$nref.h5")
+        p, t, e = load_mesh("../meshes/distmesh/mesh$nref.h5")
     else
         if vm
             p, t, e = load_mesh("../meshes/bowl_vm$res.h5")
@@ -76,29 +76,29 @@ function get_grid(L::FT, H₀::FT; res=1, nref=1, vm=false, debug=false) where F
         end
     end
 
-    # refinements
+    # # refinements
     
-    # get edge nodes (in proper order)
-    pv = p[e, :]
-    pv = pv[pv[:, 2] .< 0, :]
-    pv = sortslices(pv, dims=1)
-    pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
+    # # get edge nodes (in proper order)
+    # pv = p[e, :]
+    # pv = pv[pv[:, 2] .< 0, :]
+    # pv = sortslices(pv, dims=1)
+    # pv = [pv; 1 0; -1 0; pv[1, 1] pv[1, 2]]
 
-    for i=1:nref
-        # add midpoints
-        p = [p; edge_midpoints(p, t)]
+    # for i=1:nref
+    #     # add midpoints
+    #     p = [p; edge_midpoints(p, t)]
 
-        # retriangulate
-        t = delaunay(p)
-        t = remove_tiny_tris(p, t)
-        t = remove_outside_tris(p, t, pv)
+    #     # retriangulate
+    #     t = delaunay(p)
+    #     t = remove_tiny_tris(p, t)
+    #     t = remove_outside_tris(p, t, pv)
 
-        # recompute boundary nodes
-        e = boundary_nodes(t)
-    end
+    #     # recompute boundary nodes
+    #     e = boundary_nodes(t)
+    # end
 
-    # second order?
-    p, t, e = add_midpoints(p, t)
+    # # second order?
+    # p, t, e = add_midpoints(p, t)
 
     # rescale
     p[:, 1] *= L
@@ -191,7 +191,7 @@ function convergence(nrefs; plots=false)
     H₀ = 2e3
     # δ_x = L/10
     δ_x = 0.
-    δ_z = H₀/2
+    δ_z = H₀/10
 
     # highest resolution
     p_fine, t_fine, e_fine, C₀_fine, t_dict_fine = get_grid(L, H₀; debug=true, nref=nrefs[end])
@@ -228,23 +228,27 @@ function convergence(nrefs; plots=false)
         # compute error
         # abs_err = zeros(np)
         # @showprogress "Evaluating error..." for i=1:np
-        #     if i in e
-        #         continue
-        #     end
-        #     abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
-        # end
-        # abs_err = abs.(u - u_fine[1:np])
-        abs_err = abs.(u[1:np_coarse] - u_fine[1:np_coarse])
-        errors[k] = maximum(abs_err)
-        if plots
-            fig, ax, im = tplot(p_coarse/1e3, t_coarse, abs_err)
-            cb = colorbar(im, ax=ax, label="Absolute error")
-            ax.set_xlabel(L"Zonal coordinate $x$ (km)")
-            ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-            savefig("images/abs_err.png")
-            println("images/abs_err.png")
-            plt.close()
+        abs_err = zeros(size(p_fine, 1))
+        @showprogress "Evaluating error..." for i=1:size(p_fine, 1)
+            # if i in e
+            if i in e_fine
+                continue
+            end
+            # abs_err[i] = abs(u[i] - fem_evaluate(u_fine, p[i, 1], p[i, 2], p_fine, t_fine, C₀_fine))
+            abs_err[i] = abs(fem_evaluate(u, p_fine[i, 1], p_fine[i, 2], p, t, C₀) - u_fine[i])
         end
+        # abs_err = abs.(u - u_fine[1:np])
+        # abs_err = abs.(u[1:np_coarse] - u_fine[1:np_coarse])
+        errors[k] = maximum(abs_err)
+        # if plots
+        #     fig, ax, im = tplot(p_coarse/1e3, t_coarse, abs_err)
+        #     cb = colorbar(im, ax=ax, label="Absolute error")
+        #     ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+        #     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+        #     savefig("images/abs_err.png")
+        #     println("images/abs_err.png")
+        #     plt.close()
+        # end
     end
 
     if size(nrefs, 1) > 1
@@ -282,10 +286,10 @@ errors = convergence(0:3; plots=true)
 
 ## separate meshes 
 #          | u_xx + u_zz | u_zz  
-# gmsh     | 1.6         | 2.4
-# distmesh | 1.5         | 1.2
+# gmsh     | 1.6 (1.7)   | 2.4 (1.9)
+# distmesh | 1.5 (1.9)   | 1.2 (1.8)
 
-# quadratice convergence:
+# quadratic convergence:
 
 ## refinement of coarse mesh
 #          | u_xx + u_zz | u_zz  
