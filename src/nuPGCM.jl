@@ -1,9 +1,5 @@
 module nuPGCM
 
-if VERSION >= v"1.7"
-    println("\nNote that this version of νPGCM.jl was only tested for Julia v1.6\n")
-end
-
 export 
     # constants
     secs_in_day,
