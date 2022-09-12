@@ -16,17 +16,21 @@ pygui(false)
 Generate basin geometry. 
 
 Resolutions for square:
-   res   nodes 
-    1     1906
-    2     5162
-    3    46318
+   res  nodes 
+   0    55
+   1    198
+   2    742
+   3    2931
+   4    11660
+   5    46318
 Resolutions for circle:
-   res   nodes   with midpoints
-    1     1452     5677 
-    2     4027    15899 
-    3     9062    35936 
-    4    16114    64036
-    5    36268   144433 
+   res  nodes
+   0    34
+   1    139
+   2    562
+   3    2267
+   4    9062
+   5    36268
 """
 function get_basin_geometry(; res=3)
     # geometry type
@@ -39,7 +43,7 @@ function get_basin_geometry(; res=3)
     # bath = "bump"
 
     # load horizontal mesh
-    p, t, e = load_mesh("../meshes/$(geo)$res.h5")
+    p, t, e = load_mesh("../meshes/$(geo)/mesh$res.h5")
     # p, t, e = add_midpoints(p, t)
     np = size(p, 1)
 
