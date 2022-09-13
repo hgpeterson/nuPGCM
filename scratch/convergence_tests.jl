@@ -98,15 +98,15 @@ function poisson_res(res, shape_fns)
     # solve poisson problem
     u = solve_poisson(p, t, e, C₀, f, ua[e])
 
-    # # plot
-    # plot_horizontal(p, t, ua)
-    # savefig("images/ua.png")
-    # println("images/ua.png")
-    # plt.close()
-    # plot_horizontal(p, t, u)
-    # savefig("images/u.png")
-    # println("images/u.png")
-    # plt.close()
+    # plot
+    fig, ax, im = tplot(p, t, u)
+    cb = colorbar(im, ax=ax, label=L"u")
+    ax.axis("equal")
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    savefig("images/u.png")
+    println("images/u.png")
+    plt.close()
 
     # error
     abs_err = maximum(abs.(u - ua))
@@ -146,6 +146,7 @@ function poisson_convergence(rs)
     println(@sprintf("Quad:   %1.1f", log(abs_err_q[end-1]/abs_err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-poisson_convergence(0:5)
+poisson_res(5, "linear")
+# poisson_convergence(0:5)
 
 println("Done.")
