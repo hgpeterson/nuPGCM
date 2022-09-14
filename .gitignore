@@ -5,11 +5,12 @@
 *.msh
 *.txt
 
-# ignore images
+# ignore images and videos
 *.png
 *.pdf
 *.svg
 *.gif
+*.mp4
 
 # ignore swap files
 *.swp
