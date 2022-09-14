@@ -73,14 +73,14 @@ function profile_plot(setup_file::String, state_files::Vector{String})
             # compute u, v, Bz
             u = differentiate(χ, z)
             δ, μ, S, q = get_BL_params(m)
-            v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1]) #FIXME: something doesn't look right here
+            v = @. -m.f*s.χ[1]/q/m.ν[1] - tan(m.θ)/m.f*(s.b - s.b[1]) # this is on the m.z grid
             Bz = m.N2 .+ differentiate(b, z)
 
             # plot
             ax[1, 1].plot(1e6*Bz, (z .- z[end])/1e3, c=color, label=label)
             ax[1, 2].plot(1e3*χ,  (z .- z[end])/1e3, c=color, label=label)
             ax[2, 1].plot(1e4*u,  (z .- z[end])/1e3, c=color, label=label)
-            ax[2, 2].plot(1e2*v,  (z .- z[end])/1e3, c=color, label=label)
+            ax[2, 2].plot(1e2*v,  m./1e3,            c=color, label=label)
             axins21.plot(1e4*u,   (z .- z[end])/1e3, c=color, label=label)
         else
             # compute stratification
