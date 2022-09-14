@@ -98,15 +98,15 @@ function poisson_res(res, shape_fns)
     # solve poisson problem
     u = solve_poisson(p, t, e, C₀, f, ua[e])
 
-    # plot
-    fig, ax, im = tplot(p, t, u)
-    cb = colorbar(im, ax=ax, label=L"u")
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"y")
-    savefig("images/u.png")
-    println("images/u.png")
-    plt.close()
+    # # plot
+    # fig, ax, im = tplot(p, t, u)
+    # cb = colorbar(im, ax=ax, label=L"u")
+    # ax.axis("equal")
+    # ax.set_xlabel(L"x")
+    # ax.set_ylabel(L"y")
+    # savefig("images/u.png")
+    # println("images/u.png")
+    # plt.close()
 
     # error
     abs_err = maximum(abs.(u - ua))
@@ -130,14 +130,13 @@ function poisson_convergence(rs)
     fig, ax = subplots()
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Maximum absolute error $|u - u_a|$")
-    h1 = (hs_l[1] + hs_q[1])/2
-    h2 = (hs_l[end] + hs_q[end])/2
-    e1 = (abs_err_l[1] + abs_err_q[1])/2
-    ax.loglog([h1, h2], [e1, e1*(h2/h1)^2],     "k-", label=L"$h^2$")
-    ax.loglog([h1, h2], [e1/2, e1/2*(h2/h1)^4], "k--", label=L"$h^4$")
+    ax.loglog([hs_l[1], hs_l[end]], [abs_err_l[1], abs_err_l[1]*(hs_l[end]/hs_l[1])^2], "k-",  label=L"$h^2$")
+    ax.loglog([hs_q[1], hs_q[end]], [abs_err_q[1], abs_err_q[1]*(hs_q[end]/hs_q[1])^3], "k--", label=L"$h^3$")
     ax.loglog(hs_l, abs_err_l, "o", label="Linear")
     ax.loglog(hs_q, abs_err_q, "o", label="Quadratic")
-    ax.legend()
+    ax.legend(ncol=2)
+    ax.set_xlim(0.9*hs_q[end], 1.1*hs_l[1])
+    ax.set_ylim(0.5*abs_err_q[end], 2*abs_err_l[1])
     savefig("images/poisson.png")
     println("images/poisson.png")
     plt.close()
@@ -146,7 +145,7 @@ function poisson_convergence(rs)
     println(@sprintf("Quad:   %1.1f", log(abs_err_q[end-1]/abs_err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-poisson_res(5, "linear")
-# poisson_convergence(0:5)
+# poisson_res(5, "linear")
+poisson_convergence(0:5)
 
 println("Done.")
