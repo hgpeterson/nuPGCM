@@ -83,12 +83,18 @@ function run_ridge(; bl = false)
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
     
-    # topography: sine
+    # # topography: sine
+    # no_net_transport = true
+    # H0 = 2e3
+    # amp = 0.4*H0
+    # H_func(x) = H0 + amp*cos(2*π*x/L)
+    # Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+
+    # topography: flat
     no_net_transport = true
     H0 = 2e3
-    amp = 0.4*H0
-    H_func(x) = H0 + amp*cos(2*π*x/L)
-    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    H_func(x) = H0 + 0*x
+    Hx_func(x) = 0*x
 
     # diffusivity
     κ0 = 6e-5
@@ -105,9 +111,11 @@ function run_ridge(; bl = false)
     N2_func(ξ, σ) = N2
     
     # timestepping
-    Δt = 10*secs_in_day
+    # Δt = 10*secs_in_day
+    Δt = 0.01*secs_in_year
     t_plot = 15*secs_in_year
-    t_save = 3*secs_in_year
+    # t_save = 3*secs_in_year
+    t_save = Δt
     
     # create model struct
     m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -174,8 +182,11 @@ function plot_anim(setup_file, state_files)
         ax3.set_ylim(-2, 0)
         ax4.set_ylim(-2, 0)
         ax5.set_ylim(-2, 0)
+        # ax3.set_xlim(-0.1, 2.0)
+        # ax4.set_xlim(-2, 0)
+        # ax5.set_xlim(0, 1.5)
         ax3.set_xlim(-0.1, 2.0)
-        ax4.set_xlim(-2, 0)
+        ax4.set_xlim(-1, 1)
         ax5.set_xlim(0, 1.5)
 
         # adjust
@@ -342,9 +353,9 @@ end
 
 pc = 1/6
 
-# setup_file = string(out_folder, "setup.h5")
-# state_files = string.(out_folder, "state", 0:300, ".h5")
-# plot_anim(setup_file, state_files)
+setup_file = string(out_folder, "setup.h5")
+state_files = string.(out_folder, "state", 0:300, ".h5")
+plot_anim(setup_file, state_files)
 
 # setup_file_1D_can = string(out_folder, "setup1Dcan.h5")
 # state_file_1D_can = string.(out_folder, "state1Dcan.h5")
@@ -352,12 +363,12 @@ pc = 1/6
 # state_file_2D = string.(out_folder, "state2D.h5")
 # plot_can(setup_file_1D_can, state_file_1D_can, setup_file_2D, state_file_2D)
 
-setup_file_1D_tc = string(out_folder, "setup1Dtc.h5")
-state_file_1D_tc = string.(out_folder, "state1Dtc.h5")
-setup_file_1D_can = string(out_folder, "setup1Dcan.h5")
-state_file_1D_can = string.(out_folder, "state1Dcan.h5")
-setup_file_2D = string(out_folder, "setup2D.h5")
-state_file_2D = string.(out_folder, "state2D.h5")
-plot_tc(setup_file_1D_tc, state_file_1D_tc, setup_file_1D_can, state_file_1D_can, setup_file_2D, state_file_2D)
+# setup_file_1D_tc = string(out_folder, "setup1Dtc.h5")
+# state_file_1D_tc = string.(out_folder, "state1Dtc.h5")
+# setup_file_1D_can = string(out_folder, "setup1Dcan.h5")
+# state_file_1D_can = string.(out_folder, "state1Dcan.h5")
+# setup_file_2D = string(out_folder, "setup2D.h5")
+# state_file_2D = string.(out_folder, "state2D.h5")
+# plot_tc(setup_file_1D_tc, state_file_1D_tc, setup_file_1D_can, state_file_1D_can, setup_file_2D, state_file_2D)
 
 println("Done.")
