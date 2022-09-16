@@ -2,38 +2,61 @@ struct Grid{FT, IN}
     # node positions
     p::AbstractMatrix{FT}
 
+    # number of nodes
+    np::IN
+
     # node indices defining each element
     t::AbstractMatrix{IN}
+
+    # number of elements
+    nt::IN
 
     # edge node indices
     e::AbstractVector{IN}
 
-    # number of nodes, elements, and edge nodes
-    np::IN
-    nt::IN
+    # number of edge nodes
     ne::IN
 end
 
-struct StandardElement{FT, IN}
-    # degree of integration
-    degree::IN
+"""
+    g = Grid(file_name, order)
 
+Load points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
+"""
+function Grid(file_name::String, order)
+    file = h5open(file_name, "r")
+    p = read(file, "p")
+    t = read(file, "t")
+    e = read(file, "e")
+    e = e[:, 1]
+    t = convert(Array{Int64,2}, t)
+    e = convert(Array{Int64,1}, e)
+    if order == 2
+        p, t, e = add_midpoints(p, t)
+    end
+    np = size(p, 1)
+    nt = size(t, 1)
+    ne = size(e, 1)
+    return Grid(p, np, t, nt, e, ne)
+end
+
+struct StandardElement{FT, IN}
     # quadrature weights and points
     int_wts::AbstractVector{FT}
     int_pts::AbstractMatrix{FT}
 
-    # order of shape functions
-    order::IN
+    # number of integration points
+    n_int_pts::IN
 
     # node positions
     p::AbstractMatrix{FT}
 
     # number of nodes
-    np::IN
+    n_el_nodes::IN
 
     # shape functions and their derivatives evaluated at integration points
-    ϕ_int_pts::AbstractMatrix{FT}
-    ∂ϕ_int_pts::AbstractArray{FT, 3}
+    φ_int_pts::AbstractMatrix{FT}
+    ∂φ_int_pts::AbstractArray{FT, 3}
 end
 
 function StandardElement(order, degree)
@@ -46,18 +69,18 @@ function StandardElement(order, degree)
     np = size(p, 1)
 
     # evaluate shape functions and their derivatives at the integration points
-    ϕ_int_pts = zeros(np, nξ)
-    ∂ϕ_int_pts = zeros(np, 2, nξ)
+    φ_int_pts = zeros(np, nξ)
+    ∂φ_int_pts = zeros(np, 2, nξ)
     for i=1:np
         for j=1:nξ
-            ϕ_int_pts[i, j] = ϕ(i, ξ[j, :]; order=order)
+            φ_int_pts[i, j] = φ(i, ξ[j, :]; order=order)
             for k=1:2
-                ∂ϕ_int_pts[i, k, j] = ∂ϕ(i, k, ξ[j, :]; order=order)
+                ∂φ_int_pts[i, k, j] = ∂φ(i, k, ξ[j, :]; order=order)
             end
         end
     end
 
-    return StandardElement(degree, w, ξ, order, p, np, ϕ_int_pts, ∂ϕ_int_pts)
+    return StandardElement(w, ξ, nξ, p, np, φ_int_pts, ∂φ_int_pts)
 end
 
 function standard_element_nodes(order)
@@ -77,8 +100,7 @@ function standard_element_nodes(order)
     end
 end
 
-
-function ϕ(i, ξ; order=1)
+function φ(i, ξ; order=1)
     if order == 1
         if i == 1
             return 1 - ξ[1] - ξ[2]
@@ -110,7 +132,7 @@ function ϕ(i, ξ; order=1)
     end
 end
 
-function ∂ϕ(i, j, ξ; order=1)
+function ∂φ(i, j, ξ; order=1)
     if order == 1
         if i == 1
             return -1
@@ -131,7 +153,7 @@ function ∂ϕ(i, j, ξ; order=1)
         end
     elseif order == 2
         if i == 1
-            return 2 - 4*(1 - ξ[1] - ξ[2])
+            return 1 - 4*(1 - ξ[1] - ξ[2])
         elseif i == 2
             if j == 1
                 return 4*ξ[1] - 1 
@@ -170,25 +192,52 @@ function ∂ϕ(i, j, ξ; order=1)
     end
 end
 
+struct FESpace{FT, IN}
+    # order of shape functions
+    order::IN
 
+    # degree of integration
+    degree::IN
 
+    # grid
+    grid::Grid
 
+    # standard element
+    std_el::StandardElement
 
-"""
-    p, t, e = load_mesh(file_name)
+    # Jacobian ∂(x, y)/∂(ξ, η) at each integration point
+    J_int_pts::AbstractMatrix{FT}
 
-Load points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
-"""
-function load_mesh(file_name::String)
-    file = h5open(file_name, "r")
-    p = read(file, "p")
-    t = read(file, "t")
-    e = read(file, "e")
-    e = e[:, 1] # only need first column to make it nodes
-    # convert t and e to integer arrays
-    t = convert(Array{Int64,2}, t)
-    e = convert(Array{Int64,1}, e)
-    return p, t, e
+    # shape function derivatives ∂φ∂x(ξ, η) and ∂φ∂y(ξ, η) at each integration point
+    ∂φ_int_pts::AbstractArray{FT, 4}
+end
+
+function FESpace(fname, order, degree)
+    # load grid
+    g = Grid(fname, order)
+
+    # define standard element
+    s = StandardElement(order, degree)
+
+    # compute Jacobians and derivatives
+    ∂φ = zeros(g.nt, s.n_el_nodes, 2, s.n_int_pts)
+    J = zeros(g.nt, s.n_int_pts)
+    for k=1:g.nt
+        for i=1:s.n_int_pts
+            # compute Jacobian ∂(x, y)/∂(ξ, η)
+            x_ξ = dot(s.∂φ_int_pts[:, 1, i], g.p[g.t[k, :], 1])
+            x_η = dot(s.∂φ_int_pts[:, 2, i], g.p[g.t[k, :], 1])
+            y_ξ = dot(s.∂φ_int_pts[:, 1, i], g.p[g.t[k, :], 2])
+            y_η = dot(s.∂φ_int_pts[:, 2, i], g.p[g.t[k, :], 2])
+            J[k, i] = x_ξ*y_η - x_η*y_ξ
+            for j=1:s.n_el_nodes
+                # compute shape function derivatives ∂φ∂x(ξ, η) and ∂φ∂y(ξ, η)
+                ∂φ[k, j, 1, i] =  1/J[k, i]*(s.∂φ_int_pts[j, 1, i]*y_η - s.∂φ_int_pts[j, 2, i]*y_ξ)
+                ∂φ[k, j, 2, i] = -1/J[k, i]*(s.∂φ_int_pts[j, 1, i]*x_η - s.∂φ_int_pts[j, 2, i]*x_ξ)
+            end
+        end
+    end
+    return FESpace(order, degree, g, s, J, ∂φ)
 end
 
 """
@@ -330,7 +379,7 @@ function get_shape_func_coeffs(p::AbstractArray{<:Real,2}, t::AbstractArray{<:In
 end
 
 """
-    ϕ = shape_func(c, ξ, η)
+    φ = shape_func(c, ξ, η)
 
 Evaluate shape function defined by coefficients matrix (or vector) `c` at point (ξ, η).
 """

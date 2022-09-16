@@ -21,7 +21,9 @@ export
     tri_quad,
 
     # finite elements
-    load_mesh,
+    Grid,
+    StandardElement,
+    FESpace,
     all_edges,
     add_midpoints,
     get_t_dict,
