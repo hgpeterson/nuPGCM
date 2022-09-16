@@ -1,3 +1,179 @@
+struct Grid{FT, IN}
+    # node positions
+    p::AbstractMatrix{FT}
+
+    # node indices defining each element
+    t::AbstractMatrix{IN}
+
+    # edge node indices
+    e::AbstractVector{IN}
+
+    # number of nodes, elements, and edge nodes
+    np::IN
+    nt::IN
+    ne::IN
+end
+
+struct StandardElement{FT, IN}
+    # degree of integration
+    degree::IN
+
+    # quadrature weights and points
+    int_wts::AbstractVector{FT}
+    int_pts::AbstractMatrix{FT}
+
+    # order of shape functions
+    order::IN
+
+    # node positions
+    p::AbstractMatrix{FT}
+
+    # number of nodes
+    np::IN
+
+    # shape functions and their derivatives evaluated at integration points
+    ϕ_int_pts::AbstractMatrix{FT}
+    ∂ϕ_int_pts::AbstractArray{FT, 3}
+end
+
+function StandardElement(order, degree)
+    # get quadrature weights and points
+    w, ξ = quad_weights_points(degree)
+    nξ = size(ξ, 1)
+
+    # get nodes on standard element
+    p = standard_element_nodes(order)
+    np = size(p, 1)
+
+    # evaluate shape functions and their derivatives at the integration points
+    ϕ_int_pts = zeros(np, nξ)
+    ∂ϕ_int_pts = zeros(np, 2, nξ)
+    for i=1:np
+        for j=1:nξ
+            ϕ_int_pts[i, j] = ϕ(i, ξ[j, :]; order=order)
+            for k=1:2
+                ∂ϕ_int_pts[i, k, j] = ∂ϕ(i, k, ξ[j, :]; order=order)
+            end
+        end
+    end
+
+    return StandardElement(degree, w, ξ, order, p, np, ϕ_int_pts, ∂ϕ_int_pts)
+end
+
+function standard_element_nodes(order)
+    if order == 1
+        return [0.0  0.0
+                1.0  0.0
+                0.0  1.0]
+    elseif order == 2
+        return [0.0  0.0
+                1.0  0.0
+                0.0  1.0
+                0.5  0.0
+                0.5  0.5
+                0.0  0.5]
+    else
+        error("Unsupported shape function order.")
+    end
+end
+
+
+function ϕ(i, ξ; order=1)
+    if order == 1
+        if i == 1
+            return 1 - ξ[1] - ξ[2]
+        elseif i == 2
+            return ξ[1]
+        elseif i == 3
+            return ξ[2]
+        else
+            error("Invalid index for shape function.")
+        end
+    elseif order == 2
+        if i == 1
+            return (1 - ξ[1] - ξ[2])*(2*(1 - ξ[1] - ξ[2]) - 1)
+        elseif i == 2
+            return ξ[1]*(2*ξ[1] - 1)
+        elseif i == 3
+            return ξ[2]*(2*ξ[2] - 1)
+        elseif i == 4
+            return 4*ξ[1]*(1 - ξ[1] - ξ[2])
+        elseif i == 5
+            return 4*ξ[1]*ξ[2]
+        elseif i == 6
+            return 4*ξ[2]*(1 - ξ[1] - ξ[2])
+        else
+            error("Invalid index for shape function.")
+        end
+    else
+        error("Unsupported shape function order.")
+    end
+end
+
+function ∂ϕ(i, j, ξ; order=1)
+    if order == 1
+        if i == 1
+            return -1
+        elseif i == 2
+            if j == 1
+                return 1
+            elseif j == 2
+                return 0
+            end
+        elseif i == 3
+            if j == 1
+                return 0
+            elseif j == 2
+                return 1
+            end
+        else
+            error("Invalid index for shape function.")
+        end
+    elseif order == 2
+        if i == 1
+            return 2 - 4*(1 - ξ[1] - ξ[2])
+        elseif i == 2
+            if j == 1
+                return 4*ξ[1] - 1 
+            elseif j == 2
+                return 0
+            end
+        elseif i == 3
+            if j == 1
+                return 0
+            elseif j == 2
+                return 4*ξ[2] - 1 
+            end
+        elseif i == 4
+            if j == 1
+                return 4*(1 - 2*ξ[1] - ξ[2])
+            elseif j == 2
+                return -4*ξ[1]
+            end
+        elseif i == 5
+            if j == 1
+                return 4*ξ[2]
+            elseif j == 2
+                return 4*ξ[1]
+            end
+        elseif i == 6
+            if j == 1
+                return -4*ξ[2]
+            elseif j == 2
+                return 4*(1 - ξ[1] - 2*ξ[2])
+            end
+        else
+            error("Invalid index for shape function.")
+        end
+    else
+        error("Unsupported shape function order.")
+    end
+end
+
+
+
+
+
 """
     p, t, e = load_mesh(file_name)
 
