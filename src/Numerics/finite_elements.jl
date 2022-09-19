@@ -21,16 +21,16 @@ end
 """
     g = Grid(file_name, order)
 
-Load points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
+Construct a grid by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
 """
-function Grid(file_name::String, order)
+function Grid(file_name, order::IN) where IN <: Integer
     file = h5open(file_name, "r")
     p = read(file, "p")
     t = read(file, "t")
     e = read(file, "e")
     e = e[:, 1]
-    t = convert(Array{Int64,2}, t)
-    e = convert(Array{Int64,1}, e)
+    t = convert(Matrix{IN}, t)
+    e = convert(Vector{IN}, e)
     if order == 2
         p, t, e = add_midpoints(p, t)
     end
@@ -59,6 +59,12 @@ struct StandardElement{FT, IN}
     ∂φ_int_pts::AbstractArray{FT, 3}
 end
 
+"""
+    s = StandardElement(order, degree)
+
+Construct a standard element with shape functions of order `order` and a quadrature
+rule of accuracy `degree`.
+"""
 function StandardElement(order, degree)
     # get quadrature weights and points
     w, ξ = quad_weights_points(degree)
@@ -83,6 +89,11 @@ function StandardElement(order, degree)
     return StandardElement(w, ξ, nξ, p, np, φ_int_pts, ∂φ_int_pts)
 end
 
+"""
+    p = standard_element_nodes(order)
+
+The nodes of a standard element of order `order`.
+"""
 function standard_element_nodes(order)
     if order == 1
         return [0.0  0.0
@@ -100,6 +111,11 @@ function standard_element_nodes(order)
     end
 end
 
+"""
+    φ(i, ξ; order)
+
+Shape function `i` of order `order` evaluated at the point `ξ`.
+"""
 function φ(i, ξ; order=1)
     if order == 1
         if i == 1
@@ -132,6 +148,12 @@ function φ(i, ξ; order=1)
     end
 end
 
+"""
+    φ(i, ξ; order)
+
+Derivative of shape function `i` of order `order` in the `j` direction 
+evaluated at the point `ξ`.
+"""
 function ∂φ(i, j, ξ; order=1)
     if order == 1
         if i == 1
@@ -212,6 +234,12 @@ struct FESpace{FT, IN}
     ∂φ_int_pts::AbstractArray{FT, 4}
 end
 
+"""
+    V = FESpace(fname, order, degree)
+
+Construct finite element space by loading grid from `fname` and defining a standard
+element of order `order` with a quadrature rule of accuracy `degree`.
+"""
 function FESpace(fname, order, degree)
     # load grid
     g = Grid(fname, order)
@@ -249,7 +277,7 @@ Third output `emap` (nt x 3 array) is a mapping from local triangle edges
 to the global edge list, i.e., emap[it,k] is the global edge number
 for local edge k (1,2,3) in triangle it.
 """
-function all_edges(t::AbstractArray{<:Integer,2})
+function all_edges(t)
     # find all edges
     etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
     etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
@@ -280,7 +308,7 @@ Add midpoints to mesh for quadratic functions.
 `t2`: T x 6, a local-to-global mapping for the T triangle elements
 `e2`: E x 1, indices of boundary nodes for original mesh plus new midpoints
 """
-function add_midpoints(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2})
+function add_midpoints(p, t)
 	# Find all the edges at first
     edges, boundary_indices, emap = all_edges(t)
 
@@ -317,26 +345,26 @@ end
 
 Compute area of triangle defined by points `p`.
 """
-function tri_area(p::AbstractArray{<:Real,2})
+function tri_area(p)
 	return 1/2*abs(p[1, 1]*(p[2, 2] - p[3, 2]) + p[2, 1]*(p[3, 2] - p[1, 2]) + p[3, 1]*(p[1, 2] - p[2, 2]))
 end
 
 """
-    x = transform_from_std_tri(x̃, p)
+    x = transform_from_std_tri(ξ, p)
 
-Transform point `x̃` defined on standard triangle [0 0; 1 0; 0 1] to x defined on 
+Transform point `ξ` defined on standard triangle [0 0; 1 0; 0 1] to x defined on 
 triangle with vertices `p`.
 """
-function transform_from_std_tri(x̃::AbstractVector{<:Real}, p::AbstractMatrix{<:Real})
-    return p[1, :] + (p[2, :] - p[1, :])*x̃[1] + (p[3, :] - p[1, :])*x̃[2]
+function transform_from_std_tri(ξ, p)
+    return p[1, :] + (p[2, :] - p[1, :])*ξ[1] + (p[3, :] - p[1, :])*ξ[2]
 end
 
 """
-    x̃ = transform_to_std_tri(x, p)
+    ξ = transform_to_std_tri(x, p)
 
 Transform point `x` defined on triangle with vertices `p` to standard triangle [0 0; 1 0; 0 1].
 """
-function transform_to_std_tri(x::AbstractVector{<:Real}, p::AbstractMatrix{<:Real})
+function transform_to_std_tri(x, p)
     D = -p[1, 2]*p[2, 1] + p[1, 1]*p[2, 2] + p[1, 2]*p[3, 1] - p[2, 2]*p[3, 1] - p[1, 1]*p[3, 2] + p[2, 1]*p[3, 2]
     v = 1/D * [p[1, 2]*p[3, 1] - p[1, 1]*p[3, 2]  p[1, 1]*p[2, 2] - p[1, 2]*p[2, 1]
                p[3, 2] - p[1, 2]                  p[1, 2] - p[2, 2]
@@ -345,136 +373,57 @@ function transform_to_std_tri(x::AbstractVector{<:Real}, p::AbstractMatrix{<:Rea
     return v[1, :] + v[2, :]*x[1] + v[3, :]*x[2]
 end
 
-"""
-    C₀ = get_shape_func_coeffs(p)
-
-Compute coefficients C₀ for linear or quadratic shape functions 
-at the nodes defined by `p`. C₀[i, :] are the iᵗʰ basis vector coefficients.
-
-If triangles `t` are provided, then C₀ stores coefficients for _all_ bases.
-"""
-function get_shape_func_coeffs(p::AbstractArray{<:Real,2})
-    n = size(p, 1)
-	V = zeros(n, n)
-	for i=1:n
-	    ξ = p[i, 1]
-	    η = p[i, 2]
-        if n == 3
-		    V[:, i] = [1, ξ, η]
-        elseif n == 6
-	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2]
-        else
-            error("Unsupported shape function order.")
-        end
-	end
-	return inv(V)
-end
-function get_shape_func_coeffs(p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer,2})
-    nt = size(t, 1)
-    C₀ = zeros(nt, size(t, 2), size(t, 2))
-    for k=1:nt
-        C₀[k, :, :] = get_shape_func_coeffs(p[t[k, :], :])
-    end
-	return C₀
-end
-
-"""
-    φ = shape_func(c, ξ, η)
-
-Evaluate shape function defined by coefficients matrix (or vector) `c` at point (ξ, η).
-"""
-function shape_func(c::AbstractArray{<:Real,1}, ξ::Real, η::Real; dξ=0, dη=0)
-    if size(c, 1) == 3
-        # first order = linear
-        if dξ == 0 && dη == 0
-            return c[1] + c[2]*ξ + c[3]*η
-        elseif dξ == 1 && dη == 0
-            return c[2]
-        elseif dξ == 0 && dη == 1
-            return c[3]
-        else
-            error("Unsupported derivatives of linear shape function: dξ = $dξ, dη = $dη.")
-        end
-    elseif size(c, 1) == 6
-        # second order = quadratic
-        if dξ == 0 && dη == 0
-            return c[1] + c[2]*ξ + c[3]*η + c[4]*ξ^2 + c[5]*ξ*η + c[6]*η^2 
-        elseif dξ == 1 && dη == 0
-            return c[2] + 2*c[4]*ξ + c[5]*η
-        elseif dξ == 0 && dη == 1
-            return c[3] + c[5]*ξ + 2*c[6]*η
-        elseif dξ == 2 && dη == 0
-            return 2*c[4]
-        elseif dξ == 0 && dη == 2
-            return 2*c[6]
-        else
-            error("Unsupported derivatives of quadratic shape function: dξ = $dξ, dη = $dη.")
-        end
-    else
-        error("Invalid coefficient vector. Only first and second degree polynomials supported.")
-    end
-end
-function shape_func(C::AbstractArray{<:Real,2}, ξ::Real, η::Real; dξ=0, dη=0)
-    n = size(C, 1)
-    v = zeros(n)
-    for i=1:n
-        v[i] = shape_func(C[i, :], ξ, η; dξ=dξ, dη=dη)
-    end
-    return v
-end
-
 # https://stackoverflow.com/a/2049593
-function pt_sign(p₁::AbstractArray{<:Real,1}, p₂::AbstractArray{<:Real,1}, p₃::AbstractArray{<:Real,1})
+function pt_sign(p₁, p₂, p₃)
     return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 end
-function pt_in_tri(ξ::Real, η::Real, v₁::AbstractArray{<:Real,1}, v₂::AbstractArray{<:Real,1}, v₃::AbstractArray{<:Real,1})
-    d₁ = pt_sign([ξ, η], v₁, v₂)
-    d₂ = pt_sign([ξ, η], v₂, v₃)
-    d₃ = pt_sign([ξ, η], v₃, v₁)
+function pt_in_tri(x, v₁, v₂, v₃)
+    d₁ = pt_sign(x, v₁, v₂)
+    d₂ = pt_sign(x, v₂, v₃)
+    d₃ = pt_sign(x, v₃, v₁)
 
     has_neg = (d₁ < 0) || (d₂ < 0) || (d₃ < 0)
     has_pos = (d₁ > 0) || (d₂ > 0) || (d₃ > 0)
 
     return !(has_neg && has_pos)
 end
-function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer, 2}, 
-                 t_dict::AbstractDict{IN, Vector{IN}}) where IN <: Integer
-    closest_p = argmin((p[:, 1] .- ξ).^2 + (p[:, 2] .- η).^2)
+function get_tri(x, p, t, t_dict)
+    closest_p = argmin((p[:, 1] .- x[1]).^2 + (p[:, 2] .- x[2]).^2)
     for k=t_dict[closest_p] # just look at triangles closest_p is in
-        if pt_in_tri(ξ, η, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+        if pt_in_tri(x, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
             return k
         end
     end
-    error("Cannot find triangle; p₀=($ξ, $η) is not inside mesh domain.")
+    error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
 end
-function get_tri(ξ::Real, η::Real, p::AbstractArray{<:Real,2}, t::AbstractArray{<:Integer, 2})
+function get_tri(x, p, t)
     for k=1:size(t, 1) 
-        if pt_in_tri(ξ, η, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+        if pt_in_tri(x, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
             return k
         end
     end
-    error("Cannot find triangle; p₀=($ξ, $η) is not inside mesh domain.")
+    error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
 end
 
-function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-                      t::AbstractArray{<:Integer,2}, t_dict::AbstractDict{IN, Vector{IN}}, 
-                      C₀::AbstractArray{<:Real,3}) where IN <: Integer
-    # find triangle (ξ, η) is in
-    k = get_tri(ξ, η, p, t, t_dict)
+# function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
+#                       t::AbstractArray{<:Integer,2}, t_dict::AbstractDict{IN, Vector{IN}}, 
+#                       C₀::AbstractArray{<:Real,3}) where IN <: Integer
+#     # find triangle (ξ, η) is in
+#     k = get_tri(ξ, η, p, t, t_dict)
     
-    # evaluate there
-    return fem_evaluate(v, ξ, η, p, t, C₀, k)
-end
-function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-                      t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
-    # find triangle (ξ, η) is in
-    k = get_tri(ξ, η, p, t)
+#     # evaluate there
+#     return fem_evaluate(v, ξ, η, p, t, C₀, k)
+# end
+# function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
+#                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
+#     # find triangle (ξ, η) is in
+#     k = get_tri(ξ, η, p, t)
     
-    # evaluate there
-    return fem_evaluate(v, ξ, η, p, t, C₀, k)
-end
-function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-                      t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3}, k::Integer)
-    # sum weighted combinations of triangle k's basis functions at p₀
-    return v[t[k, :]]'*shape_func(C₀[k, :, :], ξ, η)
-end
+#     # evaluate there
+#     return fem_evaluate(v, ξ, η, p, t, C₀, k)
+# end
+# function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
+#                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3}, k::Integer)
+#     # sum weighted combinations of triangle k's basis functions at p₀
+#     return v[t[k, :]]'*shape_func(C₀[k, :, :], ξ, η)
+# end
