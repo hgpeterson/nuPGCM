@@ -1,18 +1,18 @@
-struct Grid{FT, IN}
+struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
     # node positions
-    p::AbstractMatrix{FT}
+    p::FM # float matrix
 
     # number of nodes
     np::IN
 
     # node indices defining each element
-    t::AbstractMatrix{IN}
+    t::IM # integer matrix
 
     # number of elements
     nt::IN
 
     # edge node indices
-    e::AbstractVector{IN}
+    e::IV # integer vector
 
     # number of edge nodes
     ne::IN
@@ -40,23 +40,23 @@ function Grid(file_name, order::IN) where IN <: Integer
     return Grid(p, np, t, nt, e, ne)
 end
 
-struct StandardElement{FT, IN}
+struct StandardElement{A<:AbstractArray, M<:AbstractMatrix, V<:AbstractVector, IN<:Integer}
     # quadrature weights and points
-    int_wts::AbstractVector{FT}
-    int_pts::AbstractMatrix{FT}
+    int_wts::V
+    int_pts::M
 
     # number of integration points
     n_int_pts::IN
 
     # node positions
-    p::AbstractMatrix{FT}
+    p::M
 
     # number of nodes
     n_el_nodes::IN
 
     # shape functions and their derivatives evaluated at integration points
-    φ_int_pts::AbstractMatrix{FT}
-    ∂φ_int_pts::AbstractArray{FT, 3}
+    φ_int_pts::M
+    ∂φ_int_pts::A
 end
 
 """
@@ -214,7 +214,7 @@ function ∂φ(i, j, ξ; order=1)
     end
 end
 
-struct FESpace{FT, IN}
+struct FESpace{A<:AbstractArray, M<:AbstractMatrix, IN<:Integer}
     # order of shape functions
     order::IN
 
@@ -228,10 +228,10 @@ struct FESpace{FT, IN}
     std_el::StandardElement
 
     # Jacobian ∂(x, y)/∂(ξ, η) at each integration point
-    J_int_pts::AbstractMatrix{FT}
+    J_int_pts::M
 
     # shape function derivatives ∂φ∂x(ξ, η) and ∂φ∂y(ξ, η) at each integration point
-    ∂φ_int_pts::AbstractArray{FT, 4}
+    ∂φ_int_pts::A
 end
 
 """

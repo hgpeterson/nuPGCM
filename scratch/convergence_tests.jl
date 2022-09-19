@@ -15,47 +15,47 @@ pygui(false)
 
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
-function solve_poisson(V::FESpace, f, u₀)
+function solve_poisson(V::FESpace, g::Grid, s::StandardElement, f, u₀)
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
-    b = zeros(V.grid.np)
-    for k=1:V.grid.nt
+    b = zeros(g.np)
+    for k=1:g.nt
         # calculate contribution to K from element k
-        Kᵏ = zeros(V.std_el.n_el_nodes, V.std_el.n_el_nodes)
-        for i=1:V.std_el.n_el_nodes
-            for j=1:V.std_el.n_el_nodes
-                Kᵏ[i, j] = dot(V.std_el.int_wts, (V.∂φ_int_pts[k, j, 1, :].*V.∂φ_int_pts[k, i, 1, :] .+ V.∂φ_int_pts[k, j, 2, :].*V.∂φ_int_pts[k, i, 2, :]).*V.J_int_pts[k, :])
+        Kᵏ = zeros(s.n_el_nodes, s.n_el_nodes)
+        for i=1:s.n_el_nodes
+            for j=1:s.n_el_nodes
+                Kᵏ[i, j] = dot(s.int_wts, (V.∂φ_int_pts[k, j, 1, :].*V.∂φ_int_pts[k, i, 1, :] .+ V.∂φ_int_pts[k, j, 2, :].*V.∂φ_int_pts[k, i, 2, :]).*V.J_int_pts[k, :])
             end
         end
 
         # calculate contribution to b from element k
-        bᵏ = zeros(V.std_el.n_el_nodes)
-        for i=1:V.std_el.n_el_nodes
-            for j=1:V.std_el.n_el_nodes
-                bᵏ[i] += dot(V.std_el.int_wts, f[V.grid.t[k, j]]*V.std_el.φ_int_pts[j, :].*V.std_el.φ_int_pts[i, :].*V.J_int_pts[k, :])
+        bᵏ = zeros(s.n_el_nodes)
+        for i=1:s.n_el_nodes
+            for j=1:s.n_el_nodes
+                bᵏ[i] += dot(s.int_wts, f[g.t[k, j]]*s.φ_int_pts[j, :].*s.φ_int_pts[i, :].*V.J_int_pts[k, :])
             end
         end
 
         # add to global system
-        for i=1:V.std_el.n_el_nodes
-            if V.grid.t[k, i] in V.grid.e
+        for i=1:s.n_el_nodes
+            if g.t[k, i] in g.e
                 # edge node, leave for dirichlet
                 continue
             end
-            for j=1:V.std_el.n_el_nodes
-                push!(K, (V.grid.t[k, i], V.grid.t[k, j], Kᵏ[i, j]))
+            for j=1:s.n_el_nodes
+                push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
             end
-            b[V.grid.t[k, i]] += bᵏ[i]
+            b[g.t[k, i]] += bᵏ[i]
         end
     end
     # dirichlet along edges
-    for i in V.grid.e
+    for i in g.e
         push!(K, (i, i, 1))
     end
-    b[V.grid.e] = u₀
+    b[g.e] = u₀
 
     # make CSC matrix
-    K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), V.grid.np, V.grid.np)
+    K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), g.np, g.np)
 
     # solve
     return K\b
@@ -71,11 +71,12 @@ function poisson_res(nref, order; plot=false)
 
     # create finite element space for u
     V = FESpace("../meshes/$geo/mesh$nref.h5", order, 4)
-    x = V.grid.p[:, 1]
-    y = V.grid.p[:, 2]
+    g = V.grid
+    x = g.p[:, 1]
+    y = g.p[:, 2]
 
     # mesh resolution 
-    h = 1/sqrt(V.grid.np)
+    h = 1/sqrt(g.np)
 
     # solution
     ua = @. -exp(x^2)*y
@@ -84,10 +85,10 @@ function poisson_res(nref, order; plot=false)
     f = @. exp(x^2)*(2 + 4*x^2)*y
 
     # solve poisson problem
-    u = solve_poisson(V, f, ua[V.grid.e])
+    u = solve_poisson(V, V.grid, V.std_el, f, ua[g.e])
 
     if plot
-        fig, ax, im = tplot(V.grid.p, V.grid.t, u)
+        fig, ax, im = tplot(g.p, g.t, u)
         cb = colorbar(im, ax=ax, label=L"u")
         ax.axis("equal")
         ax.set_xlabel(L"x")
@@ -96,7 +97,7 @@ function poisson_res(nref, order; plot=false)
         println("images/u.png")
         plt.close()
 
-        fig, ax, im = tplot(V.grid.p, V.grid.t, ua)
+        fig, ax, im = tplot(g.p, g.t, ua)
         cb = colorbar(im, ax=ax, label=L"u_a")
         ax.axis("equal")
         ax.set_xlabel(L"x")
@@ -105,7 +106,7 @@ function poisson_res(nref, order; plot=false)
         println("images/ua.png")
         plt.close()
 
-        fig, ax, im = tplot(V.grid.p, V.grid.t, abs.(u - ua))
+        fig, ax, im = tplot(g.p, g.t, abs.(u - ua))
         cb = colorbar(im, ax=ax, label=L"|u - u_a|")
         ax.axis("equal")
         ax.set_xlabel(L"x")
@@ -116,7 +117,8 @@ function poisson_res(nref, order; plot=false)
     end
 
     # error
-    err = L2norm(V, u - ua)
+    # err = L2norm(V, u - ua)
+    err = maximum(abs.(u - ua))
     return err, h
 end
 
@@ -157,10 +159,12 @@ end
 """
 function L2norm(V::FESpace, u)
     l2 = 0
-    for k=1:V.grid.nt
-        for i=1:V.std_el.n_el_nodes
-            for j=1:V.std_el.n_el_nodes
-                l2 += dot(V.std_el.int_wts, u[V.grid.t[k, i]].*V.std_el.φ_int_pts[i, :].*u[V.grid.t[k, j]].*V.std_el.φ_int_pts[j, :].*V.J_int_pts[k, :])
+    g = V.grid
+    s = V.std_el
+    for k=1:g.nt
+        for i=1:s.n_el_nodes
+            for j=1:s.n_el_nodes
+                l2 += dot(s.int_wts, u[g.t[k, i]].*s.φ_int_pts[i, :].*u[g.t[k, j]].*s.φ_int_pts[j, :].*V.J_int_pts[k, :])
             end
         end
     end
@@ -168,6 +172,6 @@ function L2norm(V::FESpace, u)
 end
 
 # poisson_res(3, 2; plot=true)
-poisson_convergence(0:5)
+# poisson_convergence(0:5)
 
 println("Done.")
