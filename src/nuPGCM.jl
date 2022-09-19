@@ -22,8 +22,8 @@ export
 
     # finite elements
     Grid,
-    StandardElement,
-    FESpace,
+    Jacobians,
+    ShapeFunctionIntegrals,
     all_edges,
     add_midpoints,
     get_t_dict,

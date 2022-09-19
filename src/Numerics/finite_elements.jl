@@ -40,55 +40,6 @@ function Grid(file_name, order::IN) where IN <: Integer
     return Grid(p, np, t, nt, e, ne)
 end
 
-struct StandardElement{A<:AbstractArray, M<:AbstractMatrix, V<:AbstractVector, IN<:Integer}
-    # quadrature weights and points
-    int_wts::V
-    int_pts::M
-
-    # number of integration points
-    n_int_pts::IN
-
-    # node positions
-    p::M
-
-    # number of nodes
-    n_el_nodes::IN
-
-    # shape functions and their derivatives evaluated at integration points
-    φ_int_pts::M
-    ∂φ_int_pts::A
-end
-
-"""
-    s = StandardElement(order, degree)
-
-Construct a standard element with shape functions of order `order` and a quadrature
-rule of accuracy `degree`.
-"""
-function StandardElement(order, degree)
-    # get quadrature weights and points
-    w, ξ = quad_weights_points(degree)
-    nξ = size(ξ, 1)
-
-    # get nodes on standard element
-    p = standard_element_nodes(order)
-    np = size(p, 1)
-
-    # evaluate shape functions and their derivatives at the integration points
-    φ_int_pts = zeros(np, nξ)
-    ∂φ_int_pts = zeros(np, 2, nξ)
-    for i=1:np
-        for j=1:nξ
-            φ_int_pts[i, j] = φ(i, ξ[j, :]; order=order)
-            for k=1:2
-                ∂φ_int_pts[i, k, j] = ∂φ(i, k, ξ[j, :]; order=order)
-            end
-        end
-    end
-
-    return StandardElement(w, ξ, nξ, p, np, φ_int_pts, ∂φ_int_pts)
-end
-
 """
     p = standard_element_nodes(order)
 
@@ -214,58 +165,83 @@ function ∂φ(i, j, ξ; order=1)
     end
 end
 
-struct FESpace{A<:AbstractArray, M<:AbstractMatrix, IN<:Integer}
-    # order of shape functions
-    order::IN
-
-    # degree of integration
-    degree::IN
-
-    # grid
-    grid::Grid
-
-    # standard element
-    std_el::StandardElement
-
-    # Jacobian ∂(x, y)/∂(ξ, η) at each integration point
-    J_int_pts::M
-
-    # shape function derivatives ∂φ∂x(ξ, η) and ∂φ∂y(ξ, η) at each integration point
-    ∂φ_int_pts::A
+struct Jacobians{V<:AbstractVector}
+    J::V
+    xξ::V
+    xη::V
+    yξ::V
+    yη::V
+    ξx::V
+    ξy::V
+    ηx::V
+    ηy::V
 end
 
-"""
-    V = FESpace(fname, order, degree)
+# x = v1 + v2*ξ + v3*η
+#   v1 = p1
+#   v2 = p2 - p1
+#   v3 = p3 - p1
 
-Construct finite element space by loading grid from `fname` and defining a standard
-element of order `order` with a quadrature rule of accuracy `degree`.
-"""
-function FESpace(fname, order, degree)
-    # load grid
-    g = Grid(fname, order)
+# ξ = v1 + v2*x + v3*y
+#   v1 = 1/J * (y[1]*x[3] - x[1]*y[3], x[1]*y[2] - y[1]*x[2])
+#   v2 = 1/J * (y[3] - y[1], y[1] - y[2])
+#   v3 = 1/J * (x[1] - x[3], x[2] - x[1])
 
-    # define standard element
-    s = StandardElement(order, degree)
+function Jacobians(g::Grid)
+    # unpack coords
+    x = g.p[:, 1]
+    y = g.p[:, 2]
 
-    # compute Jacobians and derivatives
-    ∂φ = zeros(g.nt, s.n_el_nodes, 2, s.n_int_pts)
-    J = zeros(g.nt, s.n_int_pts)
-    for k=1:g.nt
-        for i=1:s.n_int_pts
-            # compute Jacobian ∂(x, y)/∂(ξ, η)
-            x_ξ = dot(s.∂φ_int_pts[:, 1, i], g.p[g.t[k, :], 1])
-            x_η = dot(s.∂φ_int_pts[:, 2, i], g.p[g.t[k, :], 1])
-            y_ξ = dot(s.∂φ_int_pts[:, 1, i], g.p[g.t[k, :], 2])
-            y_η = dot(s.∂φ_int_pts[:, 2, i], g.p[g.t[k, :], 2])
-            J[k, i] = x_ξ*y_η - x_η*y_ξ
-            for j=1:s.n_el_nodes
-                # compute shape function derivatives ∂φ∂x(ξ, η) and ∂φ∂y(ξ, η)
-                ∂φ[k, j, 1, i] =  1/J[k, i]*(s.∂φ_int_pts[j, 1, i]*y_η - s.∂φ_int_pts[j, 2, i]*y_ξ)
-                ∂φ[k, j, 2, i] = -1/J[k, i]*(s.∂φ_int_pts[j, 1, i]*x_η - s.∂φ_int_pts[j, 2, i]*x_ξ)
-            end
-        end
+    # compute Jacobian terms for each triangle 
+    xξ = x[g.t[:, 2]] - x[g.t[:, 1]]
+    xη = x[g.t[:, 3]] - x[g.t[:, 1]]
+    yξ = y[g.t[:, 2]] - y[g.t[:, 1]]
+    yη = y[g.t[:, 3]] - y[g.t[:, 1]]
+    J = @. xξ*yη - xη*yξ
+    ξx = (y[g.t[:, 3]] - y[g.t[:, 1]])./J
+    ξy = (x[g.t[:, 1]] - x[g.t[:, 3]])./J
+    ηx = (y[g.t[:, 1]] - y[g.t[:, 2]])./J
+    ηy = (x[g.t[:, 2]] - x[g.t[:, 1]])./J
+    return Jacobians(J, xξ, xη, yξ, yη, ξx, ξy, ηx, ηy)
+end
+
+struct ShapeFunctionIntegrals{M<:AbstractMatrix}
+    φφ::M
+    φξφ::M
+    φηφ::M
+    φξφξ::M
+    φξφη::M
+    φηφξ::M
+    φηφη::M
+end
+function ShapeFunctionIntegrals(order)
+    if order == 1
+        φφ   = 1/24*[ 2.0   1.0   1.0
+                      1.0   2.0   1.0
+                      1.0   1.0   2.0]
+
+        φξφ  = 1/6*[-1.0   1.0   0.0
+                    -1.0   1.0   0.0
+                    -1.0   1.0   0.0]
+        φηφ  = 1/6*[-1.0   0.0   1.0
+                    -1.0   0.0   1.0
+                    -1.0   0.0   1.0]
+
+        φξφξ = [ 0.5  -0.5   0.0
+                -0.5   0.5   0.0
+                 0.0   0.0   0.0]
+        φξφη = [ 0.5  -0.5   0.0
+                 0.0   0.0   0.0
+                -0.5   0.5   0.0]
+        φηφξ = [ 0.5   0.0  -0.5
+                -0.5   0.0   0.5
+                 0.0   0.0   0.0]
+        φηφη = [ 0.5   0.0  -0.5
+                 0.0   0.0   0.0
+                -0.5   0.0   0.5]
+    elseif order == 2
     end
-    return FESpace(order, degree, g, s, J, ∂φ)
+    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
 end
 
 """

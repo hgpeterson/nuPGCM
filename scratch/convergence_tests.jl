@@ -15,34 +15,38 @@ pygui(false)
 
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
-function solve_poisson(V::FESpace, g::Grid, s::StandardElement, f, u₀)
+function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀)
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
+    n = size(g.t, 2)
     for k=1:g.nt
         # calculate contribution to K from element k
-        Kᵏ = zeros(s.n_el_nodes, s.n_el_nodes)
-        for i=1:s.n_el_nodes
-            for j=1:s.n_el_nodes
-                Kᵏ[i, j] = dot(s.int_wts, (V.∂φ_int_pts[k, j, 1, :].*V.∂φ_int_pts[k, i, 1, :] .+ V.∂φ_int_pts[k, j, 2, :].*V.∂φ_int_pts[k, i, 2, :]).*V.J_int_pts[k, :])
+        Kᵏ = zeros(n, n)
+        for i=1:n
+            for j=1:n
+                Kᵏ[i, j] = abs(J.J[k])*(s.φξφξ[i, j]*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                                        s.φξφη[i, j]*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                                        s.φηφξ[i, j]*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                                        s.φηφη[i, j]*(J.ηx[k]^2       + J.ηy[k]^2))
             end
         end
 
         # calculate contribution to b from element k
-        bᵏ = zeros(s.n_el_nodes)
-        for i=1:s.n_el_nodes
-            for j=1:s.n_el_nodes
-                bᵏ[i] += dot(s.int_wts, f[g.t[k, j]]*s.φ_int_pts[j, :].*s.φ_int_pts[i, :].*V.J_int_pts[k, :])
+        bᵏ = zeros(n)
+        for i=1:n
+            for j=n
+                bᵏ[i] += f[g.t[k, j]]*s.φφ[i, j]*abs(J.J[k])
             end
         end
 
         # add to global system
-        for i=1:s.n_el_nodes
+        for i=1:n
             if g.t[k, i] in g.e
                 # edge node, leave for dirichlet
                 continue
             end
-            for j=1:s.n_el_nodes
+            for j=1:n
                 push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
             end
             b[g.t[k, i]] += bᵏ[i]
@@ -69,11 +73,16 @@ function poisson_res(nref, order; plot=false)
     # geo = "square"
     geo = "circle"
 
-    # create finite element space for u
-    V = FESpace("../meshes/$geo/mesh$nref.h5", order, 4)
-    g = V.grid
+    # get grid
+    g = Grid("../meshes/$geo/mesh$nref.h5", order)
     x = g.p[:, 1]
     y = g.p[:, 2]
+
+    # get shape function integrals
+    s = ShapeFunctionIntegrals(order)
+
+    # get Jacobians
+    J = Jacobians(g)
 
     # mesh resolution 
     h = 1/sqrt(g.np)
@@ -85,7 +94,7 @@ function poisson_res(nref, order; plot=false)
     f = @. exp(x^2)*(2 + 4*x^2)*y
 
     # solve poisson problem
-    u = solve_poisson(V, V.grid, V.std_el, f, ua[g.e])
+    u = solve_poisson(g, s, J, f, ua[g.e])
 
     if plot
         fig, ax, im = tplot(g.p, g.t, u)
@@ -154,24 +163,24 @@ function poisson_convergence(nrefs)
     println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-"""
-    l2 = L2norm(V, u)
-"""
-function L2norm(V::FESpace, u)
-    l2 = 0
-    g = V.grid
-    s = V.std_el
-    for k=1:g.nt
-        for i=1:s.n_el_nodes
-            for j=1:s.n_el_nodes
-                l2 += dot(s.int_wts, u[g.t[k, i]].*s.φ_int_pts[i, :].*u[g.t[k, j]].*s.φ_int_pts[j, :].*V.J_int_pts[k, :])
-            end
-        end
-    end
-    return sqrt(l2)
-end
+# """
+#     l2 = L2norm(V, u)
+# """
+# function L2norm(V::FESpace, u)
+#     l2 = 0
+#     g = V.grid
+#     s = V.std_el
+#     for k=1:g.nt
+#         for i=1:s.n_el_nodes
+#             for j=1:s.n_el_nodes
+#                 l2 += dot(s.int_wts, u[g.t[k, i]].*s.φ_int_pts[i, :].*u[g.t[k, j]].*s.φ_int_pts[j, :].*V.J_int_pts[k, :])
+#             end
+#         end
+#     end
+#     return sqrt(l2)
+# end
 
-# poisson_res(3, 2; plot=true)
+poisson_res(3, 1; plot=true)
 # poisson_convergence(0:5)
 
 println("Done.")
