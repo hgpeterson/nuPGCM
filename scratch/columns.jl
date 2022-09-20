@@ -19,7 +19,6 @@ Solve linear system representing the problem
 in a finite element basis.
 """
 function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
-    n = size(g.t, 2)
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
     for k=1:g.nt        
@@ -28,10 +27,6 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
                               s.φξφη.*J.ξy[k]*J.ηy[k] +
                               s.φηφξ.*J.ηy[k]*J.ξy[k] +
                               s.φηφη.*J.ηy[k]^2)
-        # Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
-        #                       s.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-        #                       s.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-        #                       s.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # calculate contribution to M from element k
         Mᵏ = abs(J.J[k])*s.φφ
@@ -40,8 +35,8 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
         bᵏ = sum(Mᵏ, dims=2)
 
         # add to global system
-        for i=1:n
-            for j=1:n
+        for i=1:g.nn
+            for j=1:g.nn
                 if g.t[k, i] in g.e
                     # edge node, leave for dirichlet
                     continue
@@ -65,74 +60,128 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
     return A\b
 end
 
-function convergence(nrefs, order; plots=false)
-    # params
-    δ = 0.1
-    mesh_type = "jc"
-    # mesh_type = "gmsh"
-    # mesh_type = "circle"
+"""
+    err, h = columns_res(nref, order)
+"""
+function columns_res(nref, order; plot=false)
+    # parameter
+    δ = 0.05
 
-    # save errors
-    N = size(nrefs, 1)
-    hs = zeros(N)
-    errors = zeros(N)
-    for k=1:N
-        nref = nrefs[k]
-        println("refinement ", nref)
+    # geometry type
+    geo = "jc"
 
-        # grid
-        g = Grid("../meshes/$mesh_type/mesh$nref.h5", order)
-        hs[k] = 1/sqrt(g.np)
+    # get grid
+    g = Grid("../meshes/$geo/mesh$nref.h5", order)
+    x = g.p[:, 1]
+    y = g.p[:, 2]
 
-        # shape function integrals
-        s = ShapeFunctionIntegrals(order)
+    # get shape function integrals
+    s = ShapeFunctionIntegrals(order)
 
-        # Jacobians
-        J = Jacobians(g)
+    # get Jacobians
+    J = Jacobians(g)
 
-        # solve
-        u = solve_columns(g, s, J, δ)
-        if plots
-            fig, ax, im = tplot(g.p, g.t, u)
-            cb = colorbar(im, ax=ax, label=L"u")
-            ax.set_xlabel(L"x")
+    # mesh resolution 
+    h = 1/sqrt(g.np)
+
+    # solve columns problem
+    u = solve_columns(g, s, J, δ)
+
+    # analytical solution
+    H = sqrt.(2 .- g.p[:, 1].^2) .- 1
+    ua = u_exact.(g.p[:, 2], δ, H)
+
+    if plot
+        fig, ax, im = tplot(g.p, g.t, u)
+        cb = colorbar(im, ax=ax, label=L"u")
+        ax.axis("equal")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        savefig("images/u.png")
+        println("images/u.png")
+        plt.close()
+
+        fig, ax, im = tplot(g.p, g.t, ua)
+        cb = colorbar(im, ax=ax, label=L"u_a")
+        ax.axis("equal")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        savefig("images/ua.png")
+        println("images/ua.png")
+        plt.close()
+
+        fig, ax, im = tplot(g.p, g.t, abs.(u - ua))
+        cb = colorbar(im, ax=ax, label=L"|u - u_a|")
+        ax.axis("equal")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        savefig("images/e.png")
+        println("images/e.png")
+        plt.close()
+
+        n_profiles = 5
+        for i=1:n_profiles
+            x = (i - 1)/n_profiles
+            H = sqrt(2 - x^2) - 1
+            nz = 100
+            z = range(-H, 0, length=nz)
+            u1D = [try fem_evaluate(u, [x, z[j]], g) catch NaN end for j=1:nz]
+            ua1D = u_exact.(z, δ, H)
+            fig, ax = subplots(figsize=(1.955, 3.167))
+            ax.plot(u1D, z, label="Numerical")
+            ax.plot(ua1D, z, "k--", lw=0.5, label="Analytical")
+            ax.set_xlabel(L"u")
             ax.set_ylabel(L"z")
-            savefig("images/u.png")
-            println("images/u.png")
+            ax.set_title(latexstring(L"$x = $", @sprintf("%1.1f", x)))
+            ax.legend()
+            savefig("images/u_profile$i.png")
+            println("images/u_profile$i.png")
             plt.close()
         end
-
-        # compute error
-        if mesh_type == "jc"
-            H = (sqrt.(2 .- g.p[:, 1].^2) .- 1)
-        else
-            H = (1 .- g.p[:, 1].^2)
-        end
-        abs_err = abs.(u - u_exact.(g.p[:, 2], δ, H))
-
-        errors[k] = maximum(abs_err)
     end
 
-    if size(nrefs, 1) > 1
-        fig, ax = subplots(1)
-        ax.set_xlabel(L"h")
-        ax.set_ylabel(L"max $|u - u_a|$")
-        ax.plot([hs[1], hs[end]], [errors[1], errors[1]*(hs[end]/hs[1])^2], "k-", label=L"$h^2$")
-        ax.plot([hs[1], hs[end]], [errors[1], errors[1]*(hs[end]/hs[1])^3], "k--", label=L"$h^3$")
-        ax.loglog(hs, errors, "o", label="Data")
-        ax.set_ylim(0.9*errors[end], 1.1*errors[1])
-        ax.legend()
-        savefig("images/colmuns.png")
-        println("images/colmuns.png")
-        plt.close()
+    # error
+    err = L2norm(g, s, J, u - ua)
+    # err = maximum(abs.(u - ua))
+    return err, h
+end
+
+"""
+    columns_convergence(nrefs)
+"""
+function columns_convergence(nrefs)
+    hs_l = zeros(size(nrefs, 1))
+    hs_q = zeros(size(nrefs, 1))
+    err_l = zeros(size(nrefs, 1))
+    err_q = zeros(size(nrefs, 1))
+    for i in eachindex(nrefs)
+        println(nrefs[i])
+        err_l[i], hs_l[i] = columns_res(nrefs[i], 1)
+        err_q[i], hs_q[i] = columns_res(nrefs[i], 2)
     end
 
-    return errors
+    fig, ax = subplots()
+    ax.set_xlabel(L"Resolution $h$")
+    ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
+    # ax.set_ylabel(L"Error $||u - u_a||_{L^\infty}$")
+    ax.loglog([hs_l[1], hs_l[end]], [err_l[1], err_l[1]*(hs_l[end]/hs_l[1])^2], "k-",  label=L"$h^2$")
+    ax.loglog([hs_q[1], hs_q[end]], [err_q[1], err_q[1]*(hs_q[end]/hs_q[1])^3], "k--", label=L"$h^3$")
+    ax.loglog(hs_l, err_l, "o", label="Linear")
+    ax.loglog(hs_q, err_q, "o", label="Quadratic")
+    ax.legend(ncol=2)
+    ax.set_xlim(0.9*hs_q[end], 1.1*hs_l[1])
+    ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    savefig("images/columns.png")
+    println("images/columns.png")
+    plt.close()
+
+    println(@sprintf("Linear: %1.1f", log(err_l[end-1]/err_l[end])/log(hs_l[end-1]/hs_l[end])))
+    println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
 function u_exact(z, δ, H)
     return (exp(-z/δ) - exp(H/δ))*(exp(z/δ) - 1)/(1 + exp(H/δ))
 end
 
-# errors = convergence(2; plots=true)
-errors = convergence(0:4, 2)
+columns_convergence(0:5)
+# columns_res(1, 1; plot=true)

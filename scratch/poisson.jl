@@ -19,7 +19,6 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
-    n = size(g.t, 2)
     for k=1:g.nt
         # calculate contribution to K from element k
         Kᵏ = abs(J.J[k])*(s.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
@@ -31,12 +30,12 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
         bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
 
         # add to global system
-        for i=1:n
+        for i=1:g.nn
             if g.t[k, i] in g.e
                 # edge node, leave for dirichlet
                 continue
             end
-            for j=1:n
+            for j=1:g.nn
                 push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
             end
             b[g.t[k, i]] += bᵏ[i]
@@ -113,6 +112,26 @@ function poisson_res(nref, order; plot=false)
         savefig("images/e.png")
         println("images/e.png")
         plt.close()
+
+        n_profiles = 5
+        for i=1:n_profiles
+            x = (i - 1)/n_profiles
+            H = sqrt(1 - x^2)
+            ny = 100
+            y = range(-H, H, length=ny)
+            u1D = [try fem_evaluate(u, [x, y[j]], g) catch NaN end for j=1:ny]
+            ua1D = -exp(x^2)*y
+            fig, ax = subplots(figsize=(1.955, 3.167))
+            ax.plot(u1D, y, label="Numerical")
+            ax.plot(ua1D, y, "k--", lw=0.5, label="Analytical")
+            ax.set_xlabel(L"u")
+            ax.set_ylabel(L"y")
+            ax.set_title(latexstring(L"$x = $", @sprintf("%1.1f", x)))
+            ax.legend()
+            savefig("images/u_profile$i.png")
+            println("images/u_profile$i.png")
+            plt.close()
+        end
     end
 
     # error
@@ -138,6 +157,7 @@ function poisson_convergence(nrefs)
     fig, ax = subplots()
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
+    # ax.set_ylabel(L"Error $||u - u_a||_{L^\infty}$")
     ax.loglog([hs_l[1], hs_l[end]], [err_l[1], err_l[1]*(hs_l[end]/hs_l[1])^2], "k-",  label=L"$h^2$")
     ax.loglog([hs_q[1], hs_q[end]], [err_q[1], err_q[1]*(hs_q[end]/hs_q[1])^3], "k--", label=L"$h^3$")
     ax.loglog(hs_l, err_l, "o", label="Linear")
@@ -153,23 +173,7 @@ function poisson_convergence(nrefs)
     println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-"""
-    l2 = L2norm(g, s, J, u)
-"""
-function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
-    l2 = 0
-    n = size(g.t, 2)
-    for k=1:g.nt
-        for i=1:n
-            for j=1:n
-                l2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
-            end
-        end
-    end
-    return sqrt(l2)
-end
-
-# poisson_res(3, 2; plot=true)
-poisson_convergence(0:5)
+poisson_res(3, 2; plot=true)
+# poisson_convergence(0:5)
 
 println("Done.")

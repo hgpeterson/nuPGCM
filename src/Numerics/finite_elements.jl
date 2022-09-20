@@ -1,4 +1,7 @@
 struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+    # order of shape functions on this grid
+    order::IN
+
     # node positions
     p::FM # float matrix
 
@@ -10,6 +13,9 @@ struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Inte
 
     # number of elements
     nt::IN
+
+    # number of nodes per element
+    nn::IN
 
     # edge node indices
     e::IV # integer vector
@@ -36,8 +42,9 @@ function Grid(file_name, order::IN) where IN <: Integer
     end
     np = size(p, 1)
     nt = size(t, 1)
+    nn = size(t, 2)
     ne = size(e, 1)
-    return Grid(p, np, t, nt, e, ne)
+    return Grid(order, p, np, t, nt, nn, e, ne)
 end
 
 """
@@ -177,16 +184,25 @@ struct Jacobians{V<:AbstractVector}
     ηy::V
 end
 
-# x = v1 + v2*ξ + v3*η
-#   v1 = p1
-#   v2 = p2 - p1
-#   v3 = p3 - p1
+"""
+    J = Jacobians(g)
 
-# ξ = v1 + v2*x + v3*y
-#   v1 = 1/J * (y[1]*x[3] - x[1]*y[3], x[1]*y[2] - y[1]*x[2])
-#   v2 = 1/J * (y[3] - y[1], y[1] - y[2])
-#   v3 = 1/J * (x[1] - x[3], x[2] - x[1])
-
+Compute Jacobian terms for transformations from standard triangle [0 0; 1 0; 0 1] to 
+triangles on the grid. Given a triangle on the grid defined by the nodes [x1 y1; x2 y2; x3 y3], 
+the transformation ξ ↦ x is defined by
+    x = u1 + u2*ξ + u3*η
+where
+    u1 = [x1 y1]
+    u2 = [x2-x1 y2-y1]
+    u3 = [x3-x1 y3-y1].
+The insverse transform x ↦ ξ is
+    ξ = v1 + v2*x + v3*y
+where
+    v1 = 1/J*[y1*x3-x1*y3, x1*y2-y1*x2)
+    v2 = 1/J*[y3-y1,       y1-y2)
+    v3 = 1/J*[x1-x3,       x2-x1)
+and J = ∂(x, y)/∂(ξ, η) is the jacobian.
+"""
 function Jacobians(g::Grid)
     # unpack coords
     x = g.p[:, 1]
@@ -214,6 +230,14 @@ struct ShapeFunctionIntegrals{M<:AbstractMatrix}
     φηφξ::M
     φηφη::M
 end
+
+"""
+    s = ShapeFunctionIntegrals(order)
+
+Store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
+    ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
+where φᵢ and φⱼ are shape functions of order `order`.
+"""
 function ShapeFunctionIntegrals(order)
     if order == 1
         # mass
@@ -297,8 +321,28 @@ function ShapeFunctionIntegrals(order)
                      0.0   0.0   0.0  -8.0   8.0   0.0
                     -4.0   0.0  -4.0   0.0   0.0   8.0
                     ]
+    else
+        error("Shape functions of order $order are not yet supported.")
     end
     return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
+end
+
+"""
+    l2 = L2norm(g, s, J, u)
+
+Compute L2 norm, ||u||² ≡ ∫ |u|² dx, of finite element function `u`.
+"""
+function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
+    l2 = 0
+    n = size(g.t, 2)
+    for k=1:g.nt
+        for i=1:n
+            for j=1:n
+                l2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
+            end
+        end
+    end
+    return sqrt(l2)
 end
 
 """
@@ -399,7 +443,7 @@ Transform point `x` defined on triangle with vertices `p` to standard triangle [
 """
 function transform_to_std_tri(x, p)
     # jacobian
-    J = (p[2, 1] - p[1, 1])*(p[3, 2] - p[1, 2]) - (p[3, 1] - p[1, 1])*(p[2, 2] - p[2, 1])
+    J = (p[2, 1] - p[1, 1])*(p[3, 2] - p[1, 2]) - (p[3, 1] - p[1, 1])*(p[2, 2] - p[1, 2])
     v = 1/J * [p[1, 2]*p[3, 1] - p[1, 1]*p[3, 2]  p[1, 1]*p[2, 2] - p[1, 2]*p[2, 1]
                p[3, 2] - p[1, 2]                  p[1, 2] - p[2, 2]
                p[1, 1] - p[3, 1]                  p[2, 1] - p[1, 1]
@@ -407,32 +451,44 @@ function transform_to_std_tri(x, p)
     return v[1, :] + v[2, :]*x[1] + v[3, :]*x[2]
 end
 
-# https://stackoverflow.com/a/2049593
-function pt_sign(p₁, p₂, p₃)
-    return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
-end
-function pt_in_tri(x, v₁, v₂, v₃)
-    d₁ = pt_sign(x, v₁, v₂)
-    d₂ = pt_sign(x, v₂, v₃)
-    d₃ = pt_sign(x, v₃, v₁)
+"""
+    bool = pt_in_tri(x, p)
+
+Determine if point `x` is in triangle with nodes `p`.
+(See https://stackoverflow.com/a/2049593).
+"""
+function pt_in_tri(x, p)
+    d₁ = pt_sign(x, p[1, :], p[2, :])
+    d₂ = pt_sign(x, p[2, :], p[3, :])
+    d₃ = pt_sign(x, p[3, :], p[1, :])
 
     has_neg = (d₁ < 0) || (d₂ < 0) || (d₃ < 0)
     has_pos = (d₁ > 0) || (d₂ > 0) || (d₃ > 0)
 
     return !(has_neg && has_pos)
 end
-function get_tri(x, p, t, t_dict)
-    closest_p = argmin((p[:, 1] .- x[1]).^2 + (p[:, 2] .- x[2]).^2)
-    for k=t_dict[closest_p] # just look at triangles closest_p is in
-        if pt_in_tri(x, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
-            return k
-        end
-    end
-    error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
+function pt_sign(p₁, p₂, p₃)
+    return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 end
-function get_tri(x, p, t)
-    for k=1:size(t, 1) 
-        if pt_in_tri(x, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+
+
+"""
+    k = get_tri(x, g)
+
+Determine index `k` of triangle on grid `g` in which the point `x` lies.
+"""
+# function get_tri(x, p, t, t_dict)
+#     closest_p = argmin((p[:, 1] .- x[1]).^2 + (p[:, 2] .- x[2]).^2)
+#     for k=t_dict[closest_p] # just look at triangles closest_p is in
+#         if pt_in_tri(x, p[t[k, 1], :], p[t[k, 2], :], p[t[k, 3], :])
+#             return k
+#         end
+#     end
+#     error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
+# end
+function get_tri(x, g::Grid)
+    for k=1:g.nt 
+        if pt_in_tri(x, g.p[g.t[k, :], :])
             return k
         end
     end
@@ -448,16 +504,17 @@ end
 #     # evaluate there
 #     return fem_evaluate(v, ξ, η, p, t, C₀, k)
 # end
-# function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-#                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3})
-#     # find triangle (ξ, η) is in
-#     k = get_tri(ξ, η, p, t)
+function fem_evaluate(u, x, g::Grid)
+    # find triangle x is in
+    k = get_tri(x, g)
     
-#     # evaluate there
-#     return fem_evaluate(v, ξ, η, p, t, C₀, k)
-# end
-# function fem_evaluate(v::AbstractArray{<:Real,1}, ξ::Real, η::Real, p::AbstractArray{<:Real,2}, 
-#                       t::AbstractArray{<:Integer,2}, C₀::AbstractArray{<:Real,3}, k::Integer)
-#     # sum weighted combinations of triangle k's basis functions at p₀
-#     return v[t[k, :]]'*shape_func(C₀[k, :, :], ξ, η)
-# end
+    # evaluate there
+    return fem_evaluate(u, x, g, k)
+end
+function fem_evaluate(u, x, g::Grid, k)
+    # transform to standard triangle
+    ξ = transform_to_std_tri(x, g.p[g.t[k, 1:3], :])
+
+    # sum weighted combinations of triangle k's basis functions at x
+    return sum([u[g.t[k, i]]*φ(i, ξ; order=g.order) for i=1:g.nn])
+end
