@@ -22,23 +22,13 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
     n = size(g.t, 2)
     for k=1:g.nt
         # calculate contribution to K from element k
-        Kᵏ = zeros(n, n)
-        for i=1:n
-            for j=1:n
-                Kᵏ[i, j] = abs(J.J[k])*(s.φξφξ[i, j]*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                                        s.φξφη[i, j]*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                                        s.φηφξ[i, j]*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                                        s.φηφη[i, j]*(J.ηx[k]^2       + J.ηy[k]^2))
-            end
-        end
+        Kᵏ = abs(J.J[k])*(s.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                          s.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                          s.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                          s.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # calculate contribution to b from element k
-        bᵏ = zeros(n)
-        for i=1:n
-            for j=1:n
-                bᵏ[i] += f[g.t[k, j]]*s.φφ[i, j]*abs(J.J[k])
-            end
-        end
+        bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
 
         # add to global system
         for i=1:n
