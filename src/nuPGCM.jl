@@ -24,6 +24,7 @@ export
     Grid,
     Jacobians,
     ShapeFunctionIntegrals,
+    L2norm,
     all_edges,
     add_midpoints,
     get_t_dict,
