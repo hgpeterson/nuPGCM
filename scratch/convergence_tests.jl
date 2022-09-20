@@ -35,7 +35,7 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
         # calculate contribution to b from element k
         bᵏ = zeros(n)
         for i=1:n
-            for j=n
+            for j=1:n
                 bᵏ[i] += f[g.t[k, j]]*s.φφ[i, j]*abs(J.J[k])
             end
         end
@@ -126,8 +126,8 @@ function poisson_res(nref, order; plot=false)
     end
 
     # error
-    # err = L2norm(V, u - ua)
-    err = maximum(abs.(u - ua))
+    err = L2norm(g, s, J, u - ua)
+    # err = maximum(abs.(u - ua))
     return err, h
 end
 
@@ -163,24 +163,23 @@ function poisson_convergence(nrefs)
     println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-# """
-#     l2 = L2norm(V, u)
-# """
-# function L2norm(V::FESpace, u)
-#     l2 = 0
-#     g = V.grid
-#     s = V.std_el
-#     for k=1:g.nt
-#         for i=1:s.n_el_nodes
-#             for j=1:s.n_el_nodes
-#                 l2 += dot(s.int_wts, u[g.t[k, i]].*s.φ_int_pts[i, :].*u[g.t[k, j]].*s.φ_int_pts[j, :].*V.J_int_pts[k, :])
-#             end
-#         end
-#     end
-#     return sqrt(l2)
-# end
+"""
+    l2 = L2norm(g, s, J, u)
+"""
+function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
+    l2 = 0
+    n = size(g.t, 2)
+    for k=1:g.nt
+        for i=1:n
+            for j=1:n
+                l2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
+            end
+        end
+    end
+    return sqrt(l2)
+end
 
-poisson_res(3, 1; plot=true)
-# poisson_convergence(0:5)
+# poisson_res(3, 2; plot=true)
+poisson_convergence(0:5)
 
 println("Done.")
