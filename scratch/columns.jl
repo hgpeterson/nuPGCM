@@ -75,8 +75,11 @@ function columns_res(nref, order; plot=false)
     x = g.p[:, 1]
     y = g.p[:, 2]
 
+    # get shape functions
+    sf = ShapeFunctions(order)
+
     # get shape function integrals
-    s = ShapeFunctionIntegrals(order)
+    s = ShapeFunctionIntegrals(sf, order)
 
     # get Jacobians
     J = Jacobians(g)
@@ -125,7 +128,7 @@ function columns_res(nref, order; plot=false)
             H = sqrt(2 - x^2) - 1
             nz = 100
             z = range(-H, 0, length=nz)
-            u1D = [try fem_evaluate(u, [x, z[j]], g) catch NaN end for j=1:nz]
+            u1D = [try fem_evaluate(u, [x, z[j]], g, sf) catch NaN end for j=1:nz]
             ua1D = u_exact.(z, δ, H)
             fig, ax = subplots(figsize=(1.955, 3.167))
             ax.plot(u1D, z, label="Numerical")
@@ -183,5 +186,5 @@ function u_exact(z, δ, H)
     return (exp(-z/δ) - exp(H/δ))*(exp(z/δ) - 1)/(1 + exp(H/δ))
 end
 
-columns_convergence(0:5)
-# columns_res(1, 1; plot=true)
+# columns_convergence(0:5)
+columns_res(3, 1; plot=true)

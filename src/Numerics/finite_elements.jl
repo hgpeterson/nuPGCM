@@ -1,3 +1,171 @@
+# function lagrange_poly(i, x, p)
+#     l = 1
+#     for j in eachindex(p)
+#         if j == i
+#             continue
+#         end
+#         l *= (x - p[j])/(p[i] - p[j])
+#     end
+#    return l
+# end
+
+# function φ(i, ξ, order)
+#     return T(I, ξ[1])*T(J, ξ[2])*T(K, 1 - ξ[1] - ξ[2])
+# end
+# function T(I, r, r_I)
+#     if I == 1
+#         return 1
+#     else
+#         return lagrange_poly(I, 2*r/(r_I - 1), [0, 1])
+#     end
+# end
+
+struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
+    order::IN
+    n::IN
+    zeromean::Bool
+    C::M
+    ∂C::A
+end
+
+function ShapeFunctions(order; zeromean=false)
+    # get nodes of standard element
+    p = standard_element_nodes(order)
+    n = size(p, 1)
+
+    # compute shape function coefficients
+	V = zeros(n, n)
+	for i=1:n
+	    ξ = p[i, 1]
+	    η = p[i, 2]
+        if n == 3
+		    V[:, i] = [1, ξ, η]
+        elseif n == 6
+	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2]
+        else
+            error("Unsupported shape function order.")
+        end
+	end
+	C = inv(V)
+
+    # compute shape function derivative coefficients
+    ∂C = zeros(2, n, n)
+    for j=1:2
+        if order == 1
+            ∂C[j, :, 1] += C[:, j+1]
+        elseif order == 2
+            ∂C[j, :, 1] += C[:, j+1]
+            ∂C[j, :, j+1] += 2*C[:, 2j+2]
+            ∂C[j, :, 4-j] += C[:, 5]
+        end
+    end
+    return ShapeFunctions(order, n, zeromean, C, ∂C)
+end
+
+"""
+    p = standard_element_nodes(order)
+
+The nodes of a standard element of order `order`.
+"""
+function standard_element_nodes(order)
+    if order == 1
+        return [0.0  0.0
+                1.0  0.0
+                0.0  1.0]
+    elseif order == 2
+        return [0.0  0.0
+                1.0  0.0
+                0.0  1.0
+                0.5  0.0
+                0.5  0.5
+                0.0  0.5]
+    else
+        error("Unsupported shape function order.")
+    end
+end
+
+struct ShapeFunctionIntegrals{M<:AbstractMatrix}
+    φφ::M
+    φξφ::M
+    φηφ::M
+    φξφξ::M
+    φξφη::M
+    φηφξ::M
+    φηφη::M
+end
+
+"""
+    s = ShapeFunctionIntegrals(order)
+
+Compute and store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
+    ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
+where φᵢ and φⱼ are shape functions of order `order`.
+"""
+function ShapeFunctionIntegrals(sf::ShapeFunctions, order) 
+    # quadrature weights and points
+    w, ξ = quad_weights_points(2*order)
+
+    # number of shape functions (div to keep it integer)
+    n = div((order + 2)*(order + 1), 2)
+
+    # mass
+    φφ = compute_integral_matrix((ξ, i, j) -> φ(sf, j, ξ)*φ(sf, i, ξ), w, ξ, n)
+
+    # C
+    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*φ(sf, i, ξ), w, ξ, n)
+    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*φ(sf, i, ξ), w, ξ, n)
+
+    # stiffness
+    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*∂φ(sf, i, 1, ξ), w, ξ, n)
+    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*∂φ(sf, i, 2, ξ), w, ξ, n)
+    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*∂φ(sf, i, 1, ξ), w, ξ, n)
+    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*∂φ(sf, i, 2, ξ), w, ξ, n)
+    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
+end
+
+"""
+    M = compute_integral_matrix(f, w, ξ, n)
+
+Compute integrals over the standard triangle of the form ∫ f(ξ, i, j) dξ 
+for i, j ∈ {1, ..., n}. Quadrature rule defined by weights `w` and integration 
+points `ξ`.
+"""
+function compute_integral_matrix(f, w, ξ, n)
+    M = zeros(n, n)
+    for i=1:n
+        for j=1:n
+            M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
+        end
+    end
+    return M
+end
+
+"""
+    φ(sf, i, ξ)
+
+Shape function `i` evaluated at the point `ξ`.
+"""
+function φ(sf::ShapeFunctions, i, ξ)
+    if sf.order == 1
+        return sf.C[i, :]'*[1, ξ[1], ξ[2]]
+    elseif sf.order == 2
+        return sf.C[i, :]'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
+    end
+end
+
+"""
+    ∂φ(sf, i, j, ξ)
+
+Derivative of shape function `i` in the `j` direction evaluated at the point `ξ`.
+"""
+function ∂φ(sf::ShapeFunctions, i, j, ξ)
+    if sf.order == 1
+        return sf.∂C[j, i, :]'*[1, ξ[1], ξ[2]]
+    elseif sf.order == 2
+        return sf.∂C[j, i, :]'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
+    end
+end
+
 struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
     # order of shape functions on this grid
     order::IN
@@ -45,131 +213,6 @@ function Grid(file_name, order::IN) where IN <: Integer
     nn = size(t, 2)
     ne = size(e, 1)
     return Grid(order, p, np, t, nt, nn, e, ne)
-end
-
-"""
-    p = standard_element_nodes(order)
-
-The nodes of a standard element of order `order`.
-"""
-function standard_element_nodes(order)
-    if order == 1
-        return [0.0  0.0
-                1.0  0.0
-                0.0  1.0]
-    elseif order == 2
-        return [0.0  0.0
-                1.0  0.0
-                0.0  1.0
-                0.5  0.0
-                0.5  0.5
-                0.0  0.5]
-    else
-        error("Unsupported shape function order.")
-    end
-end
-
-"""
-    φ(i, ξ; order)
-
-Shape function `i` of order `order` evaluated at the point `ξ`.
-"""
-function φ(i, ξ; order=1)
-    if order == 1
-        if i == 1
-            return 1 - ξ[1] - ξ[2]
-        elseif i == 2
-            return ξ[1]
-        elseif i == 3
-            return ξ[2]
-        else
-            error("Invalid index for shape function.")
-        end
-    elseif order == 2
-        if i == 1
-            return (1 - ξ[1] - ξ[2])*(2*(1 - ξ[1] - ξ[2]) - 1)
-        elseif i == 2
-            return ξ[1]*(2*ξ[1] - 1)
-        elseif i == 3
-            return ξ[2]*(2*ξ[2] - 1)
-        elseif i == 4
-            return 4*ξ[1]*(1 - ξ[1] - ξ[2])
-        elseif i == 5
-            return 4*ξ[1]*ξ[2]
-        elseif i == 6
-            return 4*ξ[2]*(1 - ξ[1] - ξ[2])
-        else
-            error("Invalid index for shape function.")
-        end
-    else
-        error("Unsupported shape function order.")
-    end
-end
-
-"""
-    φ(i, ξ; order)
-
-Derivative of shape function `i` of order `order` in the `j` direction 
-evaluated at the point `ξ`.
-"""
-function ∂φ(i, j, ξ; order=1)
-    if order == 1
-        if i == 1
-            return -1
-        elseif i == 2
-            if j == 1
-                return 1
-            elseif j == 2
-                return 0
-            end
-        elseif i == 3
-            if j == 1
-                return 0
-            elseif j == 2
-                return 1
-            end
-        else
-            error("Invalid index for shape function.")
-        end
-    elseif order == 2
-        if i == 1
-            return 1 - 4*(1 - ξ[1] - ξ[2])
-        elseif i == 2
-            if j == 1
-                return 4*ξ[1] - 1 
-            elseif j == 2
-                return 0
-            end
-        elseif i == 3
-            if j == 1
-                return 0
-            elseif j == 2
-                return 4*ξ[2] - 1 
-            end
-        elseif i == 4
-            if j == 1
-                return 4*(1 - 2*ξ[1] - ξ[2])
-            elseif j == 2
-                return -4*ξ[1]
-            end
-        elseif i == 5
-            if j == 1
-                return 4*ξ[2]
-            elseif j == 2
-                return 4*ξ[1]
-            end
-        elseif i == 6
-            if j == 1
-                return -4*ξ[2]
-            elseif j == 2
-                return 4*(1 - ξ[1] - 2*ξ[2])
-            end
-        else
-            error("Invalid index for shape function.")
-        end
-    else
-        error("Unsupported shape function order.")
-    end
 end
 
 struct Jacobians{V<:AbstractVector}
@@ -221,78 +264,22 @@ function Jacobians(g::Grid)
     return Jacobians(J, xξ, xη, yξ, yη, ξx, ξy, ηx, ηy)
 end
 
-struct ShapeFunctionIntegrals{M<:AbstractMatrix}
-    φφ::M
-    φξφ::M
-    φηφ::M
-    φξφξ::M
-    φξφη::M
-    φηφξ::M
-    φηφη::M
-end
-
-"""
-    s = ShapeFunctionIntegrals(order)
-
-Compute and store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
-    ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
-where φᵢ and φⱼ are shape functions of order `order`.
-"""
-function ShapeFunctionIntegrals(order) 
-    # quadrature weights and points
-    w, ξ = quad_weights_points(2*order)
-
-    # number of shape functions (div to keep it integer)
-    n = div((order + 2)*(order + 1), 2)
-
-    # mass
-    φφ = compute_integral_matrix((ξ, i, j) -> φ(j, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
-
-    # C
-    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
-    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
-
-    # stiffness
-    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*∂φ(i, 1, ξ; order=order), w, ξ, n)
-    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*∂φ(i, 2, ξ; order=order), w, ξ, n)
-    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*∂φ(i, 1, ξ; order=order), w, ξ, n)
-    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*∂φ(i, 2, ξ; order=order), w, ξ, n)
-    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
-end
-
-"""
-    M = compute_integral_matrix(f, w, ξ, n)
-
-Compute integrals over the standard triangle of the form ∫ f(ξ, i, j) dξ 
-for i, j ∈ {1, ..., n}. Quadrature rule defined by weights `w` and integration 
-points `ξ`
-"""
-function compute_integral_matrix(f, w, ξ, n)
-    M = zeros(n, n)
-    for i=1:n
-        for j=1:n
-            M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
-        end
-    end
-    return M
-end
-
 """
     l2 = L2norm(g, s, J, u)
 
-Compute L2 norm, ||u||² ≡ ∫ |u|² dx, of finite element function `u`.
+Compute L2 norm, ‖u‖² ≡ ∫ |u|² dx, of finite element function `u`.
 """
 function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
-    l2 = 0
+    L2 = 0
     n = size(g.t, 2)
     for k=1:g.nt
         for i=1:n
             for j=1:n
-                l2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
+                L2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
             end
         end
     end
-    return sqrt(l2)
+    return sqrt(L2)
 end
 
 """
@@ -454,17 +441,17 @@ end
 #     # evaluate there
 #     return fem_evaluate(v, ξ, η, p, t, C₀, k)
 # end
-function fem_evaluate(u, x, g::Grid)
+function fem_evaluate(u, x, g::Grid, sf::ShapeFunctions)
     # find triangle x is in
     k = get_tri(x, g)
     
     # evaluate there
-    return fem_evaluate(u, x, g, k)
+    return fem_evaluate(u, x, g, sf, k)
 end
-function fem_evaluate(u, x, g::Grid, k)
+function fem_evaluate(u, x, g::Grid, sf::ShapeFunctions, k)
     # transform to standard triangle
     ξ = transform_to_std_tri(x, g.p[g.t[k, 1:3], :])
 
     # sum weighted combinations of triangle k's basis functions at x
-    return sum([u[g.t[k, i]]*φ(i, ξ; order=g.order) for i=1:g.nn])
+    return sum([u[g.t[k, i]]*φ(sf, i, ξ) for i=1:g.nn])
 end

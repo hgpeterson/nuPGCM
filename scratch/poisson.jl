@@ -67,8 +67,11 @@ function poisson_res(nref, order; plot=false)
     x = g.p[:, 1]
     y = g.p[:, 2]
 
+    # get shape functions
+    sf = ShapeFunctions(order; zeromean=false)
+
     # get shape function integrals
-    s = ShapeFunctionIntegrals(order)
+    s = ShapeFunctionIntegrals(sf, order)
 
     # get Jacobians
     J = Jacobians(g)
@@ -119,7 +122,7 @@ function poisson_res(nref, order; plot=false)
             H = sqrt(1 - x^2)
             ny = 100
             y = range(-H, H, length=ny)
-            u1D = [try fem_evaluate(u, [x, y[j]], g) catch NaN end for j=1:ny]
+            u1D = [try fem_evaluate(u, [x, y[j]], g, sf) catch NaN end for j=1:ny]
             ua1D = -exp(x^2)*y
             fig, ax = subplots(figsize=(1.955, 3.167))
             ax.plot(u1D, y, label="Numerical")

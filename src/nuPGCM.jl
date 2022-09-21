@@ -21,9 +21,10 @@ export
     tri_quad,
 
     # finite elements
+    ShapeFunctions,
+    ShapeFunctionIntegrals,
     Grid,
     Jacobians,
-    ShapeFunctionIntegrals,
     L2norm,
     all_edges,
     add_midpoints,
