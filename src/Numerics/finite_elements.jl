@@ -95,31 +95,28 @@ struct ShapeFunctionIntegrals{M<:AbstractMatrix}
 end
 
 """
-    s = ShapeFunctionIntegrals(order)
+    s = ShapeFunctionIntegrals(sf_trial, sf_test)
 
 Compute and store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
     ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
-where φᵢ and φⱼ are shape functions of order `order`.
+where φᵢ and φⱼ are shape functions from the trial and test space, respectively.
 """
-function ShapeFunctionIntegrals(sf::ShapeFunctions, order) 
+function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunctions) 
     # quadrature weights and points
-    w, ξ = quad_weights_points(2*order)
-
-    # number of shape functions (div to keep it integer)
-    n = div((order + 2)*(order + 1), 2)
+    w, ξ = quad_weights_points(sf_trial.order + sf_test.order)
 
     # mass
-    φφ = compute_integral_matrix((ξ, i, j) -> φ(sf, j, ξ)*φ(sf, i, ξ), w, ξ, n)
+    φφ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # C
-    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*φ(sf, i, ξ), w, ξ, n)
-    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*φ(sf, i, ξ), w, ξ, n)
+    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # stiffness
-    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*∂φ(sf, i, 1, ξ), w, ξ, n)
-    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 1, ξ)*∂φ(sf, i, 2, ξ), w, ξ, n)
-    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*∂φ(sf, i, 1, ξ), w, ξ, n)
-    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf, j, 2, ξ)*∂φ(sf, i, 2, ξ), w, ξ, n)
+    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
     return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
 end
 
@@ -127,13 +124,13 @@ end
     M = compute_integral_matrix(f, w, ξ, n)
 
 Compute integrals over the standard triangle of the form ∫ f(ξ, i, j) dξ 
-for i, j ∈ {1, ..., n}. Quadrature rule defined by weights `w` and integration 
+for i = 1, .., n and j = 1, ..., m. Quadrature rule defined by weights `w` and integration 
 points `ξ`.
 """
-function compute_integral_matrix(f, w, ξ, n)
+function compute_integral_matrix(f, w, ξ, n, m)
     M = zeros(n, n)
     for i=1:n
-        for j=1:n
+        for j=1:m
             M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
         end
     end

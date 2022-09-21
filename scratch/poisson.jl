@@ -71,7 +71,7 @@ function poisson_res(nref, order; plot=false)
     sf = ShapeFunctions(order; zeromean=false)
 
     # get shape function integrals
-    s = ShapeFunctionIntegrals(sf, order)
+    s = ShapeFunctionIntegrals(sf, sf)
 
     # get Jacobians
     J = Jacobians(g)
