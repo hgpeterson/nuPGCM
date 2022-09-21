@@ -234,97 +234,47 @@ end
 """
     s = ShapeFunctionIntegrals(order)
 
-Store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
+Compute and store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
     ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
 where φᵢ and φⱼ are shape functions of order `order`.
 """
-function ShapeFunctionIntegrals(order)
-    if order == 1
-        # mass
-        φφ   = 1/24*[ 2.0   1.0   1.0
-                      1.0   2.0   1.0
-                      1.0   1.0   2.0]
+function ShapeFunctionIntegrals(order) 
+    # quadrature weights and points
+    w, ξ = quad_weights_points(2*order)
 
-        # C
-        φξφ  = 1/6*[-1.0   1.0   0.0
-                    -1.0   1.0   0.0
-                    -1.0   1.0   0.0]
-        φηφ  = 1/6*[-1.0   0.0   1.0
-                    -1.0   0.0   1.0
-                    -1.0   0.0   1.0]
+    # number of shape functions (div to keep it integer)
+    n = div((order + 2)*(order + 1), 2)
 
-        # stiffness
-        φξφξ = [ 0.5  -0.5   0.0
-                -0.5   0.5   0.0
-                 0.0   0.0   0.0]
-        φξφη = [ 0.5  -0.5   0.0
-                 0.0   0.0   0.0
-                -0.5   0.5   0.0]
-        φηφξ = [ 0.5   0.0  -0.5
-                -0.5   0.0   0.5
-                 0.0   0.0   0.0]
-        φηφη = [ 0.5   0.0  -0.5
-                 0.0   0.0   0.0
-                -0.5   0.0   0.5]
-    elseif order == 2
-        # mass
-        φφ = 1/360*[ 6.0  -1.0  -1.0   0.0  -4.0   0.0
-                    -1.0   6.0  -1.0   0.0   0.0  -4.0
-                    -1.0  -1.0   6.0  -4.0   0.0   0.0
-                     0.0   0.0  -4.0  32.0  16.0  16.0
-                    -4.0   0.0   0.0  16.0  32.0  16.0
-                     0.0  -4.0   0.0  16.0  16.0  32.0
-                   ]
+    # mass
+    φφ = compute_integral_matrix((ξ, i, j) -> φ(j, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
 
-        # C
-        φξφ = 1/30*[-2.0  -1.0   0.0   3.0  -1.0   1.0
-                     1.0   2.0   0.0  -3.0  -1.0   1.0
-                     1.0  -1.0   0.0   0.0   2.0  -2.0
-                    -3.0   3.0   0.0   0.0   4.0  -4.0
-                     1.0   3.0   0.0  -4.0   8.0  -8.0
-                    -3.0  -1.0   0.0   4.0   8.0  -8.0
-                    ]
-        φηφ = 1/30*[-2.0   0.0  -1.0   1.0  -1.0   3.0
-                     1.0   0.0  -1.0  -2.0   2.0   0.0
-                     1.0   0.0   2.0   1.0  -1.0  -3.0
-                    -3.0   0.0  -1.0  -8.0   8.0   4.0
-                     1.0   0.0   3.0  -8.0   8.0  -4.0
-                    -3.0   0.0   3.0  -4.0   4.0   0.0
-                    ]
+    # C
+    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
+    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*φ(i, ξ; order=order), w, ξ, n)
 
-        # stiffness
-        φξφξ = 1/6*[ 3.0   1.0   0.0  -4.0   0.0   0.0
-                     1.0   3.0   0.0  -4.0   0.0   0.0
-                     0.0   0.0   0.0   0.0   0.0   0.0
-                    -4.0  -4.0   0.0   8.0   0.0   0.0
-                     0.0   0.0   0.0   0.0   8.0  -8.0
-                     0.0   0.0   0.0   0.0  -8.0   8.0
-                    ]
-        φξφη = 1/6*[ 3.0   1.0   0.0  -4.0   0.0   0.0
-                     0.0   0.0   0.0   0.0   0.0   0.0
-                     1.0  -1.0   0.0   0.0   4.0  -4.0
-                     0.0  -4.0   0.0   4.0  -4.0   4.0
-                     0.0   4.0   0.0  -4.0   4.0  -4.0
-                    -4.0   0.0   0.0   4.0  -4.0   4.0
-                    ]
-        φηφξ = 1/6*[ 3.0   0.0   1.0   0.0   0.0  -4.0
-                     1.0   0.0  -1.0  -4.0   4.0   0.0
-                     0.0   0.0   0.0   0.0   0.0   0.0
-                    -4.0   0.0   0.0   4.0  -4.0   4.0
-                     0.0   0.0   4.0  -4.0   4.0  -4.0
-                     0.0   0.0  -4.0   4.0  -4.0   4.0
-                    ]
-        φηφη = 1/6*[ 3.0   0.0   1.0   0.0   0.0  -4.0
-                     0.0   0.0   0.0   0.0   0.0   0.0
-                     1.0   0.0   3.0   0.0   0.0  -4.0
-                     0.0   0.0   0.0   8.0  -8.0   0.0
-                     0.0   0.0   0.0  -8.0   8.0   0.0
-                    -4.0   0.0  -4.0   0.0   0.0   8.0
-                    ]
-    else
-        error("Shape functions of order $order are not yet supported.")
-    end
+    # stiffness
+    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*∂φ(i, 1, ξ; order=order), w, ξ, n)
+    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 1, ξ; order=order)*∂φ(i, 2, ξ; order=order), w, ξ, n)
+    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*∂φ(i, 1, ξ; order=order), w, ξ, n)
+    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(j, 2, ξ; order=order)*∂φ(i, 2, ξ; order=order), w, ξ, n)
     return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
+end
+
+"""
+    M = compute_integral_matrix(f, w, ξ, n)
+
+Compute integrals over the standard triangle of the form ∫ f(ξ, i, j) dξ 
+for i, j ∈ {1, ..., n}. Quadrature rule defined by weights `w` and integration 
+points `ξ`
+"""
+function compute_integral_matrix(f, w, ξ, n)
+    M = zeros(n, n)
+    for i=1:n
+        for j=1:n
+            M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
+        end
+    end
+    return M
 end
 
 """
