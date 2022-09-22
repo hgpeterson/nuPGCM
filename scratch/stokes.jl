@@ -20,43 +20,49 @@ with extra condition
     ∫ p dx = 0.
 Here u = (u₁, u₂) is the velocity vector and p is the pressure.
 Weak form:
-    ∫ (∇u)⋅(∇v) - p (∇⋅v) dx = 0,
+    ∫ (∇u)⊙(∇v) - p (∇⋅v) dx = 0,
     ∫ q (∇⋅u) dx = 0,
-Or just,
-    ∫ (∇u)⋅(∇v) - p (∇⋅v) + q (∇⋅u) dx = 0,
 for all 
     v ∈ V = {(v₁, v₂) | vᵢ ∈ P₂},
     q ∈ Q = {q ∈ P₁ | ∫ q dx = 0},
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sfi_pu::ShapeFunctionIntegrals, J::Jacobians, Γ₁, Γ₂) 
-    A = Tuple{Int64,Int64,Float64}[]
+function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂) 
+    # indices
     umap = reshape(1:2*g₂.np, (2, g₂.np))
-    pmap = 2*g₂.np .+ (1:g₁.np)
-    N = 2*g₂.np + g₁.np
+    # umap = reshape(1:2*g₂.np, (g₂.np, 2))'
+    pmap = umap[end] .+ (1:g₁.np)
+    N = pmap[end]
+
+    # stamp system
+    A = Tuple{Int64,Int64,Float64}[]
     b = zeros(N)
     for k=1:g₁.nt
-        # contribution from (∇u)⋅(∇v) term
+        # contribution from (∇u)⊙(∇v) term 
         Kᵏ = abs(J.J[k])*(sfi_uu.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
                           sfi_uu.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
                           sfi_uu.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
                           sfi_uu.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
 
-        # contribution from p*(∇⋅v) and (∇⋅u)*q terms
-        Cᵏ = abs(J.J[k])*(sfi_pu.φφξ*(J.ξx[k] + J.ξy[k]) + 
-                          sfi_pu.φφη*(J.ηx[k] + J.ηy[k]))
+        # contribution from p*(∇⋅v) term
+        # Cᵏ = abs(J.J[k])*(sfi_pu.φφξ*(J.ξx[k] + J.ξy[k]) + sfi_pu.φφη*(J.ηx[k] + J.ηy[k]))
+        Cxᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξx[k] + sfi_pu.φφη*J.ηx[k])
+        Cyᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξy[k] + sfi_pu.φφη*J.ηy[k])
 
         # add to global system
         for i=1:g₂.nn
             for j=1:g₂.nn
+                # eqtn 1: (∇u)⊙(∇v) term
                 push!(A, (umap[1, g₂.t[k, i]], umap[1, g₂.t[k, j]], Kᵏ[i, j]))
                 push!(A, (umap[2, g₂.t[k, i]], umap[2, g₂.t[k, j]], Kᵏ[i, j]))
             end
             for j=1:g₁.nn
-                push!(A, (umap[1, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
-                push!(A, (umap[2, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
-                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[i, j]))
-                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[i, j]))
+                # eqtn 1: -p*(∇⋅v) term
+                push!(A, (umap[1, g₂.t[k, i]], pmap[g₁.t[k, j]], -(Cxᵏ[i, j] + Cyᵏ[i, j])))
+                push!(A, (umap[2, g₂.t[k, i]], pmap[g₁.t[k, j]], -(Cxᵏ[i, j] + Cyᵏ[i, j])))
+                # eqtn 2: q*(∇⋅u)
+                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cxᵏ[i, j]))
+                push!(A, (pmap[g₁.t[k, j]], umap[2, g₂.t[k, i]], Cyᵏ[i, j]))
             end
         end
     end
@@ -77,13 +83,26 @@ function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sf
     A[pmap[1], pmap[1]] = 1
     b[pmap[1]] = 0
 
+    # # set p̄ to zero
+    # A[pmap[1], :] .= 0
+    # A[pmap[1], pmap[1:end]] .= 1
+    # b[pmap[1]] = 0
+
+    # fig, ax = subplots()
+    # im = ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+    # savefig("images/debug.png")
+    # println("images/debug.png")
+    # plt.close()
+    # error()
+
+    # println(rank(A))
+    # println(N)
+
     # solve
     sol = A\b
 
-    # reshape
-    u = reshape(sol[1:2*g₂.np], (2, g₂.np))
-    p = sol[pmap]
-    return u, p
+    # reshape to get u and p
+    return sol[umap], sol[pmap]
 end
 
 """
@@ -107,16 +126,17 @@ function stokes_res(nref; plot=false)
     g₂ = Grid("../meshes/$geo/mesh$nref.h5", 2)
 
     # Γ₁: where u = 0 
-    Γ₁ = g₂.e[g₂.p[g₂.e, 2] .< 1]
+    Γ₁ = g₂.e[abs.(g₂.p[g₂.e, 2] .- 1) .> 1e-4]
 
     # Γ₂ where u₁ = 1 
-    Γ₂ = g₂.e[g₂.p[g₂.e, 2] .>= 1]
+    Γ₂ = g₂.e[abs.(g₂.p[g₂.e, 2] .- 1) .< 1e-4]
 
     # fig, ax, im = tplot(g₂.p, g₂.t)
     # ax.plot(g₂.p[Γ₁, 1], g₂.p[Γ₁, 2], "o", ms=1)
     # ax.plot(g₂.p[Γ₂, 1], g₂.p[Γ₂, 2], "o", ms=1)
     # savefig("images/debug.png")
-    # error()
+    # println("images/debug.png")
+    # plt.close()
 
     # get Jacobians
     J = Jacobians(g₁)
@@ -157,4 +177,4 @@ function stokes_res(nref; plot=false)
     return u, p
 end
 
-stokes_res(3; plot=true)
+u, p = stokes_res(3; plot=true)
