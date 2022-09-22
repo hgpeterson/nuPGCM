@@ -1,12 +1,12 @@
 using nuPGCM
 using PyPlot
 using SparseArrays
+using LinearAlgebra
 using Printf
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
-
 
 """
     u, p = solve_stokes()
@@ -29,27 +29,22 @@ for all
     q ∈ Q = {q ∈ P₁ | ∫ q dx = 0},
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sfi_up::ShapeFunctionIntegrals, sfi_pu::ShapeFunctionIntegrals, 
-                      J::Jacobians, Γ₁, Γ₂)
+function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sfi_pu::ShapeFunctionIntegrals, J::Jacobians, Γ₁, Γ₂) 
     A = Tuple{Int64,Int64,Float64}[]
     umap = reshape(1:2*g₂.np, (2, g₂.np))
-    pmap = 2*g₂.np + 1:g₁.np
+    pmap = 2*g₂.np .+ (1:g₁.np)
     N = 2*g₂.np + g₁.np
     b = zeros(N)
     for k=1:g₁.nt
         # contribution from (∇u)⋅(∇v) term
-        Kᵏ = abs(J.J[k])*(sfi_uu.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          sfi_uu.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          sfi_uu.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          sfi_uu.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
+        Kᵏ = abs(J.J[k])*(sfi_uu.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                          sfi_uu.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                          sfi_uu.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                          sfi_uu.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
 
-        # contribution from -p (∇⋅v) term
-        Cᵏ = abs(J.J[k])*(sfi_pu.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          sfi_pu.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          sfi_pu.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          sfi_pu.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
-
-        # contribution from q (∇⋅u) term
+        # contribution from p*(∇⋅v) and (∇⋅u)*q terms
+        Cᵏ = abs(J.J[k])*(sfi_pu.φφξ*(J.ξx[k] + J.ξy[k]) + 
+                          sfi_pu.φφη*(J.ηx[k] + J.ηy[k]))
 
         # add to global system
         for i=1:g₂.nn
@@ -60,8 +55,8 @@ function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sf
             for j=1:g₁.nn
                 push!(A, (umap[1, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
                 push!(A, (umap[2, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
-                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[j, i]))
-                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[j, i]))
+                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[i, j]))
+                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[i, j]))
             end
         end
     end
@@ -77,6 +72,11 @@ function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sf
     b[umap[1, Γ₂]] .= 1
     b[umap[2, Γ₂]] .= 0
 
+    # set p to zero somewhere
+    A[pmap[1], :] .= 0
+    A[pmap[1], pmap[1]] = 1
+    b[pmap[1]] = 0
+
     # solve
     sol = A\b
 
@@ -91,21 +91,32 @@ end
 """
 function stokes_res(nref; plot=false)
     # geometry type
-    # geo = "square"
-    geo = "circle"
+    geo = "square"
 
     # get shape functions
-    sf_u = ShapeFunctions(2; zeromean=false)
-    sf_p = ShapeFunctions(1; zeromean=true)
+    sf_u = ShapeFunctions(2)
+    # sf_p = ShapeFunctions(1; zeromean=true)
+    sf_p = ShapeFunctions(1)
 
     # get shape function integrals
     sfi_uu = ShapeFunctionIntegrals(sf_u, sf_u)
-    sfi_up = ShapeFunctionIntegrals(sf_u, sf_p)
     sfi_pu = ShapeFunctionIntegrals(sf_p, sf_u)
 
     # get grids
     g₁ = Grid("../meshes/$geo/mesh$nref.h5", 1)
     g₂ = Grid("../meshes/$geo/mesh$nref.h5", 2)
+
+    # Γ₁: where u = 0 
+    Γ₁ = g₂.e[g₂.p[g₂.e, 2] .< 1]
+
+    # Γ₂ where u₁ = 1 
+    Γ₂ = g₂.e[g₂.p[g₂.e, 2] .>= 1]
+
+    # fig, ax, im = tplot(g₂.p, g₂.t)
+    # ax.plot(g₂.p[Γ₁, 1], g₂.p[Γ₁, 2], "o", ms=1)
+    # ax.plot(g₂.p[Γ₂, 1], g₂.p[Γ₂, 2], "o", ms=1)
+    # savefig("images/debug.png")
+    # error()
 
     # get Jacobians
     J = Jacobians(g₁)
@@ -114,7 +125,7 @@ function stokes_res(nref; plot=false)
     # h = 1/sqrt(g₂.np)
 
     # solve stokes problem
-    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_up, sfi_pu, J)
+    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
 
     if plot
         fig, ax, im = tplot(g₂.p, g₂.t, u[1, :])
@@ -145,3 +156,5 @@ function stokes_res(nref; plot=false)
 
     return u, p
 end
+
+stokes_res(3; plot=true)

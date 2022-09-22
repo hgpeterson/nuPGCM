@@ -88,6 +88,8 @@ struct ShapeFunctionIntegrals{M<:AbstractMatrix}
     φφ::M
     φξφ::M
     φηφ::M
+    φφξ::M
+    φφη::M
     φξφξ::M
     φξφη::M
     φηφξ::M
@@ -111,13 +113,15 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     # C
     φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φφξ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φφη = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # stiffness
     φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
     φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
-    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φξφξ, φξφη, φηφξ, φηφη)
+    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φφξ, φφη, φξφξ, φξφη, φηφξ, φηφη)
 end
 
 """
@@ -128,7 +132,7 @@ for i = 1, .., n and j = 1, ..., m. Quadrature rule defined by weights `w` and i
 points `ξ`.
 """
 function compute_integral_matrix(f, w, ξ, n, m)
-    M = zeros(n, n)
+    M = zeros(n, m)
     for i=1:n
         for j=1:m
             M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
