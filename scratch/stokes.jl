@@ -12,24 +12,28 @@ pygui(false)
     u, p = solve_stokes()
 
 Stokes problem:
-    -Δu + ∇p = 0 on Ω,
-         ∇⋅u = 0 on Ω,
-           u = 0 on Γ,
+    -Δu + ∇p = 0      on Ω,
+         ∇⋅u = 0      on Ω,
+           u = 0      on Γ₁,
+           u = (1, 0) on Γ₂,
 with extra condition
     ∫ p dx = 0.
 Here u = (u₁, u₂) is the velocity vector and p is the pressure.
 Weak form:
-    ∫ (∇u)⋅(∇v) - p (∇⋅v) dx = 0
-    ∫ q (∇⋅u) dx = 0
+    ∫ (∇u)⋅(∇v) - p (∇⋅v) dx = 0,
+    ∫ q (∇⋅u) dx = 0,
 Or just,
-    ∫ (∇u)⋅(∇v) - p (∇⋅v) + q (∇⋅u) dx = 0
+    ∫ (∇u)⋅(∇v) - p (∇⋅v) + q (∇⋅u) dx = 0,
 for all 
-    v ∈ V = {(v₁, v₂) | vᵢ ∈ P₂}
-    q ∈ Q = {q ∈ P₁ | ∫ q dx = 0}
+    v ∈ V = {(v₁, v₂) | vᵢ ∈ P₂},
+    q ∈ Q = {q ∈ P₁ | ∫ q dx = 0},
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sfi_up::ShapeFunctionIntegrals, sfi_pu::ShapeFunctionIntegrals, J::Jacobians)
+function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sfi_up::ShapeFunctionIntegrals, sfi_pu::ShapeFunctionIntegrals, 
+                      J::Jacobians, Γ₁, Γ₂)
     A = Tuple{Int64,Int64,Float64}[]
+    umap = reshape(1:2*g₂.np, (2, g₂.np))
+    pmap = 2*g₂.np + 1:g₁.np
     N = 2*g₂.np + g₁.np
     b = zeros(N)
     for k=1:g₁.nt
@@ -40,31 +44,46 @@ function solve_stokes(g₁::Grid, g₂::Grid, sfi_uu::ShapeFunctionIntegrals, sf
                           sfi_uu.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # contribution from -p (∇⋅v) term
+        Cᵏ = abs(J.J[k])*(sfi_pu.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                          sfi_pu.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                          sfi_pu.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                          sfi_pu.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # contribution from q (∇⋅u) term
 
         # add to global system
-        for i=1:g.nn
-            if g.t[k, i] in g.e
-                # edge node, leave for dirichlet
-                continue
+        for i=1:g₂.nn
+            for j=1:g₂.nn
+                push!(A, (umap[1, g₂.t[k, i]], umap[1, g₂.t[k, j]], Kᵏ[i, j]))
+                push!(A, (umap[2, g₂.t[k, i]], umap[2, g₂.t[k, j]], Kᵏ[i, j]))
             end
-            for j=1:g.nn
-                push!(A, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
+            for j=1:g₁.nn
+                push!(A, (umap[1, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
+                push!(A, (umap[2, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cᵏ[i, j]))
+                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[j, i]))
+                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cᵏ[j, i]))
             end
         end
     end
-    # dirichlet along edges
-    for i in g.e
-        push!(K, (i, i, 1))
-    end
-    b[g.e] = u₀
 
     # make CSC matrix
-    K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), g.np, g.np)
+    A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
+
+    # dirichlet for u along edges
+    A[umap[:, g₂.e], :] .= 0
+    A[diagind(A)[umap[:, g₂.e]]] .= 1
+    b[umap[1, Γ₁]] .= 0
+    b[umap[2, Γ₁]] .= 0
+    b[umap[1, Γ₂]] .= 1
+    b[umap[2, Γ₂]] .= 0
 
     # solve
-    return K\b
+    sol = A\b
+
+    # reshape
+    u = reshape(sol[1:2*g₂.np], (2, g₂.np))
+    p = sol[pmap]
+    return u, p
 end
 
 """

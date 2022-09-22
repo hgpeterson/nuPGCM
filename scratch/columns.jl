@@ -12,17 +12,22 @@ pygui(false)
 
 
 """
-    u = solve_columns(g, s, J, δ)
+    u = solve_columns(g, s, J, δ, f, u₀)
 
 Solve linear system representing the problem
-    -δ² u_zz + u = 1
+    -δ² u_zz + u = f  on Ω
+               u = u₀ on ∂Ω
 in a finite element basis.
 """
-function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
+function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ, f, u₀)
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
     for k=1:g.nt        
         # calculate contribution to K from element k
+        # Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ.*(1e-6*J.ξx[k]^2       + J.ξy[k]^2) + 
+        #                       s.φξφη.*(1e-6*J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+        #                       s.φηφξ.*(1e-6*J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+        #                       s.φηφη.*(1e-6*J.ηx[k]^2       + J.ηy[k]^2))
         Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ.*J.ξy[k]^2 + 
                               s.φξφη.*J.ξy[k]*J.ηy[k] +
                               s.φηφξ.*J.ηy[k]*J.ξy[k] +
@@ -32,15 +37,11 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
         Mᵏ = abs(J.J[k])*s.φφ
 
         # calculate contribution to b from element k
-        bᵏ = sum(Mᵏ, dims=2)
+        bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
 
         # add to global system
         for i=1:g.nn
             for j=1:g.nn
-                if g.t[k, i] in g.e
-                    # edge node, leave for dirichlet
-                    continue
-                end
                 push!(A, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
                 push!(A, (g.t[k, i], g.t[k, j], Mᵏ[i, j]))
             end
@@ -48,14 +49,13 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ)
         end
     end
 
-    # dirichlet u = 0 along edges
-    for i in g.e
-        push!(A, (i, i, 1))
-    end
-    b[g.e] .= 0
-
     # make CSC matrix
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, g.np)
+
+    # dirichlet along edges
+    A[g.e, :] .= 0
+    A[diagind(A)[g.e]] .= 1
+    b[g.e] = u₀
 
     return A\b
 end
@@ -79,7 +79,7 @@ function columns_res(nref, order; plot=false)
     sf = ShapeFunctions(order)
 
     # get shape function integrals
-    s = ShapeFunctionIntegrals(sf, order)
+    s = ShapeFunctionIntegrals(sf, sf)
 
     # get Jacobians
     J = Jacobians(g)
@@ -87,12 +87,21 @@ function columns_res(nref, order; plot=false)
     # mesh resolution 
     h = 1/sqrt(g.np)
 
-    # solve columns problem
-    u = solve_columns(g, s, J, δ)
-
     # analytical solution
     H = sqrt.(2 .- g.p[:, 1].^2) .- 1
     ua = u_exact.(g.p[:, 2], δ, H)
+    # ua = @. 100*sin(x)*(y + 0.25)^2
+
+    # forcing 
+    f = ones(g.np)
+    # f = @. 100*sin(x)*(y + 0.25)^2 - 200*δ^2*sin(x)
+
+    # dirichlet boundary
+    u₀ = zeros(g.ne)
+    # u₀ = ua[g.e]
+
+    # solve columns problem
+    u = solve_columns(g, s, J, δ, f, u₀)
 
     if plot
         fig, ax, im = tplot(g.p, g.t, u)
@@ -129,7 +138,7 @@ function columns_res(nref, order; plot=false)
             nz = 100
             z = range(-H, 0, length=nz)
             u1D = [try fem_evaluate(u, [x, z[j]], g, sf) catch NaN end for j=1:nz]
-            ua1D = u_exact.(z, δ, H)
+            ua1D = [try fem_evaluate(ua, [x, z[j]], g, sf) catch NaN end for j=1:nz]
             fig, ax = subplots(figsize=(1.955, 3.167))
             ax.plot(u1D, z, label="Numerical")
             ax.plot(ua1D, z, "k--", lw=0.5, label="Analytical")
@@ -182,9 +191,16 @@ function columns_convergence(nrefs)
     println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
+"""
+    u = u_exact(z, δ, H)
+
+Exact 1D solution to
+    -δ^2 u_zz + u = 1
+with u(-H) = u(0) = 0.
+"""
 function u_exact(z, δ, H)
     return (exp(-z/δ) - exp(H/δ))*(exp(z/δ) - 1)/(1 + exp(H/δ))
 end
 
 # columns_convergence(0:5)
-columns_res(3, 1; plot=true)
+columns_res(3, 2; plot=true)

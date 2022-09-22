@@ -31,24 +31,20 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
 
         # add to global system
         for i=1:g.nn
-            if g.t[k, i] in g.e
-                # edge node, leave for dirichlet
-                continue
-            end
             for j=1:g.nn
                 push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
             end
             b[g.t[k, i]] += bᵏ[i]
         end
     end
-    # dirichlet along edges
-    for i in g.e
-        push!(K, (i, i, 1))
-    end
-    b[g.e] = u₀
 
     # make CSC matrix
     K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), g.np, g.np)
+
+    # dirichlet along edges
+    K[g.e, :] .= 0
+    K[diagind(K)[g.e]] .= 1
+    b[g.e] = u₀
 
     # solve
     return K\b
@@ -176,7 +172,7 @@ function poisson_convergence(nrefs)
     println(@sprintf("Quad:   %1.1f", log(err_q[end-1]/err_q[end])/log(hs_q[end-1]/hs_q[end])))
 end
 
-poisson_res(3, 2; plot=true)
+# poisson_res(3, 2; plot=true)
 # poisson_convergence(0:5)
 
 println("Done.")
