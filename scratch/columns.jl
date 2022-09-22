@@ -24,14 +24,14 @@ function solve_columns(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, δ, f, 
     b = zeros(g.np)
     for k=1:g.nt        
         # calculate contribution to K from element k
-        # Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ.*(1e-6*J.ξx[k]^2       + J.ξy[k]^2) + 
-        #                       s.φξφη.*(1e-6*J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-        #                       s.φηφξ.*(1e-6*J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-        #                       s.φηφη.*(1e-6*J.ηx[k]^2       + J.ηy[k]^2))
-        Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ.*J.ξy[k]^2 + 
-                              s.φξφη.*J.ξy[k]*J.ηy[k] +
-                              s.φηφξ.*J.ηy[k]*J.ξy[k] +
-                              s.φηφη.*J.ηy[k]^2)
+        # Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ*(1e-6*J.ξx[k]^2       + J.ξy[k]^2) + 
+        #                       s.φξφη*(1e-6*J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+        #                       s.φηφξ*(1e-6*J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+        #                       s.φηφη*(1e-6*J.ηx[k]^2       + J.ηy[k]^2))
+        Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ*J.ξy[k]^2 + 
+                              s.φξφη*J.ξy[k]*J.ηy[k] +
+                              s.φηφξ*J.ηy[k]*J.ξy[k] +
+                              s.φηφη*J.ηy[k]^2)
 
         # calculate contribution to M from element k
         Mᵏ = abs(J.J[k])*s.φφ

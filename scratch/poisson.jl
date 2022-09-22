@@ -21,10 +21,10 @@ function solve_poisson(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, f, u₀
     b = zeros(g.np)
     for k=1:g.nt
         # calculate contribution to K from element k
-        Kᵏ = abs(J.J[k])*(s.φξφξ.*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          s.φξφη.*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          s.φηφξ.*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          s.φηφη.*(J.ηx[k]^2       + J.ηy[k]^2))
+        Kᵏ = abs(J.J[k])*(s.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                          s.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                          s.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                          s.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # calculate contribution to b from element k
         bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
@@ -55,8 +55,8 @@ end
 """
 function poisson_res(nref, order; plot=false)
     # geometry type
-    # geo = "square"
-    geo = "circle"
+    geo = "square"
+    # geo = "circle"
 
     # get grid
     g = Grid("../meshes/$geo/mesh$nref.h5", order)
@@ -173,6 +173,6 @@ function poisson_convergence(nrefs)
 end
 
 # poisson_res(3, 2; plot=true)
-# poisson_convergence(0:5)
+poisson_convergence(0:5)
 
 println("Done.")
