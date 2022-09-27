@@ -98,7 +98,7 @@ function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
 end
 
 """
-    u, p = stokes_res(nref, order)
+    g₁, g₂, u, p = stokes_res(nref)
 """
 function stokes_res(nref; plot=false)
     # geometry type
@@ -132,9 +132,6 @@ function stokes_res(nref; plot=false)
     # get Jacobians
     J = Jacobians(g₁)
 
-    # # mesh resolution 
-    # h = 1/sqrt(g₂.np)
-
     # solve stokes problem
     u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
 
@@ -165,7 +162,67 @@ function stokes_res(nref; plot=false)
         plt.close()
     end
 
-    return u, p
+    return g₁, g₂, u, p
 end
 
-u, p = stokes_res(3; plot=true)
+"""
+    stokes_convergence(nrefs)
+"""
+function stokes_convergence(nrefs)
+    # compare to fine res
+    g₁_fine, g₂_fine, u_fine, p_fine = stokes_res(nrefs[end])
+
+    # save h's and errors
+    n = size(nrefs, 1)
+    hs_u = zeros(n-1)
+    hs_p = zeros(n-1)
+    err_u = zeros(n-1)
+    err_p = zeros(n-1)
+    sf_u = ShapeFunctions(2)
+    sf_p = ShapeFunctions(1)
+    for i=1:n-1
+        println(nrefs[i])
+
+        # solve
+        g₁, g₂, u, p = stokes_res(nrefs[i])
+
+        # resolution 
+        hs_u[i] = 1/sqrt(g₂.np)
+        hs_p[i] = 1/sqrt(g₁.np)
+
+        # error
+        for j=1:g₁_fine.np
+            if j in g₁_fine.e
+                continue
+            end
+            err_p[i] += (p_fine[j] - fem_evaluate(p, g₁_fine.p[j, :], g₁, sf_p))^2
+        end
+        for j=1:g₂_fine.np
+            if j in g₂_fine.e
+                continue
+            end
+            err_u[i] += (u_fine[1, j] - fem_evaluate(u[1, :], g₂_fine.p[j, :], g₂, sf_u))^2
+            err_u[i] += (u_fine[2, j] - fem_evaluate(u[2, :], g₂_fine.p[j, :], g₂, sf_u))^2
+        end
+    end
+    err_p = sqrt.(err_p)
+    err_u = sqrt.(err_u)
+
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"Resolution $h$")
+    ax.set_ylabel(L"Error $||u - u_0||_{L^2}$")
+    # ax.set_ylabel(L"Error $||u - u_a||_{L^\infty}$")
+    # ax.loglog([hs_l[1], hs_l[end]], [err_l[1], err_l[1]*(hs_l[end]/hs_l[1])^2], "k-",  label=L"$h^2$")
+    # ax.loglog([hs_q[1], hs_q[end]], [err_q[1], err_q[1]*(hs_q[end]/hs_q[1])^3], "k--", label=L"$h^3$")
+    ax.loglog(hs_u, err_u, "o", label=L"u")
+    ax.loglog(hs_p, err_p, "o", label=L"p")
+    ax.legend(ncol=2)
+    # ax.set_xlim(0.9*hs_q[end], 1.1*hs_l[1])
+    # ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    savefig("images/stokes.png")
+    println("images/stokes.png")
+    plt.close()
+end
+
+stokes_res(3; plot=true)
+# stokes_convergence(0:4)
