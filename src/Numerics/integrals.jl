@@ -38,7 +38,10 @@ Integration points and weights for quadrature rules on a standard triangle
 (see https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tri/quadrature_rules_tri.html).
 """
 function quad_weights_points(degree)
-    if degree == 2
+    if degree == 1
+        w = [1.0]
+        ξ = [0.33333333333333333333  0.33333333333333333333]
+    elseif degree == 2
         w = [0.33333333333333333333
              0.33333333333333333333
              0.33333333333333333333]
