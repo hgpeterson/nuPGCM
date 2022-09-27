@@ -23,12 +23,11 @@
 struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
     order::IN
     n::IN
-    zeromean::Bool
     C::M
     ∂C::A
 end
 
-function ShapeFunctions(order; zeromean=false)
+function ShapeFunctions(order)
     # get nodes of standard element
     p = standard_element_nodes(order)
     n = size(p, 1)
@@ -59,7 +58,7 @@ function ShapeFunctions(order; zeromean=false)
             ∂C[j, :, 4-j] += C[:, 5]
         end
     end
-    return ShapeFunctions(order, n, zeromean, C, ∂C)
+    return ShapeFunctions(order, n, C, ∂C)
 end
 
 """
@@ -272,10 +271,9 @@ Compute L2 norm, ‖u‖² ≡ ∫ |u|² dx, of finite element function `u`.
 """
 function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
     L2 = 0
-    n = size(g.t, 2)
     for k=1:g.nt
-        for i=1:n
-            for j=1:n
+        for i=1:g.nn
+            for j=1:g.nn
                 L2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
             end
         end
