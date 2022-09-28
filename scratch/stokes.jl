@@ -12,20 +12,19 @@ pygui(false)
     u, p = solve_stokes()
 
 Stokes problem:
-    -Δu + ∇p = 0      on Ω,
+    -Δu + ∇p = f      on Ω,
          ∇⋅u = 0      on Ω,
-           u = 0      on Γ₁,
-           u = (1, 0) on Γ₂,
+           u = u₀     on ∂Ω,
 with extra condition
     ∫ p dx = 0.
 Here u = (u₁, u₂) is the velocity vector and p is the pressure.
 Weak form:
-    ∫ (∇u)⊙(∇v) - p (∇⋅v) + q (∇⋅u) dx = 0,
+    ∫ (∇u)⊙(∇v) - p (∇⋅v) + q (∇⋅u) dx = ∫ f⋅v dx,
 for all 
     v₁, v₂ ∈ P₂ and q ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂) 
+function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀) 
     # indices
     umap = reshape(1:2*g₂.np, (2, g₂.np))
     pmap = umap[end] .+ (1:g₁.np)
@@ -45,6 +44,10 @@ function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
         Cxᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξx[k] + sfi_pu.φφη*J.ηx[k])
         Cyᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξy[k] + sfi_pu.φφη*J.ηy[k])
 
+        # contribution from f⋅v
+        b₁ᵏ = abs(J.J[k])*sfi_uu.φφ*f[1, g₂.t[k, :]]
+        b₂ᵏ = abs(J.J[k])*sfi_uu.φφ*f[2, g₂.t[k, :]]
+
         # add to global system
         for i=1:g₂.nn
             for j=1:g₂.nn
@@ -60,6 +63,8 @@ function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
                 push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cxᵏ[i, j]))
                 push!(A, (pmap[g₁.t[k, j]], umap[2, g₂.t[k, i]], Cyᵏ[i, j]))
             end
+            b[umap[1, g₂.t[k, i]]] += b₁ᵏ[i]
+            b[umap[2, g₂.t[k, i]]] += b₂ᵏ[i]
         end
     end
 
@@ -69,10 +74,7 @@ function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
     # dirichlet for u along edges
     A[umap[:, g₂.e], :] .= 0
     A[diagind(A)[umap[:, g₂.e]]] .= 1
-    b[umap[1, Γ₁]] .= 0
-    b[umap[2, Γ₁]] .= 0
-    b[umap[1, Γ₂]] .= 1
-    b[umap[2, Γ₂]] .= 0
+    b[umap[:, g₂.e]] .= u₀
 
     # set p to zero somewhere
     A[pmap[1], :] .= 0
@@ -98,11 +100,11 @@ function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
 end
 
 """
-    g₁, g₂, u, p = stokes_res(nref)
+    h, err = stokes_res(nref)
 """
 function stokes_res(nref; plot=false)
     # geometry type
-    geo = "square"
+    geo = "circle"
 
     # get shape functions
     sf_u = ShapeFunctions(2)
@@ -116,113 +118,91 @@ function stokes_res(nref; plot=false)
     g₁ = Grid("../meshes/$geo/mesh$nref.h5", 1)
     g₂ = Grid("../meshes/$geo/mesh$nref.h5", 2)
 
-    # Γ₁: where u = 0 
-    Γ₁ = g₂.e[abs.(g₂.p[g₂.e, 2] .- 1) .> 1e-4]
+    # mesh resolution 
+    h = 1/sqrt(g₂.np)
 
-    # Γ₂ where u₁ = 1 
-    Γ₂ = g₂.e[abs.(g₂.p[g₂.e, 2] .- 1) .< 1e-4]
+    # exact solution
+    x = g₂.p[:, 1] 
+    y = g₂.p[:, 2] 
+    ua₁ = @.  π/2*cos(π*x/2)*sin(π*y/2)
+    ua₂ = @. -π/2*sin(π*x/2)*cos(π*y/2)
+    ua = hcat(ua₁, ua₂)'
+    pa = @. y^2*cos(π*x/2)
+    f₁ = @. -π/2*y^2*sin(π*x/2) + π^3/4*cos(π*x/2)*sin(π*y/2)
+    f₂ = @. 2*y*cos(π*x/2) - π^3/4*sin(π*x/2)*cos(π*y/2)
+    f = hcat(f₁, f₂)'
 
-    # fig, ax, im = tplot(g₂.p, g₂.t)
-    # ax.plot(g₂.p[Γ₁, 1], g₂.p[Γ₁, 2], "o", ms=1)
-    # ax.plot(g₂.p[Γ₂, 1], g₂.p[Γ₂, 2], "o", ms=1)
-    # savefig("images/debug.png")
-    # println("images/debug.png")
-    # plt.close()
+    # dirichlet
+    u₀ = hcat(ua[1, g₂.e], ua[2, g₂.e])'
 
     # get Jacobians
     J = Jacobians(g₁)
 
     # solve stokes problem
-    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, Γ₁, Γ₂)
+    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀)
 
     if plot
-        fig, ax, im = tplot(g₂.p, g₂.t, u[1, :])
-        cb = colorbar(im, ax=ax, label=L"u_1")
-        ax.axis("equal")
-        ax.set_xlabel(L"x")
-        ax.set_ylabel(L"y")
-        savefig("images/u1.png")
-        println("images/u1.png")
-        plt.close()
-        fig, ax, im = tplot(g₂.p, g₂.t, u[2, :])
-        cb = colorbar(im, ax=ax, label=L"u_2")
-        ax.axis("equal")
-        ax.set_xlabel(L"x")
-        ax.set_ylabel(L"y")
-        savefig("images/u2.png")
-        println("images/u2.png")
-        plt.close()
-        fig, ax, im = tplot(g₁.p, g₁.t, p)
-        cb = colorbar(im, ax=ax, label=L"p")
-        ax.axis("equal")
-        ax.set_xlabel(L"x")
-        ax.set_ylabel(L"y")
-        savefig("images/p.png")
-        println("images/p.png")
-        plt.close()
+        quickplot(g₂, u[1, :], L"u_1", "images/u1.png")
+        quickplot(g₂, u[2, :], L"u_2", "images/u2.png")
+        quickplot(g₁, p, L"p", "images/p.png")
+
+        quickplot(g₂, ua[1, :], L"u_1^a", "images/u1a.png")
+        quickplot(g₂, ua[2, :], L"u_2^a", "images/u2a.png")
+        quickplot(g₂, pa, L"p^a", "images/pa.png")
+
+        quickplot(g₂, abs.(u[1, :] - ua[1, :]), L"|u_1 - u_1^a|", "images/e1.png")
+        quickplot(g₂, abs.(u[2, :] - ua[2, :]), L"|u_2 - u_2^a|", "images/e2.png")
+        quickplot(g₁, abs.(p - pa[1:g₁.np]), L"|p - p^a|", "images/ep.png")
     end
 
-    return g₁, g₂, u, p
+    # error
+    err_u₁ = L2norm(g₂, sfi_uu, J, u[1, :] - ua[1, :])
+    err_u₂ = L2norm(g₂, sfi_uu, J, u[2, :] - ua[2, :])
+    err= err_u₁ + err_u₂
+    return h, err
+end
+
+"""
+    quickplot(g, u, clabel, ofile)
+"""
+function quickplot(g, u, clabel, ofile)
+    fig, ax, im = tplot(g.p, g.t, u)
+    cb = colorbar(im, ax=ax, label=clabel)
+    ax.axis("equal")
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    savefig(ofile)
+    println(ofile)
+    plt.close()
 end
 
 """
     stokes_convergence(nrefs)
 """
 function stokes_convergence(nrefs)
-    # compare to fine res
-    g₁_fine, g₂_fine, u_fine, p_fine = stokes_res(nrefs[end])
-
-    # save h's and errors
     n = size(nrefs, 1)
-    hs_u = zeros(n-1)
-    hs_p = zeros(n-1)
-    err_u = zeros(n-1)
-    err_p = zeros(n-1)
-    sf_u = ShapeFunctions(2)
-    sf_p = ShapeFunctions(1)
-    for i=1:n-1
+    h = zeros(n)
+    err = zeros(n)
+    for i=1:n
         println(nrefs[i])
-
-        # solve
-        g₁, g₂, u, p = stokes_res(nrefs[i])
-
-        # resolution 
-        hs_u[i] = 1/sqrt(g₂.np)
-        hs_p[i] = 1/sqrt(g₁.np)
-
-        # error
-        for j=1:g₁_fine.np
-            if j in g₁_fine.e
-                continue
-            end
-            err_p[i] += (p_fine[j] - fem_evaluate(p, g₁_fine.p[j, :], g₁, sf_p))^2
-        end
-        for j=1:g₂_fine.np
-            if j in g₂_fine.e
-                continue
-            end
-            err_u[i] += (u_fine[1, j] - fem_evaluate(u[1, :], g₂_fine.p[j, :], g₂, sf_u))^2
-            err_u[i] += (u_fine[2, j] - fem_evaluate(u[2, :], g₂_fine.p[j, :], g₂, sf_u))^2
-        end
+        h[i], err[i] = stokes_res(nrefs[i])
     end
-    err_p = sqrt.(err_p)
-    err_u = sqrt.(err_u)
 
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||u - u_0||_{L^2}$")
-    # ax.set_ylabel(L"Error $||u - u_a||_{L^\infty}$")
-    # ax.loglog([hs_l[1], hs_l[end]], [err_l[1], err_l[1]*(hs_l[end]/hs_l[1])^2], "k-",  label=L"$h^2$")
-    # ax.loglog([hs_q[1], hs_q[end]], [err_q[1], err_q[1]*(hs_q[end]/hs_q[1])^3], "k--", label=L"$h^3$")
-    ax.loglog(hs_u, err_u, "o", label=L"u")
-    ax.loglog(hs_p, err_p, "o", label=L"p")
-    ax.legend(ncol=2)
-    # ax.set_xlim(0.9*hs_q[end], 1.1*hs_l[1])
-    # ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
+    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^2], "k-", label=L"$h^2$")
+    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^3], "k--", label=L"$h^3$")
+    ax.loglog(h, err, "o", label="Data")
+    ax.legend()
+    ax.set_xlim(0.5*h[end], 2*h[1])
+    ax.set_ylim(0.5*err[end], 2*err[1])
     savefig("images/stokes.png")
     println("images/stokes.png")
     plt.close()
+
+    return h, err
 end
 
 stokes_res(3; plot=true)
-# stokes_convergence(0:4)
+# h, err = stokes_convergence(0:5)
