@@ -26,6 +26,7 @@ export
     Grid,
     Jacobians,
     L2norm,
+    H1norm,
     all_edges,
     add_midpoints,
     get_t_dict,

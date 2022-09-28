@@ -113,6 +113,7 @@ function stokes_res(nref; plot=false)
     # get shape function integrals
     sfi_uu = ShapeFunctionIntegrals(sf_u, sf_u)
     sfi_pu = ShapeFunctionIntegrals(sf_p, sf_u)
+    sfi_pp = ShapeFunctionIntegrals(sf_p, sf_p)
 
     # get grids
     g₁ = Grid("../meshes/$geo/mesh$nref.h5", 1)
@@ -127,9 +128,9 @@ function stokes_res(nref; plot=false)
     ua₁ = @.  π/2*cos(π*x/2)*sin(π*y/2)
     ua₂ = @. -π/2*sin(π*x/2)*cos(π*y/2)
     ua = hcat(ua₁, ua₂)'
-    pa = @. y^2*cos(π*x/2)
-    f₁ = @. -π/2*y^2*sin(π*x/2) + π^3/4*cos(π*x/2)*sin(π*y/2)
-    f₂ = @. 2*y*cos(π*x/2) - π^3/4*sin(π*x/2)*cos(π*y/2)
+    pa = zeros(g₂.np)
+    f₁ = @. π^3/4*cos(π*x/2)*sin(π*y/2)
+    f₂ = @. -π^3/4*sin(π*x/2)*cos(π*y/2)
     f = hcat(f₁, f₂)'
 
     # dirichlet
@@ -156,9 +157,10 @@ function stokes_res(nref; plot=false)
     end
 
     # error
-    err_u₁ = L2norm(g₂, sfi_uu, J, u[1, :] - ua[1, :])
-    err_u₂ = L2norm(g₂, sfi_uu, J, u[2, :] - ua[2, :])
-    err= err_u₁ + err_u₂
+    err_u₁ = H1norm(g₂, sfi_uu, J, u[1, :] - ua[1, :])
+    err_u₂ = H1norm(g₂, sfi_uu, J, u[2, :] - ua[2, :])
+    err_p = L2norm(g₁, sfi_pp, J, p - pa[1:g₁.np])
+    err= err_u₁ + err_u₂ + err_p
     return h, err
 end
 
@@ -190,7 +192,7 @@ function stokes_convergence(nrefs)
 
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
+    ax.set_ylabel(L"Error $||u - u^a||_{H^1} + ||p - p^a||_{L^2}$")
     ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^2], "k-", label=L"$h^2$")
     ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^3], "k--", label=L"$h^3$")
     ax.loglog(h, err, "o", label="Data")
@@ -204,5 +206,5 @@ function stokes_convergence(nrefs)
     return h, err
 end
 
-stokes_res(3; plot=true)
-# h, err = stokes_convergence(0:5)
+# stokes_res(3; plot=true)
+h, err = stokes_convergence(0:5)

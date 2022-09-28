@@ -267,7 +267,7 @@ end
 """
     l2 = L2norm(g, s, J, u)
 
-Compute L2 norm, ‖u‖² ≡ ∫ |u|² dx, of finite element function `u`.
+Compute L2 norm, ‖u‖² ≡ ∫ u² dx, of finite element function `u`.
 """
 function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
     L2 = 0
@@ -279,6 +279,29 @@ function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
         end
     end
     return sqrt(L2)
+end
+
+"""
+    h1 = H1norm(g, s, J, u)
+
+Compute H1 norm, ‖u‖² ≡ ∫ u² + (∇u)⋅(∇u) dx, of finite element function `u`.
+"""
+function H1norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
+    H1 = 0
+    for k=1:g.nt
+        for i=1:g.nn
+            for j=1:g.nn
+                H1 += abs(J.J[k])*(u[g.t[k, j]]*u[g.t[k, i]])*(
+                        s.φφ[i,j] +
+                        s.φξφξ[i, j]*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                        s.φξφη[i, j]*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                        s.φηφξ[i, j]*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                        s.φηφη[i, j]*(J.ηx[k]^2       + J.ηy[k]^2)
+                      )
+            end
+        end
+    end
+    return sqrt(H1)
 end
 
 """
