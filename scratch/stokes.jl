@@ -9,7 +9,7 @@ plt.close("all")
 pygui(false)
 
 """
-    u, p = solve_stokes()
+    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀)
 
 Stokes problem:
     -Δu + ∇p = f      on Ω,
