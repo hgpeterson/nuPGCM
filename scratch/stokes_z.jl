@@ -53,8 +53,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
         # Czᵏ = abs(J.J[k])*(s12.φφξ*J.ξy[k] + s12.φφη*J.ηy[k])
 
         # fv
-        # rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
-        rᵏ = abs(J.J[k])*s12.φφ'*b[g2.t[k, :]]
+        rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
 
         # s2*s2
         for i=1:g2.nn
@@ -114,6 +113,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     # set p to zero somewhere
     A[pmap[1], :] .= 0
     A[pmap[1], pmap[1]] = 1
+    # A[pmap[1], pmap[:]] .= 1
     r[pmap[1]] = 0
 
     # println(rank(A))
@@ -166,10 +166,8 @@ function stokes_z_res(nref; plot=false)
     h = 1/sqrt(g2.np)
 
     # forcing
-    # x = g1.p[:, 1] 
-    # z = g1.p[:, 2] 
-    x = g2.p[:, 1] 
-    z = g2.p[:, 2] 
+    x = g1.p[:, 1] 
+    z = g1.p[:, 2] 
     b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
 
     # get Jacobians
@@ -179,21 +177,15 @@ function stokes_z_res(nref; plot=false)
     uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
 
     if plot
-        # quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
-        # quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
-        # # quickplot(g1, b, g1, p, L"p", "images/p.png")
-        # quickplot(g1, b, g2, p, L"p", "images/p.png")
-        # quickplot(g1, b, g1, b, L"b", "images/b.png")
-        quickplot(g2, b, g2, uˣ, L"u^x", "images/ux.png")
-        quickplot(g2, b, g1, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g2, b, g1, p, L"p", "images/p.png")
-        # quickplot(g2, b, g2, p, L"p", "images/p.png")
-        quickplot(g2, b, g2, b, L"b", "images/b.png")
+        quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
+        quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g1, b, g1, p, L"p", "images/p.png")
+        quickplot(g1, b, g1, b, L"b", "images/b.png")
     end
 
     # error
     err = NaN
-    return h, err
+    return uˣ, uᶻ, p
 end
 
 """
@@ -213,3 +205,23 @@ function quickplot(gb, b, gu, u, clabel, ofile)
 end
 
 stokes_z_res(3; plot=true)
+
+# s1 = ShapeFunctions(1)
+# fig, ax = subplots(1, figsize=(2, 3.2))
+# ax.set_xlabel(L"p(x = 0)")
+# ax.set_ylabel(L"z")
+# z0 = -0.4:0.005:0.0
+# for i=1:5
+#     println(i)
+#     g1 = Grid("../meshes/jc/mesh$i.h5", 1)
+#     uˣ, uᶻ, p = stokes_z_res(i)
+#     p0 = zeros(size(z0, 1))
+#     for i in eachindex(z0)
+#         p0[i] = fem_evaluate(p, [0, z0[i]], g1, s1)
+#     end
+#     ax.plot(p0, z0, label="Res $i")
+# end
+# ax.legend()
+# savefig("p0.png")
+# println("p0.png")
+# plt.close()
