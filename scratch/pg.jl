@@ -27,17 +27,17 @@ Weak form:
        ε²∂z(uʸ)∂z(v₂) + uˣv₂ +
        -p∂z(v₃) +
         q∂x(uˣ) + q∂z(uᶻ)
-      ] dx dy
-    = ∫ b v₃ dx dy,
+      ] dx dz
+    = ∫ b v₃ dx dz,
 for all 
-    v₁, v₂, v₃ ∈ P₂ and q ∈ P₁,
+    v₁, v₂ ∈ P₂ and q, v₃ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1, etop2) 
+function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1) 
     # indices
     uˣmap = 1:g2.np
-    uʸmap = uˣmap[end] .+ (1:g1.np)
-    uᶻmap = uʸmap[end] .+ (1:g2.np)
+    uʸmap = uˣmap[end] .+ (1:g2.np)
+    uᶻmap = uʸmap[end] .+ (1:g1.np)
     pmap  = uᶻmap[end] .+ (1:g1.np)
     N = pmap[end]
 
@@ -46,46 +46,50 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1, etop2)
     r = zeros(N)
     for k=1:g1.nt
         # ∂z(u)∂z(v) terms
-        K22ᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
-        K11ᵏ = abs(J.J[k])*(s11.φξφξ*J.ξy[k]^2 + s11.φξφη*J.ξy[k]*J.ηy[k] + s11.φηφξ*J.ηy[k]*J.ξy[k] + s11.φηφη*J.ηy[k]^2)
+        Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
+        # K11ᵏ = abs(J.J[k])*(s11.φξφξ*J.ξy[k]^2 + s11.φξφη*J.ξy[k]*J.ηy[k] + s11.φηφξ*J.ηy[k]*J.ξy[k] + s11.φηφη*J.ηy[k]^2)
 
         # uv terms
-        M12ᵏ = abs(J.J[k])*s12.φφ
+        Mᵏ = abs(J.J[k])*s22.φφ
 
         # p*∂x(v) and p*∂z(v) terms (also q*∂x(u) and q*∂z(u))
         Cxᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s12.φφξ*J.ξy[k] + s12.φφη*J.ηy[k])
+        Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
 
         # b*v term
-        rᵏ = abs(J.J[k])*s22.φφ*b[g2.t[k, :]]
+        rᵏ = abs(J.J[k])*s12.φφ'*b[g2.t[k, :]]
 
-        # add to global system
+        # s2*s2
         for i=1:g2.nn
             for j=1:g2.nn
                 # ∂z(u)∂z(v) terms
-                push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], ε²*K22ᵏ[i, j]))
-                push!(A, (uᶻmap[g2.t[k, i]], uᶻmap[g2.t[k, j]], ε²*K22ᵏ[i, j]/1e3))
+                push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], ε²*Kᵏ[i, j]))
+                push!(A, (uʸmap[g2.t[k, i]], uʸmap[g2.t[k, j]], ε²*Kᵏ[i, j]))
+                # uv terms
+                push!(A, (uˣmap[g2.t[k, i]], uʸmap[g2.t[k, j]], -Mᵏ[i, j]))
+                push!(A, (uʸmap[g2.t[k, j]], uˣmap[g2.t[k, i]], Mᵏ[i, j]))
             end
-            r[uᶻmap[g2.t[k, i]]] += rᵏ[i]
         end
+        # s1*s2
         for i=1:g2.nn
             for j=1:g1.nn
-                # uv terms
-                push!(A, (uˣmap[g2.t[k, i]], uʸmap[g1.t[k, j]], -M12ᵏ[i, j]))
-                push!(A, (uʸmap[g1.t[k, j]], uˣmap[g2.t[k, i]], M12ᵏ[i, j]))
-                # p*∂x(v) and p*∂z(v) terms
+                # p*∂x(v) 
                 push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cxᵏ[i, j]))
-                push!(A, (uᶻmap[g2.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
-                # q*∂x(u) and q*∂z(u) terms
+                # q*∂x(u) 
                 push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
-                push!(A, (pmap[g1.t[k, j]], uᶻmap[g2.t[k, i]], Czᵏ[i, j]))
             end
         end
+        # s1*s1
         for i=1:g1.nn
             for j=1:g1.nn
-                # ∂z(u)∂z(v) terms
-                push!(A, (uʸmap[g1.t[k, i]], uʸmap[g1.t[k, j]], ε²*K11ᵏ[i, j]))
+                # # ∂z(u)∂z(v) terms
+                # push!(A, (uᶻmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], ε²*K11ᵏ[i, j]))
+                # p*dz(u)
+                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
+                # q*dz(v)
+                push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Czᵏ[i, j]))
             end
+            r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
         end
     end
 
@@ -97,20 +101,20 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1, etop2)
     A[diagind(A)[uˣmap[ebot2]]] .= 1
     r[uˣmap[ebot2]] .= 0
 
-    A[uʸmap[ebot1], :] .= 0
-    A[diagind(A)[uʸmap[ebot1]]] .= 1
-    r[uʸmap[ebot1]] .= 0
+    A[uʸmap[ebot2], :] .= 0
+    A[diagind(A)[uʸmap[ebot2]]] .= 1
+    r[uʸmap[ebot2]] .= 0
 
-    A[uᶻmap[ebot2], :] .= 0
-    A[diagind(A)[uᶻmap[ebot2]]] .= 1
-    r[uᶻmap[ebot2]] .= 0
+    A[uᶻmap[ebot1], :] .= 0
+    A[diagind(A)[uᶻmap[ebot1]]] .= 1
+    r[uᶻmap[ebot1]] .= 0
 
     # ∂z(uˣ) = ∂(uʸ) = 0 at z = 0 → natural
 
     # uᶻ = 0 at z = 0
-    A[uᶻmap[etop2], :] .= 0
-    A[diagind(A)[uᶻmap[etop2]]] .= 1
-    r[uᶻmap[etop2]] .= 0
+    A[uᶻmap[etop1], :] .= 0
+    A[diagind(A)[uᶻmap[etop1]]] .= 1
+    r[uᶻmap[etop1]] .= 0
 
     # set p to zero somewhere
     A[pmap[1], :] .= 0
@@ -132,7 +136,7 @@ end
 """
 function pg_res(nref; plot=false)
     # Ekman number
-    ε² = 1
+    ε² = 0.0001
 
     # geometry type
     geo = "jc"
@@ -163,24 +167,20 @@ function pg_res(nref; plot=false)
     push!(ebot1, eleft1[1])
     push!(ebot1, eright1[1])
 
-    etop2 = g2.e[abs.(g2.p[g2.e, 2]) .< 1e-4]
     ebot2 = g2.e[abs.(g2.p[g2.e, 2]) .>= 1e-4]
     eleft2 = g2.e[abs.(g2.p[g2.e, 1] .+ 1) .<= 1e-4]
     eright2 = g2.e[abs.(g2.p[g2.e, 1] .- 1) .<= 1e-4]
-    deleteat!(etop2, findall(x->x==eleft2[1], etop2))
-    deleteat!(etop2, findall(x->x==eright2[1], etop2))
     push!(ebot2, eleft2[1])
     push!(ebot2, eright2[1])
 
     # buoyancy field
     x = g2.p[:, 1] 
     z = g2.p[:, 2] 
-    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    # H = @. sqrt(2 - x^2) - 1
-    # b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
-    # b[ebot] .= H[ebot]
-    # quickplot(g2, b, g2, b, L"b", "images/b.png")
-    # error()
+    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
+    H = @. sqrt(2 - x^2) - 1
+    b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
+    b[ebot2] .= H[ebot2]
 
     # fig, ax, im = tplot(g2.p, g2.t)
     # ax.plot(g2.p[ebot, 1], g2.p[ebot,2], "o", ms=1)
@@ -207,12 +207,12 @@ function pg_res(nref; plot=false)
     J = Jacobians(g1)
 
     # solve stokes problem
-    uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1, etop2)
+    uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
 
     if plot
         quickplot(g2, b, g2, uˣ, L"u^x", "images/ux.png")
-        quickplot(g2, b, g1, uʸ, L"u^y", "images/uy.png")
-        quickplot(g2, b, g2, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g2, b, g2, uʸ, L"u^y", "images/uy.png")
+        quickplot(g2, b, g1, uᶻ, L"u^z", "images/uz.png")
         quickplot(g2, b, g1, p, L"p", "images/p.png")
         quickplot(g2, b, g2, b, L"b", "images/b.png")
     end
