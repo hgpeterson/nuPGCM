@@ -113,32 +113,26 @@ end
     laplace_convergence(nrefs)
 """
 function laplace_convergence(nrefs)
-    h_l = zeros(size(nrefs, 1))
-    h_q = zeros(size(nrefs, 1))
-    err_l = zeros(size(nrefs, 1))
-    err_q = zeros(size(nrefs, 1))
-    for i in eachindex(nrefs)
-        println(nrefs[i])
-        h_l[i], err_l[i] = laplace_res(nrefs[i], 1)
-        h_q[i], err_q[i] = laplace_res(nrefs[i], 2)
-    end
-
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u^a||_{L^2}$")
-    ax.loglog([h_l[1], h_l[end]], [err_l[1], err_l[1]*(h_l[end]/h_l[1])^2], "k-",  label=L"$h^2$")
-    ax.loglog([h_q[1], h_q[end]], [err_q[1], err_q[1]*(h_q[end]/h_q[1])^3], "k--", label=L"$h^3$")
-    ax.loglog(h_l, err_l, "o", label="Linear")
-    ax.loglog(h_q, err_q, "o", label="Quadratic")
-    ax.legend(ncol=2)
-    ax.set_xlim(0.5*h_q[end], 2*h_l[1])
-    ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    for o=1:3
+        h = zeros(size(nrefs, 1))
+        err = zeros(size(nrefs, 1))
+        for i in eachindex(nrefs)
+            println(nrefs[i])
+            h[i], err[i] = laplace_res(nrefs[i], o)
+        end
+        ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
+        ax.loglog(h, err, "o", label="Order $o")
+    end
+    ax.legend(ncol=3)
+    # ax.set_xlim(0.5*h_q[end], 2*h_l[1])
+    # ax.set_ylim(0.5*err_q[end], 2*err_l[1])
     savefig("images/laplace.png")
     println("images/laplace.png")
     plt.close()
 end
 
-# laplace_res(3, 2; plot=true)
-laplace_convergence(0:5)
-
-println("Done.")
+laplace_res(0, 3; plot=true)
+# laplace_convergence(0:3)

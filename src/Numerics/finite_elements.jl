@@ -41,6 +41,8 @@ function ShapeFunctions(order)
 		    V[:, i] = [1, ξ, η]
         elseif n == 6
 	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2]
+        elseif n == 10
+	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2, ξ^3, ξ^2*η, ξ*η^2, η^3]
         else
             error("Unsupported shape function order.")
         end
@@ -54,8 +56,22 @@ function ShapeFunctions(order)
             ∂C[j, :, 1] += C[:, j+1]
         elseif order == 2
             ∂C[j, :, 1] += C[:, j+1]
+
             ∂C[j, :, j+1] += 2*C[:, 2j+2]
             ∂C[j, :, 4-j] += C[:, 5]
+        elseif order == 3
+            ∂C[j, :, 1]    +=   C[:, j+1]
+            ∂C[j, :, j+1]  += 2*C[:, 2j+2]
+            ∂C[j, :, 4-j]  +=   C[:, 5]
+            ∂C[j, :, 2j+2] += 3*C[:, 3j+4]
+            ∂C[j, :, 5]    += 2*C[:, j+7]
+            ∂C[j, :, 8-2j] +=   C[:, 10-j]
+            # ∂C[1, :, 4] += 3*C[:, 7]
+            # ∂C[1, :, 5] += 2*C[:, 8]
+            # ∂C[1, :, 6] += 1*C[:, 9]
+            # ∂C[2, :, 6] += 3*C[:, 10]
+            # ∂C[2, :, 5] += 2*C[:, 9]
+            # ∂C[2, :, 4] += 1*C[:, 8]
         end
     end
     return ShapeFunctions(order, n, C, ∂C)
@@ -78,6 +94,17 @@ function standard_element_nodes(order)
                 0.5  0.0
                 0.5  0.5
                 0.0  0.5]
+    elseif order == 3
+        return [0.0  0.0
+                1.0  0.0
+                0.0  1.0
+                1/3  0.0
+                2/3  0.0
+                2/3  1/3
+                1/3  2/3
+                0.0  2/3
+                0.0  1/3
+                1/3  1/3]
     else
         error("Unsupported shape function order.")
     end
@@ -146,11 +173,7 @@ end
 Shape function `i` evaluated at the point `ξ`.
 """
 function φ(sf::ShapeFunctions, i, ξ)
-    if sf.order == 1
-        return sf.C[i, :]'*[1, ξ[1], ξ[2]]
-    elseif sf.order == 2
-        return sf.C[i, :]'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
-    end
+    return eval_poly(sf.C[i, :], ξ)
 end
 
 """
@@ -159,10 +182,24 @@ end
 Derivative of shape function `i` in the `j` direction evaluated at the point `ξ`.
 """
 function ∂φ(sf::ShapeFunctions, i, j, ξ)
-    if sf.order == 1
-        return sf.∂C[j, i, :]'*[1, ξ[1], ξ[2]]
-    elseif sf.order == 2
-        return sf.∂C[j, i, :]'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
+    return eval_poly(sf.∂C[j, i, :], ξ)
+end
+
+"""
+    f = eval_poly(c, ξ)
+
+Evaluate polynomial defined by coefficients `c` at point `ξ`.
+"""
+function eval_poly(c, ξ)
+    n = size(c, 1)
+    if n == 3
+        return c'*[1, ξ[1], ξ[2]]
+    elseif n == 6
+        return c'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
+    elseif n == 10
+        return c'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2, ξ[1]^3, ξ[1]^2*ξ[2], ξ[1]*ξ[2]^2, ξ[2]^3]
+    else
+        error("Unsupported polynomial order.")
     end
 end
 
@@ -205,8 +242,8 @@ function Grid(file_name, order::IN) where IN <: Integer
     e = e[:, 1]
     t = convert(Matrix{IN}, t)
     e = convert(Vector{IN}, e)
-    if order == 2
-        p, t, e = add_midpoints(p, t)
+    if order > 1
+        p, t, e = add_nodes(p, t, e, order)
     end
     np = size(p, 1)
     nt = size(t, 1)
@@ -214,6 +251,123 @@ function Grid(file_name, order::IN) where IN <: Integer
     ne = size(e, 1)
     return Grid(order, p, np, t, nt, nn, e, ne)
 end
+
+"""
+	p, t, e = add_nodes(p, t, e, order)
+
+Add nodes to mesh for higher-order shape functions.
+"""
+function add_nodes(p, t, e, order)
+    edges, boundary_indices, emap = all_edges(t)
+
+    if order == 2
+        n = 6
+
+        np0 = size(p, 1)
+        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
+        pnew = [p; new_pts]
+
+        tnew = zeros(Int64, size(t, 1), n)
+        tnew[:, 1:3] = t
+        tnew[:, 4:6] = np0 .+ emap
+
+        enew = [e; np0 .+ boundary_indices]
+    elseif order == 3
+        n = 10
+
+        np0 = size(p, 1)
+        new_pts = reshape(p[edges[:, 1], :] + 1/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
+        pnew = [p; new_pts]
+        np1 = size(pnew, 1)
+        new_pts = reshape(p[edges[:, 1], :] + 2/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
+        pnew = [pnew; new_pts]
+        np2 = size(pnew, 1)
+        new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
+        pnew = [pnew; new_pts]
+
+        tnew = zeros(Int64, size(t, 1), n)
+        tnew[:, 1:3] = t
+        tnew[:, [4, 6, 8]] = np0 .+ emap
+        tnew[:, [5, 7, 9]] = np1 .+ emap
+        tnew[:, 10] = np2 .+ (1:size(t, 1))
+
+        enew = [e; np0 .+ boundary_indices]
+        enew = [enew; np1 .+ boundary_indices]
+    end
+
+    fig, ax, im = tplot(pnew, tnew)
+    # ax.plot(pnew[1:np0, 1], pnew[1:np0, 2], "o", ms=1)
+    # ax.plot(pnew[(np0+1):end, 1], pnew[(np0+1):end, 2], "o", ms=1)
+    # ax.plot(pnew[enew, 1], pnew[enew, 2], "wo", ms=0.5)
+    for k=[1, 6, 10]
+        ax.plot(pnew[tnew[k, :], 1], pnew[tnew[k, :], 2], "o-", ms=1)
+    end
+    ax.axis("equal")
+    savefig("images/debug.png")
+    plt.close()
+
+    return pnew, tnew, enew
+
+    # # Find all the edges at first
+    # edges, boundary_indices, emap = all_edges(t)
+
+    # # Add the midpoints of each edge
+    # midpts = 1/2 * reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
+    # p2 = [p; midpts]
+
+    # # Add the midpoints of each triangle
+    # t2 = zeros(size(t, 1), 6)
+    # t2[:, 1:3] = t
+    # t2[:, 4:6] = size(p, 1) .+ emap
+    # t2 = convert(Array{Int64,2}, t2)
+    
+    # # Add the midpoints that were on the boundary
+    # e2 = [unique(edges[boundary_indices, :][:]); size(p, 1) .+ boundary_indices]
+    # return p2, t2, e2
+end
+
+"""
+    edges, boundary_indices, emap = all_edges(t)
+
+Find all unique `edges` (ne x 2 array) in the triangulation `t`.
+Second output is indices to the boundary edges.
+Third output `emap` (nt x 3 array) is a mapping from local triangle edges
+to the global edge list, i.e., emap[it,k] is the global edge number
+for local edge k (1,2,3) in triangle it.
+"""
+function all_edges(t)
+    # find all edges
+    etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
+    etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
+    etag = sortslices(etag, dims=1)
+
+    # remove duplicates
+    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
+    keep = .![false;dup]
+    edges = etag[keep,1:2]
+
+    # compute local indices
+    emap = cumsum(keep)
+    invpermute!(emap, etag[:,3])
+    emap = reshape(emap,:,3)
+
+    # find boundary indices
+    dup = [dup;false]
+    dup = dup[keep]
+    bndix = findall(.!dup)
+    return edges, bndix, emap
+end
+
+"""
+    e = boundary_nodes(t)
+
+Find all boundary nodes in the triangulation `t`.
+"""
+function boundary_nodes(t)
+    edges, boundary_indices, _ = all_edges(t)
+    return unique(edges[boundary_indices,:][:])
+end
+
 
 struct Jacobians{V<:AbstractVector}
     J::V
@@ -302,65 +456,6 @@ function H1norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
         end
     end
     return sqrt(H1)
-end
-
-"""
-    edges, boundary_indices, emap = all_edges(t)
-
-Find all unique `edges` (ne x 2 array) in the triangulation `t`.
-Second output is indices to the boundary edges.
-Third output `emap` (nt x 3 array) is a mapping from local triangle edges
-to the global edge list, i.e., emap[it,k] is the global edge number
-for local edge k (1,2,3) in triangle it.
-"""
-function all_edges(t)
-    # find all edges
-    etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
-    etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
-    etag = sortslices(etag, dims=1)
-
-    # remove duplicates
-    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
-    keep = .![false;dup]
-    edges = etag[keep,1:2]
-
-    # compute local indices
-    emap = cumsum(keep)
-    invpermute!(emap, etag[:,3])
-    emap = reshape(emap,:,3)
-
-    # find boundary indices
-    dup = [dup;false]
-    dup = dup[keep]
-    bndix = findall(.!dup)
-    return edges, bndix, emap
-end
-
-"""
-	p2, t2, e2 = add_midpoints(p, t)
-
-Add midpoints to mesh for quadratic functions.
-`p2`: N x 2, node coords of original mesh plus new midpoints
-`t2`: T x 6, a local-to-global mapping for the T triangle elements
-`e2`: E x 1, indices of boundary nodes for original mesh plus new midpoints
-"""
-function add_midpoints(p, t)
-	# Find all the edges at first
-    edges, boundary_indices, emap = all_edges(t)
-
-	# Add the midpoints of each edge
-    midpts = 1/2 * reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
-    p2 = [p; midpts]
-
-	# Add the midpoints of each triangle
-    t2 = zeros(size(t, 1), 6)
-    t2[:, 1:3] = t
-    t2[:, 4:6] = size(p, 1) .+ emap
-    t2 = convert(Array{Int64,2}, t2)
-    
-    # Add the midpoints that were on the boundary
-    e2 = [unique(edges[boundary_indices, :][:]); size(p, 1) .+ boundary_indices]
-	return p2, t2, e2
 end
 
 """
