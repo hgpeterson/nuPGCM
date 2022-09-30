@@ -11,11 +11,11 @@ plt.close("all")
 pygui(false)
 
 """
-    u = solve_poisson(V, f, u₀)
+    u = solve_laplace(V, f, u₀)
 
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
-function solve_poisson(g, s, J, f, u₀)
+function solve_laplace(g, s, J, f, u₀)
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
@@ -51,9 +51,9 @@ function solve_poisson(g, s, J, f, u₀)
 end
 
 """
-    h, err = poisson_res(nref, order)
+    h, err = laplace_res(nref, order)
 """
-function poisson_res(nref, order; plot=false)
+function laplace_res(nref, order; plot=false)
     # geometry type
     # geo = "square"
     geo = "circle"
@@ -81,8 +81,8 @@ function poisson_res(nref, order; plot=false)
     # pick f such that -∇u = f
     f = @. exp(x^2)*(2 + 4*x^2)*y
 
-    # solve poisson problem
-    u = solve_poisson(g, s, J, f, ua[g.e])
+    # solve laplace problem
+    u = solve_laplace(g, s, J, f, ua[g.e])
 
     if plot
         quickplot(g, u, L"u", "images/u.png")
@@ -110,17 +110,17 @@ function quickplot(g, u, clabel, ofile)
 end
 
 """
-    poisson_convergence(nrefs)
+    laplace_convergence(nrefs)
 """
-function poisson_convergence(nrefs)
+function laplace_convergence(nrefs)
     h_l = zeros(size(nrefs, 1))
     h_q = zeros(size(nrefs, 1))
     err_l = zeros(size(nrefs, 1))
     err_q = zeros(size(nrefs, 1))
     for i in eachindex(nrefs)
         println(nrefs[i])
-        h_l[i], err_l[i] = poisson_res(nrefs[i], 1)
-        h_q[i], err_q[i] = poisson_res(nrefs[i], 2)
+        h_l[i], err_l[i] = laplace_res(nrefs[i], 1)
+        h_q[i], err_q[i] = laplace_res(nrefs[i], 2)
     end
 
     fig, ax = subplots(1)
@@ -133,12 +133,12 @@ function poisson_convergence(nrefs)
     ax.legend(ncol=2)
     ax.set_xlim(0.5*h_q[end], 2*h_l[1])
     ax.set_ylim(0.5*err_q[end], 2*err_l[1])
-    savefig("images/poisson.png")
-    println("images/poisson.png")
+    savefig("images/laplace.png")
+    println("images/laplace.png")
     plt.close()
 end
 
-# poisson_res(3, 2; plot=true)
-poisson_convergence(0:5)
+# laplace_res(3, 2; plot=true)
+laplace_convergence(0:5)
 
 println("Done.")
