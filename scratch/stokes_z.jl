@@ -22,13 +22,13 @@ Boundary conditions are
         ∂z(uˣ) = 0 at z = 0, 
             uᶻ = 0 at z = 0,
 Weak form:
-    ∫ [ ∂z(uˣ)∂z(v₁) - p∂x(v₁) 
-      - p∂z(v₂)
-      + q ∂x(uˣ) + q∂z(uᶻ)
+    ∫ [ ∂z(uˣ)∂z(vˣ) - ∂x(p)vˣ 
+      + ∂z(p)vᶻ
+      + q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
-    = ∫ bv₂ dx dz,
+    = ∫ buᶻ dx dz,
 for all 
-    v₁ ∈ P₂ and q, v₂ ∈ P₁,
+    vˣ ∈ P₂ and q, vᶻ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
 function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1) 
@@ -36,7 +36,6 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     uˣmap = 1:g2.np
     uᶻmap = uˣmap[end] .+ (1:g1.np)
     pmap  = uᶻmap[end] .+ (1:g1.np)
-    # pmap  = uᶻmap[end] .+ (1:g2.np)
     N = pmap[end]
 
     # stamp system
@@ -47,10 +46,8 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
         Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
 
         # p*∂x(v) and p*∂z(v)
-        Cxᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
-        # Cxᵏ = abs(J.J[k])*(s22.φφξ*J.ξx[k] + s22.φφη*J.ηx[k])
-        # Czᵏ = abs(J.J[k])*(s12.φφξ*J.ξy[k] + s12.φφη*J.ηy[k])
+        Cxᵏ = abs(J.J[k])*(s12.φξφ*J.ξx[k] + s12.φηφ*J.ηx[k])
+        Czᵏ = abs(J.J[k])*(s11.φξφ*J.ξy[k] + s11.φηφ*J.ηy[k])
 
         # fv
         rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
@@ -58,34 +55,26 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
         # s2*s2
         for i=1:g2.nn
             for j=1:g2.nn
-                # ∂z(u)∂z(v)
+                # x-mom: ∂z(vˣ)∂z(uˣ)
                 push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], Kᵏ[i, j]))
-                # # p*∂x(v)
-                # push!(A, (uˣmap[g2.t[k, i]], pmap[g2.t[k, j]], -Cxᵏ[i, j]))
-                # # q*∂x(u)
-                # push!(A, (pmap[g2.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
             end
         end
         # s2*s1
         for i=1:g2.nn
             for j=1:g1.nn
-                # p*∂x(v)
-                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cxᵏ[i, j]))
-                # q*∂x(u)
+                # x-mom: ∂x(p)*vˣ
+                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], Cxᵏ[i, j]))
+                # cont: ∂x(uˣ)*q
                 push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
-                # # p*∂z(v)
-                # push!(A, (uᶻmap[g1.t[k, j]], pmap[g2.t[k, i]], -Czᵏ[i, j]))
-                # # q*∂z(u)
-                # push!(A, (pmap[g2.t[k, i]], uᶻmap[g1.t[k, j]], Czᵏ[i, j]))
             end
         end
         # s1*s1
         for i=1:g1.nn
             for j=1:g1.nn
-                # p*∂z(v)
-                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
-                # q*∂z(u)
-                push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Czᵏ[i, j]))
+                # z-mom: vᶻ*∂z(p)
+                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], Czᵏ[i, j]))
+                # cont: q*∂z(uᶻ)
+                push!(A, (pmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], Czᵏ[i, j]))
             end
             r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
         end
@@ -106,15 +95,18 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     # ∂z(uˣ) = 0 at z = 0 → natural
 
     # uᶻ = 0 at z = 0
-    A[uᶻmap[etop1], :] .= 0
-    A[diagind(A)[uᶻmap[etop1]]] .= 1
-    r[uᶻmap[etop1]] .= 0
+    A[pmap[etop1], :] .= 0
+    for e in etop1
+        A[pmap[e], uᶻmap[e]] = 1
+    end
+    r[pmap[etop1]] .= 0
 
     # set p to zero somewhere
-    A[pmap[1], :] .= 0
-    A[pmap[1], pmap[1]] = 1
-    # A[pmap[1], pmap[:]] .= 1
-    r[pmap[1]] = 0
+    i = pmap[etop1[10]]
+    A[i, :] .= 0
+    A[i, i] = 1
+    # A[i, pmap[:]] .= 1
+    r[i] = 0
 
     # println(rank(A))
     # println(N)
@@ -129,22 +121,23 @@ end
 """
     h, err = stokes_z_res(nref)
 """
-function stokes_z_res(nref; plot=false)
+function stokes_z_res(nref, order; plot=false)
     # geometry type
     geo = "jc"
 
     # get shape functions
-    s2 = ShapeFunctions(2)
-    s1 = ShapeFunctions(1)
+    s1 = ShapeFunctions(order)
+    s2 = ShapeFunctions(order + 1)
 
     # get shape function integrals
-    s22 = ShapeFunctionIntegrals(s2, s2)
-    s12 = ShapeFunctionIntegrals(s1, s2)
     s11 = ShapeFunctionIntegrals(s1, s1)
+    s12 = ShapeFunctionIntegrals(s1, s2)
+    s22 = ShapeFunctionIntegrals(s2, s2)
 
     # get grids
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    g2 = Grid("../meshes/$geo/mesh$nref.h5", 2)
+    g0 = Grid("../meshes/$geo/mesh$nref.h5", 1)
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
 
     # top and bottom edges
     etop1 = g1.e[abs.(g1.p[g1.e, 2]) .< 1e-4]
@@ -171,7 +164,7 @@ function stokes_z_res(nref; plot=false)
     b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
 
     # get Jacobians
-    J = Jacobians(g1)
+    J = Jacobians(g0)
 
     # solve stokes_z problem
     uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
@@ -204,24 +197,30 @@ function quickplot(gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
-stokes_z_res(3; plot=true)
+stokes_z_res(3, 1; plot=true)
+# stokes_z_res(3, 2; plot=true)
 
-# s1 = ShapeFunctions(1)
-# fig, ax = subplots(1, figsize=(2, 3.2))
-# ax.set_xlabel(L"p(x = 0)")
-# ax.set_ylabel(L"z")
+# order = 1
+# s1 = ShapeFunctions(order)
+# fig, ax = subplots(1, 2, figsize=(4, 3.2), sharey=true)
+# ax[1].set_xlabel(L"p(x = 0)")
+# ax[2].set_xlabel(L"u^z(x = 0)")
+# ax[1].set_ylabel(L"z")
 # z0 = -0.4:0.005:0.0
-# for i=1:5
+# for i=1:4
 #     println(i)
-#     g1 = Grid("../meshes/jc/mesh$i.h5", 1)
-#     uˣ, uᶻ, p = stokes_z_res(i)
+#     g1 = Grid("../meshes/jc/mesh$i.h5", order)
+#     uˣ, uᶻ, p = stokes_z_res(i, order)
 #     p0 = zeros(size(z0, 1))
+#     uᶻ0 = zeros(size(z0, 1))
 #     for i in eachindex(z0)
 #         p0[i] = fem_evaluate(p, [0, z0[i]], g1, s1)
+#         uᶻ0[i] = fem_evaluate(uᶻ, [0, z0[i]], g1, s1)
 #     end
-#     ax.plot(p0, z0, label="Res $i")
+#     ax[1].plot(p0, z0, label="Res $i")
+#     ax[2].plot(uᶻ0, z0)
 # end
-# ax.legend()
-# savefig("p0.png")
-# println("p0.png")
+# ax[1].legend()
+# savefig("images/profiles.png")
+# println("images/profiles.png")
 # plt.close()
