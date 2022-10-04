@@ -117,16 +117,17 @@ function laplace_convergence(nrefs)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u^a||_{L^2}$")
     for o=1:3
+        println("Order", o)
         h = zeros(size(nrefs, 1))
         err = zeros(size(nrefs, 1))
         for i in eachindex(nrefs)
-            println(nrefs[i])
+            println("\tRefinement", nrefs[i])
             h[i], err[i] = laplace_res(nrefs[i], o)
         end
         ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
         ax.loglog(h, err, "o", label="Order $o")
     end
-    ax.legend(ncol=3)
+    ax.legend(ncol=3, loc=(0.0, 1.05))
     # ax.set_xlim(0.5*h_q[end], 2*h_l[1])
     # ax.set_ylim(0.5*err_q[end], 2*err_l[1])
     savefig("images/laplace.png")
@@ -134,5 +135,5 @@ function laplace_convergence(nrefs)
     plt.close()
 end
 
-laplace_res(0, 3; plot=true)
-# laplace_convergence(0:3)
+# laplace_res(0, 3; plot=true)
+laplace_convergence(0:3)
