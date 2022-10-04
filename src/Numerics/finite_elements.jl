@@ -258,72 +258,80 @@ end
 Add nodes to mesh for higher-order shape functions.
 """
 function add_nodes(p, t, e, order)
+    # get edges
     edges, boundary_indices, emap = all_edges(t)
 
     if order == 2
+        # number of nodes per triangle
         n = 6
 
+        # add midpoints
         np0 = size(p, 1)
         new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
         pnew = [p; new_pts]
 
+        # easy to map to triangle data structure
         tnew = zeros(Int64, size(t, 1), n)
         tnew[:, 1:3] = t
         tnew[:, 4:6] = np0 .+ emap
 
+        # add points that were on the boundary to `e`
         enew = [e; np0 .+ boundary_indices]
     elseif order == 3
+        # number of nodes per triangle
         n = 10
 
+        # first add 1/3 points
         np0 = size(p, 1)
         new_pts = reshape(p[edges[:, 1], :] + 1/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
         pnew = [p; new_pts]
         np1 = size(pnew, 1)
+        # then add 2/3 points
         new_pts = reshape(p[edges[:, 1], :] + 2/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
         pnew = [pnew; new_pts]
         np2 = size(pnew, 1)
+        # finally add center points
         new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
         pnew = [pnew; new_pts]
 
+        # not as easy to determine the indices for each triangle... this works but it is slow
         tnew = zeros(Int64, size(t, 1), n)
-        tnew[:, 1:3] = t
-        tnew[:, [4, 6, 8]] = np0 .+ emap
-        tnew[:, [5, 7, 9]] = np1 .+ emap
-        tnew[:, 10] = np2 .+ (1:size(t, 1))
+        ps = standard_element_nodes(order)
+        for k in axes(t, 1)
+            for i in axes(ps, 1)
+                p₀ = transform_from_std_tri(ps[i, :], pnew[t[k, :], :])
+                idx = get_idx(pnew, p₀)
+                tnew[k, i] = idx
+            end
+        end
 
+        # add points that were on boundary to `e`
         enew = [e; np0 .+ boundary_indices]
         enew = [enew; np1 .+ boundary_indices]
     end
 
-    fig, ax, im = tplot(pnew, tnew)
-    # ax.plot(pnew[1:np0, 1], pnew[1:np0, 2], "o", ms=1)
-    # ax.plot(pnew[(np0+1):end, 1], pnew[(np0+1):end, 2], "o", ms=1)
-    # ax.plot(pnew[enew, 1], pnew[enew, 2], "wo", ms=0.5)
-    for k=[1, 6, 10]
-        ax.plot(pnew[tnew[k, :], 1], pnew[tnew[k, :], 2], "o-", ms=1)
-    end
-    ax.axis("equal")
-    savefig("images/debug.png")
-    plt.close()
+    # fig, ax, im = tplot(pnew, tnew)
+    # # ax.plot(pnew[1:np0, 1], pnew[1:np0, 2], "o", ms=1)
+    # # ax.plot(pnew[(np0+1):end, 1], pnew[(np0+1):end, 2], "o", ms=1)
+    # # ax.plot(pnew[enew, 1], pnew[enew, 2], "wo", ms=0.5)
+    # for k=[1, 6, 10]
+    #     ax.plot(pnew[tnew[k, :], 1], pnew[tnew[k, :], 2], "o-", ms=1)
+    # end
+    # ax.axis("equal")
+    # savefig("images/debug.png")
+    # plt.close()
 
     return pnew, tnew, enew
+end
 
-    # # Find all the edges at first
-    # edges, boundary_indices, emap = all_edges(t)
+"""
+    i = get_idx(p, p₀)
 
-    # # Add the midpoints of each edge
-    # midpts = 1/2 * reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
-    # p2 = [p; midpts]
-
-    # # Add the midpoints of each triangle
-    # t2 = zeros(size(t, 1), 6)
-    # t2[:, 1:3] = t
-    # t2[:, 4:6] = size(p, 1) .+ emap
-    # t2 = convert(Array{Int64,2}, t2)
-    
-    # # Add the midpoints that were on the boundary
-    # e2 = [unique(edges[boundary_indices, :][:]); size(p, 1) .+ boundary_indices]
-    # return p2, t2, e2
+Find the node index of point `p₀` in set of points `p`.
+"""
+function get_idx(p, p₀)
+    Δp = @. (p[:, 1] - p₀[1])^2 + (p[:, 2] - p₀[2])^2
+    return argmin(Δp)
 end
 
 """
