@@ -22,7 +22,7 @@ Boundary conditions are
         ∂z(uˣ) = 0 at z = 0, 
             uᶻ = 0 at z = 0,
 Weak form:
-    ∫ [ ∂z(uˣ)∂z(vˣ) - ∂x(p)vˣ 
+    ∫ [ ∂z(uˣ)∂z(vˣ) + ∂x(p)vˣ 
       + ∂z(p)vᶻ
       + q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
@@ -83,7 +83,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # uˣ = uᶻ = 0 at z = -H (replace x-mom eqtns at bottom bdy)
+    # uˣ = uᶻ = 0 at z = -H (replace mom eqtns at bottom bdy)
     A[uˣmap[ebot2], :] .= 0
     A[diagind(A)[uˣmap[ebot2]]] .= 1
     r[uˣmap[ebot2]] .= 0
@@ -105,15 +105,15 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     n = convert(Int64, round(size(etop1, 1)/2)) # middle of top bdy
     i = pmap[etop1[n]]
     A[i, :] .= 0
-    # A[i, i] = 1
-    A[i, pmap[:]] .= 1
+    A[i, i] = 1
+    # A[i, pmap[:]] .= 1
     # for k=1:g1.nt
     #     A[i, pmap[g1.t[k, :]]] += sum(s11.φφ, dims=1)'
     # end
     r[i] = 0
 
-    println(rank(A))
-    println(N)
+    # println(rank(A))
+    # println(N)
 
     # solve
     sol = A\r
@@ -201,30 +201,6 @@ function quickplot(gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
-stokes_z_res(3, 1; plot=true)
-# stokes_z_res(3, 2; plot=true)
+stokes_z_res(4, 1; plot=true)
 
-# order = 1
-# s1 = ShapeFunctions(order)
-# fig, ax = subplots(1, 2, figsize=(4, 3.2), sharey=true)
-# ax[1].set_xlabel(L"p(x = 0)")
-# ax[2].set_xlabel(L"u^z(x = 0)")
-# ax[1].set_ylabel(L"z")
-# z0 = -0.4:0.005:0.0
-# for i=1:4
-#     println(i)
-#     g1 = Grid("../meshes/jc/mesh$i.h5", order)
-#     uˣ, uᶻ, p = stokes_z_res(i, order)
-#     p0 = zeros(size(z0, 1))
-#     uᶻ0 = zeros(size(z0, 1))
-#     for i in eachindex(z0)
-#         p0[i] = fem_evaluate(p, [0, z0[i]], g1, s1)
-#         uᶻ0[i] = fem_evaluate(uᶻ, [0, z0[i]], g1, s1)
-#     end
-#     ax[1].plot(p0, z0, label="Res $i")
-#     ax[2].plot(uᶻ0, z0)
-# end
-# ax[1].legend()
-# savefig("images/profiles.png")
-# println("images/profiles.png")
-# plt.close()
+println("Done.")
