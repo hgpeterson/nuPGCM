@@ -47,7 +47,6 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
     for k=1:g1.nt
         # ∂z(u)∂z(v) terms
         Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
-        # K11ᵏ = abs(J.J[k])*(s11.φξφξ*J.ξy[k]^2 + s11.φξφη*J.ξy[k]*J.ηy[k] + s11.φηφξ*J.ηy[k]*J.ξy[k] + s11.φηφη*J.ηy[k]^2)
 
         # uv terms
         Mᵏ = abs(J.J[k])*s22.φφ
@@ -57,7 +56,7 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
         Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
 
         # b*v term
-        rᵏ = abs(J.J[k])*s12.φφ'*b[g2.t[k, :]]
+        rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
 
         # s2*s2
         for i=1:g2.nn
@@ -82,8 +81,6 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
         # s1*s1
         for i=1:g1.nn
             for j=1:g1.nn
-                # # ∂z(u)∂z(v) terms
-                # push!(A, (uᶻmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], ε²*K11ᵏ[i, j]))
                 # p*dz(u)
                 push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
                 # q*dz(v)
@@ -132,18 +129,18 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
 end
 
 """
-    h, err = pg_res(nref)
+    h, err = pg_res(nref, order)
 """
-function pg_res(nref; plot=false)
+function pg_res(nref, order; plot=false)
     # Ekman number
-    ε² = 0.0001
+    ε² = 1.0
 
     # geometry type
     geo = "jc"
 
     # get shape functions
-    sf2 = ShapeFunctions(2)
-    sf1 = ShapeFunctions(1)
+    sf2 = ShapeFunctions(order + 1)
+    sf1 = ShapeFunctions(order)
 
     # get shape function integrals
     s22 = ShapeFunctionIntegrals(sf2, sf2)
@@ -151,8 +148,9 @@ function pg_res(nref; plot=false)
     s11 = ShapeFunctionIntegrals(sf1, sf1)
 
     # get grids
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    g2 = Grid("../meshes/$geo/mesh$nref.h5", 2)
+    g0 = Grid("../meshes/$geo/mesh$nref.h5", 1)
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
 
     # mesh resolution 
     h = 1/sqrt(g2.np)
@@ -174,13 +172,13 @@ function pg_res(nref; plot=false)
     push!(ebot2, eright2[1])
 
     # buoyancy field
-    x = g2.p[:, 1] 
-    z = g2.p[:, 2] 
-    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    x = g1.p[:, 1] 
+    z = g1.p[:, 2] 
+    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
     # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
-    H = @. sqrt(2 - x^2) - 1
-    b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
-    b[ebot2] .= H[ebot2]
+    # H = @. sqrt(2 - x^2) - 1
+    # b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
+    # b[ebot2] .= H[ebot2]
 
     # fig, ax, im = tplot(g2.p, g2.t)
     # ax.plot(g2.p[ebot, 1], g2.p[ebot,2], "o", ms=1)
@@ -210,11 +208,11 @@ function pg_res(nref; plot=false)
     uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
 
     if plot
-        quickplot(g2, b, g2, uˣ, L"u^x", "images/ux.png")
-        quickplot(g2, b, g2, uʸ, L"u^y", "images/uy.png")
-        quickplot(g2, b, g1, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g2, b, g1, p, L"p", "images/p.png")
-        quickplot(g2, b, g2, b, L"b", "images/b.png")
+        quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
+        quickplot(g1, b, g2, uʸ, L"u^y", "images/uy.png")
+        quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g1, b, g1, p, L"p", "images/p.png")
+        quickplot(g1, b, g1, b, L"b", "images/b.png")
     end
 
     # error
@@ -240,4 +238,4 @@ function quickplot(gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
-pg_res(3; plot=true)
+pg_res(3, 1; plot=true)
