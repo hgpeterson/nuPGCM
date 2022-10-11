@@ -16,10 +16,10 @@ Stokes_z problem:
                ∂z(p) = fᶻ,
      ∂x(uˣ) + ∂z(uᶻ) = 0, 
 with extra condition
-    ∫ p dx dz = 0
+    p = p0 at index i0
 and Dirichlet boundary conditions on u. 
 Weak form:
-    ∫ [ ∂z(uˣ)∂z(vˣ) - ∂x(p)vˣ 
+    ∫ [ ∂z(uˣ)∂z(vˣ) + ∂x(p)vˣ 
       + ∂z(p)vᶻ
       + q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
@@ -28,7 +28,7 @@ for all
     vˣ ∈ P₂ and q, vᶻ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_z(g1, g2, s22, s12, s11, J, fx, fz, ux0, uz0) 
+function solve_stokes_z(g1, g2, s22, s12, s11, J, fx, fz, ux0, uz0, p0, i0) 
     # indices
     uˣmap = 1:g2.np
     uᶻmap = uˣmap[end] .+ (1:g1.np)
@@ -92,12 +92,10 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, fx, fz, ux0, uz0)
     r[uᶻmap[g1.e]] .= uz0
 
     # p constraint (replace one of the uᶻ = 0 conditions)
-    println(g1.p[g1.e[20], :])
-    i = pmap[g1.e[20]]
+    i = pmap[g1.e[10]]
     A[i, :] .= 0
-    A[i, i] = 1
-    # A[i, pmap[:]] .= 1
-    r[i] = 0
+    A[i, pmap[i0]] = 1
+    r[i] = p0
 
     # solve
     sol = A\r
@@ -140,6 +138,8 @@ function stokes_z_res(nref, order; plot=false)
     pa = @. exp(x1)*z1^3
     fx = @. exp(x2)*z2^3 + π^3/4*cos(π*x2/2)*sin(π*z2/2)
     fz = @. 3*exp(x1)*z1^2
+    i0 = 1
+    p0 = pa[i0]
 
     # dirichlet
     ux0 = uxa[g2.e]
@@ -149,7 +149,7 @@ function stokes_z_res(nref, order; plot=false)
     J = Jacobians(g0)
 
     # solve stokes_z problem
-    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, fx, fz, ux0, uz0)
+    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, fx, fz, ux0, uz0, p0, i0)
 
     if plot
         quickplot(g2, uˣ, L"u^x", "images/ux.png")
@@ -184,3 +184,5 @@ function quickplot(gu, u, clabel, ofile)
 end
 
 h, err = stokes_z_res(3, 1; plot=true)
+
+println("Done.")
