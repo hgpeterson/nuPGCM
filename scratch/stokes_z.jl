@@ -26,7 +26,7 @@ Weak form:
       + ∂z(p)vᶻ
       + q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
-    = ∫ buᶻ dx dz,
+    = ∫ bvᶻ dx dz,
 for all 
     vˣ ∈ P₂ and q, vᶻ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
@@ -83,7 +83,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # uˣ = uᶻ = 0 at z = -H
+    # uˣ = uᶻ = 0 at z = -H (replace x-mom eqtns at bottom bdy)
     A[uˣmap[ebot2], :] .= 0
     A[diagind(A)[uˣmap[ebot2]]] .= 1
     r[uˣmap[ebot2]] .= 0
@@ -94,22 +94,26 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
 
     # ∂z(uˣ) = 0 at z = 0 → natural
 
-    # uᶻ = 0 at z = 0
+    # uᶻ = 0 at z = 0 (replace continuity at top bdy)
     A[pmap[etop1], :] .= 0
     for e in etop1
         A[pmap[e], uᶻmap[e]] = 1
     end
     r[pmap[etop1]] .= 0
 
-    # set p to zero somewhere
-    i = pmap[etop1[10]]
+    # p constraint (replace one of the uᶻ = 0 conditions at top bdy)
+    n = convert(Int64, round(size(etop1, 1)/2)) # middle of top bdy
+    i = pmap[etop1[n]]
     A[i, :] .= 0
-    A[i, i] = 1
-    # A[i, pmap[:]] .= 1
+    # A[i, i] = 1
+    A[i, pmap[:]] .= 1
+    # for k=1:g1.nt
+    #     A[i, pmap[g1.t[k, :]]] += sum(s11.φφ, dims=1)'
+    # end
     r[i] = 0
 
-    # println(rank(A))
-    # println(N)
+    println(rank(A))
+    println(N)
 
     # solve
     sol = A\r
