@@ -23,12 +23,12 @@ Boundary conditions are
     ∂z(uˣ) = ∂z(uʸ) = 0 at z = 0, 
                  uᶻ = 0 at z = 0,
 Weak form:
-    ∫ [ε²∂z(uˣ)∂z(v₁) - uʸv₁ - p∂x(v₁) +
+    ∫ [ε²∂z(uˣ)∂z(v₁) - uʸv₁ + ∂x(p)v₁ +
        ε²∂z(uʸ)∂z(v₂) + uˣv₂ +
-       -p∂z(v₃) +
+       ∂z(p)v₃ +
         q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
-    = ∫ b v₃ dx dz,
+    = ∫ bv₃ dx dz,
 for all 
     v₁, v₂ ∈ P₂ and q, v₃ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
@@ -52,8 +52,8 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
         Mᵏ = abs(J.J[k])*s22.φφ
 
         # p*∂x(v) and p*∂z(v) terms (also q*∂x(u) and q*∂z(u))
-        Cxᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
+        Cxᵏ = abs(J.J[k])*(s12.φξφ*J.ξx[k] + s12.φηφ*J.ηx[k])
+        Czᵏ = abs(J.J[k])*(s11.φξφ*J.ξy[k] + s11.φηφ*J.ηy[k])
 
         # b*v term
         rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
@@ -72,18 +72,18 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
         # s1*s2
         for i=1:g2.nn
             for j=1:g1.nn
-                # p*∂x(v) 
-                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cxᵏ[i, j]))
-                # q*∂x(u) 
+                # ∂x(p)v₁ 
+                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], Cxᵏ[i, j]))
+                # ∂x(uˣ)q
                 push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
             end
         end
         # s1*s1
         for i=1:g1.nn
             for j=1:g1.nn
-                # p*dz(u)
-                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
-                # q*dz(v)
+                # ∂z(p)v₃
+                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], Czᵏ[i, j]))
+                # ∂z(uᶻ)q
                 push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Czᵏ[i, j]))
             end
             r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
@@ -108,15 +108,19 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
 
     # ∂z(uˣ) = ∂(uʸ) = 0 at z = 0 → natural
 
-    # uᶻ = 0 at z = 0
-    A[uᶻmap[etop1], :] .= 0
-    A[diagind(A)[uᶻmap[etop1]]] .= 1
-    r[uᶻmap[etop1]] .= 0
+    # uᶻ = 0 at z = 0 (replace continuity at top bdy)
+    A[pmap[etop1], :] .= 0
+    for e in etop1
+        A[pmap[e], uᶻmap[e]] = 1
+    end
+    r[pmap[etop1]] .= 0
 
-    # set p to zero somewhere
-    A[pmap[1], :] .= 0
-    A[pmap[1], pmap[1]] = 1
-    r[pmap[1]] = 0
+    # p constraint (replace one of the uᶻ = 0 conditions at top bdy)
+    n = convert(Int64, round(size(etop1, 1)/2)) # middle of top bdy
+    i = pmap[etop1[n]]
+    A[i, :] .= 0
+    A[i, i] = 1
+    r[i] = 0
 
     # println(N)
     # println(rank(A))
@@ -174,11 +178,11 @@ function pg_res(nref, order; plot=false)
     # buoyancy field
     x = g1.p[:, 1] 
     z = g1.p[:, 2] 
-    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
     # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
-    # H = @. sqrt(2 - x^2) - 1
-    # b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
-    # b[ebot2] .= H[ebot2]
+    H = @. sqrt(2 - x^2) - 1
+    b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
+    b[ebot1] .= H[ebot1]
 
     # fig, ax, im = tplot(g2.p, g2.t)
     # ax.plot(g2.p[ebot, 1], g2.p[ebot,2], "o", ms=1)
