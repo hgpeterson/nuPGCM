@@ -9,6 +9,34 @@ plt.close("all")
 pygui(false)
 
 """
+    y₀ = lerp(x, y, x₀)
+
+Linear interpolation through points (xᵢ, yᵢ) evaluated at x₀.
+"""
+function lerp(x, y, x₀)
+    # deal with edge cases
+    if x₀ < x[1] || x₀ > x[end]
+        error("Interpolation point x₀ = $x₀ out of bounds for points x = $x.")
+    elseif x₀ == x[1]
+        return y[1]
+    elseif x₀ == x[end]
+        return y[end]
+    end
+
+    # find index x₀ would be in in x
+    i = findall(sortperm([x₀; x]) .== 1)[1]
+
+    # x₁ is left of x₀ and x₂ is right
+    x₁ = x[i-1]
+    x₂ = x[i]
+    y₁ = y[i-1]
+    y₂ = y[i]
+
+    # linear interpolation
+    return y₁*(x₂ - x₀)/(x₂ - x₁) + y₂*(x₁ - x₀)/(x₁ - x₂)
+end
+
+"""
     uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, sfi_uu, sfi_pu, J, b, ε², ebot, etop)
 
 PG Inversion:
@@ -48,6 +76,10 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
         # ∂z(u)∂z(v) terms
         Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
 
+        ###
+        K11ᵏ = abs(J.J[k])*(s11.φξφξ*J.ξy[k]^2 + s11.φξφη*J.ξy[k]*J.ηy[k] + s11.φηφξ*J.ηy[k]*J.ξy[k] + s11.φηφη*J.ηy[k]^2)
+        ###
+
         # uv terms
         Mᵏ = abs(J.J[k])*s22.φφ
 
@@ -85,6 +117,10 @@ function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
                 push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], Czᵏ[i, j]))
                 # ∂z(uᶻ)q
                 push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Czᵏ[i, j]))
+
+                ###
+                push!(A, (uᶻmap[g2.t[k, i]], uᶻmap[g2.t[k, j]], ε²*K11ᵏ[i, j]))
+                ###
             end
             r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
         end
@@ -137,7 +173,7 @@ end
 """
 function pg_res(nref, order; plot=false)
     # Ekman number
-    ε² = 1.0
+    ε² = 1e-3
 
     # geometry type
     geo = "jc"
@@ -166,23 +202,23 @@ function pg_res(nref, order; plot=false)
     eright1 = g1.e[abs.(g1.p[g1.e, 1] .- 1) .<= 1e-4]
     deleteat!(etop1, findall(x->x==eleft1[1], etop1))
     deleteat!(etop1, findall(x->x==eright1[1], etop1))
-    push!(ebot1, eleft1[1])
-    push!(ebot1, eright1[1])
+    ebot1 = [eleft1[1]; ebot1; eright1[1]]
 
     ebot2 = g2.e[abs.(g2.p[g2.e, 2]) .>= 1e-4]
     eleft2 = g2.e[abs.(g2.p[g2.e, 1] .+ 1) .<= 1e-4]
     eright2 = g2.e[abs.(g2.p[g2.e, 1] .- 1) .<= 1e-4]
-    push!(ebot2, eleft2[1])
-    push!(ebot2, eright2[1])
+    ebot2 = [eleft2[1]; ebot2; eright2[1]]
 
     # buoyancy field
     x = g1.p[:, 1] 
     z = g1.p[:, 2] 
     # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
     # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
-    H = @. sqrt(2 - x^2) - 1
-    b = @. z + 0.1*H*exp(-(z + H)/(0.1*H))
-    b[ebot1] .= H[ebot1]
+    H_func(x) = lerp(g1.p[ebot1, 1], -g1.p[ebot1, 2], x)
+    H = H_func.(x)
+    δ = 0.2
+    b = @. z + δ*H*exp(-(z/H + 1)/δ)
+    b[H .== 0] .= 0
 
     # fig, ax, im = tplot(g2.p, g2.t)
     # ax.plot(g2.p[ebot, 1], g2.p[ebot,2], "o", ms=1)
@@ -212,11 +248,13 @@ function pg_res(nref, order; plot=false)
     uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
 
     if plot
-        quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
-        quickplot(g1, b, g2, uʸ, L"u^y", "images/uy.png")
-        quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g1, b, g1, p, L"p", "images/p.png")
-        quickplot(g1, b, g1, b, L"b", "images/b.png")
+        x = g1.p[ebot1, 1]
+        H = H_func.(x)
+        quickplot(x, H, g1, b, g2, uˣ, L"u^x", "images/ux.png")
+        quickplot(x, H, g1, b, g2, uʸ, L"u^y", "images/uy.png")
+        quickplot(x, H, g1, b, g1, uᶻ, L"u^z", "images/uz.png")
+        quickplot(x, H, g1, b, g1, p, L"p", "images/p.png")
+        quickplot(x, H, g1, b, g1, b, L"b", "images/b.png")
     end
 
     # error
@@ -227,14 +265,14 @@ end
 """
     quickplot(g, u, clabel, ofile)
 """
-function quickplot(gb, b, gu, u, clabel, ofile)
+function quickplot(x, H, gb, b, gu, u, clabel, ofile)
     fig, ax, im = tplot(gu.p, gu.t, u)
     cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
     cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    # levels = -0.35:0.05:-0.05
-    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b, #levels=levels,
+    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b,
                   linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
-    ax.axis("equal")
+    ax.fill_between(x, -maximum(H), -H, color="k", alpha=0.3, lw=0.0)
+    # ax.axis("equal")
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"z")
     savefig(ofile)
@@ -242,4 +280,4 @@ function quickplot(gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
-pg_res(3, 1; plot=true)
+pg_res(5, 1; plot=true)
