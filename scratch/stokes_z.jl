@@ -33,7 +33,7 @@ for all
     vˣ ∈ P₂ and q, vᶻ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1) 
+function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2) 
     # indices
     uˣmap = 1:g2.np
     uᶻmap = uˣmap[end] .+ (1:g1.np)
@@ -50,6 +50,9 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
         # p*∂x(v) and p*∂z(v)
         Cxᵏ = abs(J.J[k])*(s12.φξφ*J.ξx[k] + s12.φηφ*J.ηx[k])
         Czᵏ = abs(J.J[k])*(s11.φξφ*J.ξy[k] + s11.φηφ*J.ηy[k])
+
+        # δ*q*p
+        Mᵏ = abs(J.J[k])*s11.φφ
 
         # fv
         rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
@@ -77,6 +80,8 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
                 push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], Czᵏ[i, j]))
                 # cont: q*∂z(uᶻ)
                 push!(A, (pmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], Czᵏ[i, j]))
+                # # pressure condition: δ*q*p
+                # push!(A, (pmap[g1.t[k, i]], pmap[g1.t[k, j]], 1e-10*Mᵏ[i, j]))
             end
             r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
         end
@@ -95,6 +100,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
     r[uᶻmap[ebot1]] .= 0
 
     # ∂z(uˣ) = 0 at z = 0 → natural
+    r[uˣmap[etop2]] .+= 1
 
     # uᶻ = 0 at z = 0 (replace continuity at top bdy)
     A[pmap[etop1], :] .= 0
@@ -155,8 +161,9 @@ function stokes_z_res(nref, order; plot=false)
     # forcing
     x = g1.p[:, 1] 
     z = g1.p[:, 2] 
+    b = zeros(g1.np)
     # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
     # H_func(x) = lerp(g1.p[ebot1, 1], -g1.p[ebot1, 2], x)
     # H = H_func.(x)
     # δ = 0.2
@@ -167,7 +174,14 @@ function stokes_z_res(nref, order; plot=false)
     J = Jacobians(g0)
 
     # solve stokes_z problem
-    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1)
+    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
+
+    # ∫p = 0
+    # for k=1:g1.nt
+    #     ∫p += dot(sum(s11.φφ, dims=1), p[g1.t[k, :], :])
+    # end
+    # println(∫p)
+    # println(mean(p))
 
     if plot
         quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
@@ -181,6 +195,6 @@ function stokes_z_res(nref, order; plot=false)
     return uˣ, uᶻ, p
 end
 
-stokes_z_res(3, 1; plot=true)
+stokes_z_res(4, 1; plot=true)
 
 println("Done.")
