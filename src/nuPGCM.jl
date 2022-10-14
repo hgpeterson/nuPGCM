@@ -9,6 +9,9 @@ export
 
     ### Numerics ###
 
+    # interpolation
+    lerp,
+
     # derivatives
     mkfdstencil,
     differentiate_pointwise,
@@ -147,6 +150,7 @@ function set_out_folder(of::String)
 end
 
 # include code
+include("Numerics/interpolation.jl")
 include("Numerics/derivatives.jl")
 include("Numerics/integrals.jl")
 include("Numerics/finite_elements.jl")
