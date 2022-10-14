@@ -4,6 +4,8 @@ using SparseArrays
 using LinearAlgebra
 using Printf
 
+include("utils.jl")
+
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -166,21 +168,6 @@ function stokes_z_res(nref, order; plot=false)
     err_p = L2norm(g1, s11, J, p - pa)
     err= err_ux + err_uz + err_p
     return h, err
-end
-
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
-    cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"z")
-    savefig(ofile)
-    println(ofile)
-    plt.close()
 end
 
 h, err = stokes_z_res(3, 1; plot=true)

@@ -4,37 +4,11 @@ using SparseArrays
 using LinearAlgebra
 using Printf
 
+include("utils.jl")
+
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
-
-"""
-    y₀ = lerp(x, y, x₀)
-
-Linear interpolation through points (xᵢ, yᵢ) evaluated at x₀.
-"""
-function lerp(x, y, x₀)
-    # deal with edge cases
-    if x₀ < x[1] || x₀ > x[end]
-        error("Interpolation point x₀ = $x₀ out of bounds for points x = $x.")
-    elseif x₀ == x[1]
-        return y[1]
-    elseif x₀ == x[end]
-        return y[end]
-    end
-
-    # find index x₀ would be in in x
-    i = findall(sortperm([x₀; x]) .== 1)[1]
-
-    # x₁ is left of x₀ and x₂ is right
-    x₁ = x[i-1]
-    x₂ = x[i]
-    y₁ = y[i-1]
-    y₂ = y[i]
-
-    # linear interpolation
-    return y₁*(x₂ - x₀)/(x₂ - x₁) + y₂*(x₁ - x₀)/(x₁ - x₂)
-end
 
 """
     uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, sfi_uu, sfi_pu, J, b, ε², ebot, etop)
@@ -196,18 +170,8 @@ function pg_res(nref, order; plot=false)
     h = 1/sqrt(g2.np)
 
     # top and bottom edges
-    etop1 = g1.e[abs.(g1.p[g1.e, 2]) .< 1e-4]
-    ebot1 = g1.e[abs.(g1.p[g1.e, 2]) .>= 1e-4]
-    eleft1 = g1.e[abs.(g1.p[g1.e, 1] .+ 1) .<= 1e-4]
-    eright1 = g1.e[abs.(g1.p[g1.e, 1] .- 1) .<= 1e-4]
-    deleteat!(etop1, findall(x->x==eleft1[1], etop1))
-    deleteat!(etop1, findall(x->x==eright1[1], etop1))
-    ebot1 = [eleft1[1]; ebot1; eright1[1]]
-
-    ebot2 = g2.e[abs.(g2.p[g2.e, 2]) .>= 1e-4]
-    eleft2 = g2.e[abs.(g2.p[g2.e, 1] .+ 1) .<= 1e-4]
-    eright2 = g2.e[abs.(g2.p[g2.e, 1] .- 1) .<= 1e-4]
-    ebot2 = [eleft2[1]; ebot2; eright2[1]]
+    ebot1, etop1 = get_sides(g1)
+    ebot2, etop2 = get_sides(g2)
 
     # buoyancy field
     x = g1.p[:, 1] 
@@ -262,22 +226,4 @@ function pg_res(nref, order; plot=false)
     return h, err
 end
 
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(x, H, gb, b, gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
-    cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b,
-                  linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
-    ax.fill_between(x, -maximum(H), -H, color="k", alpha=0.3, lw=0.0)
-    # ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"z")
-    savefig(ofile)
-    println(ofile)
-    plt.close()
-end
-
-pg_res(5, 1; plot=true)
+pg_res(3, 1; plot=true)

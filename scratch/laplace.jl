@@ -6,6 +6,8 @@ using SparseArrays
 using SuiteSparse
 using ProgressMeter
 
+include("utils.jl")
+
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -93,20 +95,6 @@ function laplace_res(nref, order; plot=false)
     # error
     err = L2norm(g, s, J, u - ua)
     return h, err
-end
-
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(g, u, clabel, ofile)
-    fig, ax, im = tplot(g.p, g.t, u)
-    cb = colorbar(im, ax=ax, label=clabel)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"y")
-    savefig(ofile)
-    println(ofile)
-    plt.close()
 end
 
 """

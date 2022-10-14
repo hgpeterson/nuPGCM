@@ -4,6 +4,8 @@ using SparseArrays
 using LinearAlgebra
 using Printf
 
+include("utils.jl")
+
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -144,20 +146,8 @@ function stokes_z_res(nref, order; plot=false)
     g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
 
     # top and bottom edges
-    etop1 = g1.e[abs.(g1.p[g1.e, 2]) .< 1e-4]
-    ebot1 = g1.e[abs.(g1.p[g1.e, 2]) .>= 1e-4]
-    eleft1 = g1.e[abs.(g1.p[g1.e, 1] .+ 1) .<= 1e-4]
-    eright1 = g1.e[abs.(g1.p[g1.e, 1] .- 1) .<= 1e-4]
-    deleteat!(etop1, findall(x->x==eleft1[1], etop1))
-    deleteat!(etop1, findall(x->x==eright1[1], etop1))
-    push!(ebot1, eleft1[1])
-    push!(ebot1, eright1[1])
-
-    ebot2 = g2.e[abs.(g2.p[g2.e, 2]) .>= 1e-4]
-    eleft2 = g2.e[abs.(g2.p[g2.e, 1] .+ 1) .<= 1e-4]
-    eright2 = g2.e[abs.(g2.p[g2.e, 1] .- 1) .<= 1e-4]
-    push!(ebot2, eleft2[1])
-    push!(ebot2, eright2[1])
+    ebot1, etop1 = get_sides(g1)
+    ebot2, etop2 = get_sides(g2)
 
     # mesh resolution 
     h = 1/sqrt(g2.np)
@@ -165,7 +155,13 @@ function stokes_z_res(nref, order; plot=false)
     # forcing
     x = g1.p[:, 1] 
     z = g1.p[:, 2] 
-    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
+    # H_func(x) = lerp(g1.p[ebot1, 1], -g1.p[ebot1, 2], x)
+    # H = H_func.(x)
+    # δ = 0.2
+    # b = @. z + δ*H*exp(-(z/H + 1)/δ)
+    # b[H .== 0] .= 0
 
     # get Jacobians
     J = Jacobians(g0)
@@ -185,22 +181,6 @@ function stokes_z_res(nref, order; plot=false)
     return uˣ, uᶻ, p
 end
 
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(gb, b, gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
-    cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b, linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"z")
-    savefig(ofile)
-    println(ofile)
-    plt.close()
-end
-
-stokes_z_res(4, 1; plot=true)
+stokes_z_res(3, 1; plot=true)
 
 println("Done.")

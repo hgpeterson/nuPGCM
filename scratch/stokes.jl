@@ -4,6 +4,8 @@ using SparseArrays
 using LinearAlgebra
 using Printf
 
+include("utils.jl")
+
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -162,20 +164,6 @@ function stokes_res(nref; plot=false)
     err_p = L2norm(g₁, sfi_pp, J, p - pa[1:g₁.np])
     err= err_u₁ + err_u₂ + err_p
     return h, err
-end
-
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(g, u, clabel, ofile)
-    fig, ax, im = tplot(g.p, g.t, u)
-    cb = colorbar(im, ax=ax, label=clabel)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"y")
-    savefig(ofile)
-    println(ofile)
-    plt.close()
 end
 
 """
