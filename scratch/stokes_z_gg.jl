@@ -1,0 +1,198 @@
+using nuPGCM
+using PyPlot
+using SparseArrays
+using LinearAlgebra
+using Printf
+
+include("utils.jl")
+
+plt.style.use("../plots.mplstyle")
+plt.close("all")
+pygui(false)
+
+"""
+    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1) 
+
+Stokes_z problem:
+    -∂zz(uˣ) + ∂x(p) = 0,
+               ∂z(p) = b,
+     ∂x(uˣ) + ∂z(uᶻ) = 0, 
+with extra condition
+    ∫ p dx dz = 0.
+Boundary conditions are 
+       uˣ = uᶻ = 0 at z = -H,
+        ∂z(uˣ) = 0 at z = 0, 
+            uᶻ = 0 at z = 0,
+Weak form:
+    ∫ [ ∂z(uˣ)∂z(vˣ) - p∂x(vˣ) 
+      - p∂z(vᶻ)
+      + q∂x(uˣ) + q∂z(uᶻ)
+      ] dx dz
+    = ∫ bvᶻ dx dz,
+for all 
+    vˣ ∈ P₂ and q, vᶻ ∈ P₁,
+where Pₙ is the space of continuous polynomials of degree n.
+"""
+function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2) 
+    # indices
+    uˣmap = 1:g2.np
+    uᶻmap = uˣmap[end] .+ (1:g1.np)
+    pmap  = uᶻmap[end] .+ (1:g1.np)
+    N = pmap[end]
+
+    # stamp system
+    A = Tuple{Int64,Int64,Float64}[]
+    r = zeros(N)
+    for k=1:g1.nt
+        # ∂z(uˣ)∂z(vˣ)
+        Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
+        # # ∂x(uˣ)∂x(vˣ)
+        # Kᵏ += abs(J.J[k])*(s22.φξφξ*J.ξx[k]^2 + s22.φξφη*J.ξx[k]*J.ηx[k] + s22.φηφξ*J.ηx[k]*J.ξx[k] + s22.φηφη*J.ηx[k]^2)
+
+        # p*∂x(vˣ) and p*∂z(vᶻ)
+        Cxᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
+        Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
+
+        # δ*q*p
+        Mᵏ = abs(J.J[k])*s11.φφ
+
+        # fv
+        rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
+
+        # s2*s2
+        for i=1:g2.nn
+            for j=1:g2.nn
+                # x-mom: ∂z(vˣ)∂z(uˣ)
+                push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], Kᵏ[i, j]))
+            end
+        end
+        # s2*s1
+        for i=1:g2.nn
+            for j=1:g1.nn
+                # x-mom: -p*∂x(vˣ)
+                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cxᵏ[i, j]))
+                # cont: ∂x(uˣ)*q
+                push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
+            end
+        end
+        # s1*s1
+        for i=1:g1.nn
+            for j=1:g1.nn
+                # z-mom: -p*∂z(vᶻ)
+                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
+                # cont: q*∂z(uᶻ)
+                push!(A, (pmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], Czᵏ[i, j]))
+                # pressure condition: δ*q*p
+                push!(A, (pmap[g1.t[k, i]], pmap[g1.t[k, j]], 1e-7*Mᵏ[i, j]))
+            end
+            r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
+        end
+    end
+
+    # make CSC matrix
+    A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
+
+    # uˣ = uᶻ = 0 at z = -H (replace mom eqtns at bottom bdy)
+    A[uˣmap[ebot2], :] .= 0
+    A[diagind(A)[uˣmap[ebot2]]] .= 1
+    r[uˣmap[ebot2]] .= 0
+
+    A[uᶻmap[ebot1], :] .= 0
+    A[diagind(A)[uᶻmap[ebot1]]] .= 1
+    r[uᶻmap[ebot1]] .= 0
+
+    # ∂z(uˣ) = 1 at z = 0 → natural
+    # r[uˣmap[etop2]] .+= 1
+
+    # uᶻ = 0 at z = 0 (replace mom eqtn at top bdy)
+    A[uᶻmap[etop1], :] .= 0
+    A[diagind(A)[uᶻmap[etop1]]] .= 1
+    r[uᶻmap[etop1]] .= 0
+
+    # p constraint
+    i = pmap[etop1[4]]
+    A[i, :] .= 0
+    A[i, i] = 1
+    r[i] = 0
+
+    println(rank(A))
+    println(N)
+
+    # solve
+    sol = A\r
+
+    # reshape to get u and p
+    return sol[uˣmap], sol[uᶻmap], sol[pmap]
+end
+
+"""
+    h, err = stokes_z_res(nref)
+"""
+function stokes_z_res(nref, order; plot=false)
+    # geometry type
+    # geo = "jc"
+    geo = "gmsh"
+
+    # get shape functions
+    s1 = ShapeFunctions(order)
+    s2 = ShapeFunctions(order + 1)
+
+    # get shape function integrals
+    s11 = ShapeFunctionIntegrals(s1, s1)
+    s12 = ShapeFunctionIntegrals(s1, s2)
+    s22 = ShapeFunctionIntegrals(s2, s2)
+
+    # get grids
+    g0 = Grid("../meshes/$geo/mesh$nref.h5", 1)
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
+
+    fig, ax, im = tplot(g0.p, g0.t)
+    ax.axis("equal")
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"z")
+    savefig("images/mesh.png")
+    println("images/mesh.png")
+    plt.close()
+
+    # top and bottom edges
+    ebot1, etop1 = get_sides(g1)
+    ebot2, etop2 = get_sides(g2)
+    # fig, ax, im = tplot(g1.p, g1.t)
+    # # ax.plot(g1.p[ebot1, 1], g1.p[ebot1, 2], "o", ms=1)
+    # # ax.plot(g1.p[etop1, 1], g1.p[etop1, 2], "o", ms=1)
+    # ax.plot(g2.p[ebot2, 1], g2.p[ebot2, 2], "o", ms=1)
+    # ax.plot(g2.p[etop2, 1], g2.p[etop2, 2], "o", ms=1)
+    # ax.axis("equal")
+    # ax.set_xlabel(L"x")
+    # ax.set_ylabel(L"z")
+    # savefig("images/debug.png")
+    # println("images/debug.png")
+    # plt.close()
+
+    # forcing
+    x = g1.p[:, 1] 
+    z = g1.p[:, 2] 
+    # b = zeros(g1.np)
+    b = @. exp(-x^2/0.1^2 - (z + 0.5)^2/0.1^2)
+
+    # get Jacobians
+    J = Jacobians(g0)
+
+    # solve stokes_z problem
+    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
+
+    if plot
+        quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
+        quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g1, b, g1, p, L"p", "images/p.png")
+    end
+
+    # error
+    err = NaN
+    return uˣ, uᶻ, p
+end
+
+stokes_z_res(2, 1; plot=true)
+
+println("Done.")
