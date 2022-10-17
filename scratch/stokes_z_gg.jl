@@ -33,7 +33,7 @@ for all
     vˣ ∈ P₂ and q, vᶻ ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2) 
+function solve_stokes_z(g1, g2, s22, s12, s21, s11, J, b, ebot1, ebot2, etop1, etop2) 
     # indices
     uˣmap = 1:g2.np
     uᶻmap = uˣmap[end] .+ (1:g1.np)
@@ -49,9 +49,14 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
         # # ∂x(uˣ)∂x(vˣ)
         # Kᵏ += abs(J.J[k])*(s22.φξφξ*J.ξx[k]^2 + s22.φξφη*J.ξx[k]*J.ηx[k] + s22.φηφξ*J.ηx[k]*J.ξx[k] + s22.φηφη*J.ηx[k]^2)
 
-        # p*∂x(vˣ) and p*∂z(vᶻ)
-        Cxᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
+        # p*∂x(vˣ) 
+        Cx_momᵏ = abs(J.J[k])*(s12.φφξ*J.ξx[k] + s12.φφη*J.ηx[k])
+        # p*∂z(vᶻ)
+        Cz_momᵏ = abs(J.J[k])*(s11.φφξ*J.ξy[k] + s11.φφη*J.ηy[k])
+        # q*∂x(uˣ) 
+        Cx_contᵏ = abs(J.J[k])*(s21.φξφ*J.ξx[k] + s21.φηφ*J.ηx[k])
+        # q*∂z(uᶻ)
+        Cz_contᵏ = abs(J.J[k])*(s11.φξφ*J.ξy[k] + s11.φηφ*J.ηy[k])
 
         # δ*q*p
         Mᵏ = abs(J.J[k])*s11.φφ
@@ -62,7 +67,7 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
         # s2*s2
         for i=1:g2.nn
             for j=1:g2.nn
-                # x-mom: ∂z(vˣ)∂z(uˣ)
+                # x-mom: ∂z(uˣ)∂z(vˣ)
                 push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], Kᵏ[i, j]))
             end
         end
@@ -70,18 +75,23 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
         for i=1:g2.nn
             for j=1:g1.nn
                 # x-mom: -p*∂x(vˣ)
-                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cxᵏ[i, j]))
+                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], -Cx_momᵏ[i, j]))
+            end
+        end
+        # s1*s2
+        for i=1:g1.nn
+            for j=1:g2.nn
                 # cont: ∂x(uˣ)*q
-                push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
+                push!(A, (pmap[g1.t[k, i]], uˣmap[g2.t[k, j]], Cx_contᵏ[i, j]))
             end
         end
         # s1*s1
         for i=1:g1.nn
             for j=1:g1.nn
                 # z-mom: -p*∂z(vᶻ)
-                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Czᵏ[i, j]))
-                # cont: q*∂z(uᶻ)
-                push!(A, (pmap[g1.t[k, i]], uᶻmap[g1.t[k, j]], Czᵏ[i, j]))
+                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], -Cz_momᵏ[i, j]))
+                # cont: ∂z(uᶻ)*q
+                push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Cz_contᵏ[i, j]))
                 # pressure condition: δ*q*p
                 push!(A, (pmap[g1.t[k, i]], pmap[g1.t[k, j]], 1e-7*Mᵏ[i, j]))
             end
@@ -109,17 +119,19 @@ function solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
     A[diagind(A)[uᶻmap[etop1]]] .= 1
     r[uᶻmap[etop1]] .= 0
 
-    # p constraint
-    i = pmap[etop1[4]]
-    A[i, :] .= 0
-    A[i, i] = 1
-    r[i] = 0
+    # println(rank(A))
+    # println(N)
 
-    println(rank(A))
-    println(N)
+    # imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+    # savefig("images/A.png")
+    # println("images/A.png")
+    # plt.close()
+
+    # println(cond(Array(A)))
 
     # solve
     sol = A\r
+    # sol = pinv(Array(A))*r
 
     # reshape to get u and p
     return sol[uˣmap], sol[uᶻmap], sol[pmap]
@@ -140,6 +152,7 @@ function stokes_z_res(nref, order; plot=false)
     # get shape function integrals
     s11 = ShapeFunctionIntegrals(s1, s1)
     s12 = ShapeFunctionIntegrals(s1, s2)
+    s21 = ShapeFunctionIntegrals(s2, s1)
     s22 = ShapeFunctionIntegrals(s2, s2)
 
     # get grids
@@ -147,22 +160,22 @@ function stokes_z_res(nref, order; plot=false)
     g1 = Grid("../meshes/$geo/mesh$nref.h5", order)
     g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
 
-    fig, ax, im = tplot(g0.p, g0.t)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"z")
-    savefig("images/mesh.png")
-    println("images/mesh.png")
-    plt.close()
+    # fig, ax, im = tplot(g0.p, g0.t)
+    # ax.axis("equal")
+    # ax.set_xlabel(L"x")
+    # ax.set_ylabel(L"z")
+    # savefig("images/mesh.png")
+    # println("images/mesh.png")
+    # plt.close()
 
     # top and bottom edges
     ebot1, etop1 = get_sides(g1)
     ebot2, etop2 = get_sides(g2)
     # fig, ax, im = tplot(g1.p, g1.t)
-    # # ax.plot(g1.p[ebot1, 1], g1.p[ebot1, 2], "o", ms=1)
-    # # ax.plot(g1.p[etop1, 1], g1.p[etop1, 2], "o", ms=1)
-    # ax.plot(g2.p[ebot2, 1], g2.p[ebot2, 2], "o", ms=1)
-    # ax.plot(g2.p[etop2, 1], g2.p[etop2, 2], "o", ms=1)
+    # ax.plot(g1.p[ebot1, 1], g1.p[ebot1, 2], "o", ms=1)
+    # ax.plot(g1.p[etop1, 1], g1.p[etop1, 2], "o", ms=1)
+    # # ax.plot(g2.p[ebot2, 1], g2.p[ebot2, 2], "o", ms=1)
+    # # ax.plot(g2.p[etop2, 1], g2.p[etop2, 2], "o", ms=1)
     # ax.axis("equal")
     # ax.set_xlabel(L"x")
     # ax.set_ylabel(L"z")
@@ -174,17 +187,27 @@ function stokes_z_res(nref, order; plot=false)
     x = g1.p[:, 1] 
     z = g1.p[:, 2] 
     # b = zeros(g1.np)
-    b = @. exp(-x^2/0.1^2 - (z + 0.5)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.5)^2/0.1^2)
+    # b = @. exp(-(x - 0.5)^2/0.1^2 - (z + 0.75)^2/0.1^2)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    # H_func(x) = lerp(g1.p[ebot1, 1], -g1.p[ebot1, 2], x)
+    H_func(x) = 1 - x^2
+    H = H_func.(x)
+    δ = 0.2
+    b = @. z + δ*H*exp(-(z/H + 1)/δ)
+    b[H .== 0] .= 0
+    # b = z
 
     # get Jacobians
     J = Jacobians(g0)
 
     # solve stokes_z problem
-    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s11, J, b, ebot1, ebot2, etop1, etop2)
+    uˣ, uᶻ, p = solve_stokes_z(g1, g2, s22, s12, s21, s11, J, b, ebot1, ebot2, etop1, etop2)
 
     if plot
         quickplot(g1, b, g2, uˣ, L"u^x", "images/ux.png")
         quickplot(g1, b, g1, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g1, b, g1, b, L"b", "images/b.png")
         quickplot(g1, b, g1, p, L"p", "images/p.png")
     end
 
@@ -193,6 +216,10 @@ function stokes_z_res(nref, order; plot=false)
     return uˣ, uᶻ, p
 end
 
-stokes_z_res(2, 1; plot=true)
+# for i=0:5
+#     uˣ, uᶻ, p = stokes_z_res(i, 1)
+#     println(@sprintf("%1.e %1.e", maximum(abs.(uˣ)), maximum(abs.(uᶻ))))
+# end
+uˣ, uᶻ, p = stokes_z_res(0, 1; plot=true)
 
 println("Done.")
