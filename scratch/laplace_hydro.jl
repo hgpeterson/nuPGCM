@@ -14,14 +14,14 @@ pygui(false)
 
 
 """
-    u = solve_laplace_z(g, s, J, δ, f, u₀)
+    u = solve_laplace_hydro(g, s, J, δ, f, u₀)
 
 Solve linear system representing the problem
     -δ² u_zz + u = f  on Ω
                u = u₀ on ∂Ω
 in a finite element basis.
 """
-function solve_laplace_z(g, s, J, δ, f, u₀)
+function solve_laplace_hydro(g, s, J, δ, f, u₀)
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(g.np)
     for k=1:g.nt        
@@ -59,9 +59,9 @@ function solve_laplace_z(g, s, J, δ, f, u₀)
 end
 
 """
-    h, err = laplace_z_res(nref, order)
+    h, err = laplace_hydro_res(nref, order)
 """
-function laplace_z_res(nref, order; plot=false)
+function laplace_hydro_res(nref, order; plot=false)
     # parameter
     δ = 0.05
 
@@ -94,8 +94,8 @@ function laplace_z_res(nref, order; plot=false)
     # dirichlet boundary
     u₀ = ua[g.e]
 
-    # solve laplace_z problem
-    u = solve_laplace_z(g, s, J, δ, f, u₀)
+    # solve laplace_hydro problem
+    u = solve_laplace_hydro(g, s, J, δ, f, u₀)
 
     if plot
         quickplot(g, u, L"u", "images/u.png")
@@ -109,17 +109,17 @@ function laplace_z_res(nref, order; plot=false)
 end
 
 """
-    laplace_z_convergence(nrefs)
+    laplace_hydro_convergence(nrefs)
 """
-function laplace_z_convergence(nrefs)
+function laplace_hydro_convergence(nrefs)
     h_l = zeros(size(nrefs, 1))
     h_q = zeros(size(nrefs, 1))
     err_l = zeros(size(nrefs, 1))
     err_q = zeros(size(nrefs, 1))
     for i in eachindex(nrefs)
         println(nrefs[i])
-        h_l[i], err_l[i] = laplace_z_res(nrefs[i], 1)
-        h_q[i], err_q[i] = laplace_z_res(nrefs[i], 2)
+        h_l[i], err_l[i] = laplace_hydro_res(nrefs[i], 1)
+        h_q[i], err_q[i] = laplace_hydro_res(nrefs[i], 2)
     end
 
     fig, ax = subplots(1)
@@ -132,10 +132,10 @@ function laplace_z_convergence(nrefs)
     ax.legend(ncol=2)
     ax.set_xlim(0.5*h_q[end], 2*h_l[1])
     ax.set_ylim(0.5*err_q[end], 2*err_l[1])
-    savefig("images/laplace_z.png")
-    println("images/laplace_z.png")
+    savefig("images/laplace_hydro.png")
+    println("images/laplace_hydro.png")
     plt.close()
 end
 
-laplace_z_convergence(0:5)
-# laplace_z_res(3, 2; plot=true)
+laplace_hydro_convergence(0:5)
+# laplace_hydro_res(3, 2; plot=true)
