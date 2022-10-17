@@ -1,25 +1,3 @@
-# function lagrange_poly(i, x, p)
-#     l = 1
-#     for j in eachindex(p)
-#         if j == i
-#             continue
-#         end
-#         l *= (x - p[j])/(p[i] - p[j])
-#     end
-#    return l
-# end
-
-# function φ(i, ξ, order)
-#     return T(I, ξ[1])*T(J, ξ[2])*T(K, 1 - ξ[1] - ξ[2])
-# end
-# function T(I, r, r_I)
-#     if I == 1
-#         return 1
-#     else
-#         return lagrange_poly(I, 2*r/(r_I - 1), [0, 1])
-#     end
-# end
-
 struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
     order::IN
     n::IN
@@ -37,11 +15,13 @@ function ShapeFunctions(order)
 	for i=1:n
 	    ξ = p[i, 1]
 	    η = p[i, 2]
-        if n == 3
+        if order == 0
+            V[:, i] = [1]
+        elseif order == 1
 		    V[:, i] = [1, ξ, η]
-        elseif n == 6
+        elseif order == 2
 	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2]
-        elseif n == 10
+        elseif order == 3
 	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2, ξ^3, ξ^2*η, ξ*η^2, η^3]
         else
             error("Unsupported shape function order.")
@@ -52,7 +32,9 @@ function ShapeFunctions(order)
     # compute shape function derivative coefficients
     ∂C = zeros(2, n, n)
     for j=1:2
-        if order == 1
+        if order == 0
+            continue
+        elseif order == 1
             ∂C[j, :, 1] += C[:, j+1]
         elseif order == 2
             ∂C[j, :, 1] += C[:, j+1]
@@ -66,12 +48,6 @@ function ShapeFunctions(order)
             ∂C[j, :, 2j+2] += 3*C[:, 3j+4]
             ∂C[j, :, 5]    += 2*C[:, j+7]
             ∂C[j, :, 8-2j] +=   C[:, 10-j]
-            # ∂C[1, :, 4] += 3*C[:, 7]
-            # ∂C[1, :, 5] += 2*C[:, 8]
-            # ∂C[1, :, 6] += 1*C[:, 9]
-            # ∂C[2, :, 6] += 3*C[:, 10]
-            # ∂C[2, :, 5] += 2*C[:, 9]
-            # ∂C[2, :, 4] += 1*C[:, 8]
         end
     end
     return ShapeFunctions(order, n, C, ∂C)
@@ -83,7 +59,9 @@ end
 The nodes of a standard element of order `order`.
 """
 function standard_element_nodes(order)
-    if order == 1
+    if order == 0
+        return 1/3*[1.0 1.0]
+    elseif order == 1
         return [0.0  0.0
                 1.0  0.0
                 0.0  1.0]
@@ -131,7 +109,7 @@ where φᵢ and φⱼ are shape functions from the trial and test space, respect
 """
 function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunctions) 
     # quadrature weights and points
-    w, ξ = quad_weights_points(sf_trial.order + sf_test.order)
+    w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order))
 
     # mass
     φφ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
@@ -192,7 +170,9 @@ Evaluate polynomial defined by coefficients `c` at point `ξ`.
 """
 function eval_poly(c, ξ)
     n = size(c, 1)
-    if n == 3
+    if n == 1
+        return c'*[1]
+    elseif n == 3
         return c'*[1, ξ[1], ξ[2]]
     elseif n == 6
         return c'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
@@ -242,7 +222,16 @@ function Grid(file_name, order::IN) where IN <: Integer
     e = e[:, 1]
     t = convert(Matrix{IN}, t)
     e = convert(Vector{IN}, e)
-    if order > 1
+    if order == 0
+        pp = zeros(size(t, 1), 2)
+        for k in axes(t, 1)
+            pp[k, :] = 1/3*sum(p[t[k, :], :], dims=1)
+        end
+        p = pp
+        t = zeros(IN, size(t, 1), 1)
+        t[:, 1] = 1:size(t, 1)
+        e = Vector{IN}[]
+    elseif order > 1
         p, t, e = add_nodes(p, t, e, order)
     end
     np = size(p, 1)
@@ -376,7 +365,6 @@ function boundary_nodes(t)
     return unique(edges[boundary_indices,:][:])
 end
 
-
 struct Jacobians{V<:AbstractVector}
     J::V
     xξ::V
@@ -477,15 +465,6 @@ function get_t_dict(p, t)
         t_dict[i] = findall(vec(sum(t .== i, dims=2) .== 1))
     end
     return t_dict
-end
-
-"""
-    area = tri_area(p)
-
-Compute area of triangle defined by points `p`.
-"""
-function tri_area(p)
-	return 1/2*abs(p[1, 1]*(p[2, 2] - p[3, 2]) + p[2, 1]*(p[3, 2] - p[1, 2]) + p[3, 1]*(p[1, 2] - p[2, 2]))
 end
 
 """
