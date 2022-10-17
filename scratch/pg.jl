@@ -2,6 +2,7 @@ using nuPGCM
 using PyPlot
 using SparseArrays
 using LinearAlgebra
+using IterativeSolvers
 using Printf
 
 include("utils.jl")
@@ -11,7 +12,7 @@ plt.close("all")
 pygui(false)
 
 """
-    uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, sfi_uu, sfi_pu, J, b, ε², ebot, etop)
+    uˣ, uʸ, uᶻ, p = solve_pg(g, s, J, b, e, ε²)
 
 PG Inversion:
     -ε²∂zz(uˣ) - uʸ + ∂x(p) = 0, 
@@ -25,205 +26,214 @@ Boundary conditions are
     ∂z(uˣ) = ∂z(uʸ) = 0 at z = 0, 
                  uᶻ = 0 at z = 0,
 Weak form:
-    ∫ [ε²∂z(uˣ)∂z(v₁) - uʸv₁ + ∂x(p)v₁ +
-       ε²∂z(uʸ)∂z(v₂) + uˣv₂ +
-       ∂z(p)v₃ +
+    ∫ [ε²∂z(uˣ)∂z(uˣ) - uʸvˣ - p∂x(vˣ) +
+       ε²∂z(uʸ)∂z(uʸ) + uˣvʸ +
+       -p∂z(vᶻ) +
         q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
-    = ∫ bv₃ dx dz,
+    = ∫ bvᶻ dx dz,
 for all 
-    v₁, v₂ ∈ P₂ and q, v₃ ∈ P₁,
-where Pₙ is the space of continuous polynomials of degree n.
+    uˣ, vˣ ∈ Pᵢ,
+    uʸ, vʸ ∈ Pᵢ, 
+    uᶻ, vᶻ ∈ Pⱼ, 
+    p, q ∈ Pₖ
+where j = i-1, k = i-2, and Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1) 
+function solve_pg(g, s, J, b, e, ε²)
     # indices
-    uˣmap = 1:g2.np
-    uʸmap = uˣmap[end] .+ (1:g2.np)
-    uᶻmap = uʸmap[end] .+ (1:g1.np)
-    pmap  = uᶻmap[end] .+ (1:g1.np)
+    uˣmap = 1:g.u.np
+    uʸmap = uˣmap[end] .+ (1:g.u.np)
+    uᶻmap = uʸmap[end] .+ (1:g.w.np)
+    pmap  = uᶻmap[end] .+ (1:g.p.np)
     N = pmap[end]
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
-    for k=1:g1.nt
-        # ∂z(u)∂z(v) terms
-        Kᵏ = abs(J.J[k])*(s22.φξφξ*J.ξy[k]^2 + s22.φξφη*J.ξy[k]*J.ηy[k] + s22.φηφξ*J.ηy[k]*J.ξy[k] + s22.φηφη*J.ηy[k]^2)
+    for k=1:g.p.nt
+        # ∂z(uˣ)∂z(vˣ)
+        Kᵏ = abs(J.J[k])*(s.uu.φξφξ*J.ξy[k]^2 + s.uu.φξφη*J.ξy[k]*J.ηy[k] + s.uu.φηφξ*J.ηy[k]*J.ξy[k] + s.uu.φηφη*J.ηy[k]^2)
 
-        ###
-        K11ᵏ = abs(J.J[k])*(s11.φξφξ*J.ξy[k]^2 + s11.φξφη*J.ξy[k]*J.ηy[k] + s11.φηφξ*J.ηy[k]*J.ξy[k] + s11.φηφη*J.ηy[k]^2)
-        ###
+        # p*∂x(vˣ) 
+        Cx_puᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξx[k] + s.pu.φφη*J.ηx[k])
+        # p*∂z(vᶻ)
+        Cz_pwᵏ = abs(J.J[k])*(s.pw.φφξ*J.ξy[k] + s.pw.φφη*J.ηy[k])
+        # q*∂x(uˣ) 
+        Cx_upᵏ = abs(J.J[k])*(s.up.φξφ*J.ξx[k] + s.up.φηφ*J.ηx[k])
+        # q*∂z(uᶻ)
+        Cz_wpᵏ = abs(J.J[k])*(s.wp.φξφ*J.ξy[k] + s.wp.φηφ*J.ηy[k])
 
-        # uv terms
-        Mᵏ = abs(J.J[k])*s22.φφ
+        # uʸvˣ
+        Muuᵏ = abs(J.J[k])*s.uu.φφ
+        # δ*q*p
+        Mppᵏ = abs(J.J[k])*s.pp.φφ
 
-        # p*∂x(v) and p*∂z(v) terms (also q*∂x(u) and q*∂z(u))
-        Cxᵏ = abs(J.J[k])*(s12.φξφ*J.ξx[k] + s12.φηφ*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s11.φξφ*J.ξy[k] + s11.φηφ*J.ηy[k])
+        # b*vᶻ
+        rᵏ = abs(J.J[k])*s.ww.φφ*b[g.w.t[k, :]]
 
-        # b*v term
-        rᵏ = abs(J.J[k])*s11.φφ*b[g1.t[k, :]]
-
-        # s2*s2
-        for i=1:g2.nn
-            for j=1:g2.nn
-                # ∂z(u)∂z(v) terms
-                push!(A, (uˣmap[g2.t[k, i]], uˣmap[g2.t[k, j]], ε²*Kᵏ[i, j]))
-                push!(A, (uʸmap[g2.t[k, i]], uʸmap[g2.t[k, j]], ε²*Kᵏ[i, j]))
-                # uv terms
-                push!(A, (uˣmap[g2.t[k, i]], uʸmap[g2.t[k, j]], -Mᵏ[i, j]))
-                push!(A, (uʸmap[g2.t[k, j]], uˣmap[g2.t[k, i]], Mᵏ[i, j]))
-            end
+        # u*u
+        for i=1:g.u.nn, j=1:g.u.nn
+            # x-mom: ∂z(uˣ)∂z(vˣ)
+            push!(A, (uˣmap[g.u.t[k, i]], uˣmap[g.u.t[k, j]], ε²*Kᵏ[i, j]))
+            # y-mom: ∂z(uʸ)∂z(vʸ)
+            push!(A, (uʸmap[g.u.t[k, i]], uʸmap[g.u.t[k, j]], ε²*Kᵏ[i, j]))
+            # x-mom: uʸ*vˣ
+            push!(A, (uˣmap[g.u.t[k, i]], uʸmap[g.u.t[k, j]], -Muuᵏ[i, j]))
+            # y-mom: uˣ*vʸ
+            push!(A, (uʸmap[g.u.t[k, i]], uˣmap[g.u.t[k, j]], Muuᵏ[i, j]))
         end
-        # s1*s2
-        for i=1:g2.nn
-            for j=1:g1.nn
-                # ∂x(p)v₁ 
-                push!(A, (uˣmap[g2.t[k, i]], pmap[g1.t[k, j]], Cxᵏ[i, j]))
-                # ∂x(uˣ)q
-                push!(A, (pmap[g1.t[k, j]], uˣmap[g2.t[k, i]], Cxᵏ[i, j]))
-            end
+        # p*vˣ
+        for i=1:g.u.nn, j=1:g.p.nn
+            # x-mom: -p*∂x(vˣ)
+            push!(A, (uˣmap[g.u.t[k, i]], pmap[g.p.t[k, j]], -Cx_puᵏ[i, j]))
         end
-        # s1*s1
-        for i=1:g1.nn
-            for j=1:g1.nn
-                # ∂z(p)v₃
-                push!(A, (uᶻmap[g1.t[k, i]], pmap[g1.t[k, j]], Czᵏ[i, j]))
-                # ∂z(uᶻ)q
-                push!(A, (pmap[g1.t[k, j]], uᶻmap[g1.t[k, i]], Czᵏ[i, j]))
-
-                ###
-                push!(A, (uᶻmap[g2.t[k, i]], uᶻmap[g2.t[k, j]], ε²*K11ᵏ[i, j]))
-                ###
-            end
-            r[uᶻmap[g1.t[k, i]]] += rᵏ[i]
+        # uˣ*q
+        for i=1:g.p.nn, j=1:g.u.nn
+            # cont: ∂x(uˣ)*q
+            push!(A, (pmap[g.p.t[k, i]], uˣmap[g.u.t[k, j]], Cx_upᵏ[i, j]))
         end
+        # p*vᶻ
+        for i=1:g.w.nn, j=1:g.p.nn
+            # z-mom: -p*∂z(vᶻ)
+            push!(A, (uᶻmap[g.w.t[k, i]], pmap[g.p.t[k, j]], -Cz_pwᵏ[i, j]))
+        end
+        # uᶻ*q
+        for i=1:g.p.nn, j=1:g.w.nn
+            # cont: ∂z(uᶻ)*q
+            push!(A, (pmap[g.p.t[k, i]], uᶻmap[g.w.t[k, j]], Cz_wpᵏ[i, j]))
+        end
+        # p*p
+        for i=1:g.p.nn, j=1:g.p.nn
+            # pressure condition: δ*q*p
+            push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
+        end
+        # b
+        r[uᶻmap[g.w.t[k, :]]] .+= rᵏ
     end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # uˣ = uʸ = uᶻ = 0 at z = -H
-    A[uˣmap[ebot2], :] .= 0
-    A[diagind(A)[uˣmap[ebot2]]] .= 1
-    r[uˣmap[ebot2]] .= 0
+    # uˣ = uʸ = uᶻ = 0 at z = -H (replace mom eqtns at bottom bdy)
+    A[uˣmap[e.botu], :] .= 0
+    A[diagind(A)[uˣmap[e.botu]]] .= 1
+    r[uˣmap[e.botu]] .= 0
 
-    A[uʸmap[ebot2], :] .= 0
-    A[diagind(A)[uʸmap[ebot2]]] .= 1
-    r[uʸmap[ebot2]] .= 0
+    A[uʸmap[e.botu], :] .= 0
+    A[diagind(A)[uʸmap[e.botu]]] .= 1
+    r[uʸmap[e.botu]] .= 0
 
-    A[uᶻmap[ebot1], :] .= 0
-    A[diagind(A)[uᶻmap[ebot1]]] .= 1
-    r[uᶻmap[ebot1]] .= 0
+    A[uᶻmap[e.botw], :] .= 0
+    A[diagind(A)[uᶻmap[e.botw]]] .= 1
+    r[uᶻmap[e.botw]] .= 0
 
-    # ∂z(uˣ) = ∂(uʸ) = 0 at z = 0 → natural
+    # ∂z(uˣ) = ∂z(uʸ) = 0 at z = 0 → natural
 
-    # uᶻ = 0 at z = 0 (replace continuity at top bdy)
-    A[pmap[etop1], :] .= 0
-    for e in etop1
-        A[pmap[e], uᶻmap[e]] = 1
-    end
-    r[pmap[etop1]] .= 0
+    # uᶻ = 0 at z = 0 (replace mom eqtn at top bdy)
+    A[uᶻmap[e.topw], :] .= 0
+    A[diagind(A)[uᶻmap[e.topw]]] .= 1
+    r[uᶻmap[e.topw]] .= 0
 
-    # p constraint (replace one of the uᶻ = 0 conditions at top bdy)
-    n = convert(Int64, round(size(etop1, 1)/2)) # middle of top bdy
-    i = pmap[etop1[n]]
-    A[i, :] .= 0
-    A[i, i] = 1
-    r[i] = 0
-
-    # println(N)
     # println(rank(A))
+    println(N)
+
+    # if N < 1000
+    #     fig, ax = subplots(1)
+    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+    #     ax.spines["left"].set_visible(false)
+    #     ax.spines["bottom"].set_visible(false)
+    #     savefig("images/A.png")
+    #     println("images/A.png")
+    #     plt.close()
+    #     # error()
+    # end
+
+    # println(cond(Array(A)))
 
     # solve
     sol = A\r
+    # sol, ch = minres(A, r, log=true, verbose=true)
+    # sol, ch = bicgstabl(A, r, log=true, verbose=true)
+    # sol, ch = lsmr(A, r, log=true, verbose=true)
+    # sol = sor(A, r, 0.5)
 
-    # reshape to get uˣ, uʸ, uᶻ and p
+    # reshape to get u and p
     return sol[uˣmap], sol[uʸmap], sol[uᶻmap], sol[pmap]
 end
 
 """
-    h, err = pg_res(nref, order)
+    h, err = pg_res(nref)
 """
 function pg_res(nref, order; plot=false)
     # Ekman number
-    ε² = 1e-3
+    ε² = 1
 
     # geometry type
     geo = "jc"
+    # geo = "gmsh"
 
     # get shape functions
-    sf2 = ShapeFunctions(order + 1)
-    sf1 = ShapeFunctions(order)
+    sp = ShapeFunctions(order-2)
+    sw = ShapeFunctions(order-1)
+    su = ShapeFunctions(order)
 
     # get shape function integrals
-    s22 = ShapeFunctionIntegrals(sf2, sf2)
-    s12 = ShapeFunctionIntegrals(sf1, sf2)
-    s11 = ShapeFunctionIntegrals(sf1, sf1)
+    uu = ShapeFunctionIntegrals(su, su)
+    ww = ShapeFunctionIntegrals(sw, sw)
+    pu = ShapeFunctionIntegrals(sp, su)
+    pw = ShapeFunctionIntegrals(sp, sw)
+    up = ShapeFunctionIntegrals(su, sp)
+    wp = ShapeFunctionIntegrals(sw, sp)
+    pp = ShapeFunctionIntegrals(sp, sp)
+    s = (uu = uu,
+         ww = ww, 
+         pu  = pu,  
+         pw  = pw,  
+         up  = up,  
+         wp  = wp,
+         pp   = pp)  
 
     # get grids
-    g0 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", order)
-    g2 = Grid("../meshes/$geo/mesh$nref.h5", order + 1)
-
-    # mesh resolution 
-    h = 1/sqrt(g2.np)
+    gp = Grid("../meshes/$geo/mesh$nref.h5", order - 2)
+    gw = Grid("../meshes/$geo/mesh$nref.h5", order - 1)
+    gu = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g = (p = gp, u = gu, w = gw)
 
     # top and bottom edges
-    ebot1, etop1 = get_sides(g1)
-    ebot2, etop2 = get_sides(g2)
+    ebotw, etopw = get_sides(gw)
+    ebotu, etopu = get_sides(gu)
+    e = (botw = ebotw, topw = etopw, 
+         botu = ebotu, topu = etopu)
 
-    # buoyancy field
-    x = g1.p[:, 1] 
-    z = g1.p[:, 2] 
-    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    # b = @. exp(-x^2/0.1^2 - (z + 0.4)^2/0.1^2)
-    H_func(x) = lerp(g1.p[ebot1, 1], -g1.p[ebot1, 2], x)
-    H = H_func.(x)
-    δ = 0.2
-    b = @. z + δ*H*exp(-(z/H + 1)/δ)
-    b[H .== 0] .= 0
-
-    # fig, ax, im = tplot(g2.p, g2.t)
-    # ax.plot(g2.p[ebot, 1], g2.p[ebot,2], "o", ms=1)
-    # ax.plot(g2.p[etop, 1], g2.p[etop,2], "o", ms=1)
-    # # ax.set_xlim(-1.1, -0.9)
-    # ax.set_xlim(0.9, 1.1)
-    # ax.set_ylim(-0.1, 0.0)
-    # savefig("images/debug.png")
-    # plt.close()
-    # error()
-
-    # # exact solution
-    # x = g2.p[:, 1] 
-    # y = g2.p[:, 2] 
-    # ua₁ = @.  π/2*cos(π*x/2)*sin(π*y/2)
-    # ua₂ = @. -π/2*sin(π*x/2)*cos(π*y/2)
-    # ua = hcat(ua₁, ua₂)'
-    # pa = zeros(g2.np)
-    # f₁ = @. π^3/4*cos(π*x/2)*sin(π*y/2)
-    # f₂ = @. -π^3/4*sin(π*x/2)*cos(π*y/2)
-    # f = hcat(f₁, f₂)'
+    # forcing
+    x = gw.p[:, 1] 
+    z = gw.p[:, 2] 
+    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    # H_func(x) = sqrt(2 - x^2) - 1
+    # # H_func(x) = 1 - x^2
+    # H = H_func.(x)
+    # δ = 0.2
+    # b = @. z + δ*H*exp(-(z/H + 1)/δ)
+    # b[H .== 0] .= 0
 
     # get Jacobians
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)
 
-    # solve stokes problem
-    uˣ, uʸ, uᶻ, p = solve_pg(g1, g2, s22, s12, s11, J, b, ε², ebot1, ebot2, etop1)
+    # solve 
+    uˣ, uʸ, uᶻ, p = solve_pg(g, s, J, b, e, ε²)
 
     if plot
-        x = g1.p[ebot1, 1]
-        H = H_func.(x)
-        quickplot(x, H, g1, b, g2, uˣ, L"u^x", "images/ux.png")
-        quickplot(x, H, g1, b, g2, uʸ, L"u^y", "images/uy.png")
-        quickplot(x, H, g1, b, g1, uᶻ, L"u^z", "images/uz.png")
-        quickplot(x, H, g1, b, g1, p, L"p", "images/p.png")
-        quickplot(x, H, g1, b, g1, b, L"b", "images/b.png")
+        quickplot(gw, b, gu, uˣ, L"u^x", "images/ux.png")
+        quickplot(gw, b, gu, uʸ, L"u^y", "images/uy.png")
+        quickplot(gw, b, gw, uᶻ, L"u^z", "images/uz.png")
+        quickplot(gw, b, gw, b, L"b", "images/b.png")
+        quickplot(gw, b, gw, p, L"p", "images/p.png")
     end
 
-    # error
-    err = 0
-    return h, err
+    return uˣ, uʸ, uᶻ, p
 end
 
-pg_res(3, 1; plot=true)
+uˣ, uʸ, uᶻ, p = pg_res(2, 2; plot=true)
+
+println("Done.")
