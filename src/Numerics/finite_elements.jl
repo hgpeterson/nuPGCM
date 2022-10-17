@@ -223,15 +223,21 @@ function Grid(file_name, order::IN) where IN <: Integer
     t = convert(Matrix{IN}, t)
     e = convert(Vector{IN}, e)
     if order == 0
+        # only need centroids
         pp = zeros(size(t, 1), 2)
+        ee = Vector{IN}()
         for k in axes(t, 1)
             pp[k, :] = 1/3*sum(p[t[k, :], :], dims=1)
+            if t[k, 1] in e || t[k, 2] in e || t[k, 3] in e
+                push!(ee, k)
+            end
         end
         p = pp
         t = zeros(IN, size(t, 1), 1)
         t[:, 1] = 1:size(t, 1)
-        e = Vector{IN}[]
+        e = ee
     elseif order > 1
+        # add nodes for higher orders
         p, t, e = add_nodes(p, t, e, order)
     end
     np = size(p, 1)
