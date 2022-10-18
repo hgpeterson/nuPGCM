@@ -32,7 +32,7 @@ for all
     p, q ∈ Pₖ
 where j = i-1, k = i-2, and Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_hydro(g, s, J, e, f, u₀)
+function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, true, true))
     # indices
     uˣmap = 1:g.u.np
     uᶻmap = uˣmap[end] .+ (1:g.w.np)
@@ -55,8 +55,8 @@ function solve_stokes_hydro(g, s, J, e, f, u₀)
         # q*∂z(uᶻ)
         Cz_wpᵏ = abs(J.J[k])*(s.wp.φξφ*J.ξy[k] + s.wp.φηφ*J.ηy[k])
 
-        # δ*q*p
-        Mppᵏ = abs(J.J[k])*s.pp.φφ
+        # # δ*q*p
+        # Mppᵏ = abs(J.J[k])*s.pp.φφ
 
         # fˣ*vˣ
         rxᵏ = abs(J.J[k])*s.uu.φφ*f.x[g.u.t[k, :]]
@@ -88,11 +88,11 @@ function solve_stokes_hydro(g, s, J, e, f, u₀)
             # cont: ∂z(uᶻ)*q
             push!(A, (pmap[g.p.t[k, i]], uᶻmap[g.w.t[k, j]], Cz_wpᵏ[i, j]))
         end
-        # p*p
-        for i=1:g.p.nn, j=1:g.p.nn
-            # pressure condition: δ*q*p
-            push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
-        end
+        # # p*p
+        # for i=1:g.p.nn, j=1:g.p.nn
+        #     # pressure condition: δ*q*p
+        #     push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
+        # end
         # f
         r[uˣmap[g.u.t[k, :]]] .+= rxᵏ
         r[uᶻmap[g.w.t[k, :]]] .+= rzᵏ
@@ -102,21 +102,31 @@ function solve_stokes_hydro(g, s, J, e, f, u₀)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # dirichlet condition on bottom and top (replace mom eqtns)
-    A[uˣmap[e.botu], :] .= 0
-    A[diagind(A)[uˣmap[e.botu]]] .= 1
-    r[uˣmap[e.botu]] .= u₀.botu
+    if diri_mask[1]
+        A[uˣmap[e.botu], :] .= 0
+        A[diagind(A)[uˣmap[e.botu]]] .= 1
+        r[uˣmap[e.botu]] .= u₀.botu
+    end
+    if diri_mask[2]
+        A[uᶻmap[e.botw], :] .= 0
+        A[diagind(A)[uᶻmap[e.botw]]] .= 1
+        r[uᶻmap[e.botw]] .= u₀.botw
+    end
+    if diri_mask[3]
+        A[uˣmap[e.topu], :] .= 0
+        A[diagind(A)[uˣmap[e.topu]]] .= 1
+        r[uˣmap[e.topu]] .= u₀.topu
+    end
+    if diri_mask[4]
+        A[uᶻmap[e.topw], :] .= 0
+        A[diagind(A)[uᶻmap[e.topw]]] .= 1
+        r[uᶻmap[e.topw]] .= u₀.topw
+    end
 
-    A[uᶻmap[e.botw], :] .= 0
-    A[diagind(A)[uᶻmap[e.botw]]] .= 1
-    r[uᶻmap[e.botw]] .= u₀.botw
-
-    A[uˣmap[e.topu], :] .= 0
-    A[diagind(A)[uˣmap[e.topu]]] .= 1
-    r[uˣmap[e.topu]] .= u₀.topu
-
-    A[uᶻmap[e.topw], :] .= 0
-    A[diagind(A)[uᶻmap[e.topw]]] .= 1
-    r[uᶻmap[e.topw]] .= u₀.topw
+    # pressure condition
+    A[pmap[1], :] .= 0
+    A[pmap[1], pmap[1]] = 1
+    r[pmap[1]] = p₀
 
     # solve
     sol = A\r
@@ -126,12 +136,15 @@ function solve_stokes_hydro(g, s, J, e, f, u₀)
 end
 
 """
-    h, err = stokes_hydro_res(nref)
+    hs, errs = stokes_hydro_res(nref)
 """
-function stokes_hydro_res(nref, order; plot=false)
+function stokes_hydro_res(nref; plot=false)
+    # order of polynomials
+    order = 2
+
     # geometry type
-    # geo = "jc"
-    geo = "gmsh"
+    geo = "jc"
+    # geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -148,11 +161,11 @@ function stokes_hydro_res(nref, order; plot=false)
     pp = ShapeFunctionIntegrals(sp, sp)
     s = (uu = uu,
          ww = ww, 
-         pu  = pu,  
-         pw  = pw,  
-         up  = up,  
-         wp  = wp,
-         pp   = pp)  
+         pu = pu,  
+         pw = pw,  
+         up = up,  
+         wp = wp,
+         pp = pp)  
 
     # get grids
     gp = Grid("../meshes/$geo/mesh$nref.h5", order - 2)
@@ -168,8 +181,8 @@ function stokes_hydro_res(nref, order; plot=false)
 
     # mesh resolution 
     hp = 1/sqrt(gp.np)
-    hw = 1/sqrt(gw.np)
-    hu = 1/sqrt(gu.np)
+    huᶻ = 1/sqrt(gw.np)
+    huˣ = 1/sqrt(gu.np)
 
     # exact solution
     xu = gu.p[:, 1] 
@@ -178,16 +191,17 @@ function stokes_hydro_res(nref, order; plot=false)
     zw = gw.p[:, 2] 
     xp = gp.p[:, 1] 
     zp = gp.p[:, 2] 
-    ua = @.  π/2*cos(π*xu/2)*sin(π*zu/2)
-    wa = @. -π/2*sin(π*xw/2)*cos(π*zw/2)
-    pa = @. sin(xp*zp)*exp(zp) #FIXME: doesn't integrate to zero...
-    fˣ = @. zu*cos(xu*zu)*exp(zu) + π^3/8*cos(π*xu/2)*sin(π*zu/2)
-    fᶻ = @. xw*cos(xw*zw)*exp(zw) + π^3/8*sin(π*xw/2)*cos(π*zw/2)
+    uˣa = @.  cos(π*xu/2)*sin(π*zu/2)
+    uᶻa = @. -sin(π*xw/2)*cos(π*zw/2)
+    pa = @. sin(xp*zp)*exp(zp) 
+    fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
+    fᶻ = @. xw*cos(xw*zw)*exp(zw) + π^2/4*sin(π*xw/2)*cos(π*zw/2)
 
     # forcing and dirichlet for solver
     f = (x = fˣ, z = fᶻ)
-    u₀ = (botw = wa[ebotw], topw = wa[etopw],
-          botu = ua[ebotu], topu = ua[etopu])
+    u₀ = (botw = uᶻa[ebotw], topw = uᶻa[etopw],
+          botu = uˣa[ebotu], topu = uˣa[etopu])
+    p₀ = pa[1]
 
 
     # get Jacobians
@@ -195,20 +209,53 @@ function stokes_hydro_res(nref, order; plot=false)
     J = Jacobians(g1)
 
     # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀)
+    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀)
 
     if plot
         quickplot(g.u, uˣ, L"u^x", "images/ux.png")
         quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
         quickplot(g.w, p, L"p", "images/p.png")
-        quickplot(g.u, ua, L"u^x_a", "images/uxa.png")
-        quickplot(g.w, wa, L"u^z_a", "images/uza.png")
+        quickplot(g.u, uˣa, L"u^x_a", "images/uxa.png")
+        quickplot(g.w, uᶻa, L"u^z_a", "images/uza.png")
         quickplot(g.w, pa, L"p_a", "images/pa.png")
     end
 
-    return uˣ, uᶻ, p
+    # error
+    err_uˣ = L2norm(g.u, s.uu, J, uˣ - uˣa)
+    err_uᶻ = L2norm(g.w, s.ww, J, uᶻ - uᶻa)
+    err_p  = L2norm(g.p, s.pp, J, p - pa)
+    # err_uˣ = maximum(abs.(uˣ - uˣa))
+    # err_uᶻ = maximum(abs.(uᶻ - uᶻa))
+    # err_p  = maximum(abs.(p - pa))
+    return huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p
 end
 
-uˣ, uᶻ, p = stokes_hydro_res(3, 2; plot=true)
+function stokes_hydro_conv(nrefs)
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"Resolution $h$")
+    ax.set_ylabel(L"$L_2$ Error") 
+    for i in eachindex(nrefs)
+        huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p = stokes_hydro_res(nrefs[i])
+        ax.loglog(huˣ, err_uˣ, c="tab:blue", "o")
+        ax.loglog(huᶻ, err_uᶻ, c="tab:orange", "o")
+        # ax.loglog(hp, err_p, c="tab:green", "o")
+    end
+    # hmin = 0.01
+    # hmax = 0.05
+    # err_min = 1e-2
+    # err_max = 2e-2
+    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)], "k-", label=L"$h$")
+    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)^2], "k--", label=L"$h^2$")
+    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)^3], "k:", label=L"$h^3$")
+    # ax.legend()
+    # ax.set_xlim(0.5*hmin, 2*hmax)
+    # ax.set_ylim(0.5*err_min, 2*err_max)
+    savefig("images/stokes_hydro.png")
+    println("images/stokes_hydro.png")
+    plt.close()
+end
+
+# stokes_hydro_res(0; plot=true)
+stokes_hydro_conv(0:3)
 
 println("Done.")
