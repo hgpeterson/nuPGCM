@@ -1,11 +1,13 @@
 using nuPGCM
 using PyPlot
+using PyCall
 using SparseArrays
 using LinearAlgebra
 using Printf
 
 include("utils.jl")
 
+Line2D = pyimport("matplotlib.lines").Line2D
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -195,7 +197,7 @@ function stokes_hydro_res(nref; plot=false)
     uᶻa = @. -sin(π*xw/2)*cos(π*zw/2)
     pa = @. sin(xp*zp)*exp(zp) 
     fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
-    fᶻ = @. xw*cos(xw*zw)*exp(zw) + π^2/4*sin(π*xw/2)*cos(π*zw/2)
+    fᶻ = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
 
     # forcing and dirichlet for solver
     f = (x = fˣ, z = fᶻ)
@@ -224,9 +226,6 @@ function stokes_hydro_res(nref; plot=false)
     err_uˣ = L2norm(g.u, s.uu, J, uˣ - uˣa)
     err_uᶻ = L2norm(g.w, s.ww, J, uᶻ - uᶻa)
     err_p  = L2norm(g.p, s.pp, J, p - pa)
-    # err_uˣ = maximum(abs.(uˣ - uˣa))
-    # err_uᶻ = maximum(abs.(uᶻ - uᶻa))
-    # err_p  = maximum(abs.(p - pa))
     return huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p
 end
 
@@ -235,27 +234,32 @@ function stokes_hydro_conv(nrefs)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"$L_2$ Error") 
     for i in eachindex(nrefs)
+        println(nrefs[i])
         huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p = stokes_hydro_res(nrefs[i])
         ax.loglog(huˣ, err_uˣ, c="tab:blue", "o")
         ax.loglog(huᶻ, err_uᶻ, c="tab:orange", "o")
-        # ax.loglog(hp, err_p, c="tab:green", "o")
+        ax.loglog(hp, err_p, c="tab:green", "o")
     end
-    # hmin = 0.01
-    # hmax = 0.05
-    # err_min = 1e-2
-    # err_max = 2e-2
-    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)], "k-", label=L"$h$")
-    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)^2], "k--", label=L"$h^2$")
-    # ax.loglog([hmax, hmin], [err_max, err_max*(hmin/hmax)^3], "k:", label=L"$h^3$")
-    # ax.legend()
-    # ax.set_xlim(0.5*hmin, 2*hmax)
-    # ax.set_ylim(0.5*err_min, 2*err_max)
+    hmin = 2e-3
+    hmax = 1e-1
+    err_min = 2e-7
+    err_max = 5e-2
+    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^2], "k-")
+    legend_elements = [
+        Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"p"),
+        Line2D([0], [0], color="k", label=L"O(h^2)")
+    ]
+    ax.legend(handles=legend_elements)
+    ax.set_xlim(0.5*hmin, 2*hmax)
+    ax.set_ylim(0.5*err_min, 2*err_max)
     savefig("images/stokes_hydro.png")
     println("images/stokes_hydro.png")
     plt.close()
 end
 
-# stokes_hydro_res(0; plot=true)
-stokes_hydro_conv(0:3)
+# stokes_hydro_res(2; plot=true)
+stokes_hydro_conv(0:5)
 
 println("Done.")
