@@ -11,31 +11,28 @@ plt.close("all")
 pygui(false)
 
 """
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, b, e)
+    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, b, e, f, u₀)
 
 stokes_hydro problem:
-    -∂zz(uˣ) + ∂x(p) = 0,
-               ∂z(p) = b,
+    -∂zz(uˣ) + ∂x(p) = fˣ,
+               ∂z(p) = fᶻ,
      ∂x(uˣ) + ∂z(uᶻ) = 0, 
 with extra condition
-    ∫ p dx dz = 0.
-Boundary conditions are 
-       uˣ = uᶻ = 0 at z = -H,
-        ∂z(uˣ) = 0 at z = 0, 
-            uᶻ = 0 at z = 0,
+    ∫ p dx dz = 0,
+and Dirichlet boundary conditions on u.
 Weak form:
     ∫ [ ∂z(uˣ)∂z(vˣ) - p∂x(vˣ) 
       - p∂z(vᶻ)
       + q∂x(uˣ) + q∂z(uᶻ)
       ] dx dz
-    = ∫ bvᶻ dx dz,
+    = ∫ [fˣvˣ + fᶻvᶻ] dx dz,
 for all 
     uˣ, vˣ ∈ Pᵢ,
     uᶻ, vᶻ ∈ Pⱼ, 
     p, q ∈ Pₖ
 where j = i-1, k = i-2, and Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_hydro(g, s, J, b, e)
+function solve_stokes_hydro(g, s, J, e, f, u₀)
     # indices
     uˣmap = 1:g.u.np
     uᶻmap = uˣmap[end] .+ (1:g.w.np)
@@ -61,8 +58,10 @@ function solve_stokes_hydro(g, s, J, b, e)
         # δ*q*p
         Mppᵏ = abs(J.J[k])*s.pp.φφ
 
-        # b*vᶻ
-        rᵏ = abs(J.J[k])*s.ww.φφ*b[g.w.t[k, :]]
+        # fˣ*vˣ
+        rxᵏ = abs(J.J[k])*s.uu.φφ*f.x[g.u.t[k, :]]
+        # fᶻ*vᶻ
+        rzᵏ = abs(J.J[k])*s.ww.φφ*f.z[g.w.t[k, :]]
 
         # uˣ*vˣ
         for i=1:g.u.nn, j=1:g.u.nn
@@ -94,29 +93,30 @@ function solve_stokes_hydro(g, s, J, b, e)
             # pressure condition: δ*q*p
             push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
         end
-        # b
-        r[uᶻmap[g.w.t[k, :]]] .+= rᵏ
+        # f
+        r[uˣmap[g.u.t[k, :]]] .+= rxᵏ
+        r[uᶻmap[g.w.t[k, :]]] .+= rzᵏ
     end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # uˣ = uᶻ = 0 at z = -H (replace mom eqtns at bottom bdy)
+    # dirichlet condition on bottom and top (replace mom eqtns)
     A[uˣmap[e.botu], :] .= 0
     A[diagind(A)[uˣmap[e.botu]]] .= 1
-    r[uˣmap[e.botu]] .= 0
+    r[uˣmap[e.botu]] .= u₀.botu
 
     A[uᶻmap[e.botw], :] .= 0
     A[diagind(A)[uᶻmap[e.botw]]] .= 1
-    r[uᶻmap[e.botw]] .= 0
+    r[uᶻmap[e.botw]] .= u₀.botw
 
-    # ∂z(uˣ) = 0 at z = 0 → natural
-    r[uˣmap[e.topu]] .= 1
+    A[uˣmap[e.topu], :] .= 0
+    A[diagind(A)[uˣmap[e.topu]]] .= 1
+    r[uˣmap[e.topu]] .= u₀.topu
 
-    # uᶻ = 0 at z = 0 (replace mom eqtn at top bdy)
     A[uᶻmap[e.topw], :] .= 0
     A[diagind(A)[uᶻmap[e.topw]]] .= 1
-    r[uᶻmap[e.topw]] .= 0
+    r[uᶻmap[e.topw]] .= u₀.topw
 
     # solve
     sol = A\r
@@ -166,31 +166,44 @@ function stokes_hydro_res(nref, order; plot=false)
     e = (botw = ebotw, topw = etopw, 
          botu = ebotu, topu = etopu)
 
-    # forcing
-    x = g.w.p[:, 1] 
-    z = g.w.p[:, 2] 
-    b = zeros(g.w.np)
-    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    # H_func(x) = sqrt(2 - x^2) - 1
-    # H_func(x) = 1 - x^2
-    # H = H_func.(x)
-    # δ = 0.2
-    # b = @. z + δ*H*exp(-(z/H + 1)/δ)
-    # b[H .== 0] .= 0
-    # b = z
+    # mesh resolution 
+    hp = 1/sqrt(gp.np)
+    hw = 1/sqrt(gw.np)
+    hu = 1/sqrt(gu.np)
+
+    # exact solution
+    xu = gu.p[:, 1] 
+    zu = gu.p[:, 2] 
+    xw = gw.p[:, 1] 
+    zw = gw.p[:, 2] 
+    xp = gp.p[:, 1] 
+    zp = gp.p[:, 2] 
+    ua = @.  π/2*cos(π*xu/2)*sin(π*zu/2)
+    wa = @. -π/2*sin(π*xw/2)*cos(π*zw/2)
+    pa = @. sin(xp*zp)*exp(zp) #FIXME: doesn't integrate to zero...
+    fˣ = @. zu*cos(xu*zu)*exp(zu) + π^3/8*cos(π*xu/2)*sin(π*zu/2)
+    fᶻ = @. xw*cos(xw*zw)*exp(zw) + π^3/8*sin(π*xw/2)*cos(π*zw/2)
+
+    # forcing and dirichlet for solver
+    f = (x = fˣ, z = fᶻ)
+    u₀ = (botw = wa[ebotw], topw = wa[etopw],
+          botu = ua[ebotu], topu = ua[etopu])
+
 
     # get Jacobians
     g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)
 
     # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, b, e)
+    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀)
 
     if plot
-        quickplot(g.w, b, g.u, uˣ, L"u^x", "images/ux.png")
-        quickplot(g.w, b, g.w, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g.w, b, g.w, b, L"b", "images/b.png")
-        quickplot(g.w, b, g.w, p, L"p", "images/p.png")
+        quickplot(g.u, uˣ, L"u^x", "images/ux.png")
+        quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g.w, p, L"p", "images/p.png")
+        quickplot(g.u, ua, L"u^x_a", "images/uxa.png")
+        quickplot(g.w, wa, L"u^z_a", "images/uza.png")
+        quickplot(g.w, pa, L"p_a", "images/pa.png")
     end
 
     return uˣ, uᶻ, p
