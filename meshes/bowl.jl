@@ -37,7 +37,7 @@ function generate_bowl_mesh(h₀, r)
     z(x) = x^2 - 1
     
     # edge points
-    N = Int64(round(2/(h₀/r)))/2
+    N = Int64(round(2/(h₀/r)))
     x = -1:2/(N - 1):1
     for i=1:N
         gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀)
@@ -139,7 +139,7 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-for i=0:5
+for i=4:5
     h₀ = 0.01*2^(5-i)
     generate_bowl_mesh(h₀, 1)
     p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
