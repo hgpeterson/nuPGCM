@@ -134,28 +134,23 @@ function solve_pg(g, s, J, b, e, ε²)
     A[diagind(A)[uᶻmap[e.topw]]] .= 1
     r[uᶻmap[e.topw]] .= 0
 
-    # println(rank(A))
-    println(N)
-
-    # if N < 1000
-    #     fig, ax = subplots(1)
-    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
-    #     ax.spines["left"].set_visible(false)
-    #     ax.spines["bottom"].set_visible(false)
-    #     savefig("images/A.png")
-    #     println("images/A.png")
-    #     plt.close()
-    #     # error()
-    # end
-
-    # println(cond(Array(A)))
+    if N < 1000
+        fig, ax = subplots(1)
+        ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+        ax.spines["left"].set_visible(false)
+        ax.spines["bottom"].set_visible(false)
+        savefig("images/A.png")
+        println("images/A.png")
+        plt.close()
+        # println("Condition number: ", cond(Array(A)))
+    end
 
     # solve
-    sol = A\r
-    # sol, ch = minres(A, r, log=true, verbose=true)
+    println("N = $N")
+    # sol = A\r
+    sol = minres(A, r)
     # sol, ch = bicgstabl(A, r, log=true, verbose=true)
     # sol, ch = lsmr(A, r, log=true, verbose=true)
-    # sol = sor(A, r, 0.5)
 
     # reshape to get u and p
     return sol[uˣmap], sol[uʸmap], sol[uᶻmap], sol[pmap]
@@ -164,7 +159,10 @@ end
 """
     h, err = pg_res(nref)
 """
-function pg_res(nref, order; plot=false)
+function pg_res(nref; plot=false)
+    # order of polynomials
+    order = 2
+
     # Ekman number
     ε² = 1
 
@@ -187,17 +185,21 @@ function pg_res(nref, order; plot=false)
     pp = ShapeFunctionIntegrals(sp, sp)
     s = (uu = uu,
          ww = ww, 
-         pu  = pu,  
-         pw  = pw,  
-         up  = up,  
-         wp  = wp,
-         pp   = pp)  
+         pu = pu,  
+         pw = pw,  
+         up = up,  
+         wp = wp,
+         pp = pp)  
 
     # get grids
-    gp = Grid("../meshes/$geo/mesh$nref.h5", order - 2)
-    gw = Grid("../meshes/$geo/mesh$nref.h5", order - 1)
+    gp = Grid("../meshes/$geo/mesh$nref.h5", order-2)
+    gw = Grid("../meshes/$geo/mesh$nref.h5", order-1)
     gu = Grid("../meshes/$geo/mesh$nref.h5", order)
     g = (p = gp, u = gu, w = gw)
+ 
+    # get Jacobians
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
+    J = Jacobians(g1)   
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -208,32 +210,27 @@ function pg_res(nref, order; plot=false)
     # forcing
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
-    b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    # H_func(x) = sqrt(2 - x^2) - 1
-    # # H_func(x) = 1 - x^2
-    # H = H_func.(x)
-    # δ = 0.2
-    # b = @. z + δ*H*exp(-(z/H + 1)/δ)
-    # b[H .== 0] .= 0
-
-    # get Jacobians
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    J = Jacobians(g1)
+    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    H_func(x) = sqrt(2 - x^2) - 1
+    # H_func(x) = 1 - x^2
+    H = H_func.(x)
+    δ = 0.2
+    b = @. z + δ*H*exp(-(z/H + 1)/δ)
+    b[H .== 0] .= 0
 
     # solve 
     uˣ, uʸ, uᶻ, p = solve_pg(g, s, J, b, e, ε²)
 
     if plot
-        quickplot(gw, b, gu, uˣ, L"u^x", "images/ux.png")
-        quickplot(gw, b, gu, uʸ, L"u^y", "images/uy.png")
-        quickplot(gw, b, gw, uᶻ, L"u^z", "images/uz.png")
-        quickplot(gw, b, gw, b, L"b", "images/b.png")
-        quickplot(gw, b, gw, p, L"p", "images/p.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gu, uˣ, L"u^x", "images/ux.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gu, uʸ, L"u^y", "images/uy.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gw, uᶻ, L"u^z", "images/uz.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gw, p, L"p", "images/p.png")
     end
 
     return uˣ, uʸ, uᶻ, p
 end
 
-uˣ, uʸ, uᶻ, p = pg_res(2, 2; plot=true)
+uˣ, uʸ, uᶻ, p = pg_res(4; plot=true)
 
 println("Done.")

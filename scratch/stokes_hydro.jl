@@ -125,12 +125,24 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
         r[uᶻmap[e.topw]] .= u₀.topw
     end
 
+    # if N < 1000
+    #     fig, ax = subplots(1)
+    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+    #     ax.spines["left"].set_visible(false)
+    #     ax.spines["bottom"].set_visible(false)
+    #     savefig("images/A.png")
+    #     println("images/A.png")
+    #     plt.close()
+    #     # println("Condition number: ", cond(Array(A)))
+    # end
+
     # pressure condition
     A[pmap[1], :] .= 0
     A[pmap[1], pmap[1]] = 1
     r[pmap[1]] = p₀
 
     # solve
+    println("N = $N")
     sol = A\r
 
     # reshape to get u and p
@@ -170,10 +182,14 @@ function stokes_hydro_res(nref; plot=false)
          pp = pp)  
 
     # get grids
-    gp = Grid("../meshes/$geo/mesh$nref.h5", order - 2)
-    gw = Grid("../meshes/$geo/mesh$nref.h5", order - 1)
+    gp = Grid("../meshes/$geo/mesh$nref.h5", order-2)
+    gw = Grid("../meshes/$geo/mesh$nref.h5", order-1)
     gu = Grid("../meshes/$geo/mesh$nref.h5", order)
     g = (p = gp, u = gu, w = gw)
+
+    # get Jacobians
+    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
+    J = Jacobians(g1)
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -186,49 +202,69 @@ function stokes_hydro_res(nref; plot=false)
     huᶻ = 1/sqrt(gw.np)
     huˣ = 1/sqrt(gu.np)
 
-    # exact solution
-    xu = gu.p[:, 1] 
-    zu = gu.p[:, 2] 
-    xw = gw.p[:, 1] 
-    zw = gw.p[:, 2] 
-    xp = gp.p[:, 1] 
-    zp = gp.p[:, 2] 
-    uˣa = @.  cos(π*xu/2)*sin(π*zu/2)
-    uᶻa = @. -sin(π*xw/2)*cos(π*zw/2)
-    pa = @. sin(xp*zp)*exp(zp) 
-    fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
-    fᶻ = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
+    # # exact solution
+    # xu = gu.p[:, 1] 
+    # zu = gu.p[:, 2] 
+    # xw = gw.p[:, 1] 
+    # zw = gw.p[:, 2] 
+    # xp = gp.p[:, 1] 
+    # zp = gp.p[:, 2] 
+    # uˣa = @.  cos(π*xu/2)*sin(π*zu/2)
+    # uᶻa = @. -sin(π*xw/2)*cos(π*zw/2)
+    # pa = @. sin(xp*zp)*exp(zp) 
+    # fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
+    # fᶻ = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
 
-    # forcing and dirichlet for solver
+    # # forcing and dirichlet for solver
+    # f = (x = fˣ, z = fᶻ)
+    # u₀ = (botw = uᶻa[ebotw], topw = uᶻa[etopw],
+    #       botu = uˣa[ebotu], topu = uˣa[etopu])
+    # p₀ = pa[1]
+
+    # more realistic example 
+    x = gw.p[:, 1] 
+    z = gw.p[:, 2] 
+    H_func(x) = sqrt(2 - x^2) - 1
+    # H_func(x) = 1 - x^2
+    H = H_func.(x)
+    δ = 0.2
+    fᶻ = @. z + δ*H*exp(-(z/H + 1)/δ)
+    fᶻ[H .== 0] .= 0
+    fˣ = zeros(gu.np)
     f = (x = fˣ, z = fᶻ)
-    u₀ = (botw = uᶻa[ebotw], topw = uᶻa[etopw],
-          botu = uˣa[ebotu], topu = uˣa[etopu])
-    p₀ = pa[1]
-
-
-    # get Jacobians
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    J = Jacobians(g1)
+    u₀ = (botw = zeros(size(ebotw)), topw = zeros(size(etopw)),
+          botu = zeros(size(ebotu)), topu = zeros(size(etopu)))
+    p₀ = 0
 
     # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀)
+    # uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀)
+    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
 
     if plot
-        quickplot(g.u, uˣ, L"u^x", "images/ux.png")
-        quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g.w, p, L"p", "images/p.png")
-        quickplot(g.u, uˣa, L"u^x_a", "images/uxa.png")
-        quickplot(g.w, uᶻa, L"u^z_a", "images/uza.png")
-        quickplot(g.w, pa, L"p_a", "images/pa.png")
+        # quickplot(g.u, uˣ, L"u^x", "images/ux.png")
+        # quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
+        # quickplot(g.w, p, L"p", "images/p.png")
+        # quickplot(g.u, uˣa, L"u^x_a", "images/uxa.png")
+        # quickplot(g.w, uᶻa, L"u^z_a", "images/uza.png")
+        # quickplot(g.w, pa, L"p_a", "images/pa.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), g.w, f.z, g.w, uᶻ, L"u^z", "images/uz.png")
+        quickplot(-1:0.01:1, H_func.(-1:0.01:1), g.w, f.z, g.w, p, L"p", "images/p.png")
     end
 
     # error
-    err_uˣ = L2norm(g.u, s.uu, J, uˣ - uˣa)
-    err_uᶻ = L2norm(g.w, s.ww, J, uᶻ - uᶻa)
-    err_p  = L2norm(g.p, s.pp, J, p - pa)
+    # err_uˣ = L2norm(g.u, s.uu, J, uˣ - uˣa)
+    # err_uᶻ = L2norm(g.w, s.ww, J, uᶻ - uᶻa)
+    # err_p  = L2norm(g.p, s.pp, J, p - pa)
+    err_uˣ = 0
+    err_uᶻ = 0
+    err_p  = 0
     return huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p
 end
 
+"""
+    stokes_hydro_conv(nrefs)
+"""
 function stokes_hydro_conv(nrefs)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
@@ -259,7 +295,7 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-# stokes_hydro_res(2; plot=true)
-stokes_hydro_conv(0:5)
+stokes_hydro_res(0; plot=true)
+# stokes_hydro_conv(0:5)
 
 println("Done.")
