@@ -157,8 +157,8 @@ function stokes_hydro_res(nref; plot=false)
     order = 2
 
     # geometry type
-    geo = "jc"
-    # geo = "gmsh"
+    # geo = "jc"
+    geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -214,8 +214,6 @@ function stokes_hydro_res(nref; plot=false)
     # pa = @. sin(xp*zp)*exp(zp) 
     # fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
     # fᶻ = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
-
-    # # forcing and dirichlet for solver
     # f = (x = fˣ, z = fᶻ)
     # u₀ = (botw = uᶻa[ebotw], topw = uᶻa[etopw],
     #       botu = uˣa[ebotu], topu = uˣa[etopu])
@@ -224,8 +222,9 @@ function stokes_hydro_res(nref; plot=false)
     # more realistic example 
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
-    H_func(x) = sqrt(2 - x^2) - 1
+    # H_func(x) = sqrt(2 - x^2) - 1
     # H_func(x) = 1 - x^2
+    H_func(x) = 1 - abs(x)
     H = H_func.(x)
     δ = 0.2
     fᶻ = @. z + δ*H*exp(-(z/H + 1)/δ)
@@ -280,12 +279,14 @@ function stokes_hydro_conv(nrefs)
     hmax = 1e-1
     err_min = 2e-7
     err_max = 5e-2
-    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^2], "k-")
+    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^1], "k-")
+    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^2], "k--")
     legend_elements = [
         Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
         Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),
         Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"p"),
-        Line2D([0], [0], color="k", label=L"O(h^2)")
+        Line2D([0], [0], color="k", label=L"O(h)"),
+        Line2D([0], [0], color="k", ls="--", label=L"O(h^2)")
     ]
     ax.legend(handles=legend_elements)
     ax.set_xlim(0.5*hmin, 2*hmax)
@@ -295,7 +296,7 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-stokes_hydro_res(0; plot=true)
+stokes_hydro_res(6; plot=true)
 # stokes_hydro_conv(0:5)
 
 println("Done.")

@@ -40,8 +40,12 @@ function generate_bowl_mesh(h₀, r)
     N = Int64(round(2/(h₀/r)))
     x = -1:2/(N - 1):1
     for i=1:N
-        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀)
+        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀/r)
     end
+    # gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
+    # gmsh.model.geo.addPoint(0, -1, 0, h₀/r)
+    # gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
+    # N = 3
 
     # connect edge points by lines
     for i=1:N-1
@@ -53,27 +57,27 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.addCurveLoop(1:N, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
-    # # refine mesh near boundary nodes
-    # gmsh.model.mesh.field.add("Distance", 1)
-    # gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
-    # gmsh.model.mesh.field.setNumber(1, "Sampling", 10)
+    # refine mesh near boundary nodes
+    gmsh.model.mesh.field.add("Distance", 1)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
+    gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
-    # gmsh.model.mesh.field.add("Threshold", 2)
-    # gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    # gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
-    # gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
-    # gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
-    # gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
+    gmsh.model.mesh.field.add("Threshold", 2)
+    gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
+    gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
+    gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
+    gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
 
-    # gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
-    # # turn off the usual ways the mesh size is determined
-    # gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    # turn off the usual ways the mesh size is determined
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
     # use different mesh algorithm (better for variable mesh size)
-    # gmsh.option.setNumber("Mesh.Algorithm", 5)
+    gmsh.option.setNumber("Mesh.Algorithm", 5)
     
     # sync 
     gmsh.model.geo.synchronize()
@@ -106,19 +110,20 @@ function load_gmesh(; savefile="")
     gmsh.open("mesh.msh")
 
     # find triangle nodes from the elements in the type-2 surface with tag 1
-    tri_nodes = gmsh.model.mesh.getElements(2, 1)[3][1]
+    el_types, el_tags, el_node_tags = gmsh.model.mesh.getElements(2, 1)
+    tri_nodes = el_node_tags[1]
     nt = Int64(size(tri_nodes, 1)/3)
-    t = zeros(nt, 3)
+    t = zeros(Int64, nt, 3)
     for i=1:nt
-        t[i, :] = [tri_nodes[3*i-2] tri_nodes[3*i-1] tri_nodes[3*i]]
+        t[i, :] = tri_nodes[3*i-2:3i]
     end
-    t = Int64.(t)
 
     # find node positions by looping through indices
     np = Int64(maximum(t))
     p = zeros(np, 2)
     for i=1:np
-        p[i, :] = gmsh.model.mesh.getNode(i)[1][1:2]
+        coords, param_coord, dim, tag = gmsh.model.mesh.getNode(i)
+        p[i, :] = coords[1:2]
     end
 
     # get edge nodes
@@ -139,15 +144,27 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-for i=4:5
-    h₀ = 0.01*2^(5-i)
-    generate_bowl_mesh(h₀, 1)
-    p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
+# for i=0:5
+#     h₀ = 0.01*2.0^(5-i)
+#     generate_bowl_mesh(h₀, 1)
+#     p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
 
-    tplot(p, t)
-    plot(p[e, 1], p[e, 2], "o", ms=1)
-    plt.axis("equal")
-    savefig("gmsh/mesh$i.png")
-    println("gmsh/mesh$i.png")
-    plt.close()
-end
+#     # tplot(p, t)
+#     # plot(p[e, 1], p[e, 2], "o", ms=1)
+#     # plt.axis("equal")
+#     # savefig("gmsh/mesh$i.png")
+#     # println("gmsh/mesh$i.png")
+#     # plt.close()
+# end
+
+h₀ = 0.02
+r = 1
+generate_bowl_mesh(h₀, r)
+p, t, e = load_gmesh(savefile="gmsh/mesh6.h5")
+println("\nnp = $(size(p, 1))")
+
+# tplot(p, t)
+# plt.axis("equal")
+# savefig("mesh.png")
+# println("mesh.png")
+# plt.close()

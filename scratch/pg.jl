@@ -134,21 +134,21 @@ function solve_pg(g, s, J, b, e, ε²)
     A[diagind(A)[uᶻmap[e.topw]]] .= 1
     r[uᶻmap[e.topw]] .= 0
 
-    if N < 1000
-        fig, ax = subplots(1)
-        ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
-        ax.spines["left"].set_visible(false)
-        ax.spines["bottom"].set_visible(false)
-        savefig("images/A.png")
-        println("images/A.png")
-        plt.close()
-        # println("Condition number: ", cond(Array(A)))
-    end
+    # if N < 1000
+    #     fig, ax = subplots(1)
+    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
+    #     ax.spines["left"].set_visible(false)
+    #     ax.spines["bottom"].set_visible(false)
+    #     savefig("images/A.png")
+    #     println("images/A.png")
+    #     plt.close()
+    #     # println("Condition number: ", cond(Array(A)))
+    # end
 
     # solve
     println("N = $N")
-    # sol = A\r
-    sol = minres(A, r)
+    sol = A\r
+    # sol = minres(A, r)
     # sol, ch = bicgstabl(A, r, log=true, verbose=true)
     # sol, ch = lsmr(A, r, log=true, verbose=true)
 
@@ -164,11 +164,12 @@ function pg_res(nref; plot=false)
     order = 2
 
     # Ekman number
-    ε² = 1
+    ε² = 1e-2
+    # ε² = 1
 
     # geometry type
-    geo = "jc"
-    # geo = "gmsh"
+    # geo = "jc"
+    geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -211,8 +212,9 @@ function pg_res(nref; plot=false)
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
     # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    H_func(x) = sqrt(2 - x^2) - 1
-    # H_func(x) = 1 - x^2
+    # H_func(x) = sqrt(2 - x^2) - 1
+    H_func(x) = 1 - x^2
+    # H_func(x) = 1 - abs(x)
     H = H_func.(x)
     δ = 0.2
     b = @. z + δ*H*exp(-(z/H + 1)/δ)
@@ -231,6 +233,6 @@ function pg_res(nref; plot=false)
     return uˣ, uʸ, uᶻ, p
 end
 
-uˣ, uʸ, uᶻ, p = pg_res(4; plot=true)
+uˣ, uʸ, uᶻ, p = pg_res(6; plot=true)
 
 println("Done.")
