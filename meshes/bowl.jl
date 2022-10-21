@@ -33,19 +33,20 @@ function generate_bowl_mesh(h₀, r)
     # model
     gmsh.model.add("bowl_mesh")
 
-    # depth function
-    z(x) = x^2 - 1
+    # # depth function
+    # # z(x) = x^2 - 1
+    # z(x) = 1 - sqrt(2 - x^2)
     
-    # edge points
-    N = Int64(round(2/(h₀/r)))
-    x = -1:2/(N - 1):1
-    for i=1:N
-        gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀/r)
-    end
-    # gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
-    # gmsh.model.geo.addPoint(0, -1, 0, h₀/r)
-    # gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
-    # N = 3
+    # # edge points
+    # N = Int64(round(2/(h₀/r)))
+    # x = -1:2/(N - 1):1
+    # for i=1:N
+    #     gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀/r)
+    # end
+    gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
+    gmsh.model.geo.addPoint(0, -1, 0, h₀/r)
+    gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
+    N = 3
 
     # connect edge points by lines
     for i=1:N-1
@@ -62,12 +63,16 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
     gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
-    gmsh.model.mesh.field.add("Threshold", 2)
-    gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
-    gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
-    gmsh.model.mesh.field.setNumber(2, "DistMin", 0.01)
-    gmsh.model.mesh.field.setNumber(2, "DistMax", 0.02)
+    # gmsh.model.mesh.field.add("Threshold", 2)
+    # gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
+    # gmsh.model.mesh.field.setNumber(2, "DistMin", 0.04)
+    # gmsh.model.mesh.field.setNumber(2, "DistMax", 0.08)
+
+    gmsh.model.mesh.field.add("MathEval", 2)
+    gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r)/2, "*(Tanh(10*(F1 - 0.25)) + 1)"))
+    # gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r), "*F1^3"))
 
     gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
@@ -83,8 +88,9 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.synchronize()
 
     # define boundary and interior physical groups
-    gmsh.model.addPhysicalGroup(1, 1:N, 1, "boundary")
-    gmsh.model.addPhysicalGroup(2, [1], 2, "surface")
+    gmsh.model.addPhysicalGroup(1, 1:N-1, 1, "bot")
+    gmsh.model.addPhysicalGroup(1, [N], 2, "top")
+    gmsh.model.addPhysicalGroup(2, [1], 3, "surface")
 
     # generate mesh
     gmsh.model.mesh.generate(2)
@@ -147,7 +153,7 @@ end
 # for i=0:5
 #     h₀ = 0.01*2.0^(5-i)
 #     generate_bowl_mesh(h₀, 1)
-#     p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
+#     p, t, e = load_gmesh(savefile="gmsh_tri/mesh$i.h5")
 
 #     # tplot(p, t)
 #     # plot(p[e, 1], p[e, 2], "o", ms=1)
@@ -157,10 +163,11 @@ end
 #     # plt.close()
 # end
 
-h₀ = 0.02
-r = 1
+h₀ = 0.03
+r = 10
 generate_bowl_mesh(h₀, r)
-p, t, e = load_gmesh(savefile="gmsh/mesh6.h5")
+# p, t, e = load_gmesh(savefile="gmsh/mesh6.h5")
+p, t, e = load_gmesh(savefile="gmsh_tri/mesh6.h5")
 println("\nnp = $(size(p, 1))")
 
 # tplot(p, t)
