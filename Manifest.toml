@@ -2,7 +2,7 @@
 
 julia_version = "1.8.1"
 manifest_format = "2.0"
-project_hash = "9aa8a7a85e135efd114ff68c949b8df17cfbba03"
+project_hash = "46c6abaaa3015457373acd6da5f993c79523b160"
 
 [[deps.ATK_jll]]
 deps = ["Artifacts", "Glib_jll", "JLLWrappers", "Libdl", "Pkg"]
@@ -105,6 +105,12 @@ deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "97f1325c10bd02b1cc1882e9c2bf6407ba630ace"
 uuid = "ee1fde0b-3d02-5ea6-8484-8dfef6360eab"
 version = "1.12.16+3"
+
+[[deps.Delaunay]]
+deps = ["LinearAlgebra", "PyCall", "Random", "SparseArrays", "SpecialFunctions", "Test"]
+git-tree-sha1 = "9cc9c5bdf00057a9c4befa9f73a3bad4363439c8"
+uuid = "07eb4e4e-0c6d-46ef-bc4e-83d5e5d860a9"
+version = "1.2.0"
 
 [[deps.Dierckx]]
 deps = ["Dierckx_jll"]

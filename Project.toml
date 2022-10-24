@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Delaunay = "07eb4e4e-0c6d-46ef-bc4e-83d5e5d860a9"
 Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
