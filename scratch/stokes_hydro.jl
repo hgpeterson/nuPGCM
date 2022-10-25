@@ -127,10 +127,10 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
 
     # pressure condition
     A[pmap[1], :] .= 0
-    # A[pmap[1], pmap[1]] = 1
-    # r[pmap[1]] = p₀
-    A[pmap[1], pmap[:]] .= 1
-    r[pmap[1]] = 0
+    A[pmap[1], pmap[1]] = 1
+    r[pmap[1]] = p₀
+    # A[pmap[1], pmap[:]] .= 1
+    # r[pmap[1]] = 0
 
     println("N = $N")
     if N < 1000
@@ -221,6 +221,7 @@ function stokes_hydro_b(nref, geo; plot=false)
     # get Jacobians
     g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)
+    println("h = ", 1/sqrt(g1.np))
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -233,13 +234,15 @@ function stokes_hydro_b(nref, geo; plot=false)
     z = gw.p[:, 2] 
     if geo == "gmsh_tri"
         H = @. 1 - abs(x)
+    elseif geo == "gmsh"
+        H = @. 1 - x^2
     else
         H = @. sqrt(2 - x^2) - 1
     end
-    δ = 0.2
-    fᶻ = @. z + δ*exp(-(z + H)/δ)
-    fᶻ[H .== 0] .= 0
-    # fᶻ = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
+    δ = 0.1
+    # fᶻ = @. z + δ*exp(-(z + H)/δ)
+    # fᶻ = z
+    fᶻ = @. δ*exp(-(z + H)/δ)
     fˣ = zeros(gu.np)
     f = (x = fˣ, z = fᶻ)
     u₀ = (botw = zeros(size(ebotw)), topw = zeros(size(etopw)),
@@ -382,12 +385,11 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-# stokes_hydro_b(2, "jc"; plot=true)
-# stokes_hydro_b(3, "gmsh"; plot=true)
+stokes_hydro_b(4, "jc"; plot=true)
+# stokes_hydro_b(4, "gmsh"; plot=true)
 # stokes_hydro_b(5, "gmsh_tri"; plot=true)
 # stokes_hydro_b(6, "gmsh_tri"; plot=true)
-stokes_hydro_b(0, ""; plot=true)
-# stokes_hydro_b(1, ""; plot=true)
+# stokes_hydro_b(0, ""; plot=true)
 
 # stokes_hydro_res(3; plot=true)
 # stokes_hydro_conv(0:5)

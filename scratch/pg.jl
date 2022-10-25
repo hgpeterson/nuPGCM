@@ -164,12 +164,12 @@ function pg_res(nref; plot=false)
     order = 2
 
     # Ekman number
-    ε² = 1e-2
+    ε² = 1e-4
     # ε² = 1
 
     # geometry type
-    # geo = "jc"
-    geo = "gmsh"
+    geo = "jc"
+    # geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -211,28 +211,31 @@ function pg_res(nref; plot=false)
     # forcing
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
-    # b = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
-    # H_func(x) = sqrt(2 - x^2) - 1
-    H_func(x) = 1 - x^2
-    # H_func(x) = 1 - abs(x)
-    H = H_func.(x)
-    δ = 0.2
-    b = @. z + δ*H*exp(-(z/H + 1)/δ)
-    b[H .== 0] .= 0
+    if geo == "gmsh_tri"
+        H = @. 1 - abs(x)
+    elseif geo == "gmsh"
+        H = @. 1 - x^2
+    else
+        H = @. sqrt(2 - x^2) - 1
+    end
+    δ = 0.1
+    # b = @. z + δ*exp(-(z + H)/δ)
+    # b = z
+    b = @. δ*exp(-(z + H)/δ)
 
     # solve 
     uˣ, uʸ, uᶻ, p = solve_pg(g, s, J, b, e, ε²)
 
     if plot
-        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gu, uˣ, L"u^x", "images/ux.png")
-        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gu, uʸ, L"u^y", "images/uy.png")
-        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gw, uᶻ, L"u^z", "images/uz.png")
-        quickplot(-1:0.01:1, H_func.(-1:0.01:1), gw, b, gw, p, L"p", "images/p.png")
+        quickplot(gw, b, gu, uˣ, L"u^x", "images/ux.png")
+        quickplot(gw, b, gu, uʸ, L"u^y", "images/uy.png")
+        quickplot(gw, b, gw, uᶻ, L"u^z", "images/uz.png")
+        quickplot(gw, b, gw, p, L"p", "images/p.png")
     end
 
     return uˣ, uʸ, uᶻ, p
 end
 
-uˣ, uʸ, uᶻ, p = pg_res(6; plot=true)
+uˣ, uʸ, uᶻ, p = pg_res(4; plot=true)
 
 println("Done.")
