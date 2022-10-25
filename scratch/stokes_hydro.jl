@@ -57,8 +57,8 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
         # q*∂z(uᶻ)
         Cz_wpᵏ = abs(J.J[k])*(s.wp.φξφ*J.ξy[k] + s.wp.φηφ*J.ηy[k])
 
-        # # δ*q*p
-        # Mppᵏ = abs(J.J[k])*s.pp.φφ
+        # δ*q*p
+        Mppᵏ = abs(J.J[k])*s.pp.φφ
 
         # fˣ*vˣ
         rxᵏ = abs(J.J[k])*s.uu.φφ*f.x[g.u.t[k, :]]
@@ -125,24 +125,59 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
         r[uᶻmap[e.topw]] .= u₀.topw
     end
 
-    # if N < 1000
-    #     fig, ax = subplots(1)
-    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
-    #     ax.spines["left"].set_visible(false)
-    #     ax.spines["bottom"].set_visible(false)
-    #     savefig("images/A.png")
-    #     println("images/A.png")
-    #     plt.close()
-    #     # println("Condition number: ", cond(Array(A)))
-    # end
-
     # pressure condition
     A[pmap[1], :] .= 0
-    A[pmap[1], pmap[1]] = 1
-    r[pmap[1]] = p₀
+    # A[pmap[1], pmap[1]] = 1
+    # r[pmap[1]] = p₀
+    A[pmap[1], pmap[:]] .= 1
+    r[pmap[1]] = 0
+
+    println("N = $N")
+    if N < 1000
+        M = Matrix(A)
+        fig, ax = subplots(1)
+        ax.imshow(abs.(M) .== 0, cmap="binary_r")
+        ax.spines["left"].set_visible(false)
+        ax.spines["bottom"].set_visible(false)
+        savefig("images/A.png")
+        println("images/A.png")
+        plt.close()
+        println("Condition number: ", cond(M))
+        println("rank(A) = ", rank(M))
+
+        evals, evecs = eigen(M)
+        println("|λₘₐₓ| = ", maximum(abs.(evals)))
+        evec = evecs[:, argmax(abs.(evals))]
+        quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_max.png")
+        quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_max.png")
+        quickplot(g.w, real(evec[pmap]), L"p", "images/p_max.png")
+        println("|λₘᵢₙ| = ", minimum(abs.(evals)))
+        evec = evecs[:, argmin(abs.(evals))]
+        quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_min.png")
+        quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_min.png")
+        quickplot(g.w, real(evec[pmap]), L"p", "images/p_min.png")
+
+        # null = nullspace(M)
+        # quickplot(g.u, real(null[uˣmap]), L"u^x", "images/ux_null.png")
+        # quickplot(g.w, real(null[uᶻmap]), L"u^z", "images/uz_null.png")
+        # quickplot(g.w, real(null[pmap]), L"p", "images/p_null.png")
+
+# pressure avg:
+#    N  O(cond(A))
+#   22  1e8
+#  398  1e9
+# 1592  1e10
+# 4415  1e13*
+
+# pressure pin:
+#    N  O(cond(A))
+#   22  1e2
+#  398  1e4
+# 1592  1e5
+# 4415  1e9
+    end
 
     # solve
-    println("N = $N")
     sol = A\r
 
     # reshape to get u and p
@@ -196,14 +231,15 @@ function stokes_hydro_b(nref, geo; plot=false)
     # b field
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
-    if geo == "jc" || geo == "gmsh"
-        H = @. sqrt(2 - x^2) - 1
-    elseif geo == "gmsh_tri"
+    if geo == "gmsh_tri"
         H = @. 1 - abs(x)
+    else
+        H = @. sqrt(2 - x^2) - 1
     end
-    δ = 0.05
+    δ = 0.2
     fᶻ = @. z + δ*exp(-(z + H)/δ)
     fᶻ[H .== 0] .= 0
+    # fᶻ = @. exp(-x^2/0.1^2 - (z + 0.2)^2/0.1^2)
     fˣ = zeros(gu.np)
     f = (x = fˣ, z = fᶻ)
     u₀ = (botw = zeros(size(ebotw)), topw = zeros(size(etopw)),
@@ -346,10 +382,12 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-# stokes_hydro_b(5, "jc"; plot=true)
-# stokes_hydro_b(6, "gmsh"; plot=true)
+# stokes_hydro_b(2, "jc"; plot=true)
+# stokes_hydro_b(3, "gmsh"; plot=true)
 # stokes_hydro_b(5, "gmsh_tri"; plot=true)
-stokes_hydro_b(6, "gmsh_tri"; plot=true)
+# stokes_hydro_b(6, "gmsh_tri"; plot=true)
+stokes_hydro_b(0, ""; plot=true)
+# stokes_hydro_b(1, ""; plot=true)
 
 # stokes_hydro_res(3; plot=true)
 # stokes_hydro_conv(0:5)
