@@ -165,11 +165,12 @@ function pg_res(nref; plot=false)
 
     # Ekman number
     ε² = 1e-4
+    # ε² = 1e-2
     # ε² = 1
 
     # geometry type
-    geo = "jc"
-    # geo = "gmsh"
+    # geo = "jc"
+    geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -236,6 +237,38 @@ function pg_res(nref; plot=false)
     return uˣ, uʸ, uᶻ, p
 end
 
+# b = z
+# δ     ε²    res  uˣ    uʸ    uᶻ
+# 1e-1  1e-4  0    4e-2  4e-1  2e-2
+# 1e-1  1e-4  1    3e-1  4e-1  1e-1
+# 1e-1  1e-4  2    2e-1  2e-1  1e-1   # not high enough resolution to handle
+# 1e-1  1e-4  3    9e-2  6e-2  7e-2
+# 1e-1  1e-4  4    3e-2  1e-2  3e-2
+
+# 1e-1  1e-2  0    3e-2  2e-2  1e-2   # uˣ and uʸ ~ O(h^2) but not uᶻ always
+# 1e-1  1e-2  1    1e-2  8e-3  9e-3
+# 1e-1  1e-2  2    3e-3  2e-3  3e-3
+# 1e-1  1e-2  3    1e-3  6e-4  3e-3
+# 1e-1  1e-2  4    3e-4  1e-4  3e-4
+
+# 1e-1  1e0   0    3e-4  4e-6  1e-4   # uˣ and uʸ ~ O(h^2) but not uᶻ always
+# 1e-1  1e0   1    1e-4  2e-6  1e-4
+# 1e-1  1e0   2    3e-5  4e-7  3e-5
+# 1e-1  1e0   3    1e-5  8e-8  3e-5
+# 1e-1  1e0   4    3e-6  2e-8  3e-6
+
+# b = δ*exp(-(z + H)/δ)
+# δ     ε²    uˣ    uʸ    uᶻ
+# 1e-1  1e-4  1e-2  2e-2  9e-3
+# 1e-1  1e-2  9e-4  5e-4  5e-4
+# 1e-1  1e0   9e-6  5e-8  5e-6
+
+# for i=0:4
+#     uˣ, uʸ, uᶻ, p = pg_res(i)
+#     println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(uˣ)), maximum(abs.(uʸ)), maximum(abs.(uᶻ))))
+# end
+
 uˣ, uʸ, uᶻ, p = pg_res(4; plot=true)
+println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(uˣ)), maximum(abs.(uʸ)), maximum(abs.(uᶻ))))
 
 println("Done.")
