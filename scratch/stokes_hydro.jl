@@ -133,49 +133,30 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
     # r[pmap[1]] = 0
 
     println("N = $N")
-    if N < 1000
-        M = Matrix(A)
-        fig, ax = subplots(1)
-        ax.imshow(abs.(M) .== 0, cmap="binary_r")
-        ax.spines["left"].set_visible(false)
-        ax.spines["bottom"].set_visible(false)
-        savefig("images/A.png")
-        println("images/A.png")
-        plt.close()
-        println("Condition number: ", cond(M))
-        println("rank(A) = ", rank(M))
+    # if N < 1000
+    #     M = Matrix(A)
+    #     fig, ax = subplots(1)
+    #     ax.imshow(abs.(M) .== 0, cmap="binary_r")
+    #     ax.spines["left"].set_visible(false)
+    #     ax.spines["bottom"].set_visible(false)
+    #     savefig("images/A.png")
+    #     println("images/A.png")
+    #     plt.close()
+    #     println("Condition number: ", cond(M))
+    #     println("rank(A) = ", rank(M))
 
-        evals, evecs = eigen(M)
-        println("|λₘₐₓ| = ", maximum(abs.(evals)))
-        evec = evecs[:, argmax(abs.(evals))]
-        quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_max.png")
-        quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_max.png")
-        quickplot(g.w, real(evec[pmap]), L"p", "images/p_max.png")
-        println("|λₘᵢₙ| = ", minimum(abs.(evals)))
-        evec = evecs[:, argmin(abs.(evals))]
-        quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_min.png")
-        quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_min.png")
-        quickplot(g.w, real(evec[pmap]), L"p", "images/p_min.png")
-
-        # null = nullspace(M)
-        # quickplot(g.u, real(null[uˣmap]), L"u^x", "images/ux_null.png")
-        # quickplot(g.w, real(null[uᶻmap]), L"u^z", "images/uz_null.png")
-        # quickplot(g.w, real(null[pmap]), L"p", "images/p_null.png")
-
-# pressure avg:
-#    N  O(cond(A))
-#   22  1e8
-#  398  1e9
-# 1592  1e10
-# 4415  1e13*
-
-# pressure pin:
-#    N  O(cond(A))
-#   22  1e2
-#  398  1e4
-# 1592  1e5
-# 4415  1e9
-    end
+    #     evals, evecs = eigen(M)
+    #     println("|λₘₐₓ| = ", maximum(abs.(evals)))
+    #     evec = evecs[:, argmax(abs.(evals))]
+    #     quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_max.png")
+    #     quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_max.png")
+    #     quickplot(g.w, real(evec[pmap]), L"p", "images/p_max.png")
+    #     println("|λₘᵢₙ| = ", minimum(abs.(evals)))
+    #     evec = evecs[:, argmin(abs.(evals))]
+    #     quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_min.png")
+    #     quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_min.png")
+    #     quickplot(g.w, real(evec[pmap]), L"p", "images/p_min.png")
+    # end
 
     # solve
     sol = A\r
@@ -221,7 +202,6 @@ function stokes_hydro_b(nref, geo; plot=false)
     # get Jacobians
     g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)
-    println("h = ", 1/sqrt(g1.np))
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -234,8 +214,6 @@ function stokes_hydro_b(nref, geo; plot=false)
     z = gw.p[:, 2] 
     if geo == "gmsh_tri"
         H = @. 1 - abs(x)
-    elseif geo == "gmsh"
-        H = @. 1 - x^2
     else
         H = @. sqrt(2 - x^2) - 1
     end
@@ -253,9 +231,12 @@ function stokes_hydro_b(nref, geo; plot=false)
     uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
 
     if plot
-        quickplot(g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
-        quickplot(g.w, f.z, g.w, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g.w, f.z, g.w, p, L"p", "images/p.png")
+        # quickplot(g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
+        # quickplot(g.w, f.z, g.w, uᶻ, L"u^z", "images/uz.png")
+        # quickplot(g.w, f.z, g.w, p, L"p", "images/p.png")
+        quickplot(g.u, uˣ, L"u^x", "images/ux.png")
+        quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
+        quickplot(g.w, p, L"p", "images/p.png")
     end
     return uˣ, uᶻ, p
 end
@@ -269,8 +250,7 @@ function stokes_hydro_res(nref; plot=false)
 
     # geometry type
     # geo = "jc"
-    # geo = "gmsh"
-    geo = "gmsh_tri"
+    geo = "gmsh"
 
     # get shape functions
     sp = ShapeFunctions(order-2)
@@ -368,14 +348,12 @@ function stokes_hydro_conv(nrefs)
     hmax = 1e-1
     err_min = 2e-7
     err_max = 5e-2
-    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^1], "k-")
-    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^2], "k--")
+    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^2], "k-")
     legend_elements = [
         Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
         Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),
         Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"p"),
-        Line2D([0], [0], color="k", label=L"O(h)"),
-        Line2D([0], [0], color="k", ls="--", label=L"O(h^2)")
+        Line2D([0], [0], color="k", label=L"O(h^2)")
     ]
     ax.legend(handles=legend_elements)
     ax.set_xlim(0.5*hmin, 2*hmax)
@@ -385,10 +363,9 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-stokes_hydro_b(4, "jc"; plot=true)
-# stokes_hydro_b(4, "gmsh"; plot=true)
+# stokes_hydro_b(4, "jc"; plot=true)
+stokes_hydro_b(5, "gmsh"; plot=true)
 # stokes_hydro_b(5, "gmsh_tri"; plot=true)
-# stokes_hydro_b(6, "gmsh_tri"; plot=true)
 # stokes_hydro_b(0, ""; plot=true)
 
 # stokes_hydro_res(3; plot=true)

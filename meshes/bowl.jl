@@ -33,28 +33,12 @@ function generate_bowl_mesh(h₀, r)
     # model
     gmsh.model.add("bowl_mesh")
 
-    # # depth function
-    # z(x) = 1 - sqrt(2 - x^2)
-    
-    # # edge points
-    # N = Int64(round(2/(h₀/r)))
-    # x = -1:2/(N - 1):1
-    # for i=1:N
-    #     gmsh.model.geo.addPoint(x[i], z(x[i]), 0, h₀/r)
-    # end
-
-    # # connect edge points by lines
-    # for i=1:N-1
-    #     gmsh.model.geo.addLine(i, i + 1)
-    # end
-    # gmsh.model.geo.addLine(N, 1)
-
     # points
     gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
     gmsh.model.geo.addPoint(0, 1 - sqrt(2), 0, h₀/r)
     gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
     
-    # center of circl
+    # center of circle
     gmsh.model.geo.addPoint(0, 1, 0, h₀/r)
 
     gmsh.model.geo.addCircleArc(1, 4, 2)
@@ -108,6 +92,12 @@ function generate_bowl_mesh(h₀, r)
 
     # generate mesh
     gmsh.model.mesh.generate(2)
+
+    # optimize mesh
+    # gmsh.model.mesh.optimize("HighOrder")
+    # gmsh.model.mesh.optimize("Laplace2D")
+    # gmsh.model.mesh.optimize("Relocate2D")
+    # gmsh.model.mesh.optimize("UntangleMeshGeometry")
     
     # save
     gmsh.write("mesh.msh")
@@ -164,25 +154,25 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-for i=0:5
-    h₀ = 0.01*2.0^(4-i)
-    generate_bowl_mesh(h₀, 1)
-    p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
-    # p, t, e = load_gmesh(savefile="gmsh_tri/mesh$i.h5")
+# for i=0:5
+#     h₀ = 0.01*2.0^(4-i)
+#     generate_bowl_mesh(h₀, 1)
+#     p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
+#     # p, t, e = load_gmesh(savefile="gmsh_tri/mesh$i.h5")
 
-    tplot(p, t)
-    plot(p[e, 1], p[e, 2], "o", ms=1)
-    plt.axis("equal")
-    savefig("gmsh/mesh$i.png")
-    println("gmsh/mesh$i.png")
-    plt.close()
-end
+#     tplot(p, t)
+#     plot(p[e, 1], p[e, 2], "o", ms=1)
+#     plt.axis("equal")
+#     savefig("gmsh/mesh$i.png")
+#     println("gmsh/mesh$i.png")
+#     plt.close()
+# end
 
-# h₀ = 0.1
-# r = 1
-# generate_bowl_mesh(h₀, r)
-# p, t, e = load_gmesh(savefile="mesh.h5")
-# tplot(p, t)
-# axis("equal")
-# savefig("mesh.png")
-# println("mesh.png")
+h₀ = 0.1
+r = 1
+generate_bowl_mesh(h₀, r)
+p, t, e = load_gmesh(savefile="mesh.h5")
+tplot(p, t)
+axis("equal")
+savefig("mesh.png")
+println("mesh.png")
