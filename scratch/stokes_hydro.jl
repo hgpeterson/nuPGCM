@@ -103,47 +103,24 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # # dirichlet condition on bottom and top (replace mom eqtns)
-    # if diri_mask[1]
-    #     A, r = add_dirichlet(A, r, uˣmap[e.botu], u₀.botu)
-    # end
-    # if diri_mask[2]
-    #     A, r = add_dirichlet(A, r, uᶻmap[e.botw], u₀.botw)
-    # end
-    # if diri_mask[3]
-    #     A, r = add_dirichlet(A, r, uˣmap[e.topu], u₀.topu)
-    # end
-    # if diri_mask[4]
-    #     A, r = add_dirichlet(A, r, uᶻmap[e.topw], u₀.topw)
-    # end
-    # # pressure condition
-    # A, r = apply_constraint(A, r, pmap[1], pmap[1], p₀)
-
     # dirichlet condition on bottom and top (replace mom eqtns)
     if diri_mask[1]
-        A[uˣmap[e.botu], :] .= 0
-        A[diagind(A)[uˣmap[e.botu]]] .= 1
-        r[uˣmap[e.botu]] .= u₀.botu
+        A, r = add_dirichlet(A, r, uˣmap[e.botu], u₀.botu)
     end
     if diri_mask[2]
-        A[uᶻmap[e.botw], :] .= 0
-        A[diagind(A)[uᶻmap[e.botw]]] .= 1
-        r[uᶻmap[e.botw]] .= u₀.botw
+        A, r = add_dirichlet(A, r, uᶻmap[e.botw], u₀.botw)
     end
     if diri_mask[3]
-        A[uˣmap[e.topu], :] .= 0
-        A[diagind(A)[uˣmap[e.topu]]] .= 1
-        r[uˣmap[e.topu]] .= u₀.topu
+        A, r = add_dirichlet(A, r, uˣmap[e.topu], u₀.topu)
     end
     if diri_mask[4]
-        A[uᶻmap[e.topw], :] .= 0
-        A[diagind(A)[uᶻmap[e.topw]]] .= 1
-        r[uᶻmap[e.topw]] .= u₀.topw
+        A, r = add_dirichlet(A, r, uᶻmap[e.topw], u₀.topw)
     end
     # pressure condition
-    A[pmap[1], :] .= 0
-    A[pmap[1], pmap[1]] = 1
-    r[pmap[1]] = p₀
+    A, r = apply_constraint(A, r, pmap[1], pmap[1], p₀)
+
+    # remove zeros
+    dropzeros!(A)
 
     println("N = $N")
     if N < 1000
@@ -160,12 +137,11 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
         println("A is sym: ", issymmetric(M))
     end
 
-    # # solve
-    # sol = A\r
+    # solve
+    sol = A\r
 
-    # # reshape to get u and p
-    # return sol[uˣmap], sol[uᶻmap], sol[pmap]
-    return A, r
+    # reshape to get u and p
+    return sol[uˣmap], sol[uᶻmap], sol[pmap]
 end
 
 """
@@ -231,9 +207,7 @@ function stokes_hydro_b(nref, geo; plot=false)
     p₀ = 0
 
     # solve stokes_hydro problem
-    # uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
-    A, r = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
-    return A, r
+    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
 
     if plot
         # quickplot(g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
@@ -371,7 +345,7 @@ end
 # stokes_hydro_b(4, "jc"; plot=true)
 # stokes_hydro_b(5, "gmsh"; plot=true)
 # stokes_hydro_b(5, "gmsh_tri"; plot=true)
-# stokes_hydro_b(1, ""; plot=true)
+stokes_hydro_b(1, ""; plot=true)
 
 # stokes_hydro_res(3; plot=true)
 # stokes_hydro_conv(0:5)
