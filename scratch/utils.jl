@@ -66,3 +66,33 @@ function quickplot(x, H, gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
+"""
+    A, b = apply_constraint(A, b, i, j, b₀)
+"""
+function apply_constraint(A, b, i, j, b₀)
+    # delete row i
+    A[i, :] .= 0
+    # replace Aᵢⱼ = 1
+    A[i, j] = 1
+    # replace bᵢ = 1
+    b[i] = b₀
+    # row reduce
+    for k in eachindex(b)
+        if k == i
+            continue
+        end
+        b[k] -= A[k, j]*b₀
+        A[k, j] = 0
+    end
+    return A, b
+end
+
+"""
+    A, b = add_dirichlet(A, b, rows, u₀)
+"""
+function add_dirichlet(A, b, rows, u₀)
+    for i in eachindex(rows)
+        A, b = apply_constraint(A, b, rows[i], rows[i], u₀[i])
+    end
+    return A, b
+end

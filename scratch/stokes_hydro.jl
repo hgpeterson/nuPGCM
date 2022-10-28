@@ -103,6 +103,22 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
+    # # dirichlet condition on bottom and top (replace mom eqtns)
+    # if diri_mask[1]
+    #     A, r = add_dirichlet(A, r, uˣmap[e.botu], u₀.botu)
+    # end
+    # if diri_mask[2]
+    #     A, r = add_dirichlet(A, r, uᶻmap[e.botw], u₀.botw)
+    # end
+    # if diri_mask[3]
+    #     A, r = add_dirichlet(A, r, uˣmap[e.topu], u₀.topu)
+    # end
+    # if diri_mask[4]
+    #     A, r = add_dirichlet(A, r, uᶻmap[e.topw], u₀.topw)
+    # end
+    # # pressure condition
+    # A, r = apply_constraint(A, r, pmap[1], pmap[1], p₀)
+
     # dirichlet condition on bottom and top (replace mom eqtns)
     if diri_mask[1]
         A[uˣmap[e.botu], :] .= 0
@@ -124,45 +140,32 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
         A[diagind(A)[uᶻmap[e.topw]]] .= 1
         r[uᶻmap[e.topw]] .= u₀.topw
     end
-
     # pressure condition
     A[pmap[1], :] .= 0
     A[pmap[1], pmap[1]] = 1
     r[pmap[1]] = p₀
-    # A[pmap[1], pmap[:]] .= 1
-    # r[pmap[1]] = 0
 
     println("N = $N")
-    # if N < 1000
-    #     M = Matrix(A)
-    #     fig, ax = subplots(1)
-    #     ax.imshow(abs.(M) .== 0, cmap="binary_r")
-    #     ax.spines["left"].set_visible(false)
-    #     ax.spines["bottom"].set_visible(false)
-    #     savefig("images/A.png")
-    #     println("images/A.png")
-    #     plt.close()
-    #     println("Condition number: ", cond(M))
-    #     println("rank(A) = ", rank(M))
+    if N < 1000
+        M = Matrix(A)
+        fig, ax = subplots(1)
+        ax.imshow(abs.(M) .== 0, cmap="binary_r")
+        ax.spines["left"].set_visible(false)
+        ax.spines["bottom"].set_visible(false)
+        savefig("images/A.png")
+        println("images/A.png")
+        plt.close()
+        println("Condition number: ", cond(M))
+        println("rank(A) = ", rank(M))
+        println("A is sym: ", issymmetric(M))
+    end
 
-    #     evals, evecs = eigen(M)
-    #     println("|λₘₐₓ| = ", maximum(abs.(evals)))
-    #     evec = evecs[:, argmax(abs.(evals))]
-    #     quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_max.png")
-    #     quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_max.png")
-    #     quickplot(g.w, real(evec[pmap]), L"p", "images/p_max.png")
-    #     println("|λₘᵢₙ| = ", minimum(abs.(evals)))
-    #     evec = evecs[:, argmin(abs.(evals))]
-    #     quickplot(g.u, real(evec[uˣmap]), L"u^x", "images/ux_min.png")
-    #     quickplot(g.w, real(evec[uᶻmap]), L"u^z", "images/uz_min.png")
-    #     quickplot(g.w, real(evec[pmap]), L"p", "images/p_min.png")
-    # end
+    # # solve
+    # sol = A\r
 
-    # solve
-    sol = A\r
-
-    # reshape to get u and p
-    return sol[uˣmap], sol[uᶻmap], sol[pmap]
+    # # reshape to get u and p
+    # return sol[uˣmap], sol[uᶻmap], sol[pmap]
+    return A, r
 end
 
 """
@@ -228,7 +231,9 @@ function stokes_hydro_b(nref, geo; plot=false)
     p₀ = 0
 
     # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
+    # uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
+    A, r = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
+    return A, r
 
     if plot
         # quickplot(g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
@@ -364,9 +369,9 @@ function stokes_hydro_conv(nrefs)
 end
 
 # stokes_hydro_b(4, "jc"; plot=true)
-stokes_hydro_b(5, "gmsh"; plot=true)
+# stokes_hydro_b(5, "gmsh"; plot=true)
 # stokes_hydro_b(5, "gmsh_tri"; plot=true)
-# stokes_hydro_b(0, ""; plot=true)
+# stokes_hydro_b(1, ""; plot=true)
 
 # stokes_hydro_res(3; plot=true)
 # stokes_hydro_conv(0:5)
