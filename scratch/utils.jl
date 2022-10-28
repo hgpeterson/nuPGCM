@@ -1,9 +1,8 @@
 ### utility function for some of the stokes/laplace/pg tests
 
-"""
-    ebot, etop = get_sides(g)
-"""
-function get_sides(g)
+import nuPGCM: tplot
+
+function get_sides(g::FEGrid)
     # bottom
     ebot = g.e[abs.(g.p[g.e, 2]) .>= 1e-4]
     eleft = g.e[abs.(g.p[g.e, 1] .+ 1) .<= 1e-4]
@@ -17,11 +16,16 @@ function get_sides(g)
     return ebot, etop
 end
 
-"""
-    quickplot(g, u, clabel, ofile)
-"""
-function quickplot(gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
+function tplot(u::FEField)
+    if u.order == 0
+        return tplot(u.g1.p, u.g1.t, u.values)
+    else
+        return tplot(u.g.p, u.g.t, u.values)
+    end
+end
+
+function quickplot(u::FEField, clabel, ofile)
+    fig, ax, im = tplot(u)
     cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
     cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     ax.axis("equal")
@@ -31,15 +35,11 @@ function quickplot(gu, u, clabel, ofile)
     println(ofile)
     plt.close()
 end
-
-"""
-    quickplot(gb, b, gu, u, clabel, ofile)
-"""
-function quickplot(gb, b, gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
+function quickplot(b::FEField, u::FEField, clabel, ofile)
+    fig, ax, im = tplot(u)
     cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
     cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b, linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
+    ax.tricontour(b.g.p[:, 1], b.g.p[:, 2], b.g.t[:, 1:3] .- 1, b.values, linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
     ax.axis("equal")
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"z")
@@ -47,16 +47,11 @@ function quickplot(gb, b, gu, u, clabel, ofile)
     println(ofile)
     plt.close()
 end
-
-"""
-    quickplot(x, H, gb, b, gu, u, clabel, ofile)
-"""
-function quickplot(x, H, gb, b, gu, u, clabel, ofile)
-    fig, ax, im = tplot(gu.p, gu.t, u)
+function quickplot(x, H, b::FEField, u::FEField, clabel, ofile)
+    fig, ax, im = tplot(u)
     cb = colorbar(im, ax=ax, label=clabel, orientation="horizontal", pad=0.25)
     cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax.tricontour(gb.p[:, 1], gb.p[:, 2], gb.t[:, 1:3] .- 1, b,
-                  linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
+    ax.tricontour(b.g.p[:, 1], b.g.p[:, 2], b.g.t[:, 1:3] .- 1, b.values, linewidths=0.5, colors="k", linestyles="-", alpha=0.3)
     ax.fill_between(x, -maximum(H), -H, color="k", alpha=0.3, lw=0.0)
     ax.axis("equal")
     ax.set_xlabel(L"x")
@@ -66,9 +61,20 @@ function quickplot(x, H, gb, b, gu, u, clabel, ofile)
     plt.close()
 end
 
-"""
-    A, b = apply_constraint(A, b, i, j, b₀)
-"""
+function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
+    u_profile = zeros(size(z))
+    for i in eachindex(z)
+        u_profile[i] = fem_evaluate(u, [x, z[i]])
+    end
+    fig, ax = subplots(1)
+    ax.plot(u_profile, z)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    savefig(ofile)
+    println(ofile)
+    plt.close()
+end
+
 function apply_constraint(A, b, i, j, b₀)
     # delete row i
     A[i, :] .= 0
@@ -87,9 +93,6 @@ function apply_constraint(A, b, i, j, b₀)
     return A, b
 end
 
-"""
-    A, b = add_dirichlet(A, b, rows, u₀)
-"""
 function add_dirichlet(A, b, rows, u₀)
     for i in eachindex(rows)
         A, b = apply_constraint(A, b, rows[i], rows[i], u₀[i])

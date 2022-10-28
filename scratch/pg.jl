@@ -39,18 +39,20 @@ for all
     p, q ∈ Pₖ
 where j = i-1, k = i-2, and Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_pg(g, s, J, b, e, ε²)
+function solve_pg(uˣ, uʸ, uᶻ, p, b, J, s, e, ε²)
     # indices
-    uˣmap = 1:g.u.np
-    uʸmap = uˣmap[end] .+ (1:g.u.np)
-    uᶻmap = uʸmap[end] .+ (1:g.w.np)
-    pmap  = uᶻmap[end] .+ (1:g.p.np)
+    uˣmap = 1:uˣ.g.np
+    uʸmap = uˣmap[end] .+ (1:uʸ.g.np)
+    uᶻmap = uʸmap[end] .+ (1:uᶻ.g.np)
+    pmap  = uᶻmap[end] .+ (1:p.g.np)
     N = pmap[end]
+    println("N = $N")
 
     # stamp system
+    println("Building...")
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
-    for k=1:g.p.nt
+    for k=1:uˣ.g1.nt
         # ∂z(uˣ)∂z(vˣ)
         Kᵏ = abs(J.J[k])*(s.uu.φξφξ*J.ξy[k]^2 + s.uu.φξφη*J.ξy[k]*J.ηy[k] + s.uu.φηφξ*J.ηy[k]*J.ξy[k] + s.uu.φηφη*J.ηy[k]^2)
 
@@ -69,70 +71,62 @@ function solve_pg(g, s, J, b, e, ε²)
         Mppᵏ = abs(J.J[k])*s.pp.φφ
 
         # b*vᶻ
-        rᵏ = abs(J.J[k])*s.ww.φφ*b[g.w.t[k, :]]
+        rᵏ = abs(J.J[k])*s.ww.φφ*b.values[b.g.t[k, :]]
 
         # u*u
-        for i=1:g.u.nn, j=1:g.u.nn
+        for i=1:uˣ.g.nn, j=1:uˣ.g.nn
             # x-mom: ∂z(uˣ)∂z(vˣ)
-            push!(A, (uˣmap[g.u.t[k, i]], uˣmap[g.u.t[k, j]], ε²*Kᵏ[i, j]))
+            push!(A, (uˣmap[uˣ.g.t[k, i]], uˣmap[uˣ.g.t[k, j]], ε²*Kᵏ[i, j]))
             # y-mom: ∂z(uʸ)∂z(vʸ)
-            push!(A, (uʸmap[g.u.t[k, i]], uʸmap[g.u.t[k, j]], ε²*Kᵏ[i, j]))
+            push!(A, (uʸmap[uʸ.g.t[k, i]], uʸmap[uʸ.g.t[k, j]], ε²*Kᵏ[i, j]))
             # x-mom: uʸ*vˣ
-            push!(A, (uˣmap[g.u.t[k, i]], uʸmap[g.u.t[k, j]], -Muuᵏ[i, j]))
+            push!(A, (uˣmap[uˣ.g.t[k, i]], uʸmap[uʸ.g.t[k, j]], -Muuᵏ[i, j]))
             # y-mom: uˣ*vʸ
-            push!(A, (uʸmap[g.u.t[k, i]], uˣmap[g.u.t[k, j]], Muuᵏ[i, j]))
+            push!(A, (uʸmap[uʸ.g.t[k, i]], uˣmap[uˣ.g.t[k, j]], Muuᵏ[i, j]))
         end
         # p*vˣ
-        for i=1:g.u.nn, j=1:g.p.nn
+        for i=1:uˣ.g.nn, j=1:p.g.nn
             # x-mom: -p*∂x(vˣ)
-            push!(A, (uˣmap[g.u.t[k, i]], pmap[g.p.t[k, j]], -Cx_puᵏ[i, j]))
+            push!(A, (uˣmap[uˣ.g.t[k, i]], pmap[p.g.t[k, j]], -Cx_puᵏ[i, j]))
         end
         # uˣ*q
-        for i=1:g.p.nn, j=1:g.u.nn
+        for i=1:p.g.nn, j=1:uˣ.g.nn
             # cont: ∂x(uˣ)*q
-            push!(A, (pmap[g.p.t[k, i]], uˣmap[g.u.t[k, j]], Cx_upᵏ[i, j]))
+            push!(A, (pmap[p.g.t[k, i]], uˣmap[uˣ.g.t[k, j]], Cx_upᵏ[i, j]))
         end
         # p*vᶻ
-        for i=1:g.w.nn, j=1:g.p.nn
+        for i=1:uᶻ.g.nn, j=1:p.g.nn
             # z-mom: -p*∂z(vᶻ)
-            push!(A, (uᶻmap[g.w.t[k, i]], pmap[g.p.t[k, j]], -Cz_pwᵏ[i, j]))
+            push!(A, (uᶻmap[uᶻ.g.t[k, i]], pmap[p.g.t[k, j]], -Cz_pwᵏ[i, j]))
         end
         # uᶻ*q
-        for i=1:g.p.nn, j=1:g.w.nn
+        for i=1:p.g.nn, j=1:uᶻ.g.nn
             # cont: ∂z(uᶻ)*q
-            push!(A, (pmap[g.p.t[k, i]], uᶻmap[g.w.t[k, j]], Cz_wpᵏ[i, j]))
+            push!(A, (pmap[p.g.t[k, i]], uᶻmap[uᶻ.g.t[k, j]], Cz_wpᵏ[i, j]))
         end
-        # p*p
-        for i=1:g.p.nn, j=1:g.p.nn
-            # pressure condition: δ*q*p
-            push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
-        end
+        # # p*p
+        # for i=1:p.g.nn, j=1:p.g.nn
+        #     # pressure condition: δ*q*p
+        #     push!(A, (pmap[p.g.t[k, i]], pmap[p.g.t[k, j]], 1e-7*Mppᵏ[i, j]))
+        # end
         # b
-        r[uᶻmap[g.w.t[k, :]]] .+= rᵏ
+        r[uᶻmap[uᶻ.g.t[k, :]]] .+= rᵏ
     end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # uˣ = uʸ = uᶻ = 0 at z = -H (replace mom eqtns at bottom bdy)
-    A[uˣmap[e.botu], :] .= 0
-    A[diagind(A)[uˣmap[e.botu]]] .= 1
-    r[uˣmap[e.botu]] .= 0
+    # dirichlet conditions on bottom and top (replace mom eqtns)
+    A, r = add_dirichlet(A, r, uˣmap[e.botu], zeros(size(e.botu)))
+    A, r = add_dirichlet(A, r, uʸmap[e.botu], zeros(size(e.botu)))
+    A, r = add_dirichlet(A, r, uᶻmap[e.botw], zeros(size(e.botw)))
+    A, r = add_dirichlet(A, r, uᶻmap[e.topw], zeros(size(e.topw)))
 
-    A[uʸmap[e.botu], :] .= 0
-    A[diagind(A)[uʸmap[e.botu]]] .= 1
-    r[uʸmap[e.botu]] .= 0
+    # pressure condition
+    A, r = apply_constraint(A, r, pmap[1], pmap[1], 0)
 
-    A[uᶻmap[e.botw], :] .= 0
-    A[diagind(A)[uᶻmap[e.botw]]] .= 1
-    r[uᶻmap[e.botw]] .= 0
-
-    # ∂z(uˣ) = ∂z(uʸ) = 0 at z = 0 → natural
-
-    # uᶻ = 0 at z = 0 (replace mom eqtn at top bdy)
-    A[uᶻmap[e.topw], :] .= 0
-    A[diagind(A)[uᶻmap[e.topw]]] .= 1
-    r[uᶻmap[e.topw]] .= 0
+    # remove zeros
+    dropzeros!(A)
 
     # if N < 1000
     #     fig, ax = subplots(1)
@@ -146,45 +140,47 @@ function solve_pg(g, s, J, b, e, ε²)
     # end
 
     # solve
-    println("N = $N")
+    println("Solving...")
     sol = A\r
     # sol = minres(A, r)
     # sol, ch = bicgstabl(A, r, log=true, verbose=true)
     # sol, ch = lsmr(A, r, log=true, verbose=true)
 
     # reshape to get u and p
-    return sol[uˣmap], sol[uʸmap], sol[uᶻmap], sol[pmap]
+    uˣ.values[:] = sol[uˣmap]
+    uʸ.values[:] = sol[uʸmap]
+    uᶻ.values[:] = sol[uᶻmap]
+    p.values[:] = sol[pmap]
+    return uˣ, uʸ, uᶻ, p
 end
 
 """
-    h, err = pg_res(nref)
+    h, err = pg_res(geo, nref)
 """
-function pg_res(nref; plot=false)
+function pg_res(geo, nref; plot=false)
     # order of polynomials
     order = 2
 
     # Ekman number
-    ε² = 1e-4
+    # ε² = 1e-4
     # ε² = 1e-2
-    # ε² = 1
+    ε² = 1
 
-    # geometry type
-    # geo = "jc"
-    geo = "gmsh"
-
-    # get shape functions
-    sp = ShapeFunctions(order-2)
-    sw = ShapeFunctions(order-1)
-    su = ShapeFunctions(order)
+    # setup FE grids
+    gfile = "../meshes/$geo/mesh$nref.h5"
+    gp = FEGrid(gfile, order-2)
+    gw = FEGrid(gfile, order-1)
+    gu = FEGrid(gfile, order)
+    g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
-    uu = ShapeFunctionIntegrals(su, su)
-    ww = ShapeFunctionIntegrals(sw, sw)
-    pu = ShapeFunctionIntegrals(sp, su)
-    pw = ShapeFunctionIntegrals(sp, sw)
-    up = ShapeFunctionIntegrals(su, sp)
-    wp = ShapeFunctionIntegrals(sw, sp)
-    pp = ShapeFunctionIntegrals(sp, sp)
+    uu = ShapeFunctionIntegrals(gu.s, gu.s)
+    ww = ShapeFunctionIntegrals(gw.s, gw.s)
+    pu = ShapeFunctionIntegrals(gp.s, gu.s)
+    pw = ShapeFunctionIntegrals(gp.s, gw.s)
+    up = ShapeFunctionIntegrals(gu.s, gp.s)
+    wp = ShapeFunctionIntegrals(gw.s, gp.s)
+    pp = ShapeFunctionIntegrals(gp.s, gp.s)
     s = (uu = uu,
          ww = ww, 
          pu = pu,  
@@ -192,16 +188,12 @@ function pg_res(nref; plot=false)
          up = up,  
          wp = wp,
          pp = pp)  
-
-    # get grids
-    gp = Grid("../meshes/$geo/mesh$nref.h5", order-2)
-    gw = Grid("../meshes/$geo/mesh$nref.h5", order-1)
-    gu = Grid("../meshes/$geo/mesh$nref.h5", order)
-    g = (p = gp, u = gu, w = gw)
  
     # get Jacobians
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)   
+
+    println("δ = ", sqrt(2*ε²))
+    println("h = ", 1/sqrt(g1.np))
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -210,28 +202,39 @@ function pg_res(nref; plot=false)
          botu = ebotu, topu = etopu)
 
     # forcing
+    function H(x)
+        if geo == "gmsh_tri"
+            return 1 - abs(x)
+        else
+            return sqrt(2 - x^2) - 1
+        end
+    end
     x = gw.p[:, 1] 
     z = gw.p[:, 2] 
-    if geo == "gmsh_tri"
-        H = @. 1 - abs(x)
-    elseif geo == "gmsh"
-        H = @. 1 - x^2
-    else
-        H = @. sqrt(2 - x^2) - 1
-    end
     δ = 0.1
     # b = @. z + δ*exp(-(z + H)/δ)
     # b = z
-    b = @. δ*exp(-(z + H)/δ)
+    b = @. δ*exp(-(z + H(x))/δ)
+
+    # initialize FE fields
+    uˣ = FEField(order,   zeros(gu.np), gu, g1)
+    uʸ = FEField(order,   zeros(gu.np), gu, g1)
+    uᶻ = FEField(order-1, zeros(gw.np), gw, g1)
+    p  = FEField(order-2, zeros(gp.np), gp, g1)
+    b  = FEField(order-1, b, gw, g1)
 
     # solve 
-    uˣ, uʸ, uᶻ, p = solve_pg(g, s, J, b, e, ε²)
+    uˣ, uʸ, uᶻ, p = solve_pg(uˣ, uʸ, uᶻ, p, b, J, s, e, ε²)
 
     if plot
-        quickplot(gw, b, gu, uˣ, L"u^x", "images/ux.png")
-        quickplot(gw, b, gu, uʸ, L"u^y", "images/uy.png")
-        quickplot(gw, b, gw, uᶻ, L"u^z", "images/uz.png")
-        quickplot(gw, b, gw, p, L"p", "images/p.png")
+        quickplot(b, uˣ, L"u^x", "images/ux.png")
+        quickplot(b, uʸ, L"u^y", "images/uy.png")
+        quickplot(b, uᶻ, L"u^z", "images/uz.png")
+        quickplot(b, p, L"p", "images/p.png")
+        plot_profile(uˣ, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^x", L"z", "images/ux_profile.png")
+        plot_profile(uʸ, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^y", L"z", "images/uy_profile.png")
+        plot_profile(uᶻ, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^z", L"z", "images/uz_profile.png")
+        plot_profile(p, 0.5, -H(0.5)+1e-5:1e-3:0, L"p", L"z", "images/p_profile.png")
     end
 
     return uˣ, uʸ, uᶻ, p
@@ -259,16 +262,15 @@ end
 
 # b = δ*exp(-(z + H)/δ)
 # δ     ε²    uˣ    uʸ    uᶻ
-# 1e-1  1e-4  1e-2  2e-2  9e-3
-# 1e-1  1e-2  9e-4  5e-4  5e-4
-# 1e-1  1e0   9e-6  5e-8  5e-6
+# 1e-1  1e-4  8e-3  3e-2  6e-3
+# 1e-1  1e-2  4e-3  6e-3  2e-3
+# 1e-1  1e0   5e-5  9e-7  2e-5
 
-# for i=0:4
-#     uˣ, uʸ, uᶻ, p = pg_res(i)
-#     println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(uˣ)), maximum(abs.(uʸ)), maximum(abs.(uᶻ))))
-# end
+# uˣ, uʸ, uᶻ, p = pg_res("gmsh", 0; plot=true)
+uˣ, uʸ, uᶻ, p = pg_res("jc", 3; plot=true)
+# uˣ, uʸ, uᶻ, p = pg_res("valign", 0; plot=true)
+# uˣ, uʸ, uᶻ, p = pg_res("", 0; plot=true)
 
-uˣ, uʸ, uᶻ, p = pg_res(4; plot=true)
-println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(uˣ)), maximum(abs.(uʸ)), maximum(abs.(uᶻ))))
+# println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(uˣ)), maximum(abs.(uʸ)), maximum(abs.(uᶻ))))
 
 println("Done.")

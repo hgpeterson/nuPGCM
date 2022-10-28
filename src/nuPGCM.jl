@@ -26,7 +26,8 @@ export
     # finite elements
     ShapeFunctions,
     ShapeFunctionIntegrals,
-    Grid,
+    FEGrid,
+    FEField,
     Jacobians,
     L2norm,
     H1norm,

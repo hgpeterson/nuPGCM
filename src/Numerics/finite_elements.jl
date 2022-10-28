@@ -1,10 +1,22 @@
 struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
+    # order of polynomials defining shape functions
     order::IN
+
+    # number of nodes on standard element
     n::IN
+
+    # coefficients matrix defining shape function polynomials
     C::M
+
+    # array of coefficients matrices defining derivatives of shape function polynomials
     ∂C::A
 end
 
+"""
+    s = ShapeFunctions(order)
+
+Construct shape functions of order `order`.
+"""
 function ShapeFunctions(order)
     # get nodes of standard element
     p = standard_element_nodes(order)
@@ -183,9 +195,12 @@ function eval_poly(c, ξ)
     end
 end
 
-struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
     # order of shape functions on this grid
     order::IN
+
+    # shape functions on this grid
+    s::ShapeFunctions
 
     # node positions
     p::FM # float matrix
@@ -210,11 +225,15 @@ struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Inte
 end
 
 """
-    g = Grid(file_name, order)
+    g = FEGrid(file_name, order)
 
-Construct a grid by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
+Construct a FE grid of order `order` by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
 """
-function Grid(file_name, order::IN) where IN <: Integer
+function FEGrid(file_name, order::IN) where IN <: Integer
+    # setup shape functions
+    s = ShapeFunctions(order)
+
+    # read grid data
     file = h5open(file_name, "r")
     p = read(file, "p")
     t = read(file, "t")
@@ -244,7 +263,7 @@ function Grid(file_name, order::IN) where IN <: Integer
     nt = size(t, 1)
     nn = size(t, 2)
     ne = size(e, 1)
-    return Grid(order, p, np, t, nt, nn, e, ne)
+    return FEGrid(order, s, p, np, t, nt, nn, e, ne)
 end
 
 """
@@ -402,7 +421,7 @@ where
     v3 = 1/J*[x1-x3,       x2-x1)
 and J = ∂(x, y)/∂(ξ, η) is the jacobian.
 """
-function Jacobians(g::Grid)
+function Jacobians(g::FEGrid)
     # unpack coords
     x = g.p[:, 1]
     y = g.p[:, 2]
@@ -419,13 +438,43 @@ function Jacobians(g::Grid)
     ηy = (x[g.t[:, 2]] - x[g.t[:, 1]])./J
     return Jacobians(J, xξ, xη, yξ, yη, ξx, ξy, ηx, ηy)
 end
+function Jacobians(gfile::String)
+    # get order 1 FE grid
+    g = FEGrid(gfile, 1)
+    return Jacobians(g)
+end
+
+struct FEField{IN<:Integer,V<:AbstractVector}
+    # order of polynomials defining shape functions
+    order::IN
+
+    # values of FE field on the nodes of the grid
+    values::V
+
+    # grid FE field exists on
+    g::FEGrid
+
+    # grid of order 1
+    g1::FEGrid
+end
+
+"""
+    u = FEField(gfile, order, values)
+
+Construct FE field from grid saved at `gfile` of order `order` with node values `values`.
+"""
+function FEField(gfile, order, values)
+    g = FEGrid(gfile, order)
+    g1 = FEGrid(gfile, 1)
+    return FEField(order, values, g, g1)
+end
 
 """
     l2 = L2norm(g, s, J, u)
 
 Compute L2 norm, ‖u‖² ≡ ∫ u² dx, of finite element function `u`.
 """
-function L2norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
+function L2norm(g::FEGrid, s::ShapeFunctionIntegrals, J::Jacobians, u)
     L2 = 0
     for k=1:g.nt
         for i=1:g.nn
@@ -442,7 +491,7 @@ end
 
 Compute H1 norm, ‖u‖² ≡ ∫ u² + (∇u)⋅(∇u) dx, of finite element function `u`.
 """
-function H1norm(g::Grid, s::ShapeFunctionIntegrals, J::Jacobians, u)
+function H1norm(g::FEGrid, s::ShapeFunctionIntegrals, J::Jacobians, u)
     H1 = 0
     for k=1:g.nt
         for i=1:g.nn
@@ -533,7 +582,7 @@ Determine index `k` of triangle on grid `g` in which the point `x` lies.
 #     end
 #     error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
 # end
-function get_tri(x, g::Grid)
+function get_tri(x, g::FEGrid)
     for k=1:g.nt 
         if pt_in_tri(x, g.p[g.t[k, :], :])
             return k
@@ -551,17 +600,17 @@ end
 #     # evaluate there
 #     return fem_evaluate(v, ξ, η, p, t, C₀, k)
 # end
-function fem_evaluate(u, x, g::Grid, sf::ShapeFunctions)
+function fem_evaluate(u::FEField, x)
     # find triangle x is in
-    k = get_tri(x, g)
+    k = get_tri(x, u.g1)
     
     # evaluate there
-    return fem_evaluate(u, x, g, sf, k)
+    return fem_evaluate(u, x, k)
 end
-function fem_evaluate(u, x, g::Grid, sf::ShapeFunctions, k)
+function fem_evaluate(u::FEField, x, k)
     # transform to standard triangle
-    ξ = transform_to_std_tri(x, g.p[g.t[k, 1:3], :])
+    ξ = transform_to_std_tri(x, u.g1.p[u.g1.t[k, :], :])
 
     # sum weighted combinations of triangle k's basis functions at x
-    return sum([u[g.t[k, i]]*φ(sf, i, ξ) for i=1:g.nn])
+    return sum([u.values[u.g.t[k, i]]*φ(u.g.s, i, ξ) for i=1:u.g.nn])
 end
