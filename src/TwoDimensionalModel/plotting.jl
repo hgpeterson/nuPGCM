@@ -94,7 +94,7 @@ function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2
         ax.set_xlabel(xlabel)
     end
     ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-    ax.set_xlim([0, m.L/1e3])
+    ax.set_xlim([m.ξ[1]/1e3, (m.ξ[end] + m.ξ[2] - m.ξ[1])/1e3])
 
     # no spines
     ax.spines["left"].set_visible(false)
