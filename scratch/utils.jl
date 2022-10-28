@@ -66,7 +66,7 @@ function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
     for i in eachindex(z)
         u_profile[i] = fem_evaluate(u, [x, z[i]])
     end
-    fig, ax = subplots(1)
+    fig, ax = subplots(1, figsize=(2, 3.2))
     ax.plot(u_profile, z)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
