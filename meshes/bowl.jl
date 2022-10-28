@@ -8,16 +8,6 @@ plt.close("all")
 pygui(false)
 
 """
-    e = boundary_nodes(t)
-
-Find all boundary nodes `e` in the triangulation `t`.
-"""
-function boundary_nodes(t)
-    edges, boundary_indices = all_edges(t)
-    return unique(edges[boundary_indices,:][:])
-end
-
-"""
     generateMesh(h₀, r)
 
 Creates 2D mesh of bowl with characteristic length `h₀` and boundary refinement
@@ -35,7 +25,7 @@ function generate_bowl_mesh(h₀, r)
 
     # points
     gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
-    gmsh.model.geo.addPoint(0, 1 - sqrt(2), 0, h₀/r)
+    gmsh.model.geo.addPoint(0, 1-√2, 0, h₀/r)
     gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
     
     # center of circle
@@ -56,30 +46,22 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.addCurveLoop(1:N, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
-    # # refine mesh near boundary nodes
-    # gmsh.model.mesh.field.add("Distance", 1)
-    # gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
-    # gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
+    # refine mesh near boundary nodes
+    gmsh.model.mesh.field.add("Distance", 1)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
+    gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
-    # # gmsh.model.mesh.field.add("Threshold", 2)
-    # # gmsh.model.mesh.field.setNumber(2, "InField", 1)
-    # # gmsh.model.mesh.field.setNumber(2, "SizeMin", h₀/r)
-    # # gmsh.model.mesh.field.setNumber(2, "SizeMax", h₀)
-    # # gmsh.model.mesh.field.setNumber(2, "DistMin", 0.04)
-    # # gmsh.model.mesh.field.setNumber(2, "DistMax", 0.08)
+    gmsh.model.mesh.field.add("MathEval", 2)
+    gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r)/2, "*(Tanh(10*(F1 - 0.1)) + 1)"))
 
-    # gmsh.model.mesh.field.add("MathEval", 2)
-    # gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r)/2, "*(Tanh(10*(F1 - 0.25)) + 1)"))
-    # # gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r), "*F1^3"))
-
-    # gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
-    # # turn off the usual ways the mesh size is determined
-    # gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    # turn off the usual ways the mesh size is determined
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
-    # # use different mesh algorithm (better for variable mesh size)
+    # use different mesh algorithm (better for variable mesh size)
     # gmsh.option.setNumber("Mesh.Algorithm", 5)
     
     # sync 
@@ -137,7 +119,7 @@ function load_gmesh(; savefile="")
     end
 
     # get edge nodes
-    e = boundary_nodes(t)
+    e = nuPGCM.boundary_nodes(t)
 
     gmsh.finalize()
 
@@ -168,10 +150,10 @@ end
 #     plt.close()
 # end
 
-h₀ = 0.1
-r = 1
+h₀ = 0.04
+r = 4
 generate_bowl_mesh(h₀, r)
-p, t, e = load_gmesh(savefile="mesh.h5")
+p, t, e = load_gmesh(savefile="mesh0.h5")
 tplot(p, t)
 axis("equal")
 savefig("mesh.png")
