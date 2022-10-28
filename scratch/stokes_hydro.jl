@@ -13,91 +13,94 @@ plt.close("all")
 pygui(false)
 
 """
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, b, e, f, u₀)
+    ux, uz, p = solve_stokes_hydro(g, s, J, b, e, f, u₀)
 
 stokes_hydro problem:
-    -∂zz(uˣ) + ∂x(p) = fˣ,
+    -∂zz(ux) + ∂x(p) = fˣ,
                ∂z(p) = fᶻ,
-     ∂x(uˣ) + ∂z(uᶻ) = 0, 
+     ∂x(ux) + ∂z(uz) = 0, 
 with extra condition
     ∫ p dx dz = 0,
 and Dirichlet boundary conditions on u.
 Weak form:
-    ∫ [ ∂z(uˣ)∂z(vˣ) - p∂x(vˣ) 
-      - p∂z(vᶻ)
-      + q∂x(uˣ) + q∂z(uᶻ)
+    ∫ [ ∂z(ux)∂z(vx) - p∂x(vx) 
+      - p∂z(vz)
+      + q∂x(ux) + q∂z(uz)
       ] dx dz
-    = ∫ [fˣvˣ + fᶻvᶻ] dx dz,
+    = ∫ [fˣvx + fᶻvz] dx dz,
 for all 
-    uˣ, vˣ ∈ Pᵢ,
-    uᶻ, vᶻ ∈ Pⱼ, 
+    ux, vx ∈ Pᵢ,
+    uz, vz ∈ Pⱼ, 
     p, q ∈ Pₖ
 where j = i-1, k = i-2, and Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, true, true))
+function solve_stokes_hydro(ux, uz, p, fx, fz, J, s, e, u₀, p₀; diri_mask=(true, true, true, true))
     # indices
-    uˣmap = 1:g.u.np
-    uᶻmap = uˣmap[end] .+ (1:g.w.np)
-    pmap  = uᶻmap[end] .+ (1:g.p.np)
+    uxmap = 1:ux.g.np
+    uzmap = uxmap[end] .+ (1:uz.g.np)
+    pmap  = uzmap[end] .+ (1:p.g.np)
     N = pmap[end]
+    println("N = $N")
 
     # stamp system
+    print("Building... ")
+    t₀ = time()
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
-    for k=1:g.p.nt
-        # ∂z(uˣ)∂z(vˣ)
+    for k=1:ux.g1.nt
+        # ∂z(ux)∂z(vx)
         Kᵏ = abs(J.J[k])*(s.uu.φξφξ*J.ξy[k]^2 + s.uu.φξφη*J.ξy[k]*J.ηy[k] + s.uu.φηφξ*J.ηy[k]*J.ξy[k] + s.uu.φηφη*J.ηy[k]^2)
 
-        # p*∂x(vˣ) 
+        # p*∂x(vx) 
         Cx_puᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξx[k] + s.pu.φφη*J.ηx[k])
-        # p*∂z(vᶻ)
+        # p*∂z(vz)
         Cz_pwᵏ = abs(J.J[k])*(s.pw.φφξ*J.ξy[k] + s.pw.φφη*J.ηy[k])
-        # q*∂x(uˣ) 
+        # q*∂x(ux) 
         Cx_upᵏ = abs(J.J[k])*(s.up.φξφ*J.ξx[k] + s.up.φηφ*J.ηx[k])
-        # q*∂z(uᶻ)
+        # q*∂z(uz)
         Cz_wpᵏ = abs(J.J[k])*(s.wp.φξφ*J.ξy[k] + s.wp.φηφ*J.ηy[k])
 
         # δ*q*p
         Mppᵏ = abs(J.J[k])*s.pp.φφ
 
-        # fˣ*vˣ
-        rxᵏ = abs(J.J[k])*s.uu.φφ*f.x[g.u.t[k, :]]
-        # fᶻ*vᶻ
-        rzᵏ = abs(J.J[k])*s.ww.φφ*f.z[g.w.t[k, :]]
+        # fˣ*vx
+        rxᵏ = abs(J.J[k])*s.uu.φφ*fx.values[ux.g.t[k, :]]
+        # fᶻ*vz
+        rzᵏ = abs(J.J[k])*s.ww.φφ*fz.values[uz.g.t[k, :]]
 
-        # uˣ*vˣ
-        for i=1:g.u.nn, j=1:g.u.nn
-            # x-mom: ∂z(uˣ)∂z(vˣ)
-            push!(A, (uˣmap[g.u.t[k, i]], uˣmap[g.u.t[k, j]], Kᵏ[i, j]))
+        # ux*vx
+        for i=1:ux.g.nn, j=1:ux.g.nn
+            # x-mom: ∂z(ux)∂z(vx)
+            push!(A, (uxmap[ux.g.t[k, i]], uxmap[ux.g.t[k, j]], Kᵏ[i, j]))
         end
-        # p*vˣ
-        for i=1:g.u.nn, j=1:g.p.nn
-            # x-mom: -p*∂x(vˣ)
-            push!(A, (uˣmap[g.u.t[k, i]], pmap[g.p.t[k, j]], -Cx_puᵏ[i, j]))
+        # p*vx
+        for i=1:ux.g.nn, j=1:p.g.nn
+            # x-mom: -p*∂x(vx)
+            push!(A, (uxmap[ux.g.t[k, i]], pmap[p.g.t[k, j]], -Cx_puᵏ[i, j]))
         end
-        # uˣ*q
-        for i=1:g.p.nn, j=1:g.u.nn
-            # cont: ∂x(uˣ)*q
-            push!(A, (pmap[g.p.t[k, i]], uˣmap[g.u.t[k, j]], Cx_upᵏ[i, j]))
+        # ux*q
+        for i=1:p.g.nn, j=1:ux.g.nn
+            # cont: ∂x(ux)*q
+            push!(A, (pmap[p.g.t[k, i]], uxmap[ux.g.t[k, j]], Cx_upᵏ[i, j]))
         end
-        # p*vᶻ
-        for i=1:g.w.nn, j=1:g.p.nn
-            # z-mom: -p*∂z(vᶻ)
-            push!(A, (uᶻmap[g.w.t[k, i]], pmap[g.p.t[k, j]], -Cz_pwᵏ[i, j]))
+        # p*vz
+        for i=1:uz.g.nn, j=1:p.g.nn
+            # z-mom: -p*∂z(vz)
+            push!(A, (uzmap[uz.g.t[k, i]], pmap[p.g.t[k, j]], -Cz_pwᵏ[i, j]))
         end
-        # uᶻ*q
-        for i=1:g.p.nn, j=1:g.w.nn
-            # cont: ∂z(uᶻ)*q
-            push!(A, (pmap[g.p.t[k, i]], uᶻmap[g.w.t[k, j]], Cz_wpᵏ[i, j]))
+        # uz*q
+        for i=1:p.g.nn, j=1:uz.g.nn
+            # cont: ∂z(uz)*q
+            push!(A, (pmap[p.g.t[k, i]], uzmap[uz.g.t[k, j]], Cz_wpᵏ[i, j]))
         end
         # # p*p
-        # for i=1:g.p.nn, j=1:g.p.nn
+        # for i=1:p.g.nn, j=1:p.g.nn
         #     # pressure condition: δ*q*p
-        #     push!(A, (pmap[g.p.t[k, i]], pmap[g.p.t[k, j]], 1e-7*Mppᵏ[i, j]))
+        #     push!(A, (pmap[p.g.t[k, i]], pmap[p.g.t[k, j]], 1e-7*Mppᵏ[i, j]))
         # end
         # f
-        r[uˣmap[g.u.t[k, :]]] .+= rxᵏ
-        r[uᶻmap[g.w.t[k, :]]] .+= rzᵏ
+        r[uxmap[ux.g.t[k, :]]] .+= rxᵏ
+        r[uzmap[uz.g.t[k, :]]] .+= rzᵏ
     end
 
     # make CSC matrix
@@ -105,24 +108,24 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
 
     # dirichlet condition on bottom and top (replace mom eqtns)
     if diri_mask[1]
-        A, r = add_dirichlet(A, r, uˣmap[e.botu], u₀.botu)
+        A, r = add_dirichlet(A, r, uxmap[e.botu], u₀.botu)
     end
     if diri_mask[2]
-        A, r = add_dirichlet(A, r, uᶻmap[e.botw], u₀.botw)
+        A, r = add_dirichlet(A, r, uzmap[e.botw], u₀.botw)
     end
     if diri_mask[3]
-        A, r = add_dirichlet(A, r, uˣmap[e.topu], u₀.topu)
+        A, r = add_dirichlet(A, r, uxmap[e.topu], u₀.topu)
     end
     if diri_mask[4]
-        A, r = add_dirichlet(A, r, uᶻmap[e.topw], u₀.topw)
+        A, r = add_dirichlet(A, r, uzmap[e.topw], u₀.topw)
     end
     # pressure condition
     A, r = apply_constraint(A, r, pmap[1], pmap[1], p₀)
 
     # remove zeros
     dropzeros!(A)
+    println(@sprintf("%.1f s", time() - t₀))
 
-    println("N = $N")
     if N < 1000
         M = Matrix(A)
         fig, ax = subplots(1)
@@ -138,32 +141,41 @@ function solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, tr
     end
 
     # solve
+    print("Solving... ")
+    t₀ = time()
     sol = A\r
+    println(@sprintf("%.1f s", time() - t₀))
 
     # reshape to get u and p
-    return sol[uˣmap], sol[uᶻmap], sol[pmap]
+    ux.values[:] = sol[uxmap]
+    uz.values[:] = sol[uzmap]
+    p.values[:] = sol[pmap]
+    return ux, uz, p
 end
 
 """
-    uˣ, uᶻ, p = stokes_hydro_b(nref)
+    ux, uz, p = stokes_hydro_res(nref)
+    hs, errs  = stokes_hydro_res(nref)
 """
-function stokes_hydro_b(nref, geo; plot=false)
+function stokes_hydro_res(nref, geo; plot=false, exact=false)
     # order of polynomials
     order = 2
 
-    # get shape functions
-    sp = ShapeFunctions(order-2)
-    sw = ShapeFunctions(order-1)
-    su = ShapeFunctions(order)
+    # setup FE grids
+    gfile = "../meshes/$geo/mesh$nref.h5"
+    gp = FEGrid(gfile, order-2)
+    gw = FEGrid(gfile, order-1)
+    gu = FEGrid(gfile, order)
+    g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
-    uu = ShapeFunctionIntegrals(su, su)
-    ww = ShapeFunctionIntegrals(sw, sw)
-    pu = ShapeFunctionIntegrals(sp, su)
-    pw = ShapeFunctionIntegrals(sp, sw)
-    up = ShapeFunctionIntegrals(su, sp)
-    wp = ShapeFunctionIntegrals(sw, sp)
-    pp = ShapeFunctionIntegrals(sp, sp)
+    uu = ShapeFunctionIntegrals(gu.s, gu.s)
+    ww = ShapeFunctionIntegrals(gw.s, gw.s)
+    pu = ShapeFunctionIntegrals(gp.s, gu.s)
+    pw = ShapeFunctionIntegrals(gp.s, gw.s)
+    up = ShapeFunctionIntegrals(gu.s, gp.s)
+    wp = ShapeFunctionIntegrals(gw.s, gp.s)
+    pp = ShapeFunctionIntegrals(gp.s, gp.s)
     s = (uu = uu,
          ww = ww, 
          pu = pu,  
@@ -172,14 +184,7 @@ function stokes_hydro_b(nref, geo; plot=false)
          wp = wp,
          pp = pp)  
 
-    # get grids
-    gp = Grid("../meshes/$geo/mesh$nref.h5", order-2)
-    gw = Grid("../meshes/$geo/mesh$nref.h5", order-1)
-    gu = Grid("../meshes/$geo/mesh$nref.h5", order)
-    g = (p = gp, u = gu, w = gw)
-
     # get Jacobians
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
     J = Jacobians(g1)
 
     # top and bottom edges
@@ -188,125 +193,77 @@ function stokes_hydro_b(nref, geo; plot=false)
     e = (botw = ebotw, topw = etopw, 
          botu = ebotu, topu = etopu)
 
-    # b field
-    x = gw.p[:, 1] 
-    z = gw.p[:, 2] 
-    if geo == "gmsh_tri"
-        H = @. 1 - abs(x)
+    if exact 
+        # mesh resolution 
+        hp = 1/sqrt(gp.np)
+        huz = 1/sqrt(gw.np)
+        hux = 1/sqrt(gu.np)
+
+        # exact solution
+        xu = gu.p[:, 1] 
+        zu = gu.p[:, 2] 
+        xw = gw.p[:, 1] 
+        zw = gw.p[:, 2] 
+        xp = gp.p[:, 1] 
+        zp = gp.p[:, 2] 
+        uxa = @.  cos(π*xu/2)*sin(π*zu/2)
+        uza = @. -sin(π*xw/2)*cos(π*zw/2)
+        pa = @. sin(xp*zp)*exp(zp) 
+        fx = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
+        fz = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
+        u₀ = (botw = uza[ebotw], topw = uza[etopw],
+              botu = uxa[ebotu], topu = uxa[etopu])
+        p₀ = pa[1]
+        diri_mask = (true, true, true, true)
     else
-        H = @. sqrt(2 - x^2) - 1
+        # forcing
+        function H(x)
+            if geo == "gmsh_tri"
+                return 1 - abs(x)
+            else
+                return sqrt(2 - x^2) - 1
+            end
+        end
+        fx = zeros(gu.np)
+        x = gw.p[:, 1] 
+        z = gw.p[:, 2] 
+        δ = 0.1
+        # fz = @. z + δ*exp(-(z + H)/δ)
+        # fz = z
+        fz = @. δ*exp(-(z + H(x))/δ)
+        u₀ = (botw = zeros(size(ebotw)), topw = zeros(size(etopw)),
+            botu = zeros(size(ebotu)), topu = zeros(size(etopu)))
+        p₀ = 0
+        diri_mask = (true, true, false, true)
     end
-    δ = 0.1
-    # fᶻ = @. z + δ*exp(-(z + H)/δ)
-    # fᶻ = z
-    fᶻ = @. δ*exp(-(z + H)/δ)
-    fˣ = zeros(gu.np)
-    f = (x = fˣ, z = fᶻ)
-    u₀ = (botw = zeros(size(ebotw)), topw = zeros(size(etopw)),
-          botu = zeros(size(ebotu)), topu = zeros(size(etopu)))
-    p₀ = 0
+
+    # initialize FE fields
+    ux = FEField(order,    zeros(gu.np), gu, g1)
+    uz = FEField(order-1,  zeros(gw.np), gw, g1)
+    p  = FEField(order-2,  zeros(gp.np), gp, g1)
+    fx  = FEField(order,   fx,           gu, g1)
+    fz  = FEField(order-1, fz,           gw, g1)
 
     # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀; diri_mask=(true, true, false, true))
+    ux, uz, p = solve_stokes_hydro(ux, uz, p, fx, fz, J, s, e, u₀, p₀; diri_mask=diri_mask)
 
     if plot
-        # quickplot(g.w, f.z, g.u, uˣ, L"u^x", "images/ux.png")
-        # quickplot(g.w, f.z, g.w, uᶻ, L"u^z", "images/uz.png")
-        # quickplot(g.w, f.z, g.w, p, L"p", "images/p.png")
-        quickplot(g.u, uˣ, L"u^x", "images/ux.png")
-        quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g.w, p, L"p", "images/p.png")
-    end
-    return uˣ, uᶻ, p
-end
-
-"""
-    hs, errs = stokes_hydro_res(nref)
-"""
-function stokes_hydro_res(nref; plot=false)
-    # order of polynomials
-    order = 2
-
-    # geometry type
-    # geo = "jc"
-    geo = "gmsh"
-
-    # get shape functions
-    sp = ShapeFunctions(order-2)
-    sw = ShapeFunctions(order-1)
-    su = ShapeFunctions(order)
-
-    # get shape function integrals
-    uu = ShapeFunctionIntegrals(su, su)
-    ww = ShapeFunctionIntegrals(sw, sw)
-    pu = ShapeFunctionIntegrals(sp, su)
-    pw = ShapeFunctionIntegrals(sp, sw)
-    up = ShapeFunctionIntegrals(su, sp)
-    wp = ShapeFunctionIntegrals(sw, sp)
-    pp = ShapeFunctionIntegrals(sp, sp)
-    s = (uu = uu,
-         ww = ww, 
-         pu = pu,  
-         pw = pw,  
-         up = up,  
-         wp = wp,
-         pp = pp)  
-
-    # get grids
-    gp = Grid("../meshes/$geo/mesh$nref.h5", order-2)
-    gw = Grid("../meshes/$geo/mesh$nref.h5", order-1)
-    gu = Grid("../meshes/$geo/mesh$nref.h5", order)
-    g = (p = gp, u = gu, w = gw)
-
-    # get Jacobians
-    g1 = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    J = Jacobians(g1)
-
-    # top and bottom edges
-    ebotw, etopw = get_sides(gw)
-    ebotu, etopu = get_sides(gu)
-    e = (botw = ebotw, topw = etopw, 
-         botu = ebotu, topu = etopu)
-
-    # mesh resolution 
-    hp = 1/sqrt(gp.np)
-    huᶻ = 1/sqrt(gw.np)
-    huˣ = 1/sqrt(gu.np)
-
-    # exact solution
-    xu = gu.p[:, 1] 
-    zu = gu.p[:, 2] 
-    xw = gw.p[:, 1] 
-    zw = gw.p[:, 2] 
-    xp = gp.p[:, 1] 
-    zp = gp.p[:, 2] 
-    uˣa = @.  cos(π*xu/2)*sin(π*zu/2)
-    uᶻa = @. -sin(π*xw/2)*cos(π*zw/2)
-    pa = @. sin(xp*zp)*exp(zp) 
-    fˣ = @. zu*cos(xu*zu)*exp(zu) + π^2/4*cos(π*xu/2)*sin(π*zu/2)
-    fᶻ = @. xw*cos(xw*zw)*exp(zw) + sin(xw*zw)*exp(zw)
-    f = (x = fˣ, z = fᶻ)
-    u₀ = (botw = uᶻa[ebotw], topw = uᶻa[etopw],
-          botu = uˣa[ebotu], topu = uˣa[etopu])
-    p₀ = pa[1]
-
-    # solve stokes_hydro problem
-    uˣ, uᶻ, p = solve_stokes_hydro(g, s, J, e, f, u₀, p₀)
-
-    if plot
-        quickplot(g.u, uˣ, L"u^x", "images/ux.png")
-        quickplot(g.w, uᶻ, L"u^z", "images/uz.png")
-        quickplot(g.w, p, L"p", "images/p.png")
-        quickplot(g.u, uˣa, L"u^x_a", "images/uxa.png")
-        quickplot(g.w, uᶻa, L"u^z_a", "images/uza.png")
-        quickplot(g.w, pa, L"p_a", "images/pa.png")
+        quickplot(fz, ux, L"u^x", "images/ux.png")
+        quickplot(fz, uz, L"u^z", "images/uz.png")
+        quickplot(fz, p, L"p", "images/p.png")
+        plot_profile(ux, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^x", L"z", "images/ux_profile.png")
+        plot_profile(uz, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^z", L"z", "images/uz_profile.png")
+        plot_profile(p, 0.5, -H(0.5)+1e-5:1e-3:0, L"p", L"z", "images/p_profile.png")
     end
 
-    # error
-    err_uˣ = L2norm(g.u, s.uu, J, uˣ - uˣa)
-    err_uᶻ = L2norm(g.w, s.ww, J, uᶻ - uᶻa)
-    err_p  = L2norm(g.p, s.pp, J, p - pa)
-    return huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p
+    if exact
+        err_ux = L2norm(ux.g, s.uu, J, ux.values - uxa)
+        err_uz = L2norm(uz.g, s.ww, J, uz.values - uza)
+        err_p  = L2norm(p.g, s.pp, J, p.values - pa)
+        return hux, huz, hp, err_ux, err_uz, err_p
+    else
+        return ux, uz, p
+    end
 end
 
 """
@@ -318,9 +275,9 @@ function stokes_hydro_conv(nrefs)
     ax.set_ylabel(L"$L_2$ Error") 
     for i in eachindex(nrefs)
         println(nrefs[i])
-        huˣ, huᶻ, hp, err_uˣ, err_uᶻ, err_p = stokes_hydro_res(nrefs[i])
-        ax.loglog(huˣ, err_uˣ, c="tab:blue", "o")
-        ax.loglog(huᶻ, err_uᶻ, c="tab:orange", "o")
+        hux, huz, hp, err_ux, err_uz, err_p = stokes_hydro_res(nrefs[i], "jc"; exact=true)
+        ax.loglog(hux, err_ux, c="tab:blue", "o")
+        ax.loglog(huz, err_uz, c="tab:orange", "o")
         ax.loglog(hp, err_p, c="tab:green", "o")
     end
     hmin = 2e-3
@@ -342,12 +299,11 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-# stokes_hydro_b(4, "jc"; plot=true)
-# stokes_hydro_b(5, "gmsh"; plot=true)
-# stokes_hydro_b(5, "gmsh_tri"; plot=true)
-stokes_hydro_b(1, ""; plot=true)
+# stokes_hydro_res(3, "jc"; plot=true)
+# stokes_hydro_res(4, "gmsh"; plot=true)
+# stokes_hydro_res(5, "gmsh_tri"; plot=true)
+stokes_hydro_res(0, "valign"; plot=true)
 
-# stokes_hydro_res(3; plot=true)
 # stokes_hydro_conv(0:5)
 
 println("Done.")
