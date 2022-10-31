@@ -10,7 +10,7 @@ function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
     end
 
     if u === nothing
-        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Set3", edgecolors="k", linewidth=0.5, rasterized=true)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors="k", linewidth=0.1, rasterized=true)
     else
         if vext === nothing
             vmax = maximum(abs.(u))
