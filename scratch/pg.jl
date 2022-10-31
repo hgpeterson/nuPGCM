@@ -26,12 +26,12 @@ Boundary conditions are
     ∂z(ux) = ∂z(uy) = 0 at z = 0, 
                  uz = 0 at z = 0,
 Weak form:
-    ∫ [ε²∂z(ux)∂z(ux) - uyvx - p∂x(vx) +
-       ε²∂z(uy)∂z(uy) + uxvy +
-       -p∂z(vz) +
-        q∂x(ux) + q∂z(uz)
+    ∫ [ε²*∂z(ux)∂z(ux) - uy*vx - p*∂x(vx) +
+       ε²*∂z(uy)∂z(uy) + ux*vy +
+       -p*∂z(vz) +
+        q*∂x(ux) + q*∂z(uz)
       ] dx dz
-    = ∫ bvz dx dz,
+    = ∫ b*vz dx dz,
 for all 
     ux, vx ∈ Pᵢ,
     uy, vy ∈ Pᵢ, 
@@ -56,6 +56,7 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
     for k=1:ux.g1.nt
         # ∂z(ux)∂z(vx)
         Kᵏ = abs(J.J[k])*(s.uu.φξφξ*J.ξy[k]^2 + s.uu.φξφη*J.ξy[k]*J.ηy[k] + s.uu.φηφξ*J.ηy[k]*J.ξy[k] + s.uu.φηφη*J.ηy[k]^2)
+        # Kwwᵏ = abs(J.J[k])*(s.ww.φξφξ*J.ξy[k]^2 + s.ww.φξφη*J.ξy[k]*J.ηy[k] + s.ww.φηφξ*J.ηy[k]*J.ξy[k] + s.ww.φηφη*J.ηy[k]^2)
 
         # p*∂x(vx) 
         Cx_puᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξx[k] + s.pu.φφη*J.ηx[k])
@@ -74,37 +75,42 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
         # b*vz
         rᵏ = abs(J.J[k])*s.ww.φφ*b.values[b.g.t[k, :]]
 
-        # u*u
+        # x-mom: ε²*∂z(ux)∂z(vx)
         for i=1:ux.g.nn, j=1:ux.g.nn
-            # x-mom: ∂z(ux)∂z(vx)
             push!(A, (uxmap[ux.g.t[k, i]], uxmap[ux.g.t[k, j]], ε²*Kᵏ[i, j]))
-            # y-mom: ∂z(uy)∂z(vy)
+        end
+        # y-mom: ∂ε²*z(uy)∂z(vy)
+        for i=1:uy.g.nn, j=1:uy.g.nn
             push!(A, (uymap[uy.g.t[k, i]], uymap[uy.g.t[k, j]], ε²*Kᵏ[i, j]))
-            # x-mom: uy*vx
+        end
+        # x-mom: -uy*vx
+        for i=1:ux.g.nn, j=1:uy.g.nn
             push!(A, (uxmap[ux.g.t[k, i]], uymap[uy.g.t[k, j]], -Muuᵏ[i, j]))
-            # y-mom: ux*vy
+        end
+        # y-mom: ux*vy
+        for i=1:uy.g.nn, j=1:ux.g.nn
             push!(A, (uymap[uy.g.t[k, i]], uxmap[ux.g.t[k, j]], Muuᵏ[i, j]))
         end
-        # p*vx
+        # x-mom: -p*∂x(vx)
         for i=1:ux.g.nn, j=1:p.g.nn
-            # x-mom: -p*∂x(vx)
             push!(A, (uxmap[ux.g.t[k, i]], pmap[p.g.t[k, j]], -Cx_puᵏ[i, j]))
         end
-        # ux*q
+        # cont: ∂x(ux)*q
         for i=1:p.g.nn, j=1:ux.g.nn
-            # cont: ∂x(ux)*q
             push!(A, (pmap[p.g.t[k, i]], uxmap[ux.g.t[k, j]], Cx_upᵏ[i, j]))
         end
-        # p*vz
+        # z-mom: -p*∂z(vz)
         for i=1:uz.g.nn, j=1:p.g.nn
-            # z-mom: -p*∂z(vz)
             push!(A, (uzmap[uz.g.t[k, i]], pmap[p.g.t[k, j]], -Cz_pwᵏ[i, j]))
         end
-        # uz*q
+        # cont: ∂z(uz)*q
         for i=1:p.g.nn, j=1:uz.g.nn
-            # cont: ∂z(uz)*q
             push!(A, (pmap[p.g.t[k, i]], uzmap[uz.g.t[k, j]], Cz_wpᵏ[i, j]))
         end
+        # # uz*vz
+        # for i=1:uz.g.nn, j=1:uz.g.nn
+        #     push!(A, (uzmap[uz.g.t[k, i]], uzmap[uz.g.t[k, j]], 1e0*ε²*Kwwᵏ[i, j]))
+        # end
         # # p*p
         # for i=1:p.g.nn, j=1:p.g.nn
         #     # pressure condition: δ*q*p
@@ -166,9 +172,11 @@ function pg_res(geo, nref; plot=false)
     order = 2
 
     # Ekman number
+    # ε² = 1e-5
     # ε² = 1e-4
     ε² = 1e-3
     # ε² = 1e-2
+    # ε² = 1e-1
     # ε² = 1
 
     # setup FE grids
@@ -197,7 +205,7 @@ function pg_res(geo, nref; plot=false)
     # get Jacobians
     J = Jacobians(g1)   
 
-    println("δ = ", sqrt(2*ε²))
+    println("q⁻¹ = ", sqrt(2*ε²))
     println("h = ", 1/sqrt(g1.np))
 
     # top and bottom edges
@@ -232,50 +240,46 @@ function pg_res(geo, nref; plot=false)
     ux, uy, uz, p = solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
 
     if plot
-        quickplot(b, ux, L"u^x", "images/ux.png")
-        quickplot(b, uy, L"u^y", "images/uy.png")
-        quickplot(b, uz, L"u^z", "images/uz.png")
-        quickplot(b, p, L"p", "images/p.png")
-        plot_profile(ux, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^x", L"z", "images/ux_profile.png")
-        plot_profile(uy, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^y", L"z", "images/uy_profile.png")
-        plot_profile(uz, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^z", L"z", "images/uz_profile.png")
-        plot_profile(p, 0.5, -H(0.5)+1e-5:1e-3:0, L"p", L"z", "images/p_profile.png")
+        quickplot(ux, L"u^x", "images/ux.png")
+        quickplot(uy, L"u^y", "images/uy.png")
+        quickplot(uz, L"u^z", "images/uz.png")
+        quickplot(p, L"p", "images/p.png")
+        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"u^x", L"z", "images/ux_profile.png")
+        plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"u^y", L"z", "images/uy_profile.png")
+        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"u^z", L"z", "images/uz_profile.png")
+        plot_profile(p,  0.5, -H(0.5):1e-3:0, L"p",   L"z", "images/p_profile.png")
     end
 
     return ux, uy, uz, p
 end
 
-# b = z
-# δ     ε²    res  ux    uy    uz
-# 1e-1  1e-4  0    4e-2  4e-1  2e-2
-# 1e-1  1e-4  1    3e-1  4e-1  1e-1
-# 1e-1  1e-4  2    2e-1  2e-1  1e-1   # not high enough resolution to handle
-# 1e-1  1e-4  3    9e-2  6e-2  7e-2
-# 1e-1  1e-4  4    3e-2  1e-2  3e-2
-
-# 1e-1  1e-2  0    3e-2  2e-2  1e-2   # ux and uy ~ O(h^2) but not uz always
-# 1e-1  1e-2  1    1e-2  8e-3  9e-3
-# 1e-1  1e-2  2    3e-3  2e-3  3e-3
-# 1e-1  1e-2  3    1e-3  6e-4  3e-3
-# 1e-1  1e-2  4    3e-4  1e-4  3e-4
-
-# 1e-1  1e0   0    3e-4  4e-6  1e-4   # ux and uy ~ O(h^2) but not uz always
-# 1e-1  1e0   1    1e-4  2e-6  1e-4
-# 1e-1  1e0   2    3e-5  4e-7  3e-5
-# 1e-1  1e0   3    1e-5  8e-8  3e-5
-# 1e-1  1e0   4    3e-6  2e-8  3e-6
-
-# b = δ*exp(-(z + H)/δ)
-# δ     ε²    ux    uy    uz
-# 1e-1  1e-4  8e-3  3e-2  6e-3
-# 1e-1  1e-2  4e-3  6e-3  2e-3
-# 1e-1  1e0   5e-5  9e-7  2e-5
-
-ux, uy, uz, p = pg_res("gmsh", 5; plot=true)
+# ux, uy, uz, p = pg_res("gmsh", 5; plot=true)
 # ux, uy, uz, p = pg_res("jc", 5; plot=true)
 # ux, uy, uz, p = pg_res("valign", 0; plot=true)
 # ux, uy, uz, p = pg_res("", 0; plot=true)
 
 # println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(ux)), maximum(abs.(uy)), maximum(abs.(uz))))
+
+# x = -1:0.01:1
+# H(x) = sqrt(2 - x^2) - 1
+# δ = 1e-1
+# plot(x, map(x->δ*x/sqrt(2 - x^2)*(1 - exp(-H(x)/δ)), x), label="Thermal Wind")
+# plot(x, map(x->fem_evaluate(uy, [x, 0]), x), label="Numerical")
+# xlabel(L"x")
+# ylabel(L"u^y(0)")
+# legend()
+# savefig("images/uy0.png")
+# println("images/uy0.png")
+
+H(x) = sqrt(2 - x^2) - 1
+x = 0.5
+z = -H(x):1e-3:0
+δ = 1e-1
+fig, ax = subplots(1, figsize=(2, 3.2))
+ax.plot(map(z->δ*x/sqrt(2 - x^2)*(1 - exp(-(z + H(x))/δ)), z), z)
+ax.set_xlabel(L"u^y")
+ax.set_ylabel(L"z")
+savefig("images/uy_profile_tw.png")
+println("images/uy_profile_tw.png")
 
 println("Done.")
