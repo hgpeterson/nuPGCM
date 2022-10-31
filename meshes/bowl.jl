@@ -27,28 +27,20 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.addPoint(-1, 0, 0, h₀/r)
     gmsh.model.geo.addPoint(0, 1-√2, 0, h₀/r)
     gmsh.model.geo.addPoint(1, 0, 0, h₀/r)
-    
-    # center of circle
-    gmsh.model.geo.addPoint(0, 1, 0, h₀/r)
+    gmsh.model.geo.addPoint(0, 1, 0, h₀/r) # center of circle
 
+    # lines
     gmsh.model.geo.addCircleArc(1, 4, 2)
     gmsh.model.geo.addCircleArc(2, 4, 3)
     gmsh.model.geo.addLine(3, 1)
-    N = 3
 
-    # connect edge points by lines
-    for i=1:N-1
-        gmsh.model.geo.addLine(i, i + 1)
-    end
-    gmsh.model.geo.addLine(N, 1)
-    
     # loop curves together and define surface
-    gmsh.model.geo.addCurveLoop(1:N, 1)
+    gmsh.model.geo.addCurveLoop(1:3, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
     # refine mesh near boundary nodes
     gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:N)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:3)
     gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
     gmsh.model.mesh.field.add("MathEval", 2)
@@ -68,8 +60,8 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.synchronize()
 
     # define boundary and interior physical groups
-    gmsh.model.addPhysicalGroup(1, 1:N-1, 1, "bot")
-    gmsh.model.addPhysicalGroup(1, [N], 2, "top")
+    gmsh.model.addPhysicalGroup(1, [1, 2], 1, "bot")
+    gmsh.model.addPhysicalGroup(1, [3], 2, "top")
     gmsh.model.addPhysicalGroup(2, [1], 3, "surface")
 
     # generate mesh
@@ -136,25 +128,11 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-# for i=0:5
-#     h₀ = 0.01*2.0^(4-i)
-#     generate_bowl_mesh(h₀, 1)
-#     p, t, e = load_gmesh(savefile="gmsh/mesh$i.h5")
-#     # p, t, e = load_gmesh(savefile="gmsh_tri/mesh$i.h5")
-
-#     tplot(p, t)
-#     plot(p[e, 1], p[e, 2], "o", ms=1)
-#     plt.axis("equal")
-#     savefig("gmsh/mesh$i.png")
-#     println("gmsh/mesh$i.png")
-#     plt.close()
-# end
-
-h₀ = 0.04
+h₀ = 0.008
 r = 4
 generate_bowl_mesh(h₀, r)
 p, t, e = load_gmesh(savefile="mesh0.h5")
-tplot(p, t)
-axis("equal")
-savefig("mesh.png")
-println("mesh.png")
+# tplot(p, t)
+# axis("equal")
+# savefig("mesh.png")
+# println("mesh.png")
