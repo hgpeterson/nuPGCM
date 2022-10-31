@@ -17,11 +17,11 @@ pygui(false)
 
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
-function solve_laplace(g, s, J, f, u₀)
+function solve_laplace(u, s, J, f, u₀)
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
-    b = zeros(g.np)
-    for k=1:g.nt
+    b = zeros(u.g.np)
+    for k=1:u.g.nt
         # calculate contribution to K from element k
         Kᵏ = abs(J.J[k])*(s.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
                           s.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
@@ -29,27 +29,27 @@ function solve_laplace(g, s, J, f, u₀)
                           s.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # calculate contribution to b from element k
-        bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
+        bᵏ = abs(J.J[k])*s.φφ*f[u.g.t[k, :]]
 
         # add to global system
-        for i=1:g.nn
-            for j=1:g.nn
-                push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
-            end
-            b[g.t[k, i]] += bᵏ[i]
+        for i=1:u.g.nn, j=1:u.g.nn
+            push!(K, (u.g.t[k, i], u.g.t[k, j], Kᵏ[i, j]))
         end
+        b[u.g.t[k, :]] += bᵏ
     end
 
     # make CSC matrix
-    K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), g.np, g.np)
+    K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), u.g.np, u.g.np)
 
     # dirichlet along edges
-    K[g.e, :] .= 0
-    K[diagind(K)[g.e]] .= 1
-    b[g.e] = u₀
+    K, b = add_dirichlet(K, b, u.g.e, u₀)
+
+    # remove zeros
+    dropzeros!(K)
 
     # solve
-    return K\b
+    u.values[:] = K\b
+    return u
 end
 
 """
@@ -61,18 +61,16 @@ function laplace_res(nref, order; plot=false)
     geo = "circle"
 
     # get grid
-    g = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g = FEGrid("../meshes/$geo/mesh$nref.h5", order)
+    g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
     x = g.p[:, 1]
     y = g.p[:, 2]
 
-    # get shape functions
-    sf = ShapeFunctions(order)
-
     # get shape function integrals
-    s = ShapeFunctionIntegrals(sf, sf)
+    s = ShapeFunctionIntegrals(g.s, g.s)
 
     # get Jacobians
-    J = Jacobians(g)
+    J = Jacobians(g1)
 
     # mesh resolution 
     h = 1/sqrt(g.np)
@@ -83,17 +81,18 @@ function laplace_res(nref, order; plot=false)
     # pick f such that -∇u = f
     f = @. exp(x^2)*(2 + 4*x^2)*y
 
+    # initialize FE field
+    u = FEField(order, zeros(g.np), g, g1)
+
     # solve laplace problem
-    u = solve_laplace(g, s, J, f, ua[g.e])
+    u = solve_laplace(u, s, J, f, ua[g.e])
 
     if plot
-        quickplot(g, u, L"u", "images/u.png")
-        quickplot(g, ua, L"u^a", "images/ua.png")
-        quickplot(g, abs.(u - ua), L"|u - u^a|", "images/e.png")
+        quickplot(u, L"u", "images/u.png")
     end
 
     # error
-    err = L2norm(g, s, J, u - ua)
+    err = L2norm(g, s, J, u.values - ua)
     return h, err
 end
 
@@ -105,11 +104,11 @@ function laplace_convergence(nrefs)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u^a||_{L^2}$")
     for o=1:3
-        println("Order", o)
+        println("Order ", o)
         h = zeros(size(nrefs, 1))
         err = zeros(size(nrefs, 1))
         for i in eachindex(nrefs)
-            println("\tRefinement", nrefs[i])
+            println("\tRefinement ", nrefs[i])
             h[i], err[i] = laplace_res(nrefs[i], o)
         end
         ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))

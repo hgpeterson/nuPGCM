@@ -11,7 +11,7 @@ plt.close("all")
 pygui(false)
 
 """
-    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀)
+    ux, uz, p = solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
 
 Stokes problem:
     -Δu + ∇p = f      on Ω,
@@ -19,149 +19,148 @@ Stokes problem:
            u = u₀     on ∂Ω,
 with extra condition
     ∫ p dx = 0.
-Here u = (u₁, u₂) is the velocity vector and p is the pressure.
+Here u = (ux, uz) is the velocity vector and p is the pressure.
 Weak form:
     ∫ (∇u)⊙(∇v) - p (∇⋅v) + q (∇⋅u) dx = ∫ f⋅v dx,
 for all 
-    v₁, v₂ ∈ P₂ and q ∈ P₁,
+    vx, vz ∈ P₂ and q ∈ P₁,
 where Pₙ is the space of continuous polynomials of degree n.
 """
-function solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀) 
+function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
     # indices
-    umap = reshape(1:2*g₂.np, (2, g₂.np))
-    pmap = umap[end] .+ (1:g₁.np)
+    uxmap = 1:ux.g.np
+    uzmap = uxmap[end] .+ (1:uz.g.np)
+    pmap  = uzmap[end] .+ (1:p.g.np)
     N = pmap[end]
+    println("N = $N")
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(N)
-    for k=1:g₁.nt
+    for k=1:ux.g.nt
         # contribution from (∇u)⊙(∇v) term 
-        Kᵏ = abs(J.J[k])*(sfi_uu.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          sfi_uu.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          sfi_uu.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          sfi_uu.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
+        Kᵏ = abs(J.J[k])*(s.uu.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
+                          s.uu.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
+                          s.uu.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
+                          s.uu.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
 
         # contribution from p*(∇⋅v) term
-        Cxᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξx[k] + sfi_pu.φφη*J.ηx[k])
-        Cyᵏ = abs(J.J[k])*(sfi_pu.φφξ*J.ξy[k] + sfi_pu.φφη*J.ηy[k])
+        Cxᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξx[k] + s.pu.φφη*J.ηx[k])
+        Czᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξy[k] + s.pu.φφη*J.ηy[k])
 
         # contribution from f⋅v
-        b₁ᵏ = abs(J.J[k])*sfi_uu.φφ*f[1, g₂.t[k, :]]
-        b₂ᵏ = abs(J.J[k])*sfi_uu.φφ*f[2, g₂.t[k, :]]
+        bxᵏ = abs(J.J[k])*s.uu.φφ*fx.values[ux.g.t[k, :]]
+        bzᵏ = abs(J.J[k])*s.uu.φφ*fz.values[ux.g.t[k, :]]
 
-        # add to global system
-        for i=1:g₂.nn
-            for j=1:g₂.nn
-                # (∇u)⊙(∇v) term
-                push!(A, (umap[1, g₂.t[k, i]], umap[1, g₂.t[k, j]], Kᵏ[i, j]))
-                push!(A, (umap[2, g₂.t[k, i]], umap[2, g₂.t[k, j]], Kᵏ[i, j]))
-            end
-            for j=1:g₁.nn
-                # -p*(∇⋅v) term
-                push!(A, (umap[1, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cxᵏ[i, j]))
-                push!(A, (umap[2, g₂.t[k, i]], pmap[g₁.t[k, j]], -Cyᵏ[i, j]))
-                # q*(∇⋅u) term (i and j flipped because we used sfi_pu)
-                push!(A, (pmap[g₁.t[k, j]], umap[1, g₂.t[k, i]], Cxᵏ[i, j]))
-                push!(A, (pmap[g₁.t[k, j]], umap[2, g₂.t[k, i]], Cyᵏ[i, j]))
-            end
-            b[umap[1, g₂.t[k, i]]] += b₁ᵏ[i]
-            b[umap[2, g₂.t[k, i]]] += b₂ᵏ[i]
+        # (∇u)⊙(∇v) term
+        for i=1:ux.g.nn, j=1:ux.g.nn
+            push!(A, (uxmap[ux.g.t[k, i]], uxmap[ux.g.t[k, j]], Kᵏ[i, j]))
         end
+        # (∇u)⊙(∇v) term
+        for i=1:uz.g.nn, j=1:uz.g.nn
+            push!(A, (uzmap[uz.g.t[k, i]], uzmap[uz.g.t[k, j]], Kᵏ[i, j]))
+        end
+        # -p*(∇⋅v) term
+        for i=1:ux.g.nn, j=1:p.g.nn
+            push!(A, (uxmap[ux.g.t[k, i]], pmap[p.g.t[k, j]], -Cxᵏ[i, j]))
+        end
+        # -p*(∇⋅v) term
+        for i=1:uz.g.nn, j=1:p.g.nn
+            push!(A, (uzmap[uz.g.t[k, i]], pmap[p.g.t[k, j]], -Czᵏ[i, j]))
+        end
+        # q*(∇⋅u) term 
+        for i=1:p.g.nn, j=1:ux.g.nn
+            push!(A, (pmap[p.g.t[k, i]], uxmap[ux.g.t[k, j]], Cxᵏ[j, i]))
+        end
+        for i=1:p.g.nn, j=1:ux.g.nn
+            push!(A, (pmap[p.g.t[k, i]], uzmap[uz.g.t[k, j]], Czᵏ[j, i]))
+        end
+        b[uxmap[ux.g.t[k, :]]] .+= bxᵏ
+        b[uzmap[uz.g.t[k, :]]] .+= bzᵏ
     end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # dirichlet for u along edges
-    A[umap[:, g₂.e], :] .= 0
-    A[diagind(A)[umap[:, g₂.e]]] .= 1
-    b[umap[:, g₂.e]] .= u₀
+    A, b = add_dirichlet(A, b, uxmap[ux.g.e], ux₀)
+    A, b = add_dirichlet(A, b, uzmap[uz.g.e], uz₀)
 
     # set p to zero somewhere
-    A[pmap[1], :] .= 0
-    A[pmap[1], pmap[1]] = 1
-    b[pmap[1]] = 0
-
-    # # set p̄ to zero
-    # A[pmap[1], :] .= 0
-    # A[pmap[1], pmap[1:end]] .= 1
-    # b[pmap[1]] = 0
-
-    # fig, ax = subplots(1)
-    # im = ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
-    # savefig("images/A.png")
-    # println("images/A.png")
-    # plt.close()
+    A, b = apply_constraint(A, b, pmap[1], pmap[1], 0)
 
     # solve
     sol = A\b
 
     # reshape to get u and p
-    return sol[umap], sol[pmap]
+    ux.values[:] = sol[uxmap]
+    uz.values[:] = sol[uzmap]
+    p.values[:] = sol[pmap]
+    return ux, uz, p
 end
 
 """
     h, err = stokes_res(nref)
 """
 function stokes_res(nref; plot=false)
+    # order
+    order = 3
+
     # geometry type
     geo = "circle"
 
-    # get shape functions
-    sf_u = ShapeFunctions(2)
-    sf_p = ShapeFunctions(1)
+    # get grids
+    gu = FEGrid("../meshes/$geo/mesh$nref.h5", order)
+    gp = FEGrid("../meshes/$geo/mesh$nref.h5", order-1)
+    g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
 
     # get shape function integrals
-    sfi_uu = ShapeFunctionIntegrals(sf_u, sf_u)
-    sfi_pu = ShapeFunctionIntegrals(sf_p, sf_u)
-    sfi_pp = ShapeFunctionIntegrals(sf_p, sf_p)
-
-    # get grids
-    g₁ = Grid("../meshes/$geo/mesh$nref.h5", 1)
-    g₂ = Grid("../meshes/$geo/mesh$nref.h5", 2)
+    suu = ShapeFunctionIntegrals(gu.s, gu.s)
+    spu = ShapeFunctionIntegrals(gp.s, gu.s)
+    spp = ShapeFunctionIntegrals(gp.s, gp.s)
+    s = (uu = suu,
+         pu = spu,
+         pp = spp)
 
     # mesh resolution 
-    h = 1/sqrt(g₂.np)
+    h = 1/sqrt(g1.np)
 
     # exact solution
-    x = g₂.p[:, 1] 
-    y = g₂.p[:, 2] 
-    ua₁ = @.  π/2*cos(π*x/2)*sin(π*y/2)
-    ua₂ = @. -π/2*sin(π*x/2)*cos(π*y/2)
-    ua = hcat(ua₁, ua₂)'
-    pa = zeros(g₂.np)
-    f₁ = @. π^3/4*cos(π*x/2)*sin(π*y/2)
-    f₂ = @. -π^3/4*sin(π*x/2)*cos(π*y/2)
-    f = hcat(f₁, f₂)'
+    x = gu.p[:, 1] 
+    z = gu.p[:, 2] 
+    uxa = @.  π/2*cos(π*x/2)*sin(π*z/2)
+    uza = @. -π/2*sin(π*x/2)*cos(π*z/2)
+    pa = zeros(gp.np)
+    fx = @. π^3/4*cos(π*x/2)*sin(π*z/2)
+    fz = @. -π^3/4*sin(π*x/2)*cos(π*z/2)
 
     # dirichlet
-    u₀ = hcat(ua[1, g₂.e], ua[2, g₂.e])'
+    ux₀ = uxa[gu.e]
+    uz₀ = uza[gu.e]
 
     # get Jacobians
-    J = Jacobians(g₁)
+    J = Jacobians(g1)
+
+    # initialize FE fields
+    ux  = FEField(gu.order, zeros(gu.np), gu, g1)
+    uz  = FEField(gu.order, zeros(gu.np), gu, g1)
+    p   = FEField(gp.order, zeros(gp.np), gp, g1)
+    fx  = FEField(gu.order, fx,           gu, g1)
+    fz  = FEField(gu.order, fz,           gu, g1)
 
     # solve stokes problem
-    u, p = solve_stokes(g₁, g₂, sfi_uu, sfi_pu, J, f, u₀)
+    ux, uz, p = solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
 
     if plot
-        quickplot(g₂, u[1, :], L"u_1", "images/u1.png")
-        quickplot(g₂, u[2, :], L"u_2", "images/u2.png")
-        quickplot(g₁, p, L"p", "images/p.png")
-
-        quickplot(g₂, ua[1, :], L"u_1^a", "images/u1a.png")
-        quickplot(g₂, ua[2, :], L"u_2^a", "images/u2a.png")
-        quickplot(g₂, pa, L"p^a", "images/pa.png")
-
-        quickplot(g₂, abs.(u[1, :] - ua[1, :]), L"|u_1 - u_1^a|", "images/e1.png")
-        quickplot(g₂, abs.(u[2, :] - ua[2, :]), L"|u_2 - u_2^a|", "images/e2.png")
-        quickplot(g₁, abs.(p - pa[1:g₁.np]), L"|p - p^a|", "images/ep.png")
+        quickplot(ux, L"u^x", "images/ux.png")
+        quickplot(uz, L"u^z", "images/uz.png")
+        quickplot(p, L"p", "images/p.png")
     end
 
     # error
-    err_u₁ = H1norm(g₂, sfi_uu, J, u[1, :] - ua[1, :])
-    err_u₂ = H1norm(g₂, sfi_uu, J, u[2, :] - ua[2, :])
-    err_p = L2norm(g₁, sfi_pp, J, p - pa[1:g₁.np])
+    err_u₁ = H1norm(gu, s.uu, J, ux.values - uxa)
+    err_u₂ = H1norm(gu, s.uu, J, uz.values - uza)
+    err_p = L2norm(gp, s.pp, J, p.values - pa)
     err= err_u₁ + err_u₂ + err_p
     return h, err
 end
@@ -181,8 +180,8 @@ function stokes_convergence(nrefs)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u^a||_{H^1} + ||p - p^a||_{L^2}$")
-    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^2], "k-", label=L"$h^2$")
-    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^3], "k--", label=L"$h^3$")
+    # ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^3], "k-", label=L"$h^3$")
+    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^4], "k-", label=L"$h^4$")
     ax.loglog(h, err, "o", label="Data")
     ax.legend()
     ax.set_xlim(0.5*h[end], 2*h[1])
@@ -194,5 +193,5 @@ function stokes_convergence(nrefs)
     return h, err
 end
 
-# stokes_res(3; plot=true)
-h, err = stokes_convergence(0:5)
+# stokes_res(0; plot=true)
+h, err = stokes_convergence(0:3)
