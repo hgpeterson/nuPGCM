@@ -601,11 +601,17 @@ end
 #     return fem_evaluate(v, ξ, η, p, t, C₀, k)
 # end
 function fem_evaluate(u::FEField, x)
-    # find triangle x is in
-    k = get_tri(x, u.g1)
-    
-    # evaluate there
-    return fem_evaluate(u, x, k)
+    try
+        # find triangle x is in
+        k = get_tri(x, u.g1)
+
+        # evaluate there
+        return fem_evaluate(u, x, k)
+    catch
+        # if triangle not found, return NaN
+        println("p₀=($(x[1]), $(x[2])) outside mesh domain.")
+        return NaN
+    end
 end
 function fem_evaluate(u::FEField, x, k)
     # transform to standard triangle
