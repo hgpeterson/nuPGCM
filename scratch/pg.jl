@@ -73,7 +73,7 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
         Mppᵏ = abs(J.J[k])*s.pp.φφ
 
         # b*vz
-        rᵏ = abs(J.J[k])*s.ww.φφ*b.values[b.g.t[k, :]]
+        rᵏ = abs(J.J[k])*s.bw.φφ*b.values[b.g.t[k, :]]
 
         # x-mom: ε²*∂z(ux)∂z(vx)
         for i=1:ux.g.nn, j=1:ux.g.nn
@@ -136,25 +136,20 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
 
-    # if N < 1000
-    #     fig, ax = subplots(1)
-    #     ax.imshow(abs.(Matrix(A)) .== 0, cmap="binary_r")
-    #     ax.spines["left"].set_visible(false)
-    #     ax.spines["bottom"].set_visible(false)
-    #     savefig("images/A.png")
-    #     println("images/A.png")
-    #     plt.close()
-    #     # println("Condition number: ", cond(Array(A)))
-    # end
+    M = Array(A)
+    println(rank(M))
+    null = nullspace(M)
+    ux.values[:] = null[uxmap, 1]
+    uy.values[:] = null[uymap, 1]
+    uz.values[:] = null[uzmap, 1]
+    p.values[:]  = null[pmap, 1]
+    return ux, uy, uz, p
 
     # solve
     print("Solving... ")
     t₀ = time()
     sol = A\r
     println(@sprintf("%.1f s", time() - t₀))
-    # sol = minres(A, r)
-    # sol, ch = bicgstabl(A, r, log=true, verbose=true)
-    # sol, ch = lsmr(A, r, log=true, verbose=true)
 
     # reshape to get u and p
     ux.values[:] = sol[uxmap]
@@ -164,23 +159,21 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
     return ux, uy, uz, p
 end
 
-"""
-    h, err = pg_res(geo, nref)
-"""
-function pg_res(geo, nref; plot=false)
+function pg_res(geo, nref; showplots=false)
     # order of polynomials
-    order = 2
+    order = 3
 
     # Ekman number
     # ε² = 1e-5
     # ε² = 1e-4
-    ε² = 1e-3
+    # ε² = 1e-3
     # ε² = 1e-2
     # ε² = 1e-1
-    # ε² = 1
+    ε² = 1
 
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
+    gb = FEGrid(gfile, order-3)
     gp = FEGrid(gfile, order-2)
     gw = FEGrid(gfile, order-1)
     gu = FEGrid(gfile, order)
@@ -194,19 +187,21 @@ function pg_res(geo, nref; plot=false)
     up = ShapeFunctionIntegrals(gu.s, gp.s)
     wp = ShapeFunctionIntegrals(gw.s, gp.s)
     pp = ShapeFunctionIntegrals(gp.s, gp.s)
+    bw = ShapeFunctionIntegrals(gb.s, gw.s)
     s = (uu = uu,
          ww = ww, 
          pu = pu,  
          pw = pw,  
          up = up,  
          wp = wp,
-         pp = pp)  
+         pp = pp,
+         bw = bw)  
  
     # get Jacobians
     J = Jacobians(g1)   
 
-    println("q⁻¹ = ", sqrt(2*ε²))
-    println("h = ", 1/sqrt(g1.np))
+    println(@sprintf("q⁻¹ = %1.1e", sqrt(2*ε²)))
+    println(@sprintf("h   = %1.1e", 1/sqrt(g1.np)))
 
     # top and bottom edges
     ebotw, etopw = get_sides(gw)
@@ -222,64 +217,80 @@ function pg_res(geo, nref; plot=false)
             return sqrt(2 - x^2) - 1
         end
     end
-    x = gw.p[:, 1] 
-    z = gw.p[:, 2] 
+    x = gb.p[:, 1] 
+    z = gb.p[:, 2] 
     δ = 0.1
-    # b = @. z + δ*exp(-(z + H)/δ)
+    # b = @. z + δ*exp(-(z + H(x))/δ)
     # b = z
     b = @. δ*exp(-(z + H(x))/δ)
 
     # initialize FE fields
-    ux = FEField(order,   zeros(gu.np), gu, g1)
-    uy = FEField(order,   zeros(gu.np), gu, g1)
-    uz = FEField(order-1, zeros(gw.np), gw, g1)
-    p  = FEField(order-2, zeros(gp.np), gp, g1)
-    b  = FEField(order-1, b, gw, g1)
+    ux = FEField(zeros(gu.np), gu, g1)
+    uy = FEField(zeros(gu.np), gu, g1)
+    uz = FEField(zeros(gw.np), gw, g1)
+    p  = FEField(zeros(gp.np), gp, g1)
+    b  = FEField(b,            gb, g1)
+    println(uz.order)
 
     # solve 
     ux, uy, uz, p = solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
 
-    if plot
+    if showplots
         quickplot(ux, L"u^x", "images/ux.png")
         quickplot(uy, L"u^y", "images/uy.png")
         quickplot(uz, L"u^z", "images/uz.png")
-        quickplot(p, L"p", "images/p.png")
-        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"u^x", L"z", "images/ux_profile.png")
-        plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"u^y", L"z", "images/uy_profile.png")
-        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"u^z", L"z", "images/uz_profile.png")
-        plot_profile(p,  0.5, -H(0.5):1e-3:0, L"p",   L"z", "images/p_profile.png")
+        quickplot(p,  L"p",   "images/p.png")
+        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
+        plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
+        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
+        plot_profile(p,  0.5, -H(0.5):1e-3:0, L"$p$ at $x = 0.5$",   L"z", "images/p_profile.png")
     end
 
     return ux, uy, uz, p
 end
 
-# ux, uy, uz, p = pg_res("gmsh", 5; plot=true)
-# ux, uy, uz, p = pg_res("jc", 5; plot=true)
-# ux, uy, uz, p = pg_res("valign", 0; plot=true)
-# ux, uy, uz, p = pg_res("", 0; plot=true)
+# ux, uy, uz, p = pg_res("gmsh", 5; showplots=true)
+ux, uy, uz, p = pg_res("jc", 0; showplots=true)
+# ux, uy, uz, p = pg_res("valign", 0; showplots=true)
+# ux, uy, uz, p = pg_res("", 0; showplots=true)
 
-# println(@sprintf("%1.0e  %1.0e  %1.0e", maximum(abs.(ux)), maximum(abs.(uy)), maximum(abs.(uz))))
+# δ = 1e-1
+# H(x) = sqrt(2 - x^2) - 1
 
 # x = -1:0.01:1
-# H(x) = sqrt(2 - x^2) - 1
-# δ = 1e-1
-# plot(x, map(x->δ*x/sqrt(2 - x^2)*(1 - exp(-H(x)/δ)), x), label="Thermal Wind")
-# plot(x, map(x->fem_evaluate(uy, [x, 0]), x), label="Numerical")
-# xlabel(L"x")
-# ylabel(L"u^y(0)")
-# legend()
+# fig, ax = subplots(1)
+# ax.plot(x, map(x->δ*x/sqrt(2 - x^2)*(1 - exp(-H(x)/δ)), x), label="Thermal Wind")
+# ax.plot(x, map(x->fem_evaluate(uy, [x, 0]), x), label="Numerical")
+# ax.set_xlabel(L"x")
+# ax.set_ylabel(L"u^y(0)")
+# ax.legend()
 # savefig("images/uy0.png")
 # println("images/uy0.png")
+# plt.close()
 
-H(x) = sqrt(2 - x^2) - 1
-x = 0.5
-z = -H(x):1e-3:0
-δ = 1e-1
-fig, ax = subplots(1, figsize=(2, 3.2))
-ax.plot(map(z->δ*x/sqrt(2 - x^2)*(1 - exp(-(z + H(x))/δ)), z), z)
-ax.set_xlabel(L"u^y")
-ax.set_ylabel(L"z")
-savefig("images/uy_profile_tw.png")
-println("images/uy_profile_tw.png")
+# x = 0.5
+# z = -H(x):1e-3:0
+# fig, ax = subplots(1, figsize=(2, 3.2))
+# ax.plot(map(z->δ*x/sqrt(2 - x^2)*(1 - exp(-(z + H(x))/δ)), z), z, label="Thermal Wind")
+# ax.plot(map(z->fem_evaluate(uy, [x, z]), z), z, label="Numerical")
+# ax.set_xlabel(L"u^y")
+# ax.set_ylabel(L"z")
+# ax.legend()
+# savefig("images/uy_profile_tw.png")
+# println("images/uy_profile_tw.png")
+# plt.close()
+
+# x = 0.5
+# z = -H(x):1e-3:0
+# p₀ = fem_evaluate(p, [x, 0])
+# fig, ax = subplots(1, figsize=(2, 3.2))
+# ax.plot(map(z->p₀ + δ^2*(exp(-H(x)/δ) - exp(-(z + H(x))/δ)), z), z, label="Thermal Wind")
+# ax.plot(map(z->fem_evaluate(p, [x, z]), z), z, label="Numerical")
+# ax.set_xlabel(L"p")
+# ax.set_ylabel(L"z")
+# ax.legend()
+# savefig("images/p_profile_hydro.png")
+# println("images/p_profile_hydro.png")
+# plt.close()
 
 println("Done.")

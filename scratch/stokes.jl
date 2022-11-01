@@ -72,7 +72,7 @@ function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
         for i=1:p.g.nn, j=1:ux.g.nn
             push!(A, (pmap[p.g.t[k, i]], uxmap[ux.g.t[k, j]], Cxᵏ[j, i]))
         end
-        for i=1:p.g.nn, j=1:ux.g.nn
+        for i=1:p.g.nn, j=1:uz.g.nn
             push!(A, (pmap[p.g.t[k, i]], uzmap[uz.g.t[k, j]], Czᵏ[j, i]))
         end
         b[uxmap[ux.g.t[k, :]]] .+= bxᵏ
@@ -115,12 +115,12 @@ function stokes_res(nref; plot=false)
     g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
 
     # get shape function integrals
-    suu = ShapeFunctionIntegrals(gu.s, gu.s)
-    spu = ShapeFunctionIntegrals(gp.s, gu.s)
-    spp = ShapeFunctionIntegrals(gp.s, gp.s)
-    s = (uu = suu,
-         pu = spu,
-         pp = spp)
+    uu = ShapeFunctionIntegrals(gu.s, gu.s)
+    pu = ShapeFunctionIntegrals(gp.s, gu.s)
+    pp = ShapeFunctionIntegrals(gp.s, gp.s)
+    s = (uu = uu,
+         pu = pu,
+         pp = pp)
 
     # mesh resolution 
     h = 1/sqrt(g1.np)
