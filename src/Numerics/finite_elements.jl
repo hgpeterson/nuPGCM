@@ -311,7 +311,7 @@ function add_nodes(p, t, e, order)
         # not as easy to determine the indices for each triangle... this works but it is slow
         tnew = zeros(Int64, size(t, 1), n)
         ps = standard_element_nodes(order)
-        for k in axes(t, 1)
+        @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
             for i in axes(ps, 1)
                 p₀ = transform_from_std_tri(ps[i, :], pnew[t[k, :], :])
                 idx = get_idx(pnew, p₀)
@@ -463,10 +463,13 @@ end
 
 Construct FE field from grid saved at `gfile` of order `order` with node values `values`.
 """
-function FEField(gfile, order, values)
+function FEField(gfile::String, order::Integer, values)
     g = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
     return FEField(order, values, g, g1)
+end
+function FEField(values, g::FEGrid, g1::FEGrid)
+    return FEField(g.order, values, g, g1)
 end
 
 """
