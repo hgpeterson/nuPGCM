@@ -79,7 +79,7 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
         for i=1:ux.g.nn, j=1:ux.g.nn
             push!(A, (uxmap[ux.g.t[k, i]], uxmap[ux.g.t[k, j]], ε²*Kᵏ[i, j]))
         end
-        # y-mom: ∂ε²*z(uy)∂z(vy)
+        # y-mom: ε²*∂z(uy)∂z(vy)
         for i=1:uy.g.nn, j=1:uy.g.nn
             push!(A, (uymap[uy.g.t[k, i]], uymap[uy.g.t[k, j]], ε²*Kᵏ[i, j]))
         end
@@ -136,15 +136,6 @@ function solve_pg(ux, uy, uz, p, b, J, s, e, ε²)
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
 
-    M = Array(A)
-    println(rank(M))
-    null = nullspace(M)
-    ux.values[:] = null[uxmap, 1]
-    uy.values[:] = null[uymap, 1]
-    uz.values[:] = null[uzmap, 1]
-    p.values[:]  = null[pmap, 1]
-    return ux, uy, uz, p
-
     # solve
     print("Solving... ")
     t₀ = time()
@@ -166,17 +157,17 @@ function pg_res(geo, nref; showplots=false)
     # Ekman number
     # ε² = 1e-5
     # ε² = 1e-4
-    # ε² = 1e-3
+    ε² = 1e-3
     # ε² = 1e-2
     # ε² = 1e-1
-    ε² = 1
+    # ε² = 1
 
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
-    gb = FEGrid(gfile, order-3)
-    gp = FEGrid(gfile, order-2)
-    gw = FEGrid(gfile, order-1)
-    gu = FEGrid(gfile, order)
+    gb = FEGrid(gfile, 2)
+    gp = FEGrid(gfile, 2)
+    gw = FEGrid(gfile, 2)
+    gu = FEGrid(gfile, 2)
     g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
@@ -250,7 +241,7 @@ function pg_res(geo, nref; showplots=false)
 end
 
 # ux, uy, uz, p = pg_res("gmsh", 5; showplots=true)
-ux, uy, uz, p = pg_res("jc", 0; showplots=true)
+ux, uy, uz, p = pg_res("jc", 4; showplots=true)
 # ux, uy, uz, p = pg_res("valign", 0; showplots=true)
 # ux, uy, uz, p = pg_res("", 0; showplots=true)
 

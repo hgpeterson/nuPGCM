@@ -81,8 +81,8 @@ function solve_stokes_hydro(ux, uz, p, fx, fz, J, s, e, u₀, p₀; diri_mask=(t
             push!(A, (pmap[p.g.t[k, i]], uzmap[uz.g.t[k, j]], Czᵏ[j, i]))
         end
         # f
-        r[uxmap[ux.g.t[k, :]]] .+= rxᵏ
-        r[uzmap[uz.g.t[k, :]]] .+= rzᵏ
+        r[uxmap[ux.g.t[k, :]]] += rxᵏ
+        r[uzmap[uz.g.t[k, :]]] += rzᵏ
     end
 
     # make CSC matrix
@@ -108,27 +108,19 @@ function solve_stokes_hydro(ux, uz, p, fx, fz, J, s, e, u₀, p₀; diri_mask=(t
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
 
-    # if N < 1000
-    #     M = Matrix(A)
-    #     fig, ax = subplots(1)
-    #     ax.imshow(abs.(M) .== 0, cmap="binary_r")
-    #     ax.spines["left"].set_visible(false)
-    #     ax.spines["bottom"].set_visible(false)
-    #     savefig("images/A.png")
-    #     println("images/A.png")
-    #     plt.close()
-    #     println("Condition number: ", cond(M))
-    #     println("rank(A) = ", rank(M))
-    #     println("A is sym: ", issymmetric(M))
-    # end
-
-    M = Array(A)
-    null = nullspace(M)
-    println(size(null))
-    ux.values[:] = null[uxmap, 1]
-    uz.values[:] = null[uzmap, 1]
-    p.values[:]  = null[pmap, 1]
-    return ux, uz, p
+    if N < 1000
+        M = Matrix(A)
+        fig, ax = subplots(1)
+        ax.imshow(abs.(M) .== 0, cmap="binary_r")
+        ax.spines["left"].set_visible(false)
+        ax.spines["bottom"].set_visible(false)
+        savefig("images/A.png")
+        println("images/A.png")
+        plt.close()
+        println("Condition number: ", cond(M))
+        println("rank(A) = ", rank(M))
+        println("A is sym: ", issymmetric(M))
+    end
 
     # solve
     print("Solving... ")
@@ -148,16 +140,17 @@ end
     hs, errs  = stokes_hydro_res(nref)
 """
 function stokes_hydro_res(nref, geo; showplots=false, exact=false)
-    # order of polynomials
-    order = 3
-
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
 
-    gp = FEGrid(gfile, order-2)
-    gw = FEGrid(gfile, order-1)
-    gu = FEGrid(gfile, order)
+    gu = FEGrid(gfile, 1)
+    gw = FEGrid(gfile, 1)
+    gp = FEGrid(gfile, 1)
     g1 = FEGrid(gfile, 1)
+
+    println("Np = ", gp.np)
+    println("Nu = ", gu.np)
+    println("Nw = ", gw.np)
 
     # get shape function integrals
     uu = ShapeFunctionIntegrals(gu.s, gu.s)
@@ -232,9 +225,9 @@ function stokes_hydro_res(nref, geo; showplots=false, exact=false)
         quickplot(ux, L"u^x", "images/ux.png")
         quickplot(uz, L"u^z", "images/uz.png")
         quickplot(p, L"p", "images/p.png")
-        plot_profile(ux, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^x", L"z", "images/ux_profile.png")
-        plot_profile(uz, 0.5, -H(0.5)+1e-5:1e-3:0, L"u^z", L"z", "images/uz_profile.png")
-        plot_profile(p, 0.5, -H(0.5)+1e-5:1e-3:0, L"p", L"z", "images/p_profile.png")
+        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
+        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
+        plot_profile(p,  0.5, -H(0.5):1e-3:0, L"$p$ at $x = 0.5$",   L"z", "images/p_profile.png")
     end
 
     if exact
@@ -280,7 +273,7 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-stokes_hydro_res(0, "jc"; showplots=true)
+stokes_hydro_res(4, "jc"; showplots=true)
 # stokes_hydro_res(4, "gmsh"; showplots=true)
 # stokes_hydro_res(5, "gmsh_tri"; showplots=true)
 # stokes_hydro_res(0, "valign"; showplots=true)
