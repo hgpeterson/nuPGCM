@@ -284,7 +284,7 @@ function add_nodes(p, t, e, order)
         new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
         pnew = [p; new_pts]
 
-        # easy to map to triangle data structure
+        # map to triangle data structure
         tnew = zeros(Int64, size(t, 1), n)
         tnew[:, 1:3] = t
         tnew[:, 4:6] = np0 .+ emap
@@ -308,16 +308,19 @@ function add_nodes(p, t, e, order)
         new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
         pnew = [pnew; new_pts]
 
-        # not as easy to determine the indices for each triangle... this works but it is slow
+        # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
+        # the 2/3rd point for another... this works but it is slow
         tnew = zeros(Int64, size(t, 1), n)
         ps = standard_element_nodes(order)
+        tnew[:, 1:3] = t
         @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
-            for i in axes(ps, 1)
+            for i=4:n-1
                 p₀ = transform_from_std_tri(ps[i, :], pnew[t[k, :], :])
                 idx = get_idx(pnew, p₀)
                 tnew[k, i] = idx
             end
         end
+        tnew[:, 10] = np2 .+ (1:size(t,1))'
 
         # add points that were on boundary to `e`
         enew = [e; np0 .+ boundary_indices]
