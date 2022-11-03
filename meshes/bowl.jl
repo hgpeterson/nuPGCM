@@ -60,7 +60,7 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.synchronize()
 
     # define boundary and interior physical groups
-    gmsh.model.addPhysicalGroup(0, [1, 3], 1, "corners")
+    gmsh.model.addPhysicalGroup(0, [1, 2, 3], 1, "corners")
     gmsh.model.addPhysicalGroup(1, [1, 2], 2, "bot")
     gmsh.model.addPhysicalGroup(1, [3],    3, "top")
     gmsh.model.addPhysicalGroup(2, [1],    4, "surface")
@@ -129,7 +129,7 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-h₀ = 0.01
+h₀ = 0.005
 r = 1
 generate_bowl_mesh(h₀, r)
 p, t, e = load_gmesh(savefile="mesh0.h5")
