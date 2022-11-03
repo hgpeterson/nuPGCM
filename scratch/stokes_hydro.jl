@@ -142,22 +142,20 @@ end
 function stokes_hydro_res(nref, geo; showplots=false, exact=false)
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
-
-    gu = FEGrid(gfile, 1)
+    gu = FEGrid(gfile, 2)
     gw = FEGrid(gfile, 1)
-    gp = FEGrid(gfile, 1)
+    gp = FEGrid(gfile, 0)
     g1 = FEGrid(gfile, 1)
-
-    println("Np = ", gp.np)
-    println("Nu = ", gu.np)
-    println("Nw = ", gw.np)
+    println(g1.np)
+    error()
 
     # get shape function integrals
     uu = ShapeFunctionIntegrals(gu.s, gu.s)
     ww = ShapeFunctionIntegrals(gw.s, gw.s)
     pu = ShapeFunctionIntegrals(gp.s, gu.s)
     pw = ShapeFunctionIntegrals(gp.s, gw.s)
-    s = (uu=uu, ww=ww, pu=pu, pw=pw)  
+    pp = ShapeFunctionIntegrals(gp.s, gp.s)
+    s = (uu=uu, ww=ww, pu=pu, pw=pw, pp=pp)  
 
     # get Jacobians
     J = Jacobians(g1)
@@ -273,11 +271,11 @@ function stokes_hydro_conv(nrefs)
     plt.close()
 end
 
-stokes_hydro_res(4, "jc"; showplots=true)
-# stokes_hydro_res(4, "gmsh"; showplots=true)
+# stokes_hydro_res(3, "jc"; showplots=true)
+stokes_hydro_res(4, "gmsh"; showplots=true)
 # stokes_hydro_res(5, "gmsh_tri"; showplots=true)
 # stokes_hydro_res(0, "valign"; showplots=true)
 
-# stokes_hydro_conv(0:5)
+# stokes_hydro_conv(0:3)
 
 println("Done.")
