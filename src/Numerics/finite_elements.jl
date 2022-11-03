@@ -1,4 +1,4 @@
-struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
+struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix}
     # order of polynomials defining shape functions
     order::IN
 
@@ -8,8 +8,14 @@ struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
     # coefficients matrix defining shape function polynomials
     C::M
 
-    # array of coefficients matrices defining derivatives of shape function polynomials
-    ∂C::A
+    # coefficients matrices defining derivatives of shape function polynomials
+    Cξ::M
+    Cη::M
+
+    # coefficients matrices defining 2nd derivatives of shape function polynomials
+    Cξξ::M
+    Cξη::M
+    Cηη::M
 end
 
 """
@@ -42,27 +48,66 @@ function ShapeFunctions(order)
 	C = inv(V)
 
     # compute shape function derivative coefficients
-    ∂C = zeros(2, n, n)
-    for j=1:2
-        if order == 0
-            continue
-        elseif order == 1
-            ∂C[j, :, 1] += C[:, j+1]
-        elseif order == 2
-            ∂C[j, :, 1] += C[:, j+1]
+    Cξ = zeros(n, n)
+    Cη = zeros(n, n)
+    if order == 0
+        # derivatives are already zero
+    elseif order == 1
+        Cξ[:, 1] += C[:, 2]
 
-            ∂C[j, :, j+1] += 2*C[:, 2j+2]
-            ∂C[j, :, 4-j] += C[:, 5]
-        elseif order == 3
-            ∂C[j, :, 1]    +=   C[:, j+1]
-            ∂C[j, :, j+1]  += 2*C[:, 2j+2]
-            ∂C[j, :, 4-j]  +=   C[:, 5]
-            ∂C[j, :, 2j+2] += 3*C[:, 3j+4]
-            ∂C[j, :, 5]    += 2*C[:, j+7]
-            ∂C[j, :, 8-2j] +=   C[:, 10-j]
-        end
+        Cη[:, 1] += C[:, 3]
+    elseif order == 2
+        Cξ[:, 1] +=   C[:, 2]
+        Cξ[:, 2] += 2*C[:, 4]
+        Cξ[:, 3] +=   C[:, 5]
+
+        Cη[:, 1] +=   C[:, 3]
+        Cη[:, 2] +=   C[:, 5]
+        Cη[:, 3] += 2*C[:, 6]
+    elseif order == 3
+        Cξ[:, 1] +=   C[:, 2]
+        Cξ[:, 2] += 2*C[:, 4]
+        Cξ[:, 3] +=   C[:, 5]
+        Cξ[:, 4] += 3*C[:, 7]
+        Cξ[:, 5] += 2*C[:, 8]
+        Cξ[:, 6] +=   C[:, 9]
+
+        Cη[:, 1] +=   C[:, 3]
+        Cη[:, 2] +=   C[:, 5]
+        Cη[:, 3] += 2*C[:, 6]
+        Cη[:, 4] +=   C[:, 8]
+        Cη[:, 5] += 2*C[:, 9]
+        Cη[:, 6] += 3*C[:, 10]
     end
-    return ShapeFunctions(order, n, C, ∂C)
+
+    # compute shape function 2nd derivative coefficients
+    Cξξ = zeros(n, n)
+    Cξη = zeros(n, n)
+    Cηη = zeros(n, n)
+    if order == 0
+        # 2nd derivatives are already zero
+    elseif order == 1
+        # 2nd derivatives are already zero
+    elseif order == 2
+        Cξξ[:, 1] += Cξ[:, 2]
+
+        # Cξη = 0
+
+        Cηη[:, 1] += Cη[:, 3]
+    elseif order == 3
+        Cξξ[:, 1] +=   Cξ[:, 2]
+        Cξξ[:, 2] += 2*Cξ[:, 4]
+        Cξξ[:, 3] +=   Cξ[:, 5]
+
+        Cξη[:, 1] +=   Cξ[:, 3]
+        Cξη[:, 2] +=   Cξ[:, 5]
+        Cξη[:, 3] += 2*Cξ[:, 6]
+
+        Cηη[:, 1] +=   Cη[:, 3]
+        Cηη[:, 2] +=   Cη[:, 5]
+        Cηη[:, 3] += 2*Cη[:, 6]
+    end
+    return ShapeFunctions(order, n, C, Cξ, Cη, Cξξ, Cξη, Cηη)
 end
 
 """
@@ -102,14 +147,25 @@ end
 
 struct ShapeFunctionIntegrals{M<:AbstractMatrix}
     φφ::M
+
     φξφ::M
     φηφ::M
+
     φφξ::M
     φφη::M
+
     φξφξ::M
     φξφη::M
+
     φηφξ::M
     φηφη::M
+
+    φξξφξ::M
+    φξξφη::M
+    φξηφξ::M
+    φξηφη::M
+    φηηφξ::M
+    φηηφη::M
 end
 
 """
@@ -127,17 +183,26 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     φφ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # C
-    φξφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φφξ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φφη = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξφ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φφξ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φφη = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # stiffness
-    φξφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 1, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφξ = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 1, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφη = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, 2, ξ)*∂φ(sf_test, i, 2, ξ), w, ξ, sf_test.n, sf_trial.n)
-    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φφξ, φφη, φξφξ, φξφη, φηφξ, φηφη)
+    φξφξ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξφη = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφξ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφη = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+
+    # higher order
+    φξξφξ = compute_integral_matrix((ξ, i, j) -> φξξ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξξφη = compute_integral_matrix((ξ, i, j) -> φξξ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξηφξ = compute_integral_matrix((ξ, i, j) -> φξη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξηφη = compute_integral_matrix((ξ, i, j) -> φξη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηηφξ = compute_integral_matrix((ξ, i, j) -> φηη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηηφη = compute_integral_matrix((ξ, i, j) -> φηη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+
+    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φφξ, φφη, φξφξ, φξφη, φηφξ, φηφη, φξξφξ, φξξφη, φξηφξ, φξηφη, φηηφξ, φηηφη)
 end
 
 """
@@ -159,20 +224,31 @@ end
 
 """
     φ(sf, i, ξ)
+    φξ(sf, i, ξ)
+    φη(sf, i, ξ)
+    φξξ(sf, i, ξ)
+    φξη(sf, i, ξ)
+    φηη(sf, i, ξ)
 
-Shape function `i` evaluated at the point `ξ`.
+Evaluate shape function `i` and its derivates evaluated at the point `ξ`.
 """
 function φ(sf::ShapeFunctions, i, ξ)
     return eval_poly(sf.C[i, :], ξ)
 end
-
-"""
-    ∂φ(sf, i, j, ξ)
-
-Derivative of shape function `i` in the `j` direction evaluated at the point `ξ`.
-"""
-function ∂φ(sf::ShapeFunctions, i, j, ξ)
-    return eval_poly(sf.∂C[j, i, :], ξ)
+function φξ(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cξ[i, :], ξ)
+end
+function φη(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cη[i, :], ξ)
+end
+function φξξ(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cξξ[i, :], ξ)
+end
+function φξη(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cξη[i, :], ξ)
+end
+function φηη(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cηη[i, :], ξ)
 end
 
 """
