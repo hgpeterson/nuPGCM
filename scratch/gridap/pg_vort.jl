@@ -9,27 +9,28 @@ model = GmshDiscreteModel("bowl1.msh")
 # error()
 
 # reference FE 
-reffe_ωx = ReferenceFE(lagrangian, Float64, 2; space=:P)
-reffe_ωy = ReferenceFE(lagrangian, Float64, 2; space=:P)
-reffe_χx = ReferenceFE(lagrangian, Float64, 2; space=:P)
-reffe_χy = ReferenceFE(lagrangian, Float64, 2; space=:P)
+order = 2
+reffe_ωx = ReferenceFE(lagrangian, Float64, order; space=:P)
+reffe_ωy = ReferenceFE(lagrangian, Float64, order; space=:P)
+reffe_χx = ReferenceFE(lagrangian, Float64, order; space=:P)
+reffe_χy = ReferenceFE(lagrangian, Float64, order; space=:P)
 
 # test FESpaces
-Ox = TestFESpace(model, reffe_ωx, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
-Oy = TestFESpace(model, reffe_ωy, conformity=:H1, dirichlet_tags=["top"])
-Xx = TestFESpace(model, reffe_χx, conformity=:H1, dirichlet_tags=["top"])
-Xy = TestFESpace(model, reffe_χy, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
-Y = MultiFieldFESpace([Ox, Oy, Xx, Xy])
+Tx = TestFESpace(model, reffe_ωx, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
+Ty = TestFESpace(model, reffe_ωy, conformity=:H1, dirichlet_tags=["top"])
+Ψx = TestFESpace(model, reffe_χx, conformity=:H1, dirichlet_tags=["top"])
+Ψy = TestFESpace(model, reffe_χy, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
+Y = MultiFieldFESpace([Tx, Ty, Ψx, Ψy])
 
 # trial FESpaces with Dirichlet values
-Ux = TrialFESpace(Ox, [0, 0, 0])
-Uy = TrialFESpace(Oy, [0])
-Cx = TrialFESpace(Xx, [0])
-Cy = TrialFESpace(Xy, [0, 0, 0])
-X  = MultiFieldFESpace([Ux, Uy, Cx, Cy])
+Wx = TrialFESpace(Tx, [0, 0, 0])
+Wy = TrialFESpace(Ty, [0])
+Xx = TrialFESpace(Ψx, [0])
+Xy = TrialFESpace(Ψy, [0, 0, 0])
+X  = MultiFieldFESpace([Wx, Wy, Xx, Xy])
 
 # triangulation and integration measure
-degree = 4
+degree = 2*order
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
 
@@ -45,7 +46,7 @@ H(x) = sqrt(2 - x^2) - 1
 bx(x) = x[1]/sqrt(2 - x[1]^2)*exp(-(x[2] + H(x[1]))/δ)
 
 # bilinear and linear form
-ε² = 1e-5
+ε² = 1e-3
 a((ωx, ωy, χx, χy), (τx, τy, ψx, ψy)) = ∫( ε²*∂z(ωx)*∂z(τx) - ωy*τx + 
                                           -ε²*∂z(ωy)*∂z(τy) - ωx*τy + #multiplied by -1 to get +bx 
                                            ∂z(χx)*∂z(ψx) - ωx*ψx +
