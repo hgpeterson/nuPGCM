@@ -1,11 +1,6 @@
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
-using PyPlot
-
-pygui(false)
-plt.style.use("../nuPGCM/plots.mplstyle")
-plt.close("all")
 
 # model
 model = GmshDiscreteModel("bowl.msh")
@@ -35,8 +30,8 @@ X  = MultiFieldFESpace([Ux, Uy, Uz, P])
 
 # triangulation and integration measure
 degree = 2
-Ωₕ = Triangulation(model)
-dΩ = Measure(Ωₕ, degree)
+Ω = Triangulation(model)
+dΩ = Measure(Ω, degree)
 Γ = BoundaryTriangulation(model, tags=["top"])
 dΓ = Measure(Γ, degree)
 
@@ -52,7 +47,7 @@ H(x) = sqrt(2 - x^2) - 1
 b(x) = δ*exp(-(x[2] + H(x[1]))/δ)
 
 # bilinear and linear form
-ε² = 1e-3
+ε² = 1e-2
 a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*∂z(vx)*∂z(ux) + ε²*∂z(vy)*∂z(uy) + uy*vx - ux*vy - ∂x(vx)*p - ∂z(vz)*p + q*∂x(ux) + q*∂z(uz) )dΩ
 l((vx, vy, vz, q)) = ∫( b*vz )dΩ
 
@@ -63,4 +58,4 @@ op = AffineFEOperator(a, l, X, Y)
 ux, uy, uz, p = solve(op)
 
 # export to vtk
-writevtk(Ωₕ, "results", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])
+writevtk(Ω, "results", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])

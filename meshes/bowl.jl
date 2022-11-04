@@ -129,10 +129,10 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-h₀ = 0.01
+h₀ = 0.005
 r = 1
 generate_bowl_mesh(h₀, r)
-p, t, e = load_gmesh(savefile="mesh0.h5")
+p, t, e = load_gmesh(savefile="mesh.h5")
 tplot(p, t)
 axis("equal")
 savefig("mesh.png")
