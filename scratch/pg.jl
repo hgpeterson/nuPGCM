@@ -152,7 +152,7 @@ end
 
 function pg_res(geo, nref; showplots=false)
     # order of polynomials
-    order = 3
+    # order = 3
 
     # Ekman number
     # ε² = 1e-5
@@ -164,10 +164,10 @@ function pg_res(geo, nref; showplots=false)
 
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
-    gb = FEGrid(gfile, 2)
-    gp = FEGrid(gfile, 2)
-    gw = FEGrid(gfile, 2)
+    gb = FEGrid(gfile, 1)
     gu = FEGrid(gfile, 2)
+    gw = FEGrid(gfile, 1)
+    gp = FEGrid(gfile, 0)
     g1 = FEGrid(gfile, 1)
 
     # get shape function integrals

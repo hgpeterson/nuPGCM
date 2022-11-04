@@ -4,6 +4,7 @@
 *.h5
 *.msh
 *.txt
+*.vtu
 
 # ignore images and videos
 *.png

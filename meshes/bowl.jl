@@ -129,7 +129,7 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-h₀ = 0.005
+h₀ = 0.01
 r = 1
 generate_bowl_mesh(h₀, r)
 p, t, e = load_gmesh(savefile="mesh0.h5")
