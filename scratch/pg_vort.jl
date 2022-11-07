@@ -22,7 +22,8 @@ PG Inversion:
 with boundary conditions 
     χx = χy = ωx = ωy = 0  at  z = 0,
       ∂z(χx) = ∂z(χy) = 0  at  z = -H,
-              χy = ωx = 0  at  z = -H. ***
+              χy = ωx = 0  at  z = -H. (*)
+(*) should actually have ∂x(ωx) = 0 at z = -H.
 """
 function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # indices
@@ -84,8 +85,11 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, ωymap[e.top], 0)
     A, r = add_dirichlet(A, r, χxmap[e.top], 0)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0)
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0)
     A, r = add_dirichlet(A, r, χymap[e.bot], 0)
+
+    # special dirichlet condition ∂x(ωx) = 0
+    # ???
 
     # remove zeros
     dropzeros!(A)
