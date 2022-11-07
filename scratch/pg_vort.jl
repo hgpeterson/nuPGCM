@@ -262,6 +262,8 @@ function get_velocities(χx, χy; showplots=false)
 end
 
 # ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
+
 ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
 println("Done.")

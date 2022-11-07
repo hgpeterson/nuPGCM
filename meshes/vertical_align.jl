@@ -48,10 +48,10 @@ function vertical_align(hx, hz)
     t = mesh.simplices
 
     println("np = ", size(p, 1))
-    if size(p, 1) < 1000
+    if size(p, 1) < 10000
         fig, ax, im = tplot(p, t)
-        # ax.plot(p[:, 1], p[:, 2], "o", ms=1)
-        # ax.plot(p[e, 1], p[e, 2], "o", ms=1)
+        ax.plot(p[:, 1], p[:, 2], ".", ms=1)
+        ax.plot(p[e, 1], p[e, 2], ".", ms=1)
         ax.axis("equal")
         savefig("mesh.png")
         println("mesh.png")
@@ -68,5 +68,5 @@ function vertical_align(hx, hz)
     return p, t, e
 end
 
-p, t, e = vertical_align(0.01, 0.01)
+p, t, e = vertical_align(0.02, 0.02)
 println("Done.")

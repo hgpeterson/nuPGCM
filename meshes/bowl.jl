@@ -38,22 +38,22 @@ function generate_bowl_mesh(h₀, r)
     gmsh.model.geo.addCurveLoop(1:3, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
 
-    # # refine mesh near boundary nodes
-    # gmsh.model.mesh.field.add("Distance", 1)
-    # gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:3)
-    # gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
+    # refine mesh near boundary nodes
+    gmsh.model.mesh.field.add("Distance", 1)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", 1:3)
+    gmsh.model.mesh.field.setNumber(1, "Sampling", 100)
 
-    # gmsh.model.mesh.field.add("MathEval", 2)
-    # gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r)/2, "*(Tanh(10*(F1 - 0.1)) + 1)"))
+    gmsh.model.mesh.field.add("MathEval", 2)
+    gmsh.model.mesh.field.setString(2, "F", string(h₀/r, "+", (h₀ - h₀/r)/2, "*(Tanh(10*(F1 - 0.1)) + 1)"))
 
-    # gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
     
-    # # turn off the usual ways the mesh size is determined
-    # gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-    # gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    # turn off the usual ways the mesh size is determined
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
-    # use different mesh algorithm (better for variable mesh size)
+    # # use different mesh algorithm (better for variable mesh size)
     # gmsh.option.setNumber("Mesh.Algorithm", 5)
     
     # sync 
@@ -129,8 +129,8 @@ function load_gmesh(; savefile="")
     return p, t, e
 end
 
-h₀ = 0.005
-r = 1
+h₀ = 0.02
+r = 8
 generate_bowl_mesh(h₀, r)
 p, t, e = load_gmesh(savefile="mesh.h5")
 tplot(p, t)
