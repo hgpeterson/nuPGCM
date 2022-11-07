@@ -46,7 +46,7 @@ H(x) = sqrt(2 - x^2) - 1
 bx(x) = x[1]/sqrt(2 - x[1]^2)*exp(-(x[2] + H(x[1]))/δ)
 
 # bilinear and linear form
-ε² = 1e-3
+ε² = 1e-4
 a((ωx, ωy, χx, χy), (τx, τy, ψx, ψy)) = ∫( ε²*∂z(ωx)*∂z(τx) - ωy*τx + 
                                           -ε²*∂z(ωy)*∂z(τy) - ωx*τy + #multiplied by -1 to get +bx 
                                            ∂z(χx)*∂z(ψx) - ωx*ψx +

@@ -3,13 +3,14 @@ using GridapGmsh
 using Gmsh: gmsh
 
 # model
-model = GmshDiscreteModel("bowl.msh")
+# model = GmshDiscreteModel("bowl.msh")
+model = GmshDiscreteModel("bowl1.msh")
 # writevtk(model, "model")
 # error()
 
 # reference FE 
 reffe_ux = ReferenceFE(lagrangian, Float64, 2; space=:P)
-reffe_uy = ReferenceFE(lagrangian, Float64, 1; space=:P)
+reffe_uy = ReferenceFE(lagrangian, Float64, 2; space=:P)
 reffe_uz = ReferenceFE(lagrangian, Float64, 1; space=:P)
 reffe_p  = ReferenceFE(lagrangian, Float64, 0; space=:P)
 
@@ -18,7 +19,6 @@ Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot", "corner
 Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot", "corners"])
 Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
 Q  = TestFESpace(model, reffe_p,  conformity=:L2, constraint=:zeromean)
-# Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
 Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
 
 # trial FESpaces with Dirichlet values
@@ -29,11 +29,9 @@ P  = TrialFESpace(Q)
 X  = MultiFieldFESpace([Ux, Uy, Uz, P])
 
 # triangulation and integration measure
-degree = 2
+degree = 4
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
-Γ = BoundaryTriangulation(model, tags=["top"])
-dΓ = Measure(Γ, degree)
 
 # gradients 
 x = VectorValue(1.0, 0.0)
@@ -47,7 +45,7 @@ H(x) = sqrt(2 - x^2) - 1
 b(x) = δ*exp(-(x[2] + H(x[1]))/δ)
 
 # bilinear and linear form
-ε² = 1e-2
+ε² = 1e-4
 a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*∂z(vx)*∂z(ux) + ε²*∂z(vy)*∂z(uy) + uy*vx - ux*vy - ∂x(vx)*p - ∂z(vz)*p + q*∂x(ux) + q*∂z(uz) )dΩ
 l((vx, vy, vz, q)) = ∫( b*vz )dΩ
 
