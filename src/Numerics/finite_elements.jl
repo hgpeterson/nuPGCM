@@ -177,7 +177,7 @@ where φᵢ and φⱼ are shape functions from the trial and test space, respect
 """
 function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunctions) 
     # quadrature weights and points
-    w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order))
+    w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order), 2)
 
     # mass
     φφ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)

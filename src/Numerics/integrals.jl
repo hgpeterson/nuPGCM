@@ -3,7 +3,7 @@
 
 Integrate array `f` over domain `x` using trapezoidal rule.
 """
-function trapz(f::Array{Float64,1}, x::Array{Float64,1})
+function trapz(f, x)
     return 0.5*dot((f[1:end-1] .+ f[2:end]), (x[2:end] .- x[1:end-1]))
 end
 
@@ -12,9 +12,10 @@ end
 
 Cumulatively integrate array `f` over domain `x` using trapezoidal rule.
 """
-function cumtrapz(f::Array{Float64,1}, x::Array{Float64,1})
-    y = zeros(size(f, 1))
-    for i=2:size(f, 1)
+function cumtrapz(f, x)
+    n = size(f, 1)
+    y = zeros(n)
+    for i=2:n
         y[i] = y[i-1] + 0.5*(f[i] + f[i-1])*(x[i] - x[i-1])
     end
     return y
@@ -32,14 +33,47 @@ function std_tri_quad(f, w, ξ)
 end
 
 """
-    w, ξ = quad_weights_points(degree; dim) 
+    w, ξ = quad_weights_points(degree, dim) 
 
-Integration points and weights for quadrature rules on a standard triangle or tetrahedron
-(see https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tri/quadrature_rules_tri.html
-and https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tet/quadrature_rules_tet.html).
+Integration weights `w` and points `ξ` for quadrature rules on 
+    `dim` = 1: the real line segment [-1, 1],
+    `dim` = 2: the standard triangle [0 0; 1 0; 0 1], or 
+    `dim` = 3: the standard tetrahedron [0 0 0; 1 0 0; 0 1 0; 0 0 1].
+The integration should be exact for polynomials up to degree `degree`.
 """
-function quad_weights_points(degree; dim=2)
-    if dim == 2
+function quad_weights_points(degree, dim)
+    if dim == 1
+        # https://en.wikipedia.org/wiki/Gaussian_quadrature
+        # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_legendre/quadrature_rules_legendre.html
+        if degree == 1
+            w = [2.0]
+            ξ = [0.0]
+        elseif 1 < degree <= 3
+            w = [1.0
+                 1.0]
+            ξ = [-1/√3
+                  1/√3]
+        elseif 3 < degree <= 5
+            w = [5.0/9
+                 8.0/9
+                 5.0/9]
+            ξ = [-√(3/5)
+                  0.0
+                  √(3/5)]
+        elseif 5 < degree <= 7
+            w = [(18 - √30)/36
+                 (18 + √30)/36
+                 (18 + √30)/36
+                 (18 - √30)/36]
+            ξ = [-√(3/7 + 2/7*√(6/5))
+                 -√(3/7 - 2/7*√(6/5))
+                  √(3/7 - 2/7*√(6/5))
+                  √(3/7 + 2/7*√(6/5))]
+        else
+            error("Degree of integration unsupported.")
+        end
+    elseif dim == 2
+        # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tri/quadrature_rules_tri.html,
         if degree == 1
             w = [1.0]
             ξ = [0.33333333333333333333  0.33333333333333333333]
@@ -143,6 +177,7 @@ function quad_weights_points(degree; dim=2)
             error("Degree of integration unsupported.")
         end
     elseif dim == 3
+        # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tet/quadrature_rules_tet.html
         if degree == 1
             w = [1.0000000000000000]
             ξ = [0.2500000000000000  0.2500000000000000  0.2500000000000000]
