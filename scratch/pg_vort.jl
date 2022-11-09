@@ -23,15 +23,18 @@ with boundary conditions
     χx = χy = ωx = ωy = 0  at  z = 0,
       ∂z(χx) = ∂z(χy) = 0  at  z = -H,
               χy = ωx = 0  at  z = -H. (*)
-(*) should actually have ∂x(ωx) = 0 at z = -H.
+(*) should actually have ∂x(ωx) = ∂x(χy) = 0 at z = -H.
 """
 function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+    # unpack grids
+    g1 = ωx.g1
+    g = ωx.g
     # indices
-    ωxmap = 1:ωx.g.np
-    ωymap = ωxmap[end] .+ (1:ωy.g.np)
-    χxmap = ωymap[end] .+ (1:χx.g.np)
-    χymap = χxmap[end] .+ (1:χy.g.np)
-    N = χymap[end]
+    ωxmap = 1:g.np
+    ωymap = (g.np+1):2*g.np
+    χxmap = (2*g.np+1):3*g.np
+    χymap = (3*g.np+1):4*g.np
+    N = 4*g.np
     println("N = $N")
 
     # stamp system
@@ -39,21 +42,21 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     t₀ = time()
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
-    for k=1:ωx.g1.nt
+    for k=1:g1.nt
         # matrices
         K = abs(J.J[k])*(s.φξφξ*J.ξy[k]^2 + s.φξφη*J.ξy[k]*J.ηy[k] + s.φηφξ*J.ηy[k]*J.ξy[k] + s.φηφη*J.ηy[k]^2)
         Cx = abs(J.J[k])*(s.φξφ*J.ξx[k] + s.φηφ*J.ηx[k])
         M = abs(J.J[k])*s.φφ
 
         # -∂x(b)
-        r[ωymap[ωy.g.t[k, :]]] -= Cx*b.values[b.g.t[k, :]]
+        r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
 
-        for i=1:ωx.g.nn, j=1:ωx.g.nn
+        for i=1:g.nn, j=1:g.nn
             # indices
-            ωxi = ωxmap[ωx.g.t[k, :]]
-            ωyi = ωymap[ωy.g.t[k, :]]
-            χxi = χxmap[χx.g.t[k, :]]
-            χyi = χymap[χy.g.t[k, :]]
+            ωxi = ωxmap[g.t[k, :]]
+            ωyi = ωymap[g.t[k, :]]
+            χxi = χxmap[g.t[k, :]]
+            χyi = χymap[g.t[k, :]]
 
             # -ε²*∂zz(ωx)
             push!(A, (ωxi[i], ωxi[j], ε²*K[i, j]))
@@ -80,27 +83,56 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # dirichlet conditions
+    # top: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.top], 0)
     A, r = add_dirichlet(A, r, ωymap[e.top], 0)
     A, r = add_dirichlet(A, r, χxmap[e.top], 0)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0)
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on on ωy since χy is full
 
-    # special dirichlet condition ∂x(ωx) = 0
-    # edges, boundary_indices, emap = all_edges(g1.t)
-    # for k=1:g1.nt
-    #     for ie=1:3
-    #         if emap[k, ie] in boundary_indices
+    # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
+    edges, boundary_indices, emap = all_edges(g1.t)
+    w, t = quad_weights_points(2*g.order-1, 1)
+    ps = standard_element_nodes(g.order)
+    A[ωxmap[e.bot], :] .= 0
+    r[ωxmap[e.bot]] .= 0
+    # A[ωymap[e.bot], :] .= 0
+    # r[ωymap[e.bot]] .= 0
+    for k=1:g1.nt
+        for ie=1:3
+            if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+                # get local indices of each point on edge `ie`:
+                il = [ie, ie+3, mod1(ie+1, 3)]
+                if (g.t[k, il[1]] in e.bot) && (g.t[k, il[3]] in e.bot) # the edge is on the *bottom* boundary
+                    # get local coordinates on standard triangle of each point on edge
+                    ξ1 = ps[il[1], :]
+                    ξ3 = ps[il[3], :]
 
-    #         end
-    #     end
-    # end
+                    # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ3
+                    ξ(t) = (ξ3 - ξ1)/2*t + (ξ3 + ξ1)/2
+                    for i=il, j=1:g.nn
+                        f(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm((ξ3 - ξ1)/2)
+                        # f(t) = φ(g.s, i, ξ(t))*φ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)
+                        ∫f = dot(w, f.(t))
+                        A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
+                        # A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
+                    end
+                end
+            end
+        end
+    end
+
+    # # corners: dirichlet 
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot[1]], 0)
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot[end]], 0)
+
+    # if we don't do ∂x(χy) = 0
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
 
     # remove zeros
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
+
+    println("rank(A): ", rank(A))
 
     # solve
     print("Solving... ")
@@ -257,10 +289,10 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("gmsh", 3; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("valign", 0; showplots=true)
 
-ux, uy, uz = get_velocities(χx, χy; showplots=true)
+# ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
 println("Done.")
