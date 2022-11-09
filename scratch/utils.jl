@@ -75,37 +75,40 @@ function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
     plt.close()
 end
 
-function apply_constraint(A, b, i, j, b₀)
-    # delete row i
-    A[i, :] .= 0
+function add_dirichlet(A, b, row::Integer, col::Integer, u₀::Real)
+    # delete row
+    A[row, :] .= 0
     # replace Aᵢⱼ = 1
-    A[i, j] = 1
+    A[row, col] = 1
     # replace bᵢ = 1
-    b[i] = b₀
+    b[row] = u₀
     # row reduce
     for k in eachindex(b)
-        if k == i
+        if k == row
             continue
         end
-        b[k] -= A[k, j]*b₀
-        A[k, j] = 0
+        b[k] -= A[k, col]*u₀
+        A[k, col] = 0
     end
     return A, b
+end
+function add_dirichlet(A, b, row::Integer, u₀::Real)
+    return add_dirichlet(A, b, row, row, u₀)
 end
 
-function add_dirichlet(A, b, rows, cols, u₀::AbstractVector)
+function add_dirichlet(A, b, rows::AbstractVector, cols::AbstractVector, u₀::AbstractVector)
     for i in eachindex(rows)
-        A, b = apply_constraint(A, b, rows[i], cols[i], u₀[i])
+        A, b = add_dirichlet(A, b, rows[i], cols[i], u₀[i])
     end
     return A, b
 end
-function add_dirichlet(A, b, rows, cols, u₀::Real)
+function add_dirichlet(A, b, rows::AbstractVector, cols::AbstractVector, u₀::Real)
     return add_dirichlet(A, b, rows, cols, u₀*ones(size(rows)))
 end
 
-function add_dirichlet(A, b, rows, u₀::AbstractVector)
+function add_dirichlet(A, b, rows::AbstractVector, u₀::AbstractVector)
     return add_dirichlet(A, b, rows, rows, u₀)
 end
-function add_dirichlet(A, b, rows, u₀::Real)
+function add_dirichlet(A, b, rows::AbstractVector, u₀::Real)
     return add_dirichlet(A, b, rows, u₀*ones(size(rows)))
 end
