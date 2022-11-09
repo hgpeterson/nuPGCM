@@ -85,11 +85,18 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, ωymap[e.top], 0)
     A, r = add_dirichlet(A, r, χxmap[e.top], 0)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0)
-    A, r = add_dirichlet(A, r, χymap[e.bot], 0)
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0)
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on on ωy since χy is full
 
     # special dirichlet condition ∂x(ωx) = 0
-    # ???
+    # edges, boundary_indices, emap = all_edges(g1.t)
+    # for k=1:g1.nt
+    #     for ie=1:3
+    #         if emap[k, ie] in boundary_indices
+
+    #         end
+    #     end
+    # end
 
     # remove zeros
     dropzeros!(A)
@@ -115,8 +122,8 @@ function pg_vort_res(geo, nref; showplots=false)
 
     # Ekman number
     # ε² = 1e-5
-    ε² = 1e-4
-    # ε² = 1e-3
+    # ε² = 1e-4
+    ε² = 1e-3
     # ε² = 1e-2
     # ε² = 1e-1
     # ε² = 1
@@ -150,9 +157,7 @@ function pg_vort_res(geo, nref; showplots=false)
     x = g.p[:, 1] 
     z = g.p[:, 2] 
     δ = 0.1
-    # b = @. z + δ*exp(-(z + H(x))/δ)
-    # b = z
-    b = @. δ*exp(-(z + H(x))/δ)
+    b = @. z + δ*exp(-(z + H(x))/δ)
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
@@ -203,9 +208,6 @@ function get_velocities(χx, χy; showplots=false)
     # Jacobians
     J = Jacobians(g1)   
 
-    # edges
-    ebot, etop = get_sides(g1)
-
     # integrals
     s1 = ShapeFunctionIntegrals(g1.s, g1.s)
     s21 = ShapeFunctionIntegrals(g2.s, g1.s)
@@ -234,23 +236,13 @@ function get_velocities(χx, χy; showplots=false)
     Cz = sparse((x -> x[1]).(Cz), (x -> x[2]).(Cz), (x -> x[3]).(Cz), g1.np, g2.np)
 
     # ux = -∂z(χy)
-    r = -Cz*χy.values
-    A, r = add_dirichlet(M, r, ebot, 0)
-    dropzeros!(A)
-    ux.values[:] = A\r
+    ux.values[:] = -M\(Cz*χy.values)
 
     # uy = ∂z(χx)
-    r = Cz*χx.values
-    A, r = add_dirichlet(M, r, ebot, 0)
-    dropzeros!(A)
-    uy.values[:] = A\r
+    uy.values[:] = M\(Cz*χx.values)
 
     # uz = ∂x(χy)
-    r = Cx*χy.values
-    A, r = add_dirichlet(M, r, ebot, 0)
-    A, r = add_dirichlet(A, r, etop, 0)
-    dropzeros!(A)
-    uz.values[:] = A\r
+    uz.values[:] = M\(Cx*χy.values)
 
     if showplots
         quickplot(ux, L"u^x", "images/ux.png")
@@ -265,8 +257,9 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-# ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
-ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
+# ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
+# ωx, ωy, χx, χy = pg_vort_res("valign", 0; showplots=true)
 
 ux, uy, uz = get_velocities(χx, χy; showplots=true)
 

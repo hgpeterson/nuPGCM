@@ -93,11 +93,18 @@ function apply_constraint(A, b, i, j, b₀)
     return A, b
 end
 
-function add_dirichlet(A, b, rows, u₀::AbstractVector)
+function add_dirichlet(A, b, rows, cols, u₀::AbstractVector)
     for i in eachindex(rows)
-        A, b = apply_constraint(A, b, rows[i], rows[i], u₀[i])
+        A, b = apply_constraint(A, b, rows[i], cols[i], u₀[i])
     end
     return A, b
+end
+function add_dirichlet(A, b, rows, cols, u₀::Real)
+    return add_dirichlet(A, b, rows, cols, u₀*ones(size(rows)))
+end
+
+function add_dirichlet(A, b, rows, u₀::AbstractVector)
+    return add_dirichlet(A, b, rows, rows, u₀)
 end
 function add_dirichlet(A, b, rows, u₀::Real)
     return add_dirichlet(A, b, rows, u₀*ones(size(rows)))
