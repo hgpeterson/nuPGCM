@@ -95,14 +95,19 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     ps = standard_element_nodes(g.order)
     A[ωxmap[e.bot], :] .= 0
     r[ωxmap[e.bot]] .= 0
-    # A[ωymap[e.bot], :] .= 0
-    # r[ωymap[e.bot]] .= 0
+    A[ωymap[e.bot], :] .= 0
+    r[ωymap[e.bot]] .= 0
     for k=1:g1.nt
         for ie=1:3
             if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
                 # get local indices of each point on edge `ie`:
                 il = [ie, ie+3, mod1(ie+1, 3)]
-                if (g.t[k, il[1]] in e.bot) && (g.t[k, il[3]] in e.bot) # the edge is on the *bottom* boundary
+                ig = g.t[k, il]
+                if (ig[1] in e.bot) && (ig[3] in e.bot) # the edge is on the *bottom* boundary
+                    # get global coordinates of end points on edge
+                    p1 = g.p[ig[1], :]
+                    p3 = g.p[ig[3], :]
+
                     # get local coordinates on standard triangle of each point on edge
                     ξ1 = ps[il[1], :]
                     ξ3 = ps[il[3], :]
@@ -110,23 +115,32 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
                     # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ3
                     ξ(t) = (ξ3 - ξ1)/2*t + (ξ3 + ξ1)/2
                     for i=il, j=1:g.nn
-                        f(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm((ξ3 - ξ1)/2)
-                        # f(t) = φ(g.s, i, ξ(t))*φ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)
+                        f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
                         ∫f = dot(w, f.(t))
                         A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
-                        # A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
+
+                        # f1(t) = φ(g.s, i, ξ(t))*φ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
+                        # f1(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
+                        f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
+                        ∫f1 = dot(w, f1.(t))
+                        A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f1
                     end
                 end
             end
         end
     end
 
-    # # corners: dirichlet 
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot[1]], 0)
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot[end]], 0)
+    # # if we don't do ∂x(ωx) = 0
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
 
-    # if we don't do ∂x(χy) = 0
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+    # # if we don't do ∂x(χy) = 0
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+
+    # corners: dirichlet 
+    A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
+    A, r = add_dirichlet(A, r, ωymap[e.bot[[1, end]]], 0)
+    A, r = add_dirichlet(A, r, χxmap[e.bot[[1, end]]], 0)
+    A, r = add_dirichlet(A, r, χymap[e.bot[[1, end]]], 0)
 
     # remove zeros
     dropzeros!(A)
@@ -134,13 +148,20 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
 
     println("rank(A): ", rank(A))
 
+    # null = nullspace(Matrix(A))
+    # ωx.values[:] = null[ωxmap]
+    # ωy.values[:] = null[ωymap]
+    # χx.values[:] = null[χxmap]
+    # χy.values[:] = null[χymap]
+    # return ωx, ωy, χx, χy
+
     # solve
     print("Solving... ")
     t₀ = time()
     sol = A\r
     println(@sprintf("%.1f s", time() - t₀))
 
-    # reshape to get u and p
+    # reshape to get ω and χ
     ωx.values[:] = sol[ωxmap]
     ωy.values[:] = sol[ωymap]
     χx.values[:] = sol[χxmap]
@@ -155,9 +176,9 @@ function pg_vort_res(geo, nref; showplots=false)
     # Ekman number
     # ε² = 1e-5
     # ε² = 1e-4
-    ε² = 1e-3
+    # ε² = 1e-3
     # ε² = 1e-2
-    # ε² = 1e-1
+    ε² = 1e-1
     # ε² = 1
 
     # setup FE grids
