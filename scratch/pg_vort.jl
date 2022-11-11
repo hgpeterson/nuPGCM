@@ -101,27 +101,29 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
         for ie=1:3
             if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
                 # get local indices of each point on edge `ie`:
-                il = [ie, ie+3, mod1(ie+1, 3)]
+                if g.order == 1
+                    il = [ie, mod1(ie+1, 3)]
+                elseif g.order == 2
+                    il = [ie, ie+3, mod1(ie+1, 3)]
+                end
                 ig = g.t[k, il]
-                if (ig[1] in e.bot) && (ig[3] in e.bot) # the edge is on the *bottom* boundary
+                if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
                     # get global coordinates of end points on edge
                     p1 = g.p[ig[1], :]
-                    p3 = g.p[ig[3], :]
+                    p2 = g.p[ig[end], :]
 
                     # get local coordinates on standard triangle of each point on edge
                     ξ1 = ps[il[1], :]
-                    ξ3 = ps[il[3], :]
+                    ξ2 = ps[il[end], :]
 
-                    # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ3
-                    ξ(t) = (ξ3 - ξ1)/2*t + (ξ3 + ξ1)/2
+                    # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+                    ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
                     for i=il, j=1:g.nn
-                        f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
+                        f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm(p2 - p1)/2
                         ∫f = dot(w, f.(t))
                         A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
-                        # f1(t) = φ(g.s, i, ξ(t))*φ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
-                        # f1(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
-                        f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm((ξ3 - ξ1)/2)*norm(p3 - p1)
+                        f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
                         ∫f1 = dot(w, f1.(t))
                         A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f1
                     end
@@ -133,8 +135,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # # if we don't do ∂x(ωx) = 0
     # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
 
-    # # if we don't do ∂x(χy) = 0
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+    # if we don't do ∂x(χy) = 0
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
 
     # corners: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
@@ -146,14 +148,19 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
 
-    println("rank(A): ", rank(A))
-
-    # null = nullspace(Matrix(A))
-    # ωx.values[:] = null[ωxmap]
-    # ωy.values[:] = null[ωymap]
-    # χx.values[:] = null[χxmap]
-    # χy.values[:] = null[χymap]
-    # return ωx, ωy, χx, χy
+    R = rank(A)
+    println("rank(A): ", R)
+    if R < N
+        if N > 1000
+            error("🐻")
+        end
+        null = nullspace(Matrix(A))
+        ωx.values[:] = null[ωxmap]
+        ωy.values[:] = null[ωymap]
+        χx.values[:] = null[χxmap]
+        χy.values[:] = null[χymap]
+        return ωx, ωy, χx, χy
+    end
 
     # solve
     print("Solving... ")
@@ -171,7 +178,7 @@ end
 
 function pg_vort_res(geo, nref; showplots=false)
     # order of polynomials
-    order = 2
+    order = 1
 
     # Ekman number
     # ε² = 1e-5
@@ -310,7 +317,7 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res("gmsh", 3; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("gmsh", 1; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("valign", 0; showplots=true)
 
