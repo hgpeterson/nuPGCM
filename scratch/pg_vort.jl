@@ -124,8 +124,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
                         A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
                         f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
-                        ∫f1 = dot(w, f1.(t))
-                        A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f1
+                        ∫f = dot(w, f1.(t))
+                        A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
                     end
                 end
             end
@@ -135,8 +135,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # # if we don't do ∂x(ωx) = 0
     # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
 
-    # if we don't do ∂x(χy) = 0
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+    # # if we don't do ∂x(χy) = 0
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
 
     # corners: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
@@ -147,6 +147,16 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # remove zeros
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
+
+    # # apply A to fake data
+    # x = g.p[:, 1]
+    # z = g.p[:, 2]
+    # f = sin.(π*z/2)
+    # sol = vcat(f, f, f, f)
+    # r = A*sol
+    # println(@sprintf("%1.1e", maximum(abs.(r[ωxmap][e.bot[2:end-1]]))))
+    # println(@sprintf("%1.1e", maximum(abs.(r[ωymap][e.bot[2:end-1]]))))
+    # error()
 
     R = rank(A)
     println("rank(A): ", R)
