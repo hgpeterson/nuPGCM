@@ -43,12 +43,12 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
     for k=1:g1.nt
-        # matrices
+        # stiffness and mass matrices
         K = abs(J.J[k])*(s.φξφξ*J.ξy[k]^2 + s.φξφη*J.ξy[k]*J.ηy[k] + s.φηφξ*J.ηy[k]*J.ξy[k] + s.φηφη*J.ηy[k]^2)
-        Cx = abs(J.J[k])*(s.φξφ*J.ξx[k] + s.φηφ*J.ηx[k])
         M = abs(J.J[k])*s.φφ
 
         # -∂x(b)
+        Cx = abs(J.J[k])*(s.φξφ*J.ξx[k] + s.φηφ*J.ηx[k])
         r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
@@ -91,49 +91,47 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
 
     # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
     edges, boundary_indices, emap = all_edges(g1.t)
-    w, t = quad_weights_points(2*g.order-1, 1)
+    w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
     ps = standard_element_nodes(g.order)
     A[ωxmap[e.bot], :] .= 0
     r[ωxmap[e.bot]] .= 0
     A[ωymap[e.bot], :] .= 0
     r[ωymap[e.bot]] .= 0
-    for k=1:g1.nt
-        for ie=1:3
-            if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
-                # get local indices of each point on edge `ie`:
-                if g.order == 1
-                    il = [ie, mod1(ie+1, 3)]
-                elseif g.order == 2
-                    il = [ie, ie+3, mod1(ie+1, 3)]
-                end
-                ig = g.t[k, il]
-                if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
-                    # get global coordinates of end points on edge
-                    p1 = g.p[ig[1], :]
-                    p2 = g.p[ig[end], :]
+    for k=1:g1.nt, ie=1:3
+        if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+            # get local indices of each point on edge `ie`:
+            if g.order == 1
+                il = [ie, mod1(ie+1, 3)]
+            elseif g.order == 2
+                il = [ie, ie+3, mod1(ie+1, 3)]
+            end
+            ig = g.t[k, il]
+            if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
+                # get global coordinates of end points on edge
+                p1 = g.p[ig[1], :]
+                p2 = g.p[ig[end], :]
 
-                    # get local coordinates on standard triangle of each point on edge
-                    ξ1 = ps[il[1], :]
-                    ξ2 = ps[il[end], :]
+                # get local coordinates on standard triangle of each point on edge
+                ξ1 = ps[il[1], :]
+                ξ2 = ps[il[end], :]
 
-                    # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
-                    ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
-                    for i=il, j=1:g.nn
-                        f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm(p2 - p1)/2
-                        ∫f = dot(w, f.(t))
-                        A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
+                # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+                ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
+                for i=il, j=1:g.nn
+                    # f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))/2 # divide by ||p2 - p1|| because T.F. ξ is scaled
+                    # ∫f = dot(w_quad, f.(t_quad))
+                    # A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
-                        f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
-                        ∫f = dot(w, f1.(t))
-                        A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
-                    end
+                    f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
+                    ∫f = dot(w_quad, f1.(t_quad))
+                    A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
                 end
             end
         end
     end
 
-    # # if we don't do ∂x(ωx) = 0
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
+    # if we don't do ∂x(ωx) = 0
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
 
     # # if we don't do ∂x(χy) = 0
     # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
@@ -151,19 +149,67 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # # apply A to fake data
     # x = g.p[:, 1]
     # z = g.p[:, 2]
-    # f = sin.(π*z/2)
+    # f = z .+ 1
+    # # f = sin.(z)
+    # # f = sin.(x)
     # sol = vcat(f, f, f, f)
     # r = A*sol
-    # println(@sprintf("%1.1e", maximum(abs.(r[ωxmap][e.bot[2:end-1]]))))
-    # println(@sprintf("%1.1e", maximum(abs.(r[ωymap][e.bot[2:end-1]]))))
+    # b = zeros(g.np)
+    # for k=1:g1.nt, ie=1:3
+    #     if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+    #         # get local indices of each point on edge `ie`:
+    #         if g.order == 1
+    #             il = [ie, mod1(ie+1, 3)]
+    #         elseif g.order == 2
+    #             il = [ie, ie+3, mod1(ie+1, 3)]
+    #         end
+    #         ig = g.t[k, il]
+    #         if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
+    #             # get global coordinates of end points on edge
+    #             p1 = g.p[ig[1], :]
+    #             p2 = g.p[ig[end], :]
+
+    #             # get local coordinates on standard triangle of each point on edge
+    #             ξ1 = ps[il[1], :]
+    #             ξ2 = ps[il[end], :]
+
+    #             # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+    #             ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
+    #             p(t) = (p2 - p1)/2*t + (p2 + p1)/2
+    #             for i=il
+    #                 # f2(t) = φ(g.s, i, ξ(t))*p(t)[1]/sqrt(2 - p(t)[1]^2)*cos(p(t)[2])*norm(p2 - p1)/2
+    #                 f2(t) = φ(g.s, i, ξ(t))*p(t)[1]/sqrt(2 - p(t)[1]^2)*norm(p2 - p1)/2
+    #                 ∫f = dot(w_quad, f2.(t_quad))
+    #                 b[g.t[k, i]] += ∫f
+    #             end
+    #         end
+    #     end
+    # end
+    # # println(@sprintf("%1.1e", maximum(abs.(r[ωymap][e.bot] - b[e.bot]))))
+    # println(@sprintf("%1.1e", maximum(abs.(r[ωxmap][e.bot] - b[e.bot]))))
+    # # plot(g.p[e.bot, 1], r[ωymap][e.bot], "o", ms=1, label="Data")
+    # plot(g.p[e.bot, 1], r[ωxmap][e.bot], "o", ms=1, label="Data")
+    # plot(g.p[e.bot, 1], b[e.bot], "o", ms=0.5, label="Truth")
+    # xlim(-1.1, 1.1)
+    # ylim(-0.1, 0.1)
+    # xlabel(L"x_i")
+    # # title(L"$\sin x_j \int_C \varphi_i \partial_x \varphi_j \; $d$s$")
+    # # title(L"$\sin z_j \int_C \varphi_i \partial_\xi \varphi_j \; $d$s$")
+    # title(L"$(z_j + 1) \int_C \varphi_i \partial_\xi \varphi_j \; $d$s$")
+    # legend(loc="lower center")
+    # savefig("images/line_int.png")
+    # println("images/line_int.png")
+    # plt.close()
+    # # println(@sprintf("%1.1e", maximum(abs.(r[ωxmap][e.bot[2:end-1]]))))
+    # # println(@sprintf("%1.1e", maximum(abs.(r[ωymap][e.bot[2:end-1]]))))
     # error()
 
     R = rank(A)
-    println("rank(A): ", R)
+    println("rank(A): ", R, " = N - ", N - R)
     if R < N
-        if N > 1000
-            error("🐻")
-        end
+        # if N > 1000
+        #     error("🐻")
+        # end
         null = nullspace(Matrix(A))
         ωx.values[:] = null[ωxmap]
         ωy.values[:] = null[ωymap]
@@ -189,6 +235,7 @@ end
 function pg_vort_res(geo, nref; showplots=false)
     # order of polynomials
     order = 1
+    # order = 2
 
     # Ekman number
     # ε² = 1e-5
@@ -248,6 +295,10 @@ function pg_vort_res(geo, nref; showplots=false)
         plot_profile(ωy, 0.5, -H(0.5):1e-3:0, L"$\omega^y$ at $x = 0.5$", L"z", "images/omegay_profile.png")
         plot_profile(χx, 0.5, -H(0.5):1e-3:0, L"$\chi^x$ at $x = 0.5$",   L"z", "images/chix_profile.png")
         plot_profile(χy, 0.5, -H(0.5):1e-3:0, L"$\chi^y$ at $x = 0.5$",   L"z", "images/chiy_profile.png")
+        plot(x[ebot], χy.values[ebot], "o", ms=1)
+        xlabel(L"x")
+        ylabel(L"\chi^y(z = - H)")
+        savefig("images/chiy_bot.png")
     end
 
     return ωx, ωy, χx, χy
@@ -327,7 +378,7 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res("gmsh", 1; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("gmsh", 3; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("", 0; showplots=true)
 # ωx, ωy, χx, χy = pg_vort_res("valign", 0; showplots=true)
 
