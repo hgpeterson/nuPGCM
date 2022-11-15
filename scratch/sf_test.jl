@@ -83,8 +83,7 @@ function solve_sf_test(χ, f, J, s, e)
                 ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
                 for i=il, j=1:g.nn
                     f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
-                    # f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k])*norm(p2 - p1)/2
-                    # f1(t) = φ(g.s, i, ξ(t))*φ(g.s, j, ξ(t))*norm(p2 - p1)/2
+                    # f1(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2
                     ∫f = dot(w_quad, f1.(t_quad))
                     A[g.t[k, i], g.t[k, j]] += ∫f
                 end
@@ -99,14 +98,6 @@ function solve_sf_test(χ, f, J, s, e)
     # remove zeros
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
-
-    M = Matrix(A)
-    # imshow(M[e.bot, :] .== 0, cmap="binary_r")
-    imshow(M .== 0, cmap="binary_r")
-    savefig("images/A.png")
-    println("images/A.png")
-    plt.close()
-
 
     R = rank(A)
     println("rank(A): ", R, " = N - ", g.np - R)
@@ -161,7 +152,10 @@ function sf_test_res(geo, nref; showplots=false)
 
     if showplots
         quickplot(χ, L"\chi", "images/chi.png")
+        H(x) = sqrt(2 - x^2) - 1
+        plot_profile(χ, 0.5, -H(0.5):1e-3:0, L"$\chi$ at $x = 0.5$",   L"z", "images/chi_profile.png")
         plot(x[ebot], χ.values[ebot], "o", ms=1)
+        println(maximum(abs.(χ.values[ebot])))
         xlabel(L"x")
         ylabel(L"\chi(z = - H)")
         savefig("images/chi_bot.png")
@@ -172,6 +166,7 @@ function sf_test_res(geo, nref; showplots=false)
     return χ
 end
 
-χ = sf_test_res("jc", 1; showplots=true)
+# χ = sf_test_res("gmsh", 3; showplots=true)
+χ = sf_test_res("jc", 3; showplots=true)
 
 println("Done.")
