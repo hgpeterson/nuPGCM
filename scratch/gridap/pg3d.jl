@@ -14,16 +14,16 @@ reffe_uz = ReferenceFE(lagrangian, Float64, 1; space=:P)
 reffe_p  = ReferenceFE(lagrangian, Float64, 0; space=:P)
 
 # test FESpaces
-Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface"])
+Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bottom"])
+Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bottom"])
+Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bottom", "surface"])
 Q  = TestFESpace(model, reffe_p,  conformity=:L2, constraint=:zeromean)
 Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
 
 # trial FESpaces with Dirichlet values
-Ux = TrialFESpace(Vx, [0, 0])
-Uy = TrialFESpace(Vy, [0, 0])
-Uz = TrialFESpace(Vz, [0, 0, 0])
+Ux = TrialFESpace(Vx, [0])
+Uy = TrialFESpace(Vy, [0])
+Uz = TrialFESpace(Vz, [0, 0])
 P  = TrialFESpace(Q)
 X  = MultiFieldFESpace([Ux, Uy, Uz, P])
 
@@ -41,14 +41,18 @@ z = VectorValue(0.0, 0.0, 1.0)
 ∂z(u) = z⋅∇(u)
 
 # forcing
-δ = 0.1
-H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
-b(x) = δ*exp(-(x[3] + H(x))/δ)
-# b(x) = x[1]
+# δ = 0.1
+# H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
+# b(x) = δ*exp(-(x[3] + H(x))/δ)
+b(x) = x[1]
 
 # bilinear and linear form
-ε² = 1e-1
-a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*∂z(vx)*∂z(ux) + ε²*∂z(vy)*∂z(uy) + uy*vx - ux*vy - ∂x(vx)*p - ∂y(vy)*p - ∂z(vz)*p + q*∂x(ux) + q*∂y(uy) + q*∂z(uz) )dΩ
+# ε² = 1e-1
+ε² = 1
+a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*(∂z(ux)*∂z(vx) + ∂z(uy)*∂z(vy)) + 
+                                         uy*vx - ux*vy + 
+                                        -p*(∂x(vx) + ∂y(vy) + ∂z(vz)) + 
+                                         (∂x(ux) + ∂y(uy) + ∂z(uz))*q )dΩ
 l((vx, vy, vz, q)) = ∫( b*vz )dΩ
 
 # affine FE operator

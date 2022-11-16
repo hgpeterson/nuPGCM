@@ -18,18 +18,13 @@ function generate_bowl_mesh(h₀)
     # sync 
     gmsh.model.occ.synchronize()
 
-    # physical groups
-    println(gmsh.model.getEntities(0))
-    println(gmsh.model.getEntities(1))
-    println(gmsh.model.getEntities(2))
-    println(gmsh.model.getEntities(3))
-    gmsh.model.addPhysicalGroup(0, [1], 1, "coastline")
-    gmsh.model.addPhysicalGroup(0, [2], 2, "bottom")
-    gmsh.model.addPhysicalGroup(1, [1], 1, "coastline")
-    gmsh.model.addPhysicalGroup(1, [2], 2, "bottom")
-    # gmsh.model.addPhysicalGroup(1, [3], 3, "line 3")
+    # bottom
+    gmsh.model.addPhysicalGroup(0, 1:2, 1, "bottom")
+    gmsh.model.addPhysicalGroup(1, 1:2, 1, "bottom")
     gmsh.model.addPhysicalGroup(2, [1], 1, "bottom")
+    # surface
     gmsh.model.addPhysicalGroup(2, [2], 2, "surface")
+    # interior
     gmsh.model.addPhysicalGroup(3, [3], 1, "interior")
 
     # mesh size
@@ -43,5 +38,5 @@ function generate_bowl_mesh(h₀)
     gmsh.finalize()
 end
 
-h₀ = 0.02
+h₀ = 0.05
 generate_bowl_mesh(h₀)
