@@ -24,14 +24,12 @@ export
 
     # finite elements
     ShapeFunctions,
-    standard_element_nodes,
+    reference_element_nodes,
     ShapeFunctionIntegrals,
     φ,
     φξ,
     φη,
-    φξξ,
-    φξη,
-    φηη,
+    φζ,
     FEGrid,
     all_edges,
     boundary_nodes,

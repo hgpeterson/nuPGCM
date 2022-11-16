@@ -2,7 +2,10 @@ struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix}
     # order of polynomials defining shape functions
     order::IN
 
-    # number of nodes on standard element
+    # dimension of space
+    dim::IN
+
+    # number of nodes on reference element
     n::IN
 
     # coefficients matrix defining shape function polynomials
@@ -11,138 +14,202 @@ struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix}
     # coefficients matrices defining derivatives of shape function polynomials
     Cξ::M
     Cη::M
-
-    # coefficients matrices defining 2nd derivatives of shape function polynomials
-    Cξξ::M
-    Cξη::M
-    Cηη::M
+    Cζ::M
 end
 
 """
-    s = ShapeFunctions(order)
+    s = ShapeFunctions(order, dim)
 
-Construct shape functions of order `order`.
+Construct shape functions of order `order` in dimension `dim`.
 """
-function ShapeFunctions(order)
+function ShapeFunctions(order, dim)
     # get nodes of standard element
-    p = standard_element_nodes(order)
+    p = reference_element_nodes(order, dim)
     n = size(p, 1)
 
     # compute shape function coefficients
 	V = zeros(n, n)
-	for i=1:n
-	    ξ = p[i, 1]
-	    η = p[i, 2]
-        if order == 0
-            V[:, i] = [1]
-        elseif order == 1
-		    V[:, i] = [1, ξ, η]
-        elseif order == 2
-	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2]
-        elseif order == 3
-	        V[:, i] = [1, ξ, η, ξ^2, ξ*η, η^2, ξ^3, ξ^2*η, ξ*η^2, η^3]
-        else
-            error("Unsupported shape function order.")
+    for row=1:n 
+        col = 1 
+        for k=0:order
+            perms = iter_permutations(k, dim)
+            for i in eachindex(perms)
+                V[row, col] = prod(p[row, :].^perms[i]) # (btw: julia says 0^0 is 1)
+                col += 1
+            end
         end
-	end
+    end
+    display(Matrix(V))
 	C = inv(V)
+    display(Matrix(C))
 
     # compute shape function derivative coefficients
     Cξ = zeros(n, n)
     Cη = zeros(n, n)
-    if order == 0
-        # derivatives are already zero
-    elseif order == 1
-        Cξ[:, 1] += C[:, 2]
+    Cζ = zeros(n, n)
+    if dim == 2
+        if order == 0
+            # derivatives are already zero
+        elseif order == 1
+            Cξ[1, :] += C[2, :]
+                             
+            Cη[1, :] += C[3, :]
+        elseif order == 2
+            Cξ[1, :] +=   C[2, :]
+            Cξ[2, :] += 2*C[4, :]
+            Cξ[3, :] +=   C[5, :]
+                  
+            Cη[1, :] +=   C[3, :]
+            Cη[2, :] +=   C[5, :]
+            Cη[3, :] += 2*C[6, :]
+        elseif order == 3
+            Cξ[1, :] +=   C[2, :]
+            Cξ[2, :] += 2*C[4, :]
+            Cξ[3, :] +=   C[5, :]
+            Cξ[4, :] += 3*C[7, :]
+            Cξ[5, :] += 2*C[8, :]
+            Cξ[6, :] +=   C[9, :]
+                               
+            Cη[1, :] +=   C[3, :]
+            Cη[2, :] +=   C[5, :]
+            Cη[3, :] += 2*C[6, :]
+            Cη[4, :] +=   C[8, :]
+            Cη[5, :] += 2*C[9, :]
+            Cη[6, :] += 3*C[10, :]
+        end
+    elseif dim == 3
+        if order == 0
+            # derivatives are already zero
+        elseif order == 1
+            Cξ[:, 1] += C[:, 2]
 
-        Cη[:, 1] += C[:, 3]
-    elseif order == 2
-        Cξ[:, 1] +=   C[:, 2]
-        Cξ[:, 2] += 2*C[:, 4]
-        Cξ[:, 3] +=   C[:, 5]
+            Cη[:, 1] += C[:, 3]
 
-        Cη[:, 1] +=   C[:, 3]
-        Cη[:, 2] +=   C[:, 5]
-        Cη[:, 3] += 2*C[:, 6]
-    elseif order == 3
-        Cξ[:, 1] +=   C[:, 2]
-        Cξ[:, 2] += 2*C[:, 4]
-        Cξ[:, 3] +=   C[:, 5]
-        Cξ[:, 4] += 3*C[:, 7]
-        Cξ[:, 5] += 2*C[:, 8]
-        Cξ[:, 6] +=   C[:, 9]
+            Cζ[:, 1] += C[:, 4]
+        elseif order == 2
+            Cξ[:, 1] +=   C[:, 2]
+            Cξ[:, 2] += 2*C[:, 5]
+            Cξ[:, 3] +=   C[:, 6]
+            Cξ[:, 4] +=   C[:, 7]
 
-        Cη[:, 1] +=   C[:, 3]
-        Cη[:, 2] +=   C[:, 5]
-        Cη[:, 3] += 2*C[:, 6]
-        Cη[:, 4] +=   C[:, 8]
-        Cη[:, 5] += 2*C[:, 9]
-        Cη[:, 6] += 3*C[:, 10]
+            Cη[:, 1] +=   C[:, 3]
+            Cη[:, 2] +=   C[:, 6]
+            Cη[:, 3] += 2*C[:, 8]
+            Cη[:, 4] +=   C[:, 9]
+
+            Cζ[:, 1] +=   C[:, 4]
+            Cζ[:, 2] +=   C[:, 7]
+            Cζ[:, 3] += 2*C[:, 9]
+            Cζ[:, 4] += 2*C[:, 10]
+        end
     end
 
-    # compute shape function 2nd derivative coefficients
-    Cξξ = zeros(n, n)
-    Cξη = zeros(n, n)
-    Cηη = zeros(n, n)
-    if order == 0
-        # 2nd derivatives are already zero
-    elseif order == 1
-        # 2nd derivatives are already zero
-    elseif order == 2
-        Cξξ[:, 1] += Cξ[:, 2]
-
-        # Cξη = 0
-
-        Cηη[:, 1] += Cη[:, 3]
-    elseif order == 3
-        Cξξ[:, 1] +=   Cξ[:, 2]
-        Cξξ[:, 2] += 2*Cξ[:, 4]
-        Cξξ[:, 3] +=   Cξ[:, 5]
-
-        Cξη[:, 1] +=   Cξ[:, 3]
-        Cξη[:, 2] +=   Cξ[:, 5]
-        Cξη[:, 3] += 2*Cξ[:, 6]
-
-        Cηη[:, 1] +=   Cη[:, 3]
-        Cηη[:, 2] +=   Cη[:, 5]
-        Cηη[:, 3] += 2*Cη[:, 6]
-    end
-    return ShapeFunctions(order, n, C, Cξ, Cη, Cξξ, Cξη, Cηη)
+    return ShapeFunctions(order, dim, n, C, Cξ, Cη, Cζ)
 end
 
 """
-    p = standard_element_nodes(order)
+    p = reference_element_nodes(order, dim)
 
-The nodes of a standard element of order `order`.
+The nodes of a reference element of order `order` in `dim` dimensions.
 """
-function standard_element_nodes(order)
-    if order == 0
-        return 1/3*[1.0 1.0]
-    elseif order == 1
-        return [0.0  0.0
-                1.0  0.0
-                0.0  1.0]
-    elseif order == 2
-        return [0.0  0.0
-                1.0  0.0
-                0.0  1.0
-                0.5  0.0
-                0.5  0.5
-                0.0  0.5]
-    elseif order == 3
-        return [0.0  0.0
-                1.0  0.0
-                0.0  1.0
-                1/3  0.0
-                2/3  0.0
-                2/3  1/3
-                1/3  2/3
-                0.0  2/3
-                0.0  1/3
-                1/3  1/3]
+function reference_element_nodes(order, dim)
+    if dim == 1
+        if order == 0
+            return [0.0]
+        elseif order == 1
+            return [-1.0
+                     1.0]
+        elseif order == 2
+            return [-1.0
+                     0.0
+                     1.0]
+        elseif order == 3
+            return [-1.0
+                    -1/3
+                     1/3
+                     1.0]
+        else
+            error("Unsupported reference element order `$order` for dimension `$dim`.")
+        end
+    elseif dim == 2
+        if order == 0
+            return 1/3*[1.0  1.0]
+        elseif order == 1
+            return [0.0  0.0
+                    1.0  0.0
+                    0.0  1.0]
+        elseif order == 2
+            return [0.0  0.0
+                    1.0  0.0
+                    0.0  1.0
+                    0.5  0.0
+                    0.5  0.5
+                    0.0  0.5]
+        elseif order == 3
+            return [0.0  0.0
+                    1.0  0.0
+                    0.0  1.0
+                    1/3  0.0
+                    2/3  0.0
+                    2/3  1/3
+                    1/3  2/3
+                    0.0  2/3
+                    0.0  1/3
+                    1/3  1/3]
+        else
+            error("Unsupported reference element order `$order` for dimension `$dim`.")
+        end
+    elseif dim == 3
+        if order == 0
+            return 1/3*[1.0  1.0  1.0]
+        elseif order == 1
+            return [0.0  0.0  0.0
+                    1.0  0.0  0.0
+                    0.0  1.0  0.0
+                    0.0  0.0  1.0]
+        elseif order == 2
+            return [0.0  0.0  0.0
+                    1.0  0.0  0.0
+                    0.0  1.0  0.0
+                    0.0  0.0  1.0
+                    0.5  0.0  0.0
+                    0.5  0.5  0.0
+                    0.0  0.5  0.0
+                    0.0  0.0  0.5
+                    0.5  0.0  0.5
+                    0.0  0.5  0.5]
+        else
+            error("Unsupported reference element order `$order` for dimension `$dim`.")
+        end
     else
-        error("Unsupported shape function order.")
+        error("Unsupported reference element dimension `$dim`.")
     end
+end
+
+
+"""
+    perms = iter_permutations(n, d)
+
+Compute all permutations (i₁, i₂, ..., i_d) such that i₁ + i₂ + ... + i_d = n.
+(Currently hard-coded for d = 1, 2, 3 only).
+"""
+function iter_permutations(n, d)
+    perms = []
+    if d == 1
+        push!(perms, (n))
+    elseif d == 2
+        for i=0:n
+            push!(perms, (n - i, i))
+        end
+    elseif d == 3
+        for i=0:n
+            k = n - i
+            for j=0:k
+                push!(perms, (k - j, j, i))
+            end
+        end
+    end
+    return perms
 end
 
 struct ShapeFunctionIntegrals{M<:AbstractMatrix}
@@ -150,22 +217,23 @@ struct ShapeFunctionIntegrals{M<:AbstractMatrix}
 
     φξφ::M
     φηφ::M
+    φζφ::M
 
     φφξ::M
     φφη::M
+    φφζ::M
 
     φξφξ::M
     φξφη::M
+    φξφζ::M
 
     φηφξ::M
     φηφη::M
+    φηφζ::M
 
-    φξξφξ::M
-    φξξφη::M
-    φξηφξ::M
-    φξηφη::M
-    φηηφξ::M
-    φηηφη::M
+    φζφξ::M
+    φζφη::M
+    φζφζ::M
 end
 
 """
@@ -185,24 +253,24 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     # C
     φξφ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φζφ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φφξ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φφη = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φφζ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    
 
     # stiffness
     φξφξ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φξφη = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φξφζ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφξ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     φηφη = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φηφζ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φζφξ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φζφη = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    φζφζ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
-    # higher order
-    φξξφξ = compute_integral_matrix((ξ, i, j) -> φξξ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξξφη = compute_integral_matrix((ξ, i, j) -> φξξ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξηφξ = compute_integral_matrix((ξ, i, j) -> φξη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξηφη = compute_integral_matrix((ξ, i, j) -> φξη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηηφξ = compute_integral_matrix((ξ, i, j) -> φηη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηηφη = compute_integral_matrix((ξ, i, j) -> φηη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-
-    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φφξ, φφη, φξφξ, φξφη, φηφξ, φηφη, φξξφξ, φξξφη, φξηφξ, φξηφη, φηηφξ, φηηφη)
+    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φζφ, φφξ, φφη, φφζ, φξφξ, φξφη, φξφζ, φηφξ, φηφη, φηφζ, φζφξ, φζφη, φζφζ)
 end
 
 """
@@ -224,51 +292,56 @@ end
 
 """
     φ(sf, i, ξ)
-    φξ(sf, i, ξ)
-    φη(sf, i, ξ)
-    φξξ(sf, i, ξ)
-    φξη(sf, i, ξ)
-    φηη(sf, i, ξ)
 
-Evaluate shape function `i` and its derivates evaluated at the point `ξ`.
+Evaluate shape function `i` at the point `ξ`.
 """
 function φ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.C[i, :], ξ)
+    return eval_poly(sf.C[:, i], ξ, sf.order, sf.dim)
 end
+
+"""
+    φξ(sf, i, ξ)
+
+Evaluate ξ-derivative of shape function `i` at the point `ξ`.
+"""
 function φξ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cξ[i, :], ξ)
+    return eval_poly(sf.Cξ[:, i], ξ, sf.order, sf.dim)
 end
+
+"""
+    φη(sf, i, ξ)
+
+Evaluate η-derivative of shape function `i` at the point `ξ`.
+"""
 function φη(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cη[i, :], ξ)
-end
-function φξξ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cξξ[i, :], ξ)
-end
-function φξη(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cξη[i, :], ξ)
-end
-function φηη(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cηη[i, :], ξ)
+    return eval_poly(sf.Cη[:, i], ξ, sf.order, sf.dim)
 end
 
 """
-    f = eval_poly(c, ξ)
+    φζ(sf, i, ξ)
 
-Evaluate polynomial defined by coefficients `c` at point `ξ`.
+Evaluate ζ-derivative of shape function `i` at the point `ξ`.
 """
-function eval_poly(c, ξ)
-    n = size(c, 1)
-    if n == 1
-        return c'*[1]
-    elseif n == 3
-        return c'*[1, ξ[1], ξ[2]]
-    elseif n == 6
-        return c'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2]
-    elseif n == 10
-        return c'*[1, ξ[1], ξ[2], ξ[1]^2, ξ[1]*ξ[2], ξ[2]^2, ξ[1]^3, ξ[1]^2*ξ[2], ξ[1]*ξ[2]^2, ξ[2]^3]
-    else
-        error("Unsupported polynomial order.")
+function φζ(sf::ShapeFunctions, i, ξ)
+    return eval_poly(sf.Cζ[:, i], ξ, sf.order, sf.dim)
+end
+
+"""
+    f = eval_poly(c, ξ, n, d)
+
+Evaluate `n` degree polynomial in `d` dimensions defined by coefficients `c` at point `ξ`.
+"""
+function eval_poly(c, ξ, n, d)
+    f = 0 
+    i = 1
+    for k=0:n
+        perms = iter_permutations(k, d)
+        for j in eachindex(perms)
+            f += c[i]*prod(ξ.^perms[j]) # (btw: julia says 0^0 is 1)
+            i += 1
+        end
     end
+    return f
 end
 
 struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
