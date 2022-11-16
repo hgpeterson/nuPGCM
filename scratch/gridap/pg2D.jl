@@ -3,7 +3,7 @@ using GridapGmsh
 using Gmsh: gmsh
 
 # model
-model = GmshDiscreteModel("../../meshes/mesh.msh")
+model = GmshDiscreteModel("bowl2D.msh")
 writevtk(model, "model")
 # error()
 
@@ -33,26 +33,23 @@ degree = 4
 dΩ = Measure(Ω, degree)
 
 # gradients 
-x = VectorValue(1.0, 0.0, 0.0)
-y = VectorValue(0.0, 1.0, 0.0)
-z = VectorValue(0.0, 0.0, 1.0)
+x = VectorValue(1.0, 0.0)
+z = VectorValue(0.0, 1.0)
 ∂x(u) = x⋅∇(u)
-∂y(u) = y⋅∇(u)
 ∂z(u) = z⋅∇(u)
 
 # forcing
 # δ = 0.1
-# H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
-# b(x) = δ*exp(-(x[3] + H(x))/δ)
+# H(x) = sqrt(2 - x[1]^2) - 1
+# b(x) = δ*exp(-(x[2] + H(x))/δ)
 b(x) = x[1]
 
 # bilinear and linear form
-# ε² = 1e-1
 ε² = 1
 a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*(∂z(ux)*∂z(vx) + ∂z(uy)*∂z(vy)) + 
                                          uy*vx - ux*vy + 
-                                        -p*(∂x(vx) + ∂y(vy) + ∂z(vz)) + 
-                                         (∂x(ux) + ∂y(uy) + ∂z(uz))*q )dΩ
+                                        -p*(∂x(vx) + ∂z(vz)) + 
+                                         (∂x(ux) + ∂z(uz))*q )dΩ
 l((vx, vy, vz, q)) = ∫( b*vz )dΩ
 
 # affine FE operator
@@ -62,4 +59,4 @@ op = AffineFEOperator(a, l, X, Y)
 ux, uy, uz, p = solve(op)
 
 # export to vtk
-writevtk(Ω, "results", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])
+writevtk(Ω, "pg2D", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])

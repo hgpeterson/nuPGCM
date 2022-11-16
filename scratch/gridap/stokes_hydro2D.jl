@@ -3,8 +3,8 @@ using GridapGmsh
 using Gmsh: gmsh
 
 # model
-model = GmshDiscreteModel("bowl.msh")
-# writevtk(model, "model")
+model = GmshDiscreteModel("bowl2D.msh")
+writevtk(model, "model")
 # error()
 
 # reference FE 
@@ -13,14 +13,14 @@ reffe_uz = ReferenceFE(lagrangian, Float64, 1; space=:P)
 reffe_p  = ReferenceFE(lagrangian, Float64, 0; space=:P)
 
 # test FESpaces
-Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot", "corners"])
-Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
+Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bottom"])
+Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bottom", "surface"])
 Q  = TestFESpace(model, reffe_p,  conformity=:L2, constraint=:zeromean)
 Y = MultiFieldFESpace([Vx, Vz, Q])
 
 # trial FESpaces with Dirichlet values
-Ux = TrialFESpace(Vx, [0, 0])
-Uz = TrialFESpace(Vz, [0, 0, 0])
+Ux = TrialFESpace(Vx, [0])
+Uz = TrialFESpace(Vz, [0, 0])
 P  = TrialFESpace(Q)
 X  = MultiFieldFESpace([Ux, Uz, P])
 
@@ -36,9 +36,10 @@ z = VectorValue(0.0, 1.0)
 ∂z(u) = z⋅∇(u)
 
 # forcing
-δ = 0.1
-H(x) = sqrt(2 - x^2) - 1
-b(x) = δ*exp(-(x[2] + H(x[1]))/δ)
+# δ = 0.1
+# H(x) = sqrt(2 - x[1]^2) - 1
+# b(x) = δ*exp(-(x[2] + H(x))/δ)
+b(x) = x[1]
 
 # bilinear and linear form
 a((ux, uz, p), (vx, vz, q)) = ∫( ∂z(vx)*∂z(ux) - ∂x(vx)*p - ∂z(vz)*p + q*∂x(ux) + q*∂z(uz) )dΩ
@@ -51,4 +52,4 @@ op = AffineFEOperator(a, l, X, Y)
 ux, uz, p = solve(op)
 
 # export to vtk
-writevtk(Ω, "results", cellfields=["ux"=>ux, "uz"=>uz, "p"=>p])
+writevtk(Ω, "stokes_hydro2D", cellfields=["ux"=>ux, "uz"=>uz, "p"=>p])

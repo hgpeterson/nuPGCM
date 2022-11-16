@@ -3,21 +3,21 @@ using GridapGmsh
 using Gmsh: gmsh
 
 # model
-model = GmshDiscreteModel("../../meshes/mesh.msh")
+model = GmshDiscreteModel("bowl3D.msh")
 writevtk(model, "model")
 # error()
 
 # reference FE 
 reffe_ux = ReferenceFE(lagrangian, Float64, 2; space=:P)
 reffe_uy = ReferenceFE(lagrangian, Float64, 2; space=:P)
-reffe_uz = ReferenceFE(lagrangian, Float64, 1; space=:P)
-reffe_p  = ReferenceFE(lagrangian, Float64, 0; space=:P)
+reffe_uz = ReferenceFE(lagrangian, Float64, 2; space=:P)
+reffe_p  = ReferenceFE(lagrangian, Float64, 1; space=:P)
 
 # test FESpaces
 Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bottom"])
 Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bottom"])
 Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bottom", "surface"])
-Q  = TestFESpace(model, reffe_p,  conformity=:L2, constraint=:zeromean)
+Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
 Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
 
 # trial FESpaces with Dirichlet values
@@ -28,14 +28,16 @@ P  = TrialFESpace(Q)
 X  = MultiFieldFESpace([Ux, Uy, Uz, P])
 
 # triangulation and integration measure
-degree = 4
+degree = 2
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
 
 # gradients 
-x = VectorValue(1.0, 0.0)
-z = VectorValue(0.0, 1.0)
+x = VectorValue(1.0, 0.0, 0.0)
+y = VectorValue(0.0, 1.0, 0.0)
+z = VectorValue(0.0, 0.0, 1.0)
 ∂x(u) = x⋅∇(u)
+∂y(u) = y⋅∇(u)
 ∂z(u) = z⋅∇(u)
 
 # forcing
@@ -45,11 +47,9 @@ z = VectorValue(0.0, 1.0)
 b(x) = x[1]
 
 # bilinear and linear form
-ε² = 1
-a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ε²*(∂z(ux)*∂z(vx) + ∂z(uy)*∂z(vy)) + 
-                                         uy*vx - ux*vy + 
-                                        -p*(∂x(vx) + ∂z(vz)) + 
-                                         (∂x(ux) + ∂z(uz))*q )dΩ
+a((ux, uy, uz, p), (vx, vy, vz, q)) = ∫( ∂z(ux)*∂z(vx) + ∂z(uy)*∂z(vy) + ∂z(uz)*∂z(vz) +
+                                        -p*(∂x(vx) + ∂y(vy) + ∂z(vz)) + 
+                                         q*(∂x(ux) + ∂y(uy) + ∂z(uz)) )dΩ
 l((vx, vy, vz, q)) = ∫( b*vz )dΩ
 
 # affine FE operator
@@ -59,4 +59,4 @@ op = AffineFEOperator(a, l, X, Y)
 ux, uy, uz, p = solve(op)
 
 # export to vtk
-writevtk(Ω, "results", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])
+writevtk(Ω, "stokes3D", cellfields=["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])

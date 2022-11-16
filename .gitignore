@@ -5,6 +5,7 @@
 *.msh
 *.txt
 *.vtu
+*.pvsm
 
 # ignore images and videos
 *.png
