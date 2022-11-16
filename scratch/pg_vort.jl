@@ -49,8 +49,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
 
         # -∂x(b)
         Cx = abs(J.J[k])*(s.φξφ*J.ξx[k] + s.φηφ*J.ηx[k])
-        # r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
-        r[ωymap[g.t[k, :]]] += M*b.values[g.t[k, :]]
+        r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
+        # r[ωymap[g.t[k, :]]] += M*b.values[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
             # indices
@@ -144,7 +144,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χymap[e.bot[[1, end]]], 0)
 
     # off-corners: dirichlet
-    A, r = add_dirichlet(A, r, ωymap[e.bot[[3, end-1]]], χymap[e.bot[[3, end-1]]], 0) 
+    A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
 
     # remove zeros
     dropzeros!(A)
@@ -180,8 +180,8 @@ end
 
 function pg_vort_res(geo, nref; showplots=false)
     # order of polynomials
-    order = 1
-    # order = 2
+    # order = 1
+    order = 2
 
     # Ekman number
     # ε² = 1e-5
@@ -219,9 +219,9 @@ function pg_vort_res(geo, nref; showplots=false)
     end
     x = g.p[:, 1] 
     z = g.p[:, 2] 
-    # δ = 0.1
-    # b = @. z + δ*exp(-(z + H(x))/δ)
-    b = -ones(g.np)
+    δ = 0.1
+    b = @. z + δ*exp(-(z + H(x))/δ)
+    # b = -ones(g.np)
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
@@ -325,7 +325,8 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
+# ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res("valign", 4; showplots=true)
 
 # ux, uy, uz = get_velocities(χx, χy; showplots=true)
 

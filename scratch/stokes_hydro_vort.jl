@@ -108,10 +108,12 @@ function solve_stokes_hydro_vort(ω, χ, f, J, s, e)
 
     # off-corners: dirichlet
     # FIXME: need a better way of finding nodes on off-corners
+    println(g.p[e.bot[2], :])
     println(g.p[e.bot[3], :])
+    println(g.p[e.bot[end-2], :])
     println(g.p[e.bot[end-1], :])
-    A, r = add_dirichlet(A, r, ωmap[e.bot[3]], χmap[e.bot[3]], 0)
-    A, r = add_dirichlet(A, r, ωmap[e.bot[end-1]], χmap[e.bot[end-1]], 0)
+    A, r = add_dirichlet(A, r, ωmap[e.bot[2]], χmap[e.bot[2]], 0)
+    A, r = add_dirichlet(A, r, ωmap[e.bot[end-2]], χmap[e.bot[end-2]], 0)
 
     # remove zeros
     dropzeros!(A)
@@ -142,8 +144,8 @@ end
 
 function stokes_hydro_vort_res(geo, nref; showplots=false)
     # order of polynomials
-    order = 1
-    # order = 2
+    # order = 1
+    order = 2
 
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
@@ -165,7 +167,7 @@ function stokes_hydro_vort_res(geo, nref; showplots=false)
     z = g.p[:, 2] 
     H(x) = sqrt(2 - x^2) - 1
     Hx(x) = -x/sqrt(2 - x^2)
-    δ = 1
+    δ = 0.1
     f = @. -Hx(x)*exp(-(z + H(x))/δ)
     # f = -ones(g.np)
 
@@ -182,7 +184,7 @@ function stokes_hydro_vort_res(geo, nref; showplots=false)
         quickplot(χ, L"\chi", "images/chi.png")
     end
 
-    ω_a = @. -1/8*z*(-3 + 3*sqrt(2 - x^2) + 4*z)
+    ω_a = @. 1/8*z*(-3 + 3*sqrt(2 - x^2) + 4*z)
     χ_a = @. -1/48*(-1 + sqrt(2 - x^2) - 2*z)*z*(-1 + sqrt(2 - x^2) + z)^2
     ω_a = FEField(ω_a, g, g1)
     χ_a = FEField(χ_a, g, g1)
@@ -194,7 +196,8 @@ function stokes_hydro_vort_res(geo, nref; showplots=false)
     return ω, χ
 end
 
-ω, χ = stokes_hydro_vort_res("gmsh", 5; showplots=true)
+# ω, χ = stokes_hydro_vort_res("gmsh", 5; showplots=true)
 # ω, χ = stokes_hydro_vort_res("jc", 5; showplots=true)
+# ω, χ = stokes_hydro_vort_res("valign", 4; showplots=true)
 
 println("Done.")
