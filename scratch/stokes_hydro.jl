@@ -102,25 +102,11 @@ function solve_stokes_hydro(ux, uz, p, fx, fz, J, s, e, u₀, p₀; diri_mask=(t
         A, r = add_dirichlet(A, r, uzmap[e.topw], u₀.topw)
     end
     # pressure condition
-    A, r = apply_constraint(A, r, pmap[1], pmap[1], p₀)
+    A, r = add_dirichlet(A, r, pmap[1], pmap[1], p₀)
 
     # remove zeros
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
-
-    if N < 1000
-        M = Matrix(A)
-        fig, ax = subplots(1)
-        ax.imshow(abs.(M) .== 0, cmap="binary_r")
-        ax.spines["left"].set_visible(false)
-        ax.spines["bottom"].set_visible(false)
-        savefig("images/A.png")
-        println("images/A.png")
-        plt.close()
-        println("Condition number: ", cond(M))
-        println("rank(A) = ", rank(M))
-        println("A is sym: ", issymmetric(M))
-    end
 
     # solve
     print("Solving... ")
@@ -146,8 +132,6 @@ function stokes_hydro_res(nref, geo; showplots=false, exact=false)
     gw = FEGrid(gfile, 1)
     gp = FEGrid(gfile, 0)
     g1 = FEGrid(gfile, 1)
-    println(g1.np)
-    error()
 
     # get shape function integrals
     uu = ShapeFunctionIntegrals(gu.s, gu.s)
@@ -272,10 +256,10 @@ function stokes_hydro_conv(nrefs)
 end
 
 # stokes_hydro_res(3, "jc"; showplots=true)
-stokes_hydro_res(4, "gmsh"; showplots=true)
+# stokes_hydro_res(4, "gmsh"; showplots=true)
 # stokes_hydro_res(5, "gmsh_tri"; showplots=true)
 # stokes_hydro_res(0, "valign"; showplots=true)
 
-# stokes_hydro_conv(0:3)
+stokes_hydro_conv(0:5)
 
 println("Done.")
