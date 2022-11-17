@@ -1,4 +1,4 @@
-struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix}
+struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
     # order of polynomials defining shape functions
     order::IN
 
@@ -12,9 +12,7 @@ struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix}
     C::M
 
     # coefficients matrices defining derivatives of shape function polynomials
-    Cξ::M
-    Cη::M
-    Cζ::M
+    ∂C::A
 end
 
 """
@@ -27,84 +25,52 @@ function ShapeFunctions(order, dim)
     p = reference_element_nodes(order, dim)
     n = size(p, 1)
 
+    # perms[i] tells you the permutation at index i
+    # if you want to know the index of a permutation, do `findall(x->x==1, indexin(perms, [perm]))[1]`
+    perms = Vector{Tuple}([])
+    for k=0:order
+        k_perms = iter_permutations(k, dim) # get all permutations of `dim` integers s.t. their sum is k
+        for i in eachindex(k_perms)
+            push!(perms, k_perms[i])
+        end
+    end
+
     # compute shape function coefficients
 	V = zeros(n, n)
     for row=1:n 
-        col = 1 
         for k=0:order
-            perms = iter_permutations(k, dim)
-            for i in eachindex(perms)
-                V[row, col] = prod(p[row, :].^perms[i]) # (btw: julia says 0^0 is 1)
-                col += 1
+            k_perms = iter_permutations(k, dim) 
+            for i in eachindex(k_perms)
+                col = findall(x->x==1, indexin(perms, [k_perms[i]]))[1] # find index of k-permutation i
+                V[row, col] = prod(p[row, :].^k_perms[i]) # ξˡηᵐζⁿ terms (note: julia says 0^0 is 1)
             end
         end
     end
-    display(Matrix(V))
-	C = inv(V)
-    display(Matrix(C))
+ 	C = inv(V)
 
     # compute shape function derivative coefficients
-    Cξ = zeros(n, n)
-    Cη = zeros(n, n)
-    Cζ = zeros(n, n)
-    if dim == 2
-        if order == 0
-            # derivatives are already zero
-        elseif order == 1
-            Cξ[1, :] += C[2, :]
-                             
-            Cη[1, :] += C[3, :]
-        elseif order == 2
-            Cξ[1, :] +=   C[2, :]
-            Cξ[2, :] += 2*C[4, :]
-            Cξ[3, :] +=   C[5, :]
-                  
-            Cη[1, :] +=   C[3, :]
-            Cη[2, :] +=   C[5, :]
-            Cη[3, :] += 2*C[6, :]
-        elseif order == 3
-            Cξ[1, :] +=   C[2, :]
-            Cξ[2, :] += 2*C[4, :]
-            Cξ[3, :] +=   C[5, :]
-            Cξ[4, :] += 3*C[7, :]
-            Cξ[5, :] += 2*C[8, :]
-            Cξ[6, :] +=   C[9, :]
-                               
-            Cη[1, :] +=   C[3, :]
-            Cη[2, :] +=   C[5, :]
-            Cη[3, :] += 2*C[6, :]
-            Cη[4, :] +=   C[8, :]
-            Cη[5, :] += 2*C[9, :]
-            Cη[6, :] += 3*C[10, :]
-        end
-    elseif dim == 3
-        if order == 0
-            # derivatives are already zero
-        elseif order == 1
-            Cξ[:, 1] += C[:, 2]
+    ∂C = zeros(dim, n, n)
+    for i=1:n
+        perm = perms[i]
+        for j=1:dim
+            # take derivative in jth direction -> subtract 1 from jth term in permutation
+            dperm = collect(perm) # convert to an array so we can modify an element
+            if dperm[j] == 0
+                # already constant in jth direction, derivative is zero
+                continue
+            end
+            dperm[j] -= 1
+            dperm = Tuple(dperm) # back to tuple to find in `perms`
 
-            Cη[:, 1] += C[:, 3]
+            # find index of this permutation
+            k = findall(x->x==1, indexin(perms, [dperm]))[1]
 
-            Cζ[:, 1] += C[:, 4]
-        elseif order == 2
-            Cξ[:, 1] +=   C[:, 2]
-            Cξ[:, 2] += 2*C[:, 5]
-            Cξ[:, 3] +=   C[:, 6]
-            Cξ[:, 4] +=   C[:, 7]
-
-            Cη[:, 1] +=   C[:, 3]
-            Cη[:, 2] +=   C[:, 6]
-            Cη[:, 3] += 2*C[:, 8]
-            Cη[:, 4] +=   C[:, 9]
-
-            Cζ[:, 1] +=   C[:, 4]
-            Cζ[:, 2] +=   C[:, 7]
-            Cζ[:, 3] += 2*C[:, 9]
-            Cζ[:, 4] += 2*C[:, 10]
+            # add perm[j] times original coefficient to ∂C
+            ∂C[j, k, :] += perm[j]*C[i, :]
         end
     end
 
-    return ShapeFunctions(order, dim, n, C, Cξ, Cη, Cζ)
+    return ShapeFunctions(order, dim, n, C, ∂C)
 end
 
 """
@@ -121,13 +87,13 @@ function reference_element_nodes(order, dim)
                      1.0]
         elseif order == 2
             return [-1.0
-                     0.0
-                     1.0]
+                     1.0
+                     0.0]
         elseif order == 3
             return [-1.0
+                     1.0
                     -1/3
-                     1/3
-                     1.0]
+                     1/3]
         else
             error("Unsupported reference element order `$order` for dimension `$dim`.")
         end
@@ -194,9 +160,9 @@ Compute all permutations (i₁, i₂, ..., i_d) such that i₁ + i₂ + ... + i_
 (Currently hard-coded for d = 1, 2, 3 only).
 """
 function iter_permutations(n, d)
-    perms = []
+    perms = Vector{Tuple}([])
     if d == 1
-        push!(perms, (n))
+        push!(perms, Tuple(n))
     elseif d == 2
         for i=0:n
             push!(perms, (n - i, i))
@@ -212,28 +178,18 @@ function iter_permutations(n, d)
     return perms
 end
 
-struct ShapeFunctionIntegrals{M<:AbstractMatrix}
-    φφ::M
+struct ShapeFunctionIntegrals{A2<:AbstractMatrix, A3<:AbstractArray, A4<:AbstractArray}
+    # mass matrix of form ∫ φᵢ*φⱼ
+    M::A2
 
-    φξφ::M
-    φηφ::M
-    φζφ::M
+    # C matrices of form ∫ ∂ξ₁(φᵢ)*φⱼ
+    C::A3
 
-    φφξ::M
-    φφη::M
-    φφζ::M
+    # Cᵀ matrices of form ∫ φᵢ*∂ξ₁(φⱼ)
+    CT::A3
 
-    φξφξ::M
-    φξφη::M
-    φξφζ::M
-
-    φηφξ::M
-    φηφη::M
-    φηφζ::M
-
-    φζφξ::M
-    φζφη::M
-    φζφζ::M
+    # stiffness matrices of form ∫ ∂ξ₁(φᵢ)*∂ξ₂(φⱼ)
+    K::A4
 end
 
 """
@@ -247,30 +203,30 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     # quadrature weights and points
     w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order), 2)
 
+    # for now
+    dim = 2
+
     # mass
-    φφ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    M = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
 
     # C
-    φξφ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φζφ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φφξ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φφη = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φφζ = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    C = zeros(dim, sf_test.n, sf_trial.n)
+    for k=1:dim
+        C[k, :, :] = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, k, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    end
+
+    CT = zeros(dim, sf_test.n, sf_trial.n)
+    for k=1:dim
+        CT[k, :, :] = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, k, ξ), w, ξ, sf_test.n, sf_trial.n)
+    end
     
-
     # stiffness
-    φξφξ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξφη = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φξφζ = compute_integral_matrix((ξ, i, j) -> φξ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφξ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφη = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φηφζ = compute_integral_matrix((ξ, i, j) -> φη(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φζφξ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φξ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φζφη = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φη(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
-    φζφζ = compute_integral_matrix((ξ, i, j) -> φζ(sf_trial, j, ξ)*φζ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
+    K = zeros(dim, dim, sf_test.n, sf_trial.n)
+    for k=1:dim, l=1:dim
+        K[k, l, :, :] = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, k, ξ)*∂φ(sf_test, i, l, ξ), w, ξ, sf_test.n, sf_trial.n)
+    end
 
-    return ShapeFunctionIntegrals(φφ, φξφ, φηφ, φζφ, φφξ, φφη, φφζ, φξφξ, φξφη, φξφζ, φηφξ, φηφη, φηφζ, φζφξ, φζφη, φζφζ)
+    return ShapeFunctionIntegrals(M, C, CT, K)
 end
 
 """
@@ -300,30 +256,12 @@ function φ(sf::ShapeFunctions, i, ξ)
 end
 
 """
-    φξ(sf, i, ξ)
+    ∂φ(sf, i, j, ξ)
 
-Evaluate ξ-derivative of shape function `i` at the point `ξ`.
+Evaluate `j`-derivative of shape function `i` at the point `ξ`.
 """
-function φξ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cξ[:, i], ξ, sf.order, sf.dim)
-end
-
-"""
-    φη(sf, i, ξ)
-
-Evaluate η-derivative of shape function `i` at the point `ξ`.
-"""
-function φη(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cη[:, i], ξ, sf.order, sf.dim)
-end
-
-"""
-    φζ(sf, i, ξ)
-
-Evaluate ζ-derivative of shape function `i` at the point `ξ`.
-"""
-function φζ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.Cζ[:, i], ξ, sf.order, sf.dim)
+function ∂φ(sf::ShapeFunctions, i, j, ξ)
+    return eval_poly(sf.∂C[j, :, i], ξ, sf.order, sf.dim)
 end
 
 """
@@ -347,6 +285,9 @@ end
 struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
     # order of shape functions on this grid
     order::IN
+
+    # dimension of space
+    dim::IN
 
     # shape functions on this grid
     s::ShapeFunctions
@@ -379,9 +320,6 @@ end
 Construct a FE grid of order `order` by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
 """
 function FEGrid(file_name, order::IN) where IN <: Integer
-    # setup shape functions
-    s = ShapeFunctions(order)
-
     # read grid data
     file = h5open(file_name, "r")
     p = read(file, "p")
@@ -412,7 +350,14 @@ function FEGrid(file_name, order::IN) where IN <: Integer
     nt = size(t, 1)
     nn = size(t, 2)
     ne = size(e, 1)
-    return FEGrid(order, s, p, np, t, nt, nn, e, ne)
+
+    # determine dimension
+    dim = size(p, 2)
+
+    # setup shape functions
+    s = ShapeFunctions(order, dim)
+
+    return FEGrid(order, dim, s, p, np, t, nt, nn, e, ne)
 end
 
 """
@@ -542,16 +487,12 @@ function boundary_nodes(t)
     return unique(edges[boundary_indices,:][:])
 end
 
-struct Jacobians{V<:AbstractVector}
-    J::V
-    xξ::V
-    xη::V
-    yξ::V
-    yη::V
-    ξx::V
-    ξy::V
-    ηx::V
-    ηy::V
+struct Jacobians{V<:AbstractVector, A<:AbstractArray}
+    # determinant of the Jacobian of each element
+    detJ::V
+
+    # Jacobian of each element
+    J::A
 end
 
 """
@@ -583,12 +524,28 @@ function Jacobians(g::FEGrid)
     xη = x[g.t[:, 3]] - x[g.t[:, 1]]
     yξ = y[g.t[:, 2]] - y[g.t[:, 1]]
     yη = y[g.t[:, 3]] - y[g.t[:, 1]]
-    J = @. xξ*yη - xη*yξ
-    ξx = (y[g.t[:, 3]] - y[g.t[:, 1]])./J
-    ξy = (x[g.t[:, 1]] - x[g.t[:, 3]])./J
-    ηx = (y[g.t[:, 1]] - y[g.t[:, 2]])./J
-    ηy = (x[g.t[:, 2]] - x[g.t[:, 1]])./J
-    return Jacobians(J, xξ, xη, yξ, yη, ξx, ξy, ηx, ηy)
+    detJ = @. xξ*yη - xη*yξ
+    J = zeros(g.nt, g.dim, g.dim)
+    # for i=1:g.dim, j=1:g.dim
+    #     # i = x, y, z
+    #     # j = ξ, η, ζ
+    #     x = g.p[:, mod1(i+1, g.dim)]
+    #     ks = [4 - j, 1]
+    #     k₁ = ks[i]
+    #     k₂ = ks[mod1(i+1, 2)]
+    #     J[:, i, j] = (x[g.t[:, k₁]] - x[g.t[:, k₂]])./detJ
+    # end
+    ξx = (y[g.t[:, 3]] - y[g.t[:, 1]])#./detJ
+    ξy = (x[g.t[:, 1]] - x[g.t[:, 3]])#./detJ
+    ηx = (y[g.t[:, 1]] - y[g.t[:, 2]])#./detJ
+    ηy = (x[g.t[:, 2]] - x[g.t[:, 1]])#./detJ
+    J[:, 1, 1] = ξx
+    J[:, 2, 1] = ξy
+    J[:, 1, 2] = ηx
+    J[:, 2, 2] = ηy
+    println(det(J[1, :, :]))
+    println(detJ[1])
+    return Jacobians(detJ, J)
 end
 function Jacobians(gfile::String)
     # get order 1 FE grid
