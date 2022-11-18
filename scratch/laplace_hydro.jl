@@ -26,16 +26,14 @@ function solve_laplace_hydro(g, s, J, δ, f, u₀)
     b = zeros(g.np)
     for k=1:g.nt        
         # calculate contribution to K from element k
-        Kᵏ = δ^2*abs(J.J[k])*(s.φξφξ*J.ξy[k]^2 + 
-                              s.φξφη*J.ξy[k]*J.ηy[k] +
-                              s.φηφξ*J.ηy[k]*J.ξy[k] +
-                              s.φηφη*J.ηy[k]^2)
+        JJ = J.Js[k, :, 2]*J.Js[k, :, 2]'
+        Kᵏ = δ^2*J.dets[k]*dropdims(sum(s.K.*JJ, dims=(1, 2)), dims=(1, 2))
 
         # calculate contribution to M from element k
-        Mᵏ = abs(J.J[k])*s.φφ
+        Mᵏ = J.dets[k]*s.M
 
         # calculate contribution to b from element k
-        bᵏ = abs(J.J[k])*s.φφ*f[g.t[k, :]]
+        bᵏ = Mᵏ*f[g.t[k, :]]
 
         # add to global system
         for i=1:g.nn
@@ -51,9 +49,7 @@ function solve_laplace_hydro(g, s, J, δ, f, u₀)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, g.np)
 
     # dirichlet along edges
-    A[g.e, :] .= 0
-    A[diagind(A)[g.e]] .= 1
-    b[g.e] = u₀
+    A, b = add_dirichlet(A, b, g.e, u₀)
 
     return A\b
 end
@@ -69,18 +65,16 @@ function laplace_hydro_res(nref, order; plot=false)
     geo = "jc"
 
     # get grid
-    g = Grid("../meshes/$geo/mesh$nref.h5", order)
+    g = FEGrid("../meshes/$geo/mesh$nref.h5", order)
+    g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
     x = g.p[:, 1]
     y = g.p[:, 2]
 
-    # get shape functions
-    sf = ShapeFunctions(order)
-
     # get shape function integrals
-    s = ShapeFunctionIntegrals(sf, sf)
+    s = ShapeFunctionIntegrals(g.s, g.s)
 
     # get Jacobians
-    J = Jacobians(g)
+    J = Jacobians(g1)
 
     # mesh resolution 
     h = 1/sqrt(g.np)
@@ -97,14 +91,18 @@ function laplace_hydro_res(nref, order; plot=false)
     # solve laplace_hydro problem
     u = solve_laplace_hydro(g, s, J, δ, f, u₀)
 
+    u = FEField(order, u, g, g1)
+    ua = FEField(order, ua, g, g1)
+    abs_err = abs(u - ua)
+
     if plot
-        quickplot(g, u, L"u", "images/u.png")
-        quickplot(g, ua, L"u^a", "images/ua.png")
-        quickplot(g, abs.(u - ua), L"|u - u^a|", "images/e.png")
+        quickplot(u, L"u", "images/u.png")
+        quickplot(ua, L"u_a", "images/ua.png")
+        quickplot(abs_err, L"|u - u_a|", "images/e.png")
     end
 
     # error
-    err = L2norm(g, s, J, u - ua)
+    err = L2norm(abs_err, s, J)
     return h, err
 end
 
@@ -124,7 +122,7 @@ function laplace_hydro_convergence(nrefs)
 
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||u - u^a||_{L^2}$")
+    ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
     ax.loglog([h_l[1], h_l[end]], [err_l[1], err_l[1]*(h_l[end]/h_l[1])^2], "k-",  label=L"$h^2$")
     ax.loglog([h_q[1], h_q[end]], [err_q[1], err_q[1]*(h_q[end]/h_q[1])^3], "k--", label=L"$h^3$")
     ax.loglog(h_l, err_l, "o", label="Linear")
@@ -137,5 +135,5 @@ function laplace_hydro_convergence(nrefs)
     plt.close()
 end
 
-laplace_hydro_convergence(0:5)
-# laplace_hydro_res(3, 2; plot=true)
+# laplace_hydro_convergence(0:5)
+laplace_hydro_res(5, 1; plot=true)

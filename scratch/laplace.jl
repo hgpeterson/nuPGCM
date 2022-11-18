@@ -24,7 +24,7 @@ function solve_laplace(u, s, J, f, u₀)
     for k=1:u.g.nt
         # calculate contribution to K from element k
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
-        Kᵏ = J.dets[k]*dropdims(sum(s.K.*JJ, dims=[1, 2]), dims=(1, 2))
+        Kᵏ = J.dets[k]*dropdims(sum(s.K.*JJ, dims=(1, 2)), dims=(1, 2))
 
         # calculate contribution to b from element k
         bᵏ = J.dets[k]*s.M*f[u.g.t[k, :]]
@@ -81,18 +81,18 @@ function laplace_res(nref, order; plot=false)
 
     # initialize FE field
     u = FEField(order, zeros(g.np), g, g1)
+    ua = FEField(order, ua, g, g1)
 
     # solve laplace problem
-    u = solve_laplace(u, s, J, f, ua[g.e])
+    u = solve_laplace(u, s, J, f, ua.values[g.e])
 
     if plot
         quickplot(u, L"u", "images/u.png")
-        err = FEField(order, u.values - ua, g, g1)
-        quickplot(err, "Error", "images/error.png")
+        quickplot(u - ua, "Error", "images/error.png")
     end
 
     # error
-    err = L2norm(g, s, J, u.values - ua)
+    err = L2norm(u - ua, s, J)
     return h, err
 end
 
@@ -102,7 +102,7 @@ end
 function laplace_convergence(nrefs)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||u - u^a||_{L^2}$")
+    ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
     for o=1:3
         println("Order ", o)
         h = zeros(size(nrefs, 1))

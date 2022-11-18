@@ -6,6 +6,7 @@ using Printf
 
 include("utils.jl")
 
+Line2D = pyimport("matplotlib.lines").Line2D
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
@@ -39,18 +40,17 @@ function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
     b = zeros(N)
     for k=1:ux.g.nt
         # contribution from (∇u)⊙(∇v) term 
-        Kᵏ = abs(J.J[k])*(s.uu.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          s.uu.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          s.uu.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          s.uu.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
+        JJ = J.Js[k, :, :]*J.Js[k, :, :]'
+        Kᵏ = J.dets[k]*dropdims(sum(s.uu.K.*JJ, dims=(1, 2)), dims=(1, 2))
 
         # contribution from p*(∇⋅v) term
-        Cxᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξx[k] + s.pu.φφη*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s.pu.φφξ*J.ξy[k] + s.pu.φφη*J.ηy[k])
+        Cxᵏ = J.dets[k]*dropdims(sum(s.pu.CT.*J.Js[k, :, 1], dims=1), dims=1)
+        Czᵏ = J.dets[k]*dropdims(sum(s.pu.CT.*J.Js[k, :, 2], dims=1), dims=1)
 
         # contribution from f⋅v
-        bxᵏ = abs(J.J[k])*s.uu.φφ*fx.values[ux.g.t[k, :]]
-        bzᵏ = abs(J.J[k])*s.uu.φφ*fz.values[ux.g.t[k, :]]
+        Mᵏ = J.dets[k]*s.uu.M
+        bxᵏ = Mᵏ*fx.values[ux.g.t[k, :]]
+        bzᵏ = Mᵏ*fz.values[ux.g.t[k, :]]
 
         # (∇u)⊙(∇v) term
         for i=1:ux.g.nn, j=1:ux.g.nn
@@ -87,7 +87,7 @@ function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
     A, b = add_dirichlet(A, b, uzmap[uz.g.e], uz₀)
 
     # set p to zero somewhere
-    A, b = apply_constraint(A, b, pmap[1], pmap[1], 0)
+    A, b = add_dirichlet(A, b, pmap[1], 0)
 
     # solve
     sol = A\b
@@ -100,12 +100,9 @@ function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
 end
 
 """
-    h, err = stokes_res(nref)
+    h, err = stokes_res(nref, order)
 """
-function stokes_res(nref; plot=false)
-    # order
-    order = 3
-
+function stokes_res(nref, order; plot=false)
     # geometry type
     geo = "circle"
 
@@ -121,10 +118,7 @@ function stokes_res(nref; plot=false)
     s = (uu = uu,
          pu = pu,
          pp = pp)
-
-    # mesh resolution 
-    h = 1/sqrt(g1.np)
-
+         
     # exact solution
     x = gu.p[:, 1] 
     z = gu.p[:, 2] 
@@ -158,40 +152,47 @@ function stokes_res(nref; plot=false)
     end
 
     # error
-    err_u₁ = H1norm(gu, s.uu, J, ux.values - uxa)
-    err_u₂ = H1norm(gu, s.uu, J, uz.values - uza)
-    err_p = L2norm(gp, s.pp, J, p.values - pa)
-    err= err_u₁ + err_u₂ + err_p
-    return h, err
+    hux = 1/sqrt(gu.np)
+    huz = 1/sqrt(gu.np)
+    hp = 1/sqrt(gp.np)
+    uxa  = FEField(gu.order, uxa, gu, g1)
+    uza  = FEField(gu.order, uza, gu, g1)
+    pa   = FEField(gp.order, pa,  gp, g1)
+    err_ux = L2norm(ux - uxa, s.uu, J)
+    err_uz = L2norm(uz - uza, s.uu, J)
+    err_p = L2norm(p - pa, s.pp, J)
+    return hux, huz, hp, err_ux, err_uz, err_p
 end
 
-"""
-    stokes_convergence(nrefs)
-"""
-function stokes_convergence(nrefs)
-    n = size(nrefs, 1)
-    h = zeros(n)
-    err = zeros(n)
-    for i=1:n
-        println(nrefs[i])
-        h[i], err[i] = stokes_res(nrefs[i])
-    end
-
+function stokes_conv(nrefs)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||u - u^a||_{H^1} + ||p - p^a||_{L^2}$")
-    # ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^3], "k-", label=L"$h^3$")
-    ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^4], "k-", label=L"$h^4$")
-    ax.loglog(h, err, "o", label="Data")
-    ax.legend()
-    ax.set_xlim(0.5*h[end], 2*h[1])
-    ax.set_ylim(0.5*err[end], 2*err[1])
+    ax.set_ylabel(L"$L_2$ Error") 
+    for i in eachindex(nrefs)
+        println(nrefs[i])
+        hux, huz, hp, err_ux, err_uz, err_p = stokes_res(nrefs[i], 2)
+        ax.loglog(hux, err_ux, c="tab:blue", "o")
+        ax.loglog(huz, err_uz, c="tab:orange", "o")
+        ax.loglog(hp, err_p, c="tab:green", "o")
+    end
+    # hmin = 2e-3
+    # hmax = 1e-1
+    # err_min = 2e-7
+    # err_max = 5e-2
+    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^3], "k-")
+    legend_elements = [
+        Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"p"),
+        Line2D([0], [0], color="k", label=L"O(h^3)")
+    ]
+    ax.legend(handles=legend_elements)
+    # ax.set_xlim(0.5*hmin, 2*hmax)
+    # ax.set_ylim(0.5*err_min, 2*err_max)
     savefig("images/stokes.png")
     println("images/stokes.png")
     plt.close()
-
-    return h, err
 end
 
-# stokes_res(0; plot=true)
-h, err = stokes_convergence(0:3)
+stokes_res(3, 2; plot=true)
+# h, err = stokes_conv(0:3)
