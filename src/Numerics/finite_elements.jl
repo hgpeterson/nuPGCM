@@ -488,63 +488,48 @@ function boundary_nodes(t)
 end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
-    # determinant of the Jacobian of each element
+    # |∂x/∂ξ| for each element
     detJ::V
 
-    # Jacobian of each element
+    # ∂ξ/∂x for each element
     J::A
 end
 
 """
     J = Jacobians(g)
 
-Compute Jacobian terms for transformations from standard triangle [0 0; 1 0; 0 1] to 
-triangles on the grid. Given a triangle on the grid defined by the nodes [x1 y1; x2 y2; x3 y3], 
-the transformation ξ ↦ x is defined by
-    x = u1 + u2*ξ + u3*η
+Compute Jacobian terms for transformations from reference element to element on grid.
+Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation ξ ↦ x is 
+    x = x₁ + A*ξ
 where
-    u1 = [x1 y1]
-    u2 = [x2-x1 y2-y1]
-    u3 = [x3-x1 y3-y1].
-The insverse transform x ↦ ξ is
-    ξ = v1 + v2*x + v3*y
-where
-    v1 = 1/J*[y1*x3-x1*y3, x1*y2-y1*x2)
-    v2 = 1/J*[y3-y1,       y1-y2)
-    v3 = 1/J*[x1-x3,       x2-x1)
-and J = ∂(x, y)/∂(ξ, η) is the jacobian.
+    A in 1D = [x₂ - x₁],
+    A in 2D = [x₂ - x₁  x₃ - x₁],
+    A in 3D = [x₂ - x₁  x₃ - x₁  x₄ - x₁].
+In other words, A = ∂x/∂ξ is the Jacobian. To transform from global coordinates to 
+the reference element, we then need the inverse of A, J = ∂ξ/∂x:
+    J in 1D = [∂ξ/∂x],
+    J in 2D = [∂ξ/∂x  ∂ξ/∂y;  ∂η/∂x  ∂η/∂y],
+    J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z;  ∂η/∂x  ∂η/∂y  ∂η/∂z;  ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
 """
 function Jacobians(g::FEGrid)
-    # unpack coords
-    x = g.p[:, 1]
-    y = g.p[:, 2]
-
-    # compute Jacobian terms for each triangle 
-    xξ = x[g.t[:, 2]] - x[g.t[:, 1]]
-    xη = x[g.t[:, 3]] - x[g.t[:, 1]]
-    yξ = y[g.t[:, 2]] - y[g.t[:, 1]]
-    yη = y[g.t[:, 3]] - y[g.t[:, 1]]
-    detJ = @. xξ*yη - xη*yξ
+    # pre-allocate
+    detJ = zeros(g.nt)
     J = zeros(g.nt, g.dim, g.dim)
-    # for i=1:g.dim, j=1:g.dim
-    #     # i = x, y, z
-    #     # j = ξ, η, ζ
-    #     x = g.p[:, mod1(i+1, g.dim)]
-    #     ks = [4 - j, 1]
-    #     k₁ = ks[i]
-    #     k₂ = ks[mod1(i+1, 2)]
-    #     J[:, i, j] = (x[g.t[:, k₁]] - x[g.t[:, k₂]])./detJ
-    # end
-    ξx = (y[g.t[:, 3]] - y[g.t[:, 1]])#./detJ
-    ξy = (x[g.t[:, 1]] - x[g.t[:, 3]])#./detJ
-    ηx = (y[g.t[:, 1]] - y[g.t[:, 2]])#./detJ
-    ηy = (x[g.t[:, 2]] - x[g.t[:, 1]])#./detJ
-    J[:, 1, 1] = ξx
-    J[:, 2, 1] = ξy
-    J[:, 1, 2] = ηx
-    J[:, 2, 2] = ηy
-    println(det(J[1, :, :]))
-    println(detJ[1])
+
+    # loop through elements in g
+    for k=1:g.nt
+        # build A
+        A = zeros(g.dim, g.dim)
+        for i=1:g.dim
+            A[:, i] = g.p[g.t[k, i+1], :] - g.p[g.t[k, 1], :]
+        end
+
+        # compute determinant
+        detJ[k] = det(A)
+
+        # invert for J
+        J[k, :, :] = inv(A)
+    end
     return Jacobians(detJ, J)
 end
 function Jacobians(gfile::String)
