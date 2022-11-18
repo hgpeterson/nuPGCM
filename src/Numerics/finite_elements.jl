@@ -405,7 +405,7 @@ function add_nodes(p, t, e, order)
         # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
         # the 2/3rd point for another... this works but it is slow
         tnew = zeros(Int64, size(t, 1), n)
-        ps = standard_element_nodes(order)
+        ps = reference_element_nodes(order, 2)
         tnew[:, 1:3] = t
         @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
             for i=4:n-1
@@ -489,10 +489,10 @@ end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     # |∂x/∂ξ| for each element
-    detJ::V
+    dets::V
 
     # ∂ξ/∂x for each element
-    J::A
+    Js::A
 end
 
 """
@@ -513,8 +513,8 @@ the reference element, we then need the inverse of A, J = ∂ξ/∂x:
 """
 function Jacobians(g::FEGrid)
     # pre-allocate
-    detJ = zeros(g.nt)
-    J = zeros(g.nt, g.dim, g.dim)
+    dets = zeros(g.nt)
+    Js = zeros(g.nt, g.dim, g.dim)
 
     # loop through elements in g
     for k=1:g.nt
@@ -525,12 +525,12 @@ function Jacobians(g::FEGrid)
         end
 
         # compute determinant
-        detJ[k] = det(A)
+        dets[k] = abs(det(A))
 
         # invert for J
-        J[k, :, :] = inv(A)
+        Js[k, :, :] = inv(A)
     end
-    return Jacobians(detJ, J)
+    return Jacobians(dets, Js)
 end
 function Jacobians(gfile::String)
     # get order 1 FE grid
@@ -576,7 +576,7 @@ function L2norm(g::FEGrid, s::ShapeFunctionIntegrals, J::Jacobians, u)
     for k=1:g.nt
         for i=1:g.nn
             for j=1:g.nn
-                L2 += u[g.t[k, j]]*u[g.t[k, i]]*s.φφ[i, j]*abs(J.J[k])
+                L2 += u[g.t[k, j]]*u[g.t[k, i]]*s.M[i, j]*abs(J.dets[k])
             end
         end
     end

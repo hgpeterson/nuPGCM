@@ -23,13 +23,11 @@ function solve_laplace(u, s, J, f, u₀)
     b = zeros(u.g.np)
     for k=1:u.g.nt
         # calculate contribution to K from element k
-        Kᵏ = abs(J.J[k])*(s.φξφξ*(J.ξx[k]^2       + J.ξy[k]^2) + 
-                          s.φξφη*(J.ξx[k]*J.ηx[k] + J.ξy[k]*J.ηy[k]) +
-                          s.φηφξ*(J.ηx[k]*J.ξx[k] + J.ηy[k]*J.ξy[k]) +
-                          s.φηφη*(J.ηx[k]^2       + J.ηy[k]^2))
+        JJ = J.Js[k, :, :]*J.Js[k, :, :]'
+        Kᵏ = J.dets[k]*dropdims(sum(s.K.*JJ, dims=[1, 2]), dims=(1, 2))
 
         # calculate contribution to b from element k
-        bᵏ = abs(J.J[k])*s.φφ*f[u.g.t[k, :]]
+        bᵏ = J.dets[k]*s.M*f[u.g.t[k, :]]
 
         # add to global system
         for i=1:u.g.nn, j=1:u.g.nn
@@ -89,6 +87,8 @@ function laplace_res(nref, order; plot=false)
 
     if plot
         quickplot(u, L"u", "images/u.png")
+        err = FEField(order, u.values - ua, g, g1)
+        quickplot(err, "Error", "images/error.png")
     end
 
     # error
@@ -122,5 +122,5 @@ function laplace_convergence(nrefs)
     plt.close()
 end
 
-# laplace_res(0, 3; plot=true)
-laplace_convergence(0:3)
+laplace_res(5, 1; plot=true)
+# laplace_convergence(0:3)
