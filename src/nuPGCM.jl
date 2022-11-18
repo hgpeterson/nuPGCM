@@ -34,11 +34,9 @@ export
     Jacobians,
     FEField,
     L2norm,
-    H1norm,
-    get_t_dict,
-    transform_from_std_tri,
-    transform_to_std_tri,
-    fem_evaluate,
+    transform_from_ref_el,
+    transform_to_ref_el,
+    evaluate,
 
     # saving models
     save_setup,
@@ -153,7 +151,10 @@ end
 include("Numerics/interpolation.jl")
 include("Numerics/derivatives.jl")
 include("Numerics/integrals.jl")
-include("Numerics/finite_elements.jl")
+include("Numerics/shape_functions.jl")
+include("Numerics/reference_elements.jl")
+include("Numerics/fe_grids.jl")
+include("Numerics/fe_fields.jl")
 
 include("OneDimensionalModel/setup.jl")
 include("OneDimensionalModel/logging.jl")
