@@ -1,6 +1,7 @@
 ### utility function for some of the stokes/laplace/pg tests
 
 import nuPGCM: tplot
+using WriteVTK
 
 function get_sides(g::FEGrid)
     # bottom
@@ -112,3 +113,64 @@ end
 function add_dirichlet(A, b, rows::AbstractVector, u₀::Real)
     return add_dirichlet(A, b, rows, u₀*ones(size(rows)))
 end
+
+function write_vtk(fname, u::FEField, uname)
+    # define points and cells for vtk
+    points = u.g.p'
+    cells = Vector{MeshCell}([])
+    for i in axes(u.g.t, 1)
+        if u.g.dim == 2
+            push!(cells, MeshCell(VTKCellTypes.VTK_TRIANGLE, u.g.t[i, :]))
+        elseif u.g.dim == 3
+            push!(cells, MeshCell(VTKCellTypes.VTK_TETRA, u.g.t[i, :]))
+        end
+    end
+
+    # save as vtu file
+    vtk_grid(fname, points, cells) do vtk
+        vtk[uname] = u.values
+    end
+end
+function write_vtk(fname, g::FEGrid)
+    # define points and cells for vtk
+    points = Array(g.p')
+    cells = Vector{MeshCell}([])
+    for i in axes(g.t, 1)
+        if g.dim == 2
+            push!(cells, MeshCell(VTKCellTypes.VTK_TRIANGLE, g.t[i, :]))
+        elseif g.dim == 3
+            push!(cells, MeshCell(VTKCellTypes.VTK_TETRA, g.t[i, :]))
+        end
+    end
+
+    # save as vtu file
+    vtk_grid(fname, points, cells) do vtk
+        # boundary = zeros(g.np)
+        # boundary[g.e] .= 1
+        # vtk["boundary"] = boundary
+        # interior = ones(g.np)
+        # interior[g.e] .= 0
+        # vtk["interior"] = interior
+    end
+end
+
+# function count_ni(g)
+#     ni = 0
+#     nb = 0
+#     for i in axes(g.t, 1)
+#         bdy = false
+#         for j=1:4
+#             if g.t[i, j] in g.e
+#                 bdy = true
+#                 nb += 1
+#                 break
+#             end
+#         end
+#         if !bdy
+#             ni += 1
+#         end
+#     end
+#     println(ni)
+#     println(nb)
+#     println(g.nt)
+# end

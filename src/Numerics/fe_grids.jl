@@ -41,7 +41,7 @@ function FEGrid(file_name, order::IN) where IN <: Integer
     p = read(file, "p")
     t = read(file, "t")
     e = read(file, "e")
-    e = e[:, 1]
+    # e = e[:, 1]
     t = convert(Matrix{IN}, t)
     e = convert(Vector{IN}, e)
     if order == 0
