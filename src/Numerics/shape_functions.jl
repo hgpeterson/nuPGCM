@@ -115,16 +115,16 @@ end
 """
     s = ShapeFunctionIntegrals(sf_trial, sf_test)
 
-Compute and store integrals over the standard triangle [0 0; 1 0; 0 1] of the form
+Compute and store integrals of the form 
     ∫ ∂ₙφⱼ ∂ₘφᵢ dξ
-where φᵢ and φⱼ are shape functions from the trial and test space, respectively.
+over reference element. Here φᵢ and φⱼ are shape functions from the test and trial space, respectively.
 """
 function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunctions) 
-    # quadrature weights and points
-    w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order), 2)
+    # dimension of space 
+    dim = sf_trial.dim
 
-    # for now
-    dim = 2
+    # quadrature weights and points
+    w, ξ = quad_weights_points(max(1, sf_trial.order + sf_test.order), dim)
 
     # mass
     M = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
@@ -152,7 +152,7 @@ end
 """
     M = compute_integral_matrix(f, w, ξ, n)
 
-Compute integrals over the standard triangle of the form ∫ f(ξ, i, j) dξ 
+Compute integrals over reference element of the form ∫ f(ξ, i, j) dξ 
 for i = 1, .., n and j = 1, ..., m. Quadrature rule defined by weights `w` and integration 
 points `ξ`.
 """
@@ -160,7 +160,7 @@ function compute_integral_matrix(f, w, ξ, n, m)
     M = zeros(n, m)
     for i=1:n
         for j=1:m
-            M[i, j] = std_tri_quad(ξ -> f(ξ, i, j), w, ξ)
+            M[i, j] = ref_el_quad(ξ -> f(ξ, i, j), w, ξ)
         end
     end
     return M

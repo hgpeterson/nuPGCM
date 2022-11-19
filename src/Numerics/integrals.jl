@@ -22,14 +22,23 @@ function cumtrapz(f, x)
 end
 
 """
-    integral = std_tri_quad(f, w, ξ)
+    integral = ref_el_quad(f, w, ξ)
 
-Compute ∫ f(ξ) dξ over a standard triangle quadrature rule defined by weights `w`
+Compute ∫ f(ξ) dξ over the reference element. Quadrature rule defined by weights `w`
 and integration points `ξ`.
 """
-function std_tri_quad(f, w, ξ)
-    # sum contributions and multiply by area of standard triangle (1/2)
-    return 1/2*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
+function ref_el_quad(f, w, ξ)
+    # dimension of space
+    dim = size(ξ, 2)
+    
+    # sum contributions and multiply by volume of reference element 
+    if dim == 1 || dim == 2
+        return 1/2*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
+    elseif dim == 3
+        return 1/6*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
+    else
+        error("Unsupported dimension `$dim`.")
+    end
 end
 
 """
@@ -37,8 +46,8 @@ end
 
 Integration weights `w` and points `ξ` for quadrature rules on 
     `dim` = 1: the real line segment [-1, 1],
-    `dim` = 2: the standard triangle [0 0; 1 0; 0 1], or 
-    `dim` = 3: the standard tetrahedron [0 0 0; 1 0 0; 0 1 0; 0 0 1].
+    `dim` = 2: the reference triangle [0 0; 1 0; 0 1], or 
+    `dim` = 3: the reference tetrahedron [0 0 0; 1 0 0; 0 1 0; 0 0 1].
 The integration should be exact for polynomials up to degree `degree`.
 """
 function quad_weights_points(degree, dim)
