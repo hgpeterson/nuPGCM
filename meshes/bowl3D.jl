@@ -59,37 +59,28 @@ function load_msh(ifile)
     np = gmsh.model.mesh.get_max_node_tag()
     p = zeros(np, dim)
     for i=1:np
-        p[i, :], param_coord, dim, tag = gmsh.model.mesh.getNode(i)
+        coord, parametricCoord, dim, tag = gmsh.model.mesh.getNode(i)
+        p[i, :] = coord
     end
 
     # get tetrahedra
-    for i=0:3
-        el_types, el_tags, el_node_tags = gmsh.model.mesh.getElements(i)
-        println(el_types)
-    end
-    el_types, el_tags, el_node_tags = gmsh.model.mesh.getElements(3)
-    tri_nodes = el_node_tags[1]
-    nt = Int64(size(tri_nodes, 1)/(dim + 1))
-    t = Array(Int64.(reshape(tri_nodes, (dim+1, nt)))')
+    elementTypes, elementTags, nodeTags = gmsh.model.mesh.getElements(3)
+    nodes = nodeTags[1]
+    nt = Int64(size(nodes, 1)/(dim + 1))
+    t = Array(Int64.(reshape(nodes, (dim+1, nt)))')
 
     # edge nodes
-    e, e_coords = gmsh.model.mesh.getNodesByElementType(2)
-    ebot, ebot_coords = gmsh.model.mesh.getNodesForPhysicalGroup(2, 1)
-    etop, etop_coords = gmsh.model.mesh.getNodesForPhysicalGroup(2, 2)
-    e = Int64.(e)
-    ebot = Int64.(ebot)
-    etop = Int64.(etop)
-    unique!(e)
-    unique!(ebot)
-    unique!(etop)
+    nodeTags, coord, parametricCoord = gmsh.model.mesh.getNodesByElementType(2)
+    e = unique!(Int64.(nodeTags))
+    println(gmsh.model.getPhysicalGroups(0))
 
     gmsh.finalize()
 
-    return p, t, e, ebot, etop
+    return p, t, e
 end
 
 function msh2h5(ifile, ofile)
-    p, t, e, ebot, etop = load_msh(ifile)
+    p, t, e = load_msh(ifile)
     file = h5open(ofile, "w")
     write(file, "p", p)
     write(file, "t", t)
@@ -100,7 +91,7 @@ end
 
 function msh2vtu(ifile, ofile)
     # load p, t, e
-    p, t, e, ebot, etop = load_msh(ifile)
+    p, t, e = load_msh(ifile)
     np = size(p, 1)
 
     # define points and cells for vtk
@@ -112,12 +103,6 @@ function msh2vtu(ifile, ofile)
 
     # save as vtu file
     vtk_grid(ofile, points, cells) do vtk
-        bot = zeros(np)
-        bot[ebot] .= 1
-        vtk["bot"] = bot
-        top = zeros(np)
-        top[etop] .= 1
-        vtk["top"] = top
         boundary = zeros(np)
         boundary[e] .= 1
         vtk["boundary"] = boundary
@@ -130,9 +115,9 @@ end
 #     msh2h5("mesh.msh", "bowl3D/mesh$(i-1).h5")
 # end
 
-generate_bowl_mesh(0.16)
+# generate_bowl_mesh(0.16)
 
-# p, t, e, ebot, etop = load_msh("mesh.msh")
+# p, t, e = load_msh("mesh.msh")
 
 # msh2h5("mesh.msh", "mesh.h5")
 

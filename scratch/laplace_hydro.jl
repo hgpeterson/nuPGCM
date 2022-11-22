@@ -26,8 +26,8 @@ function solve_laplace_hydro(g, s, J, δ, f, u₀)
     b = zeros(g.np)
     for k=1:g.nt        
         # calculate contribution to K from element k
-        JJ = J.Js[k, :, 2]*J.Js[k, :, 2]'
-        Kᵏ = δ^2*J.dets[k]*dropdims(sum(s.K.*JJ, dims=(1, 2)), dims=(1, 2))
+        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        Kᵏ = δ^2*J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
 
         # calculate contribution to M from element k
         Mᵏ = J.dets[k]*s.M
@@ -54,21 +54,18 @@ function solve_laplace_hydro(g, s, J, δ, f, u₀)
     return A\b
 end
 
-"""
-    h, err = laplace_hydro_res(nref, order)
-"""
-function laplace_hydro_res(nref, order; plot=false)
+function laplace_hydro_res(; nref, order, dim, plot=false)
     # parameter
-    δ = 0.05
-
-    # geometry type
-    geo = "jc"
+    δ = 0.2
 
     # get grid
-    g = FEGrid("../meshes/$geo/mesh$nref.h5", order)
-    g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
-    x = g.p[:, 1]
-    y = g.p[:, 2]
+    if dim == 2
+        gfile = "../meshes/gmsh/mesh$nref.h5"
+    elseif dim == 3
+        gfile = "../meshes/bowl3D/mesh$nref.h5"
+    end
+    g = FEGrid(gfile, order)
+    g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -77,13 +74,21 @@ function laplace_hydro_res(nref, order; plot=false)
     J = Jacobians(g1)
 
     # mesh resolution 
-    h = 1/sqrt(g.np)
+    h = 1/g.np^(1/dim)
 
     # analytical solution
-    ua = @. 100*sin(x)*(y + 0.25)^2
-
-    # forcing 
-    f = @. 100*sin(x)*(y + 0.25)^2 - 200*δ^2*sin(x)
+    if dim == 2
+        x = g.p[:, 1]
+        y = g.p[:, 2]
+        ua = @. 100*sin(x)*(y + 0.25)^2
+        f = @. -200*δ^2*sin(x) + ua
+    elseif dim == 3
+        x = g.p[:, 1]
+        y = g.p[:, 2]
+        z = g.p[:, 3]
+        ua = @. 100*sin(x)*cos(y)*(z + 0.25)^2
+        f = @. -200*δ^2*sin(x)*cos(y) + ua
+    end
 
     # dirichlet boundary
     u₀ = ua[g.e]
@@ -93,47 +98,40 @@ function laplace_hydro_res(nref, order; plot=false)
 
     u = FEField(order, u, g, g1)
     ua = FEField(order, ua, g, g1)
-    abs_err = abs(u - ua)
 
     if plot
-        quickplot(u, L"u", "images/u.png")
-        quickplot(ua, L"u_a", "images/ua.png")
-        quickplot(abs_err, L"|u - u_a|", "images/e.png")
+        if dim == 2
+            quickplot(u, L"u", "images/u.png")
+        elseif dim == 3
+            write_vtk(g1, "../output/laplace_hydro", ["u"=>u, "error"=>abs(u - ua)])
+        end
     end
 
     # error
-    err = L2norm(abs_err, s, J)
+    err = L2norm(u - ua, s, J)
     return h, err
 end
 
-"""
-    laplace_hydro_convergence(nrefs)
-"""
-function laplace_hydro_convergence(nrefs)
-    h_l = zeros(size(nrefs, 1))
-    h_q = zeros(size(nrefs, 1))
-    err_l = zeros(size(nrefs, 1))
-    err_q = zeros(size(nrefs, 1))
-    for i in eachindex(nrefs)
-        println(nrefs[i])
-        h_l[i], err_l[i] = laplace_hydro_res(nrefs[i], 1)
-        h_q[i], err_q[i] = laplace_hydro_res(nrefs[i], 2)
-    end
-
+function laplace_hydro_conv(; nrefs, dim)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
-    ax.loglog([h_l[1], h_l[end]], [err_l[1], err_l[1]*(h_l[end]/h_l[1])^2], "k-",  label=L"$h^2$")
-    ax.loglog([h_q[1], h_q[end]], [err_q[1], err_q[1]*(h_q[end]/h_q[1])^3], "k--", label=L"$h^3$")
-    ax.loglog(h_l, err_l, "o", label="Linear")
-    ax.loglog(h_q, err_q, "o", label="Quadratic")
-    ax.legend(ncol=2)
-    ax.set_xlim(0.5*h_q[end], 2*h_l[1])
-    ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    for o=1:1
+        println("Order ", o)
+        h = zeros(size(nrefs, 1))
+        err = zeros(size(nrefs, 1))
+        for i in eachindex(nrefs)
+            println("\tRefinement ", nrefs[i])
+            h[i], err[i] = laplace_hydro_res(nref=nrefs[i], order=o, dim=dim)
+        end
+        ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
+        ax.loglog(h, err, "o", label="Order $o")
+    end
+    ax.legend(ncol=3, loc=(0.0, 1.05))
     savefig("images/laplace_hydro.png")
     println("images/laplace_hydro.png")
     plt.close()
 end
 
-# laplace_hydro_convergence(0:5)
-laplace_hydro_res(5, 1; plot=true)
+laplace_hydro_res(nref=2, order=1, dim=3, plot=true)
+# laplace_hydro_conv(nrefs=0:3, dim=3)

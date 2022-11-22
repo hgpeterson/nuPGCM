@@ -18,13 +18,17 @@ pygui(false)
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
 function solve_laplace(u, s, J, f, u₀)
+    println("N = $(u.g.np)")
+
     # create global linear system using stamping method
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(u.g.np)
+    print("Building... ")
+    t₀ = time()
     for k=1:u.g.nt
         # calculate contribution to K from element k
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
-        Kᵏ = J.dets[k]*dropdims(sum(s.K.*JJ, dims=(1, 2)), dims=(1, 2))
+        Kᵏ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
 
         # calculate contribution to b from element k
         bᵏ = J.dets[k]*s.M*f[u.g.t[k, :]]
@@ -44,25 +48,25 @@ function solve_laplace(u, s, J, f, u₀)
 
     # remove zeros
     dropzeros!(K)
+    println(time() - t₀, " s")
 
     # solve
+    print("Solving... ")
+    t₀ = time()
     u.values[:] = K\b
+    println(time() - t₀, " s")
     return u
 end
 
-"""
-    h, err = laplace_res(nref, order)
-"""
-function laplace_res(nref, order; plot=false)
-    # geometry type
-    # geo = "square"
-    geo = "circle"
-
+function laplace_res(; nref, order, dim, showplots=false)
     # get grid
-    g = FEGrid("../meshes/$geo/mesh$nref.h5", order)
-    g1 = FEGrid("../meshes/$geo/mesh$nref.h5", 1)
-    x = g.p[:, 1]
-    y = g.p[:, 2]
+    if dim == 2
+        gfile = "../meshes/gmsh/mesh$nref.h5"
+    elseif dim == 3
+        gfile = "../meshes/bowl3D/mesh$nref.h5"
+    end
+    g = FEGrid(gfile, order)
+    g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -71,24 +75,41 @@ function laplace_res(nref, order; plot=false)
     J = Jacobians(g1)
 
     # mesh resolution 
-    h = 1/sqrt(g.np)
+    h = 1/g.np^(1/dim)
 
     # solution
-    ua = @. -exp(x^2)*y
+    x = g.p[:, 1]
+    y = g.p[:, 2]
+    if dim == 3
+        z = g.p[:, 3]
+    end
+    if dim == 2
+        ua = @. -exp(x^2)*sin(y)
+    elseif dim == 3
+        ua = @. -exp(x^2)*sin(y)*z^5
+    end
+    u₀ = ua[g.e]
 
-    # pick f such that -∇u = f
-    f = @. exp(x^2)*(2 + 4*x^2)*y
+    # pick f such that -∇²u = f
+    if dim == 2
+        f = @. exp(x^2)*(1 + 4*x^2)*sin(y)
+    elseif dim == 3
+        f = @. exp(x^2)*z^3*(20 + (1 + 4*x^2)*z^2)*sin(y)
+    end
 
     # initialize FE field
     u = FEField(order, zeros(g.np), g, g1)
     ua = FEField(order, ua, g, g1)
 
     # solve laplace problem
-    u = solve_laplace(u, s, J, f, ua.values[g.e])
+    u = solve_laplace(u, s, J, f, u₀)
 
-    if plot
-        quickplot(u, L"u", "images/u.png")
-        quickplot(u - ua, "Error", "images/error.png")
+    if showplots
+        if dim == 2
+            quickplot(u, L"u", "images/u.png")
+        elseif dim == 3
+            write_vtk(g1, "../output/laplace", ["u"=>u, "error"=>abs(u - ua)])
+        end
     end
 
     # error
@@ -96,31 +117,27 @@ function laplace_res(nref, order; plot=false)
     return h, err
 end
 
-"""
-    laplace_convergence(nrefs)
-"""
-function laplace_convergence(nrefs)
+function laplace_convergence(; nrefs, dim)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
-    for o=1:3
+    orders = 1:2
+    for o=orders
         println("Order ", o)
         h = zeros(size(nrefs, 1))
         err = zeros(size(nrefs, 1))
         for i in eachindex(nrefs)
             println("\tRefinement ", nrefs[i])
-            h[i], err[i] = laplace_res(nrefs[i], o)
+            h[i], err[i] = laplace_res(nref=nrefs[i], order=o, dim=dim)
         end
         ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
         ax.loglog(h, err, "o", label="Order $o")
     end
-    ax.legend(ncol=3, loc=(0.0, 1.05))
-    # ax.set_xlim(0.5*h_q[end], 2*h_l[1])
-    # ax.set_ylim(0.5*err_q[end], 2*err_l[1])
+    ax.legend(ncol=size(orders, 1), loc=(0.0, 1.05))
     savefig("images/laplace.png")
     println("images/laplace.png")
     plt.close()
 end
 
-laplace_res(5, 1; plot=true)
-# laplace_convergence(0:3)
+# laplace_res(nref=1, order=2, dim=3, showplots=true)
+laplace_convergence(nrefs=0:2, dim=3)

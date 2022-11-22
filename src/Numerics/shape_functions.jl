@@ -134,7 +134,6 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     for k=1:dim
         C[k, :, :] = compute_integral_matrix((ξ, i, j) -> ∂φ(sf_trial, j, k, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
     end
-
     CT = zeros(dim, sf_test.n, sf_trial.n)
     for k=1:dim
         CT[k, :, :] = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*∂φ(sf_test, i, k, ξ), w, ξ, sf_test.n, sf_trial.n)
