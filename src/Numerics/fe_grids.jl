@@ -41,16 +41,22 @@ function FEGrid(file_name, order::IN) where IN <: Integer
     p = read(file, "p")
     t = read(file, "t")
     e = read(file, "e")
-    # e = e[:, 1]
+    close(file)
     t = convert(Matrix{IN}, t)
     e = convert(Vector{IN}, e)
+
+    # dimension of space
+    dim = size(p, 2)
+
+    # order of grid
     if order == 0
         # only need centroids
-        pp = zeros(size(t, 1), 2)
+        pp = zeros(size(t, 1), dim)
         ee = Vector{IN}()
         for k in axes(t, 1)
-            pp[k, :] = 1/3*sum(p[t[k, :], :], dims=1)
-            if t[k, 1] in e || t[k, 2] in e || t[k, 3] in e
+            pp[k, :] = 1/(dim + 1)*sum(p[t[k, :], :], dims=1)
+            if sum([t[k, i] in e for i in axes(t, 2)]) > 0 
+                # at least one of the points in this element is on the boundary, make centroid a bounday node
                 push!(ee, k)
             end
         end
@@ -58,17 +64,20 @@ function FEGrid(file_name, order::IN) where IN <: Integer
         t = zeros(IN, size(t, 1), 1)
         t[:, 1] = 1:size(t, 1)
         e = ee
+    elseif order == 1
+        # grid already order 1
     elseif order > 1
         # add nodes for higher orders
         p, t, e = add_nodes(p, t, e, order)
+    else
+        error("Unsupported grid order `$order`.")
     end
+
+    # indices
     np = size(p, 1)
     nt = size(t, 1)
     nn = size(t, 2)
     ne = size(e, 1)
-
-    # determine dimension
-    dim = size(p, 2)
 
     # setup shape functions
     s = ShapeFunctions(order, dim)
@@ -85,19 +94,17 @@ function add_nodes(p, t, e, order)
     # get edges
     edges, boundary_indices, emap = all_edges(t)
 
-    if order == 2
-        # number of nodes per triangle
-        n = 6
+    # dimension of space
+    dim = size(p, 2)
 
+    if order == 2
         # add midpoints
         np0 = size(p, 1)
-        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), 2))
+        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
         pnew = [p; new_pts]
 
         # map to triangle data structure
-        tnew = zeros(Int64, size(t, 1), n)
-        tnew[:, 1:3] = t
-        tnew[:, 4:6] = np0 .+ emap
+        tnew = hcat(t, np0 .+ emap)
 
         # add points that were on the boundary to `e`
         enew = [e; np0 .+ boundary_indices]
@@ -166,28 +173,60 @@ end
 
 Find all unique `edges` (ne x 2 array) in the triangulation `t`.
 Second output is indices to the boundary edges.
-Third output `emap` (nt x 3 array) is a mapping from local triangle edges
+Third output `emap` (nt x dim+1 array) is a mapping from local edges
 to the global edge list, i.e., emap[it,k] is the global edge number
-for local edge k (1,2,3) in triangle it.
+for local edge k (1,2,3) in elemnt it.
 """
 function all_edges(t)
+    # dimension of space
+    dim = size(t, 2) - 1
+
+    # get all possible edge index pairs
+    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
+    # pairs = zeros(Int64, ne, 2)
+    # n = 1
+    # for i=1:dim, j=i+1:dim+1
+    #     pairs[n, :] = [i j]
+    #     n += 1
+    # end
+    # pairs = [
+    #     1 2
+    #     2 3
+    #     1 3
+    # ]
+    pairs = [
+        1 2
+        2 3
+        1 3
+        1 4
+        2 4
+        3 4
+    ]
+
     # find all edges
-    etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
-    etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
+    etag = t[:, pairs[1, :]]
+    for i=2:ne
+        etag = vcat(etag, t[:, pairs[i, :]])
+    end
+
+    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
+    etag = hcat(sort(etag, dims=2), 1:ne*size(t, 1))
+
+    # now sort so that first column goes from lowest to highest node index
     etag = sortslices(etag, dims=1)
 
     # remove duplicates
     dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
-    keep = .![false;dup]
-    edges = etag[keep,1:2]
+    keep = .![false; dup]
+    edges = etag[keep, 1:2]
 
-    # compute local indices
+    # compute mapping to global indices
     emap = cumsum(keep)
-    invpermute!(emap, etag[:,3])
-    emap = reshape(emap,:,3)
+    invpermute!(emap, etag[:, 3])
+    emap = reshape(emap, :, ne)
 
     # find boundary indices
-    dup = [dup;false]
+    dup = [dup; false]
     dup = dup[keep]
     bndix = findall(.!dup)
     return edges, bndix, emap
