@@ -20,11 +20,21 @@ Solves -Δu = f with dirichlet b.c. u = u₀.
 function solve_laplace(u, s, J, f, u₀)
     println("N = $(u.g.np)")
 
-    # create global linear system using stamping method
+    # setup matrix and vector
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(u.g.np)
     print("Building... ")
     t₀ = time()
+
+    # tag whether node of triangle is on boundary or not
+    edge_tags = zeros(Bool, size(u.g.t))
+    for k=1:u.g.nt
+        for i in axes(u.g.t, 2)
+            edge_tags[k, i] = u.g.t[k, i] in u.g.e
+        end
+    end
+
+    # stamp
     for k=1:u.g.nt
         # calculate contribution to K from element k
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
@@ -35,16 +45,26 @@ function solve_laplace(u, s, J, f, u₀)
 
         # add to global system
         for i=1:u.g.nn, j=1:u.g.nn
+            if edge_tags[k, i]
+                # save for dirichlet
+                continue
+            end
             push!(K, (u.g.t[k, i], u.g.t[k, j], Kᵏ[i, j]))
         end
         b[u.g.t[k, :]] += bᵏ
     end
 
+    # dirichlet b.c.
+    for i in eachindex(u₀)
+        push!(K, (u.g.e[i], u.g.e[i], 1))
+        b[u.g.e[i]] = u₀[i]
+    end
+
     # make CSC matrix
     K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), u.g.np, u.g.np)
 
-    # dirichlet along edges
-    K, b = add_dirichlet(K, b, u.g.e, u₀)
+    # # dirichlet along edges
+    # K, b = add_dirichlet(K, b, u.g.e, u₀)
 
     # remove zeros
     dropzeros!(K)
@@ -108,7 +128,7 @@ function laplace_res(; nref, order, dim, showplots=false)
         if dim == 2
             quickplot(u, L"u", "images/u.png")
         elseif dim == 3
-            write_vtk(g1, "../output/laplace", ["u"=>u, "error"=>abs(u - ua)])
+            write_vtk(g, "../output/laplace", ["u"=>u, "error"=>abs(u - ua)])
         end
     end
 
@@ -139,5 +159,5 @@ function laplace_convergence(; nrefs, dim)
     plt.close()
 end
 
-# laplace_res(nref=1, order=2, dim=3, showplots=true)
-laplace_convergence(nrefs=0:2, dim=3)
+# laplace_res(nref=0, order=2, dim=3, showplots=true)
+laplace_convergence(nrefs=0:5, dim=2)
