@@ -31,19 +31,13 @@ struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:In
 end
 
 """
-    g = FEGrid(file_name, order)
+    g = FEGrid(gfile, order)
 
 Construct a FE grid of order `order` by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
 """
-function FEGrid(file_name, order::IN) where IN <: Integer
+function FEGrid(gfile, order::IN) where IN <: Integer
     # read grid data
-    file = h5open(file_name, "r")
-    p = read(file, "p")
-    t = read(file, "t")
-    e = read(file, "e")
-    close(file)
-    t = convert(Matrix{IN}, t)
-    e = convert(Vector{IN}, e)
+    p, t, e = read_gfile_h5(gfile)
 
     # dimension of space
     dim = size(p, 2)
@@ -86,13 +80,36 @@ function FEGrid(file_name, order::IN) where IN <: Integer
 end
 
 """
+    p, t, e = read_gfile_h5(gfile)
+
+Load grid from HDF5 file `gfile`.
+"""
+function read_gfile_h5(gfile)
+    file = h5open(gfile, "r")
+    p = read(file, "p")
+    t = read(file, "t")
+    e = read(file, "e")
+    close(file)
+    t = convert(Matrix{Int64}, t)
+    try
+        e = convert(Vector{Int64}, e)
+    catch
+        # for some old meshes...
+        e = e[:, 1]
+        e = convert(Vector{Int64}, e)
+    end
+    return p, t, e
+end
+
+
+"""
 	p, t, e = add_nodes(p, t, e, order)
 
 Add nodes to mesh for higher-order shape functions.
 """
 function add_nodes(p, t, e, order)
     # get edges
-    edges, boundary_indices, emap = all_edges(t)
+    edges, boundary_indices, emap = all_edges(t, e)
 
     # dimension of space
     dim = size(p, 2)
@@ -108,7 +125,7 @@ function add_nodes(p, t, e, order)
 
         # add points that were on the boundary to `e`
         enew = [e; np0 .+ boundary_indices]
-    elseif order == 3
+    elseif order == 3 && dim == 2
         # number of nodes per triangle
         n = 10
 
@@ -142,18 +159,9 @@ function add_nodes(p, t, e, order)
         # add points that were on boundary to `e`
         enew = [e; np0 .+ boundary_indices]
         enew = [enew; np1 .+ boundary_indices]
+    else
+        error("Unsupported grid order `$order` for dimension `$dim`.")
     end
-
-    # fig, ax, im = tplot(pnew, tnew)
-    # # ax.plot(pnew[1:np0, 1], pnew[1:np0, 2], "o", ms=1)
-    # # ax.plot(pnew[(np0+1):end, 1], pnew[(np0+1):end, 2], "o", ms=1)
-    # # ax.plot(pnew[enew, 1], pnew[enew, 2], "wo", ms=0.5)
-    # for k=[1, 6, 10]
-    #     ax.plot(pnew[tnew[k, :], 1], pnew[tnew[k, :], 2], "o-", ms=1)
-    # end
-    # ax.axis("equal")
-    # savefig("images/debug.png")
-    # plt.close()
 
     return pnew, tnew, enew
 end
@@ -177,31 +185,18 @@ Third output `emap` (nt x dim+1 array) is a mapping from local edges
 to the global edge list, i.e., emap[it,k] is the global edge number
 for local edge k (1,2,3) in elemnt it.
 """
-function all_edges(t)
+function all_edges(t, e)
     # dimension of space
     dim = size(t, 2) - 1
 
     # get all possible edge index pairs
     ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
-    # pairs = zeros(Int64, ne, 2)
-    # n = 1
-    # for i=1:dim, j=i+1:dim+1
-    #     pairs[n, :] = [i j]
-    #     n += 1
-    # end
-    # pairs = [
-    #     1 2
-    #     2 3
-    #     1 3
-    # ]
-    pairs = [
-        1 2
-        2 3
-        1 3
-        1 4
-        2 4
-        3 4
-    ]
+    pairs = [1 2
+             2 3
+             1 3
+             1 4
+             2 4
+             3 4]
 
     # find all edges
     etag = t[:, pairs[1, :]]
@@ -215,20 +210,27 @@ function all_edges(t)
     # now sort so that first column goes from lowest to highest node index
     etag = sortslices(etag, dims=1)
 
-    # remove duplicates
-    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
-    keep = .![false; dup]
+    # determine if edge is a duplicate or should be kept
+    keep = unique(i -> etag[i, 1:2], 1:size(etag, 1))
+
+    # only keep unique edges
     edges = etag[keep, 1:2]
 
+    # boundary edges have both nodes in `e`
+    bndix = Vector{Int64}([])
+    for i in axes(edges, 1)
+        if edges[i, 1] in e && edges[i, 2] in e
+            push!(bndix, i)
+        end
+    end
+
     # compute mapping to global indices
-    emap = cumsum(keep)
+    kept = zeros(Bool, ne*size(t, 1))
+    kept[keep] .= 1
+    emap = cumsum(kept)
     invpermute!(emap, etag[:, 3])
     emap = reshape(emap, :, ne)
 
-    # find boundary indices
-    dup = [dup; false]
-    dup = dup[keep]
-    bndix = findall(.!dup)
     return edges, bndix, emap
 end
 

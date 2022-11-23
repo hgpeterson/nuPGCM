@@ -38,6 +38,8 @@ function solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(N)
+    print("Building... ")
+    t₀ = time()
     for k=1:ux.g.nt
         # contribution from (∇u)⊙(∇v) term 
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
@@ -99,9 +101,15 @@ function solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀
 
     # set p to zero somewhere
     A, b = add_dirichlet(A, b, pmap[1], p₀)
+    println(time() - t₀, " s")
+
+    println("rank(A) = ", rank(A))
 
     # solve
+    print("Solving... ")
+    t₀ = time()
     sol = A\b
+    println(time() - t₀, " s")
 
     # reshape to get u and p
     ux.values[:] = sol[uxmap]
@@ -134,9 +142,9 @@ function stokes_res(; nref, order, plot=false)
     uya = @.  cos(y)*(sin(x)/cos(z)^2 - cos(x)*tan(z))
     uza = @. cos(x - y)*tan(z)
     pa = @. exp(x*y*z)
-    fx = @. y*z*p + 6*cos(y)/cos(z)^2*sin(x)*tan(z)^2 + 2*sin(x)*sin(y)*tan(z)^3
-    fy = @. x*z*p + 2*cos(y)*tan(z)^2*(cos(x)*tan(z) - 3*sin(x)/cos(z)^2)
-    fz = @. x*y*p - 2*cos(x)*cos(y)*tan(z)^3 - 2*sin(x)*sin(y)*tan(z)^3
+    fx = @. y*z*pa + 6*cos(y)/cos(z)^2*sin(x)*tan(z)^2 + 2*sin(x)*sin(y)*tan(z)^3
+    fy = @. x*z*pa + 2*cos(y)*tan(z)^2*(cos(x)*tan(z) - 3*sin(x)/cos(z)^2)
+    fz = @. x*y*pa - 2*cos(x)*cos(y)*tan(z)^3 - 2*sin(x)*sin(y)*tan(z)^3
 
     # dirichlet
     ux₀ = uxa[gu.e]
@@ -169,7 +177,7 @@ function stokes_res(; nref, order, plot=false)
     uxa  = FEField(gu.order, uxa, gu, g1)
     uya  = FEField(gu.order, uya, gu, g1)
     uza  = FEField(gu.order, uza, gu, g1)
-    pa   = FEField(gp.order, pa,  gp, g1)
+    pa   = FEField(gp.order, pa[1:gp.np], gp, g1)
     err_ux = L2norm(ux - uxa, s.uu, J)
     err_uy = L2norm(uy - uya, s.uu, J)
     err_uz = L2norm(uz - uza, s.uu, J)
@@ -201,5 +209,5 @@ function stokes_conv(; nrefs)
     plt.close()
 end
 
-stokes_res(nref=2, order=2, plot=true)
+stokes_res(nref=0, order=2, plot=true)
 # stokes_conv(nrefs=0:3)

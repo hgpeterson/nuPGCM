@@ -83,14 +83,14 @@ function add_dirichlet(A, b, row::Integer, col::Integer, u₀::Real)
     A[row, col] = 1
     # replace bᵢ = 1
     b[row] = u₀
-    # row reduce
-    for k in eachindex(b)
-        if k == row
-            continue
-        end
-        b[k] -= A[k, col]*u₀
-        A[k, col] = 0
-    end
+    # # row reduce
+    # for k in eachindex(b)
+    #     if k == row
+    #         continue
+    #     end
+    #     b[k] -= A[k, col]*u₀
+    #     A[k, col] = 0
+    # end
     return A, b
 end
 function add_dirichlet(A, b, row::Integer, u₀::Real)
@@ -118,18 +118,19 @@ function write_vtk(g, fname, data)
     # define points and cells for vtk
     points = g.p'
     cells = Vector{MeshCell}([])
+    if g.order == 1
+        cell_type = VTKCellTypes.VTK_TETRA
+    elseif g.order == 2
+        cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    end
     for i in axes(g.t, 1)
-        if g.dim == 2
-            push!(cells, MeshCell(VTKCellTypes.VTK_TRIANGLE, g.t[i, :]))
-        elseif g.dim == 3
-            push!(cells, MeshCell(VTKCellTypes.VTK_TETRA, g.t[i, :]))
-        end
+        push!(cells, MeshCell(cell_type, g.t[i, :]))
     end
 
     # save as vtu file
     vtk_grid(fname, points, cells) do vtk
         for d in data
-            vtk[d.first] = d.second.values[1:g.np, :]
+            vtk[d.first] = d.second.values
         end
     end
 end
