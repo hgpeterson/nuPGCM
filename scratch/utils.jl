@@ -5,15 +5,18 @@ using WriteVTK
 
 function get_sides(g::FEGrid)
     # bottom
-    ebot = g.e[abs.(g.p[g.e, 2]) .>= 1e-4]
-    eleft = g.e[abs.(g.p[g.e, 1] .+ 1) .<= 1e-4]
-    eright = g.e[abs.(g.p[g.e, 1] .- 1) .<= 1e-4]
-    ebot = [eleft[1]; ebot; eright[1]]
+    ebot = g.e[abs.(g.p[g.e, end]) .>= 1e-4]
 
     # top
-    etop = g.e[abs.(g.p[g.e, 2]) .< 1e-4]
-    deleteat!(etop, findall(x->x==eleft[1], etop))
-    deleteat!(etop, findall(x->x==eright[1], etop))
+    etop = g.e[abs.(g.p[g.e, end]) .< 1e-4]
+
+    if g.dim == 2
+        # for 2D, add corners to ebot and remove them from etop
+        eleft = g.e[abs.(g.p[g.e, 1] .+ 1) .<= 1e-4]
+        eright = g.e[abs.(g.p[g.e, 1] .- 1) .<= 1e-4]
+        ebot = [eleft[1]; ebot; eright[1]]
+    end
+
     return ebot, etop
 end
 
@@ -83,14 +86,14 @@ function add_dirichlet(A, b, row::Integer, col::Integer, u₀::Real)
     A[row, col] = 1
     # replace bᵢ = 1
     b[row] = u₀
-    # # row reduce
-    # for k in eachindex(b)
-    #     if k == row
-    #         continue
-    #     end
-    #     b[k] -= A[k, col]*u₀
-    #     A[k, col] = 0
-    # end
+    # row reduce
+    for k in eachindex(b)
+        if k == row
+            continue
+        end
+        b[k] -= A[k, col]*u₀
+        A[k, col] = 0
+    end
     return A, b
 end
 function add_dirichlet(A, b, row::Integer, u₀::Real)
