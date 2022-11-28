@@ -171,7 +171,7 @@ function stokes_conv(; nrefs)
         ax.loglog(huz, err_uz, c="tab:orange", "o")
         ax.loglog(hp, err_p, c="tab:green", "o")
     end
-    ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^3], "k-")
+    ax.loglog([1e-1, 1e-2], [5*(1e-1)^3, 5*(1e-2)^3], "k-")
     legend_elements = [
         Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
         Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),

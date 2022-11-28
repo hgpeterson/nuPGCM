@@ -35,6 +35,14 @@ function solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀
     N = pmap[end]
     println("N = $N")
 
+    # tag whether node of triangle is on boundary or not
+    edge_tags = zeros(Bool, size(ux.g.t))
+    for k=1:ux.g.nt
+        for i in axes(ux.g.t, 2)
+            edge_tags[k, i] = ux.g.t[k, i] in ux.g.e
+        end
+    end
+
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     b = zeros(N)
@@ -58,22 +66,28 @@ function solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀
 
         # (∇u)⊙(∇v) term
         for i=1:ux.g.nn, j=1:ux.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uxmap[ux.g.t[k, i]], uxmap[ux.g.t[k, j]], Kᵏ[i, j]))
         end
         for i=1:uy.g.nn, j=1:uy.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uymap[uy.g.t[k, i]], uymap[uy.g.t[k, j]], Kᵏ[i, j]))
         end
         for i=1:uz.g.nn, j=1:uz.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uzmap[uz.g.t[k, i]], uzmap[uz.g.t[k, j]], Kᵏ[i, j]))
         end
         # -p*(∇⋅v) term
         for i=1:ux.g.nn, j=1:p.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uxmap[ux.g.t[k, i]], pmap[p.g.t[k, j]], -Cxᵏ[i, j]))
         end
         for i=1:uy.g.nn, j=1:p.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uymap[uy.g.t[k, i]], pmap[p.g.t[k, j]], -Cyᵏ[i, j]))
         end
         for i=1:uz.g.nn, j=1:p.g.nn
+            if edge_tags[k, i] continue end
             push!(A, (uzmap[uz.g.t[k, i]], pmap[p.g.t[k, j]], -Czᵏ[i, j]))
         end
         # q*(∇⋅u) term 
@@ -91,19 +105,29 @@ function solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀
         b[uzmap[uz.g.t[k, :]]] .+= bzᵏ
     end
 
+    # dirichlet b.c.
+    for i in eachindex(ux₀)
+        push!(A, (uxmap[ux.g.e[i]], uxmap[ux.g.e[i]], 1))
+        push!(A, (uymap[uy.g.e[i]], uymap[uy.g.e[i]], 1))
+        push!(A, (uzmap[uz.g.e[i]], uzmap[uz.g.e[i]], 1))
+        b[uxmap[ux.g.e[i]]] = ux₀[i]
+        b[uymap[uy.g.e[i]]] = uy₀[i]
+        b[uzmap[uz.g.e[i]]] = uz₀[i]
+    end
+
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # dirichlet for u along edges
-    A, b = add_dirichlet(A, b, uxmap[ux.g.e], ux₀)
-    A, b = add_dirichlet(A, b, uymap[uy.g.e], uy₀)
-    A, b = add_dirichlet(A, b, uzmap[uz.g.e], uz₀)
+    # A, b = add_dirichlet(A, b, uxmap[ux.g.e], ux₀)
+    # A, b = add_dirichlet(A, b, uymap[uy.g.e], uy₀)
+    # A, b = add_dirichlet(A, b, uzmap[uz.g.e], uz₀)
 
     # set p to zero somewhere
     A, b = add_dirichlet(A, b, pmap[1], p₀)
     println(time() - t₀, " s")
 
-    println("rank(A) = ", rank(A))
+    # println("rank(A) = ", rank(A))
 
     # solve
     print("Solving... ")
@@ -121,7 +145,8 @@ end
 
 function stokes_res(; nref, order, plot=false)
     # get grids
-    gfile = "../meshes/bowl3D/mesh$nref.h5"
+    # gfile = "../meshes/bowl3D/mesh$nref.h5"
+    gfile = "../meshes/sphere/mesh$nref.h5"
     gu = FEGrid(gfile, order)
     gp = FEGrid(gfile, order-1)
     g1 = FEGrid(gfile, 1)
@@ -141,16 +166,31 @@ function stokes_res(; nref, order, plot=false)
     uxa = @. -sin(x)*(cos(y)/cos(z)^2 + sin(y)*tan(z))
     uya = @.  cos(y)*(sin(x)/cos(z)^2 - cos(x)*tan(z))
     uza = @. cos(x - y)*tan(z)
+    x = gp.p[:, 1] 
+    y = gp.p[:, 2] 
+    z = gp.p[:, 3] 
     pa = @. exp(x*y*z)
-    fx = @. y*z*pa + 6*cos(y)/cos(z)^2*sin(x)*tan(z)^2 + 2*sin(x)*sin(y)*tan(z)^3
-    fy = @. x*z*pa + 2*cos(y)*tan(z)^2*(cos(x)*tan(z) - 3*sin(x)/cos(z)^2)
-    fz = @. x*y*pa - 2*cos(x)*cos(y)*tan(z)^3 - 2*sin(x)*sin(y)*tan(z)^3
+    uxa  = FEField(gu.order, uxa, gu, g1)
+    uya  = FEField(gu.order, uya, gu, g1)
+    uza  = FEField(gu.order, uza, gu, g1)
+    pa   = FEField(gp.order, pa,  gp, g1)
+
+    # forcing
+    x = gu.p[:, 1] 
+    y = gu.p[:, 2] 
+    z = gu.p[:, 3] 
+    fx = @. y*z*exp(x*y*z) + 6*cos(y)/cos(z)^2*sin(x)*tan(z)^2 + 2*sin(x)*sin(y)*tan(z)^3
+    fy = @. x*z*exp(x*y*z) + 2*cos(y)*tan(z)^2*(cos(x)*tan(z) - 3*sin(x)/cos(z)^2)
+    fz = @. x*y*exp(x*y*z) - 2*cos(x)*cos(y)*tan(z)^3 - 2*sin(x)*sin(y)*tan(z)^3
+    fx  = FEField(gu.order, fx, gu, g1)
+    fy  = FEField(gu.order, fy, gu, g1)
+    fz  = FEField(gu.order, fz, gu, g1)
 
     # dirichlet
-    ux₀ = uxa[gu.e]
-    uy₀ = uya[gu.e]
-    uz₀ = uza[gu.e]
-    p₀ = pa[1]
+    ux₀ = uxa.values[gu.e]
+    uy₀ = uya.values[gu.e]
+    uz₀ = uza.values[gu.e]
+    p₀ = pa.values[1]
 
     # get Jacobians
     J = Jacobians(g1)
@@ -160,24 +200,17 @@ function stokes_res(; nref, order, plot=false)
     uy  = FEField(gu.order, zeros(gu.np), gu, g1)
     uz  = FEField(gu.order, zeros(gu.np), gu, g1)
     p   = FEField(gp.order, zeros(gp.np), gp, g1)
-    fx  = FEField(gu.order, fx,           gu, g1)
-    fy  = FEField(gu.order, fy,           gu, g1)
-    fz  = FEField(gu.order, fz,           gu, g1)
 
     # solve stokes problem
     ux, uy, uz, p = solve_stokes(ux, uy, uz, p, J, s, fx, fy, fz, ux₀, uy₀, uz₀, p₀)
 
     if plot
-        write_vtk(g1, "../output/stokes", ["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])
+        write_vtk(gu, "../output/stokes", ["ux"=>ux, "uy"=>uy, "uz"=>uz, "p"=>p])
     end
 
     # error
     hux = huy = huz = 1/cbrt(gu.np)
     hp = 1/cbrt(gp.np)
-    uxa  = FEField(gu.order, uxa, gu, g1)
-    uya  = FEField(gu.order, uya, gu, g1)
-    uza  = FEField(gu.order, uza, gu, g1)
-    pa   = FEField(gp.order, pa[1:gp.np], gp, g1)
     err_ux = L2norm(ux - uxa, s.uu, J)
     err_uy = L2norm(uy - uya, s.uu, J)
     err_uz = L2norm(uz - uza, s.uu, J)
@@ -191,23 +224,26 @@ function stokes_conv(; nrefs)
     ax.set_ylabel(L"$L_2$ Error") 
     for i in eachindex(nrefs)
         println(nrefs[i])
-        hux, huz, hp, err_ux, err_uz, err_p = stokes_res(nref=nrefs[i], order=2)
+        hux, huy, huz, hp, err_ux, err_uy, err_uz, err_p = stokes_res(nref=nrefs[i], order=2)
+        println("$err_ux, $err_uy, $err_uz, $err_p")
         ax.loglog(hux, err_ux, c="tab:blue", "o")
-        ax.loglog(huz, err_uz, c="tab:orange", "o")
-        ax.loglog(hp, err_p, c="tab:green", "o")
+        ax.loglog(hux, err_uy, c="tab:orange", "o")
+        ax.loglog(huz, err_uz, c="tab:green", "o")
+        ax.loglog(hp, err_p, c="tab:red", "o")
     end
     ax.loglog([1e-1, 1e-2], [5e-3, 5e-3*(1e-1)^3], "k-")
     legend_elements = [
         Line2D([0], [0], color="w", markerfacecolor="tab:blue", marker="o", label=L"u^x"),
-        Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^z"),
-        Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"p"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:orange", marker="o", label=L"u^y"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:green", marker="o", label=L"u^z"),
+        Line2D([0], [0], color="w", markerfacecolor="tab:red", marker="o", label=L"p"),
         Line2D([0], [0], color="k", label=L"O(h^3)")
     ]
     ax.legend(handles=legend_elements)
-    savefig("images/stokes.png")
-    println("images/stokes.png")
+    savefig("images/stokes3D.png")
+    println("images/stokes3D.png")
     plt.close()
 end
 
-stokes_res(nref=0, order=2, plot=true)
-# stokes_conv(nrefs=0:3)
+# stokes_res(nref=0, order=2, plot=true)
+stokes_conv(nrefs=0:1)
