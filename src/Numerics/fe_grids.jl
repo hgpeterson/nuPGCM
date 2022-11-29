@@ -31,14 +31,11 @@ struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:In
 end
 
 """
-    g = FEGrid(gfile, order)
+    g = FEGrid(p, t, e, order)
 
-Construct a FE grid of order `order` by loading points `p`, triangles `t`, and boundary nodes `e` from .h5 file.
+Construct a FE grid of order `order` with points `p`, elements `t`, and boundary nodes `e`.
 """
-function FEGrid(gfile, order::IN) where IN <: Integer
-    # read grid data
-    p, t, e = read_gfile_h5(gfile)
-
+function FEGrid(p, t, e, order::IN) where IN <: Integer
     # dimension of space
     dim = size(p, 2)
 
@@ -77,6 +74,12 @@ function FEGrid(gfile, order::IN) where IN <: Integer
     s = ShapeFunctions(order, dim)
 
     return FEGrid(order, dim, s, p, np, t, nt, nn, e, ne)
+end
+function FEGrid(gfile, order)
+    # read grid data
+    p, t, e = read_gfile_h5(gfile)
+
+    return FEGrid(p, t, e, order) 
 end
 
 """

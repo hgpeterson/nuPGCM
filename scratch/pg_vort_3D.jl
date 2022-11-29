@@ -4,6 +4,7 @@ using SparseArrays
 using LinearAlgebra
 using IterativeSolvers
 using Printf
+using HDF5
 
 include("utils.jl")
 
@@ -28,9 +29,9 @@ with boundary conditions
 For now, we simplify the problem so that
     - f = 1,
     - τx = τy = 0, and
-    - b.c.'s 4 and 5 are just χx = χy = ωx = ωy = 0 at z = -H.
+    - b.c.'s 4 and 5 are just χy = ωx = 0 at z = -H.
 """
-function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, bdy, ε²)
     # unpack grids
     g1 = ωx.g1
     g = ωx.g
@@ -129,14 +130,35 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # top: dirichlet 
-    A, r = add_dirichlet(A, r, ωxmap[e.top], 0)
-    A, r = add_dirichlet(A, r, ωymap[e.top], 0)
-    A, r = add_dirichlet(A, r, χxmap[e.top], 0)
-    A, r = add_dirichlet(A, r, χymap[e.top], 0)
-    # bottom: dirichlet
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+    A, r = add_dirichlet(A, r, ωxmap[bdy.sfc_nodes], 0)
+    A, r = add_dirichlet(A, r, ωymap[bdy.sfc_nodes], 0)
+    A, r = add_dirichlet(A, r, χxmap[bdy.sfc_nodes], 0)
+    A, r = add_dirichlet(A, r, χymap[bdy.sfc_nodes], 0)
 
+    # # bottom: dirichlet
+    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], 0) 
+    # A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], 0) # need to apply this on ωy since χy is full
+
+    # special dirichlet conditions at z = -H:
+    #              ∂x(χy) - ∂y(χx) = 0, 
+    # -ε²*(∂x(ωx) - ∂y(ωy)) - β*χx = 0.
+    A[ωxmap[bdy.bot_nodes], :] .= 0
+    r[ωxmap[bdy.bot_nodes]] .= 0
+    A[ωymap[bdy.bot_nodes], :] .= 0
+    r[ωymap[bdy.bot_nodes]] .= 0
+    w_quad, ξ_quad = quad_weights_points(2*g.order-1, 2)
+    for k in axes(bdy.bot_tris, 1)
+        # get tet associated with this bdy tri 
+
+        # transform triangle to standard tri in x-y plane
+
+        # compute ∫ φᵢ*∂x(φⱼ) dx dy,  ∫ φᵢ*∂y(φⱼ) dx dy, and ∫ φᵢ*φⱼ dx dy
+        # for i's on the triangle and all j's in the tetrahedra
+
+        # put the results (time 1, ε², or β as needed) as coefficients with the proper terms
+
+        # get local indices of each point on edge `ie`:
+    end
     println(@sprintf("%.1f s", time() - t₀))
 
     # solve
@@ -159,14 +181,28 @@ function pg_vort_res(; nref, order, showplots=false)
     println(@sprintf("q⁻¹ = %1.1e", sqrt(2*ε²)))
 
     # setup FE grids
-    gfile = "../meshes/bowl3D/mesh$nref.h5"
-    g  = FEGrid(gfile, order)
-    g1 = FEGrid(gfile, 1)
+
+    # gfile = "../meshes/bowl3D/mesh$nref.h5"
+    # g  = FEGrid(gfile, order)
+    # g1 = FEGrid(gfile, 1)
+
+    gfile = "../meshes/mesh.h5"
+    file = h5open(gfile, "r")
+    p = read(file, "pts")
+    t = read(file, "tets")
+    tris_bot = read(file, "tris_bot")
+    tris_sfc = read(file, "tris_sfc")
+    bdy_bot = read(file, "bdy_bot")
+    bdy_sfc = read(file, "bdy_sfc")
+    e = unique!(vcat(bdy_bot, bdy_sfc))
+    close(file)
+    g = FEGrid(p, t, e, order)
+    g1 = FEGrid(p, t, e, 1)
     println(@sprintf("h   = %1.1e", 1/cbrt(g.np)))
 
     # top and bottom surfaces
     ebot, etop = get_sides(g)
-    e = (bot = ebot, top = etop) 
+    bdy = (bot_nodes = ebot, sfc_nodes = etop, bot_tris = tris_bot, sfc_tris = tris_sfc) 
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -190,7 +226,7 @@ function pg_vort_res(; nref, order, showplots=false)
     b  = FEField(b,           g, g1)
 
     # solve 
-    ωx, ωy, χx, χy = solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+    ωx, ωy, χx, χy = solve_pg_vort(ωx, ωy, χx, χy, b, J, s, bdy, ε²)
 
     if showplots
         write_vtk(g, "../output/pg_vort", ["ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy])
@@ -200,6 +236,6 @@ function pg_vort_res(; nref, order, showplots=false)
     return ωx, ωy, χx, χy
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=0, order=2, showplots=true)
 
 println("Done.")

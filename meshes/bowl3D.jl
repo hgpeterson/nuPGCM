@@ -13,7 +13,7 @@ function generate_bowl_mesh(h₀)
     gmsh.initialize()
     
     # model
-    gmsh.model.add("bowl_mesh")
+    gmsh.model.add("mesh")
 
     # volumes
     gmsh.model.occ.addSphere(0, 0, 1, √2, 1) 
@@ -46,66 +46,75 @@ function generate_bowl_mesh(h₀)
 end
 
 function load_msh(ifile)
-    # number of dimensions
-    dim = 3
+    # physical group tags
+    bottom = 1
+    surface = 2
+    interior = 3
 
     # initialize mesh and load from file
     gmsh.initialize()
-    gmsh.option.setNumber("General.Terminal", 1)
-    gmsh.model.add("bowl_mesh")
     gmsh.open(ifile)
 
-    # find node positions by looping through indices
-    np = gmsh.model.mesh.get_max_node_tag()
-    p = zeros(np, dim)
-    for i=1:np
-        coord, parametricCoord, dim, tag = gmsh.model.mesh.getNode(i)
-        p[i, :] = coord
-    end
+    # get all node positions (`pts[i, 1:3]` are the coordinates of point `i`)
+    pts = Array(reshape(gmsh.model.mesh.getNodes()[2], (3, :))')
 
-    # get tetrahedra
-    elementTypes, elementTags, nodeTags = gmsh.model.mesh.getElements(3)
-    nodes = nodeTags[1]
-    nt = Int64(size(nodes, 1)/(dim + 1))
-    t = Array(Int64.(reshape(nodes, (dim+1, nt)))')
+    # get interior tetrahedra
+    tets = get_elements(3, interior)
 
-    # edge nodes
-    nodeTags, coord, parametricCoord = gmsh.model.mesh.getNodesByElementType(2)
-    e = unique!(Int64.(nodeTags))
-    println(gmsh.model.getPhysicalGroups(0))
+    # get boundary triangles
+    tris_bot = get_elements(2, bottom)
+    tris_sfc = get_elements(2, surface)
 
+    # boundary nodes
+    bdy_bot = Int64.(gmsh.model.mesh.getNodesForPhysicalGroup(2, bottom)[1])
+    bdy_sfc = Int64.(gmsh.model.mesh.getNodesForPhysicalGroup(2, surface)[1])
+
+    # finalize
     gmsh.finalize()
 
-    return p, t, e
+    return pts, tets, tris_bot, tris_sfc, bdy_bot, bdy_sfc
+end
+
+function get_elements(dim, tag)
+    # get nodes in elements of dimension `dim` with tag `tag`
+    nodes = gmsh.model.mesh.getElements(dim, tag)[3][1]
+
+    # `els[i, j]` is the index of node `j` in element `i`
+    els = Array(Int64.(reshape(nodes, (dim+1, :)))')
+    return els
 end
 
 function msh2h5(ifile, ofile)
-    p, t, e = load_msh(ifile)
+    pts, tets, tris_bot, tris_sfc, bdy_bot, bdy_sfc = load_msh(ifile)
     file = h5open(ofile, "w")
-    write(file, "p", p)
-    write(file, "t", t)
-    write(file, "e", e)
+    write(file, "pts", pts)
+    write(file, "tets", tets)
+    write(file, "tris_bot", tris_bot)
+    write(file, "tris_sfc", tris_sfc)
+    write(file, "bdy_bot", bdy_bot)
+    write(file, "bdy_sfc", bdy_sfc)
     close(file)
     println(ofile)
 end
 
 function msh2vtu(ifile, ofile)
-    # load p, t, e
-    p, t, e = load_msh(ifile)
-    np = size(p, 1)
+    # load .msh file
+    pts, tets, tris_bot, tris_sfc, bdy_bot, bdy_sfc = load_msh(ifile)
 
-    # define points and cells for vtk
-    points = p'
-    cells = Vector{MeshCell}([])
-    for i in axes(t, 1)
-        push!(cells, MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]))
-    end
+    # vtk takes points as column vectors
+    pts = pts'
+
+    # define cells for vtk
+    cells = [MeshCell(VTKCellTypes.VTK_TETRA, tets[i, :]) for i in axes(tets, 1)]
 
     # save as vtu file
-    vtk_grid(ofile, points, cells) do vtk
-        boundary = zeros(np)
-        boundary[e] .= 1
-        vtk["boundary"] = boundary
+    vtk_grid(ofile, pts, cells) do vtk
+        sfc = zeros(size(pts, 2))
+        sfc[bdy_sfc] .= 1
+        vtk["sfc"] = sfc
+        bot = zeros(size(pts, 2))
+        bot[bdy_bot] .= 1
+        vtk["bot"] = bot
     end
 end
 
@@ -117,8 +126,8 @@ end
 
 # generate_bowl_mesh(0.16)
 
-# p, t, e = load_msh("mesh.msh")
+# pts, tets, tris_bot, tris_sfc, bdy_bot, bdy_sfc = load_msh("mesh.msh")
 
-# msh2h5("mesh.msh", "mesh.h5")
+msh2h5("mesh.msh", "mesh.h5")
 
-msh2vtu("mesh.msh", "mesh.vtu")
+# msh2vtu("mesh.msh", "mesh.vtu")
