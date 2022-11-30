@@ -90,6 +90,12 @@ function solve_stokes(ux, uz, p, J, s, fx, fz, ux₀, uz₀)
     # set p to zero somewhere
     A, b = add_dirichlet(A, b, pmap[1], 0)
 
+    null = nullspace(Matrix(A))[:, 1]
+    ux.values[:] = null[uxmap]
+    uz.values[:] = null[uzmap]
+    p.values[:]  = null[pmap]
+    return ux, uz, p
+
     # solve
     sol = A\b
 
@@ -102,7 +108,8 @@ end
 
 function stokes_res(; nref, order, plot=false)
     # get grids
-    gfile = "../meshes/circle/mesh$nref.h5"
+    # gfile = "../meshes/circle/mesh$nref.h5"
+    gfile = "../meshes/gmsh/mesh$nref.h5"
     gu = FEGrid(gfile, order)
     gp = FEGrid(gfile, order-1)
     g1 = FEGrid(gfile, 1)
@@ -184,5 +191,5 @@ function stokes_conv(; nrefs)
     plt.close()
 end
 
-# stokes_res(nref=3, order=2, plot=true)
-stokes_conv(nrefs=0:3)
+stokes_res(nref=0, order=2, plot=true)
+# stokes_conv(nrefs=0:3)
