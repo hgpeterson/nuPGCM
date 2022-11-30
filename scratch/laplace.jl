@@ -18,24 +18,21 @@ pygui(false)
 Solves -Δu = f with dirichlet b.c. u = u₀.
 """
 function solve_laplace(u, s, J, f, u₀)
-    println("N = $(u.g.np)")
+    println("np = $(u.g.np)")
+    println("nt = $(u.g.nt)")
 
     # setup matrix and vector
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(u.g.np)
-    print("Building... ")
-    t₀ = time()
 
     # tag whether node of triangle is on boundary or not
-    edge_tags = zeros(Bool, size(u.g.t))
-    for k=1:u.g.nt
-        for i in axes(u.g.t, 2)
-            edge_tags[k, i] = u.g.t[k, i] in u.g.e
-        end
-    end
+    print("Creating edge tags... ")
+    t₀ = time()
+    edge_tags = [u.g.t[k, i] in u.g.e for k=1:u.g.nt, i in axes(u.g.t, 2)]
+    println(time() - t₀, " s")
 
     # stamp
-    for k=1:u.g.nt
+    @showprogress "Building... " for k=1:u.g.nt
         # calculate contribution to K from element k
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
         Kᵏ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
@@ -62,13 +59,6 @@ function solve_laplace(u, s, J, f, u₀)
 
     # make CSC matrix
     K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), u.g.np, u.g.np)
-
-    # # dirichlet along edges
-    # K, b = add_dirichlet(K, b, u.g.e, u₀)
-
-    # remove zeros
-    dropzeros!(K)
-    println(time() - t₀, " s")
 
     # solve
     print("Solving... ")
@@ -159,5 +149,5 @@ function laplace_convergence(; nrefs, dim)
     plt.close()
 end
 
-# laplace_res(nref=0, order=2, dim=3, showplots=true)
-laplace_convergence(nrefs=0:5, dim=2)
+laplace_res(nref=3, order=1, dim=3, showplots=true)
+# laplace_convergence(nrefs=0:5, dim=2)
