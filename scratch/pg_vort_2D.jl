@@ -44,13 +44,13 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     r = zeros(N)
     for k=1:g1.nt
         # stiffness and mass matrices
-        K = abs(J.J[k])*(s.φξφξ*J.ξy[k]^2 + s.φξφη*J.ξy[k]*J.ηy[k] + s.φηφξ*J.ηy[k]*J.ξy[k] + s.φηφη*J.ηy[k]^2)
-        M = abs(J.J[k])*s.φφ
+        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
+        M = J.dets[k]*s.M
 
         # -∂x(b)
-        Cx = abs(J.J[k])*(s.φξφ*J.ξx[k] + s.φηφ*J.ηx[k])
+        Cx = J.dets[k]*sum(s.C.*J.Js[k, :, 1], dims=1)[1, :, :]
         r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
-        # r[ωymap[g.t[k, :]]] += M*b.values[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
             # indices
@@ -90,52 +90,52 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χxmap[e.top], 0)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
 
-    # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
-    edges, boundary_indices, emap = all_edges(g1.t)
-    w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
-    ps = standard_element_nodes(g.order)
-    A[ωxmap[e.bot], :] .= 0
-    r[ωxmap[e.bot]] .= 0
-    A[ωymap[e.bot], :] .= 0
-    r[ωymap[e.bot]] .= 0
-    for k=1:g1.nt, ie=1:3
-        if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
-            # get local indices of each point on edge `ie`:
-            if g.order == 1
-                il = [ie, mod1(ie+1, 3)]
-            elseif g.order == 2
-                il = [ie, ie+3, mod1(ie+1, 3)]
-            end
-            ig = g.t[k, il]
-            if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
-                # get global coordinates of end points on edge
-                p1 = g.p[ig[1], :]
-                p2 = g.p[ig[end], :]
+    # # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
+    # edges, boundary_indices, emap = all_edges(g1.t)
+    # w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
+    # ps = standard_element_nodes(g.order)
+    # A[ωxmap[e.bot], :] .= 0
+    # r[ωxmap[e.bot]] .= 0
+    # A[ωymap[e.bot], :] .= 0
+    # r[ωymap[e.bot]] .= 0
+    # for k=1:g1.nt, ie=1:3
+    #     if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+    #         # get local indices of each point on edge `ie`:
+    #         if g.order == 1
+    #             il = [ie, mod1(ie+1, 3)]
+    #         elseif g.order == 2
+    #             il = [ie, ie+3, mod1(ie+1, 3)]
+    #         end
+    #         ig = g.t[k, il]
+    #         if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
+    #             # get global coordinates of end points on edge
+    #             p1 = g.p[ig[1], :]
+    #             p2 = g.p[ig[end], :]
 
-                # get local coordinates on standard triangle of each point on edge
-                ξ1 = ps[il[1], :]
-                ξ2 = ps[il[end], :]
+    #             # get local coordinates on standard triangle of each point on edge
+    #             ξ1 = ps[il[1], :]
+    #             ξ2 = ps[il[end], :]
 
-                # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
-                ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
-                for i=il, j=1:g.nn
-                    f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2 # TF ∂ξ
-                    ∫f = dot(w_quad, f.(t_quad))
-                    A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
+    #             # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+    #             ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
+    #             for i=il, j=1:g.nn
+    #                 f(t) = φ(g.s, i, ξ(t))*φξ(g.s, j, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2 # TF ∂ξ
+    #                 ∫f = dot(w_quad, f.(t_quad))
+    #                 A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
-                    f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
-                    ∫f = dot(w_quad, f1.(t_quad))
-                    A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
-                end
-            end
-        end
-    end
+    #                 f1(t) = φ(g.s, i, ξ(t))*(φξ(g.s, j, ξ(t))*J.ξx[k] + φη(g.s, j, ξ(t))*J.ηx[k])*norm(p2 - p1)/2
+    #                 ∫f = dot(w_quad, f1.(t_quad))
+    #                 A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
+    #             end
+    #         end
+    #     end
+    # end
 
-    # # if we don't do ∂x(ωx) = 0
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
-
-    # # if we don't do ∂x(χy) = 0
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0) # need to apply this on ωy since χy is full
+    # possible bottom b.c.'s
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], 0) 
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], 0) 
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0)
 
     # corners: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
@@ -143,8 +143,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χxmap[e.bot[[1, end]]], 0)
     A, r = add_dirichlet(A, r, χymap[e.bot[[1, end]]], 0)
 
-    # off-corners: dirichlet
-    A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
+    # # off-corners: dirichlet
+    # A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
 
     # remove zeros
     dropzeros!(A)
@@ -178,11 +178,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     return ωx, ωy, χx, χy
 end
 
-function pg_vort_res(geo, nref; showplots=false)
-    # order of polynomials
-    # order = 1
-    order = 2
-
+function pg_vort_res(; nref, order, showplots=false)
     # Ekman number
     # ε² = 1e-5
     # ε² = 1e-4
@@ -192,7 +188,7 @@ function pg_vort_res(geo, nref; showplots=false)
     ε² = 1
 
     # setup FE grids
-    gfile = "../meshes/$geo/mesh$nref.h5"
+    gfile = "../meshes/gmsh/mesh$nref.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
 
@@ -210,18 +206,12 @@ function pg_vort_res(geo, nref; showplots=false)
     e = (bot = ebot, top = etop) 
 
     # forcing
-    function H(x)
-        if geo == "gmsh_tri"
-            return 1 - abs(x)
-        else
-            return sqrt(2 - x^2) - 1
-        end
-    end
+    # H(x) = sqrt(2 - x^2) - 1
     x = g.p[:, 1] 
-    z = g.p[:, 2] 
-    δ = 0.1
-    b = @. z + δ*exp(-(z + H(x))/δ)
-    # b = -ones(g.np)
+    # z = g.p[:, 2] 
+    # δ = 0.1
+    # b = @. z + δ*exp(-(z + H(x))/δ)
+    b = 2*x
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
@@ -238,14 +228,16 @@ function pg_vort_res(geo, nref; showplots=false)
         quickplot(ωy, L"\omega^y", "images/omegay.png")
         quickplot(χx, L"\chi^x",   "images/chix.png")
         quickplot(χy, L"\chi^y",   "images/chiy.png")
-        plot_profile(ωx, 0.5, -H(0.5):1e-3:0, L"$\omega^x$ at $x = 0.5$", L"z", "images/omegax_profile.png")
-        plot_profile(ωy, 0.5, -H(0.5):1e-3:0, L"$\omega^y$ at $x = 0.5$", L"z", "images/omegay_profile.png")
-        plot_profile(χx, 0.5, -H(0.5):1e-3:0, L"$\chi^x$ at $x = 0.5$",   L"z", "images/chix_profile.png")
-        plot_profile(χy, 0.5, -H(0.5):1e-3:0, L"$\chi^y$ at $x = 0.5$",   L"z", "images/chiy_profile.png")
-        plot(x[ebot], χy.values[ebot], "o", ms=1)
+        plot(g.p[e.bot, 1], ωy.values[e.bot], "o", ms=1)
         xlabel(L"x")
-        ylabel(L"\chi^y(z = - H)")
-        savefig("images/chiy_bot.png")
+        ylabel(L"\omega^y(z = -H)")
+        savefig("images/omegay_bot.png")
+        println("images/omegay_bot.png")
+        plt.close()
+        # plot_profile(ωx, 0.5, -H(0.5):1e-3:0, L"$\omega^x$ at $x = 0.5$", L"z", "images/omegax_profile.png")
+        # plot_profile(ωy, 0.5, -H(0.5):1e-3:0, L"$\omega^y$ at $x = 0.5$", L"z", "images/omegay_profile.png")
+        # plot_profile(χx, 0.5, -H(0.5):1e-3:0, L"$\chi^x$ at $x = 0.5$",   L"z", "images/chix_profile.png")
+        # plot_profile(χy, 0.5, -H(0.5):1e-3:0, L"$\chi^y$ at $x = 0.5$",   L"z", "images/chiy_profile.png")
     end
 
     return ωx, ωy, χx, χy
@@ -317,16 +309,15 @@ function get_velocities(χx, χy; showplots=false)
         quickplot(uy, L"u^y", "images/uy.png")
         quickplot(uz, L"u^z", "images/uz.png")
         H(x) = sqrt(2 - x^2) - 1
-        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
-        plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
-        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
+        # plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
+        # plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
+        # plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
     end
 
     return ux, uy, uz
 end
 
-# ωx, ωy, χx, χy = pg_vort_res("gmsh", 5; showplots=true)
-ωx, ωy, χx, χy = pg_vort_res("valign", 4; showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
 
 # ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
