@@ -3,10 +3,8 @@ using GridapGmsh
 using Gmsh: gmsh
 
 # model
-# model = GmshDiscreteModel("bowl.msh")
-model = GmshDiscreteModel("bowl1.msh")
-# writevtk(model, "model")
-# error()
+model = GmshDiscreteModel("bowl2D.msh")
+writevtk(model, "bowl2D")
 
 # reference FE 
 order = 2
@@ -16,23 +14,25 @@ reffe_χx = ReferenceFE(lagrangian, Float64, order; space=:P)
 reffe_χy = ReferenceFE(lagrangian, Float64, order; space=:P)
 
 # test FESpaces
-Tx = TestFESpace(model, reffe_ωx, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
-Ty = TestFESpace(model, reffe_ωy, conformity=:H1, dirichlet_tags=["top"])
-Ψx = TestFESpace(model, reffe_χx, conformity=:H1, dirichlet_tags=["top"])
-Ψy = TestFESpace(model, reffe_χy, conformity=:H1, dirichlet_tags=["top", "bot", "corners"])
+Tx = TestFESpace(model, reffe_ωx, conformity=:H1, dirichlet_tags=["surface", "bottom"])
+Ty = TestFESpace(model, reffe_ωy, conformity=:H1, dirichlet_tags=["surface"])
+Ψx = TestFESpace(model, reffe_χx, conformity=:H1, dirichlet_tags=["surface"])
+Ψy = TestFESpace(model, reffe_χy, conformity=:H1, dirichlet_tags=["surface", "bottom"])
 Y = MultiFieldFESpace([Tx, Ty, Ψx, Ψy])
 
 # trial FESpaces with Dirichlet values
-Wx = TrialFESpace(Tx, [0, 0, 0])
+Wx = TrialFESpace(Tx, [0, 0])
 Wy = TrialFESpace(Ty, [0])
 Xx = TrialFESpace(Ψx, [0])
-Xy = TrialFESpace(Ψy, [0, 0, 0])
+Xy = TrialFESpace(Ψy, [0, 0])
 X  = MultiFieldFESpace([Wx, Wy, Xx, Xy])
 
 # triangulation and integration measure
 degree = 2*order
 Ω = Triangulation(model)
 dΩ = Measure(Ω, degree)
+Γ = BoundaryTriangulation(model, tags=["bottom"])
+dΓ = Measure(Γ, degree)
 
 # gradients 
 x = VectorValue(1.0, 0.0)
@@ -44,14 +44,15 @@ z = VectorValue(0.0, 1.0)
 δ = 0.1
 H(x) = sqrt(2 - x^2) - 1
 bx(x) = x[1]/sqrt(2 - x[1]^2)*exp(-(x[2] + H(x[1]))/δ)
+# bx(x) = 2
 
 # bilinear and linear form
 ε² = 1e-4
 a((ωx, ωy, χx, χy), (τx, τy, ψx, ψy)) = ∫( ε²*∂z(ωx)*∂z(τx) - ωy*τx + 
                                           -ε²*∂z(ωy)*∂z(τy) - ωx*τy + #multiplied by -1 to get +bx 
-                                           ∂z(χx)*∂z(ψx) - ωx*ψx +
-                                           ∂z(χy)*∂z(ψy) - ωy*ψy
-                                           )dΩ
+                                          -∂z(χx)*∂z(ψx) + ωx*ψx +
+                                          -∂z(χy)*∂z(ψy) + ωy*ψy)dΩ + 
+                                        ∫(-ε²*∂z(ωx)*τx + ε²*∂z(ωy)*τy)dΓ
 l((τx, τy, ψx, ψy)) = ∫( bx*τy )dΩ
 
 # affine FE operator
@@ -66,5 +67,5 @@ uy = ∂z(χx)
 uz = ∂x(χy)
 
 # export to vtk
-writevtk(Ω, "results", cellfields=["ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy,
-                                   "ux"=>ux, "uy"=>uy, "uz"=>uz])
+writevtk(Ω, "pg_vort_2D", cellfields=["ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy,
+                                      "ux"=>ux, "uy"=>uy, "uz"=>uz])
