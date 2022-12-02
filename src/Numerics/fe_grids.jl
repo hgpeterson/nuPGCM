@@ -104,7 +104,6 @@ function read_gfile_h5(gfile)
     return p, t, e
 end
 
-
 """
 	p, t, e = add_nodes(p, t, e, order)
 
@@ -235,16 +234,6 @@ function all_edges(t, e)
     emap = reshape(emap, :, ne)
 
     return edges, bndix, emap
-end
-
-"""
-    e = boundary_nodes(t)
-
-Find all boundary nodes in the triangulation `t`.
-"""
-function boundary_nodes(t)
-    edges, boundary_indices, _ = all_edges(t)
-    return unique(edges[boundary_indices,:][:])
 end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
