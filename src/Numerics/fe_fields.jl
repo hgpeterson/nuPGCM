@@ -113,7 +113,7 @@ function evaluate(u::FEField, x)
         k = get_tri(x, u.g1)
 
         # evaluate there
-        return fem_evaluate(u, x, k)
+        return evaluate(u, x, k)
     catch
         # if triangle not found, return NaN
         println("p₀=($(x[1]), $(x[2])) outside mesh domain.")
