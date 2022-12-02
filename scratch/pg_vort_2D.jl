@@ -80,6 +80,42 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
             push!(A, (χyi[i], ωyi[j], M[i, j]))
         end
     end
+    edges, boundary_indices, emap = all_edges(g1.t, g1.e)
+    w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
+    ps = reference_element_nodes(g.order, g.dim)
+    for k=1:g1.nt, ie=1:3
+        if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+            # get local indices of each point on edge `ie`:
+            if g.order == 1
+                il = [ie, mod1(ie+1, 3)]
+            elseif g.order == 2
+                il = [ie, ie+3, mod1(ie+1, 3)]
+            end
+            ig = g.t[k, il]
+            if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
+                # get global coordinates of end points on edge
+                p1 = g.p[ig[1], :]
+                p2 = g.p[ig[end], :]
+
+                # get local coordinates on standard triangle of each point on edge
+                ξ1 = ps[il[1], :]
+                ξ2 = ps[il[end], :]
+
+                # get ∂ξ/∂z and ∂η/∂z
+                ξz = J.Js[k, 1, 2]
+                ηz = J.Js[k, 2, 2]
+
+                # compute ∫ φᵢ(ξ(t))*∂z(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+                ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
+                for i=il, j=1:g.nn
+                    f(t) = φ(g.s, i, ξ(t))*(∂φ(g.s, j, 1, ξ(t))*ξz + ∂φ(g.s, j, 2, ξ(t))*ηz)*norm(p2 - p1)/2
+                    ∫f = dot(w_quad, f.(t_quad))
+                    push!(A, (ωxmap[g.t[k, i]], ωxmap[g.t[k, j]], -ε²*∫f))
+                    push!(A, (ωymap[g.t[k, i]], ωymap[g.t[k, j]], -ε²*∫f))
+                end
+            end
+        end
+    end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
@@ -132,7 +168,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # end
 
     # possible bottom b.c.'s
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
     # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], 0) 
     # A, r = add_dirichlet(A, r, ωymap[e.bot], 0) 
     A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0)
@@ -215,7 +251,7 @@ function pg_vort_res(; nref, order, showplots=false)
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
-    ωy = FEField(zeros(g.np), g, g1)
+    ωy = FEField(zeros(g.np), g, g1)    
     χx = FEField(zeros(g.np), g, g1)
     χy = FEField(zeros(g.np), g, g1)
     b  = FEField(b,           g, g1)
@@ -317,7 +353,7 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=4, order=1, showplots=true)
 
 # ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
