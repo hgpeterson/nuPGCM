@@ -6,6 +6,7 @@
 *.txt
 *.vtu
 *.pvsm
+*.csv
 
 # ignore images and videos
 *.png
