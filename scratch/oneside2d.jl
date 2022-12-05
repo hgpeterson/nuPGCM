@@ -27,7 +27,7 @@ function solve_oneside2d(u, s, J, e, f)
         M = J.dets[k]*s.M
 
         # rhs
-        b[u.g.t[k, :]] = M*f.values[u.g.t[k, :]]
+        b[u.g.t[k, :]] += M*f.values[u.g.t[k, :]]
 
         # stamp
         for i=1:u.g.nn, j=1:u.g.nn
@@ -39,7 +39,8 @@ function solve_oneside2d(u, s, J, e, f)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
     # set bottom b.c. u = 0 at z = 0 nodes
-    A, b = add_dirichlet(A, b, e.top, e.bot, 0)
+    # A, b = add_dirichlet(A, b, e.top, e.bot, 0)
+    A, b = add_dirichlet(A, b, e.top, 0)
 
     # solve
     u.values[:] = A\b
@@ -49,7 +50,8 @@ end
 
 function oneside2d_res(; nref, order, showplots=false)
     # get grid
-    gfile = "../meshes/jc_valign/mesh$nref.h5"
+    # gfile = "../meshes/jc_valign/mesh$nref.h5"
+    gfile = "../meshes/valign/mesh$nref.h5"
     g = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
 
@@ -67,12 +69,14 @@ function oneside2d_res(; nref, order, showplots=false)
     h = 1/sqrt(g.np)
 
     # analytical solution
-    H(x) = 1 - x^2
+    # H(x) = 1 - x^2
+    H(x) = sqrt(2 - x^2) - 1
     x = g.p[:, 1]
     z = g.p[:, 2]
     f = ones(g.np)
     f = FEField(order, f, g, g1)
-    ua = @. -1/2*(z^2 + 2*H(x)*z + H(x)^2)
+    # ua = @. -1/2*(z^2 + 2*H(x)*z + H(x)^2)
+    ua = @. -1/2*(z^2 + 2*H(x)*z)
     ua = FEField(order, ua, g, g1)
 
     # initialize
@@ -107,4 +111,7 @@ function oneside2d_res(; nref, order, showplots=false)
     return h, err
 end
 
-oneside2d_res(nref=4, order=1, showplots=true)
+for nref=1:4
+    h, err = oneside2d_res(nref=nref, order=1)
+    println(err)
+end
