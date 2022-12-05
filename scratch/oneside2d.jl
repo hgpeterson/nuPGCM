@@ -39,8 +39,10 @@ function solve_oneside2d(u, s, J, e, f)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
     # set bottom b.c. u = 0 at z = 0 nodes
-    # A, b = add_dirichlet(A, b, e.top, e.bot, 0)
-    A, b = add_dirichlet(A, b, e.top, 0)
+    A, b = add_dirichlet(A, b, e.top, e.bot, 0)
+
+    # zero corners
+    # A, b = add_dirichlet(A, b, e.corners, 0)
 
     # solve
     u.values[:] = A\b
@@ -50,14 +52,27 @@ end
 
 function oneside2d_res(; nref, order, showplots=false)
     # get grid
-    # gfile = "../meshes/jc_valign/mesh$nref.h5"
-    gfile = "../meshes/valign/mesh$nref.h5"
+    gfile = "../meshes/jc_valign/mesh$nref.h5"
+    # gfile = "../meshes/valign/mesh$nref.h5"
+    # gfile = "../meshes/gmsh_equal_edges/mesh$nref.h5"
     g = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
 
     # edges
     ebot, etop = get_sides(g)
     e = (bot=ebot, top=etop)
+    # ebot = g.e[2:Int64(g.ne/2)]
+    # etop = g.e[end:-1:Int64(g.ne/2)+2]
+    # ecorners = g.e[[1, Int64(g.ne/2)+1]]
+    # e = (bot=ebot, top=etop, corners=ecorners)
+    # tplot(g.p, g.t)
+    # axis("equal")
+    # plot(g.p[e.bot, 1], g.p[e.bot, 2], "o", ms=1)
+    # plot(g.p[e.top, 1], g.p[e.top, 2], "o", ms=1)
+    # plot(g.p[e.corners, 1], g.p[e.corners, 2], "o", ms=1)
+    # savefig("images/mesh.png")
+    # println("images/mesh.png")
+    # plt.close()
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -69,14 +84,13 @@ function oneside2d_res(; nref, order, showplots=false)
     h = 1/sqrt(g.np)
 
     # analytical solution
-    # H(x) = 1 - x^2
-    H(x) = sqrt(2 - x^2) - 1
+    H(x) = 1 - x^2
+    # H(x) = sqrt(2 - x^2) - 1
     x = g.p[:, 1]
     z = g.p[:, 2]
     f = ones(g.np)
     f = FEField(order, f, g, g1)
-    # ua = @. -1/2*(z^2 + 2*H(x)*z + H(x)^2)
-    ua = @. -1/2*(z^2 + 2*H(x)*z)
+    ua = @. -1/2*(z^2 + 2*H(x)*z + H(x)^2)
     ua = FEField(order, ua, g, g1)
 
     # initialize
@@ -111,7 +125,8 @@ function oneside2d_res(; nref, order, showplots=false)
     return h, err
 end
 
-for nref=1:4
-    h, err = oneside2d_res(nref=nref, order=1)
-    println(err)
-end
+h, err = oneside2d_res(nref=4, order=2, showplots=true)
+# for nref=1:4
+#     h, err = oneside2d_res(nref=nref, order=2)
+#     println(err)
+# end
