@@ -35,7 +35,7 @@ function boundary_nodes(t)
 end
 
 for nref=1:4
-    fbase = string("meshva", nref)
+    fbase = string("meshvaquadbowl", nref)
     savefile = string("mesh", nref, ".h5")
     load_jc(fbase, savefile)
 end
