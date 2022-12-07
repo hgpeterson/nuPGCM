@@ -2,7 +2,6 @@ using nuPGCM
 using PyPlot
 using SparseArrays
 using LinearAlgebra
-using IterativeSolvers
 using Printf
 using HDF5
 
@@ -176,29 +175,16 @@ function pg_vort_res(; nref, order, showplots=false)
     println(@sprintf("q⁻¹ = %1.1e", sqrt(2*ε²)))
 
     # setup FE grids
-
-    gfile = "../meshes/bowl3D/mesh$nref.h5"
+    # gfile = "../meshes/bowl3D/mesh$nref.h5"
+    gfile = "../meshes/mesh.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
-
-    # gfile = "../meshes/mesh.h5"
-    # file = h5open(gfile, "r")
-    # p = read(file, "pts")
-    # t = read(file, "tets")
-    # tris_bot = read(file, "tris_bot")
-    # tris_sfc = read(file, "tris_sfc")
-    # bdy_bot = read(file, "bdy_bot")
-    # bdy_sfc = read(file, "bdy_sfc")
-    # e = unique!(vcat(bdy_bot, bdy_sfc))
-    # close(file)
-    # g = FEGrid(p, t, e, order)
-    # g1 = FEGrid(p, t, e, 1)
     println(@sprintf("h   = %1.1e", 1/cbrt(g.np)))
 
     # top and bottom surfaces
     ebot, etop = get_sides(g)
     # bdy = (bot_nodes = ebot, sfc_nodes = etop, bot_tris = tris_bot, sfc_tris = tris_sfc) 
-    bdy = (bot_nodes = ebot, sfc_nodes = etop)
+    bdy = (bot_nodes=ebot, sfc_nodes=etop)
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -211,6 +197,7 @@ function pg_vort_res(; nref, order, showplots=false)
     y = g.p[:, 2] 
     z = g.p[:, 3] 
     # H(x, y) = sqrt(2 - x^2 - y^2) - 1
+    # H(x, y) = 1 - x^2 - y^2
     # δ = 0.1
     # b = @. z + δ*exp(-(z + H(x, y))/δ)
     b = 2*x - 3*y

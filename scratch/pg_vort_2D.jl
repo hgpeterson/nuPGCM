@@ -90,56 +90,57 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χxmap[e.top], 0)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
 
-    # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
-    edges, boundary_indices, emap = all_edges(g1.t, g1.e)
-    w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
-    ps = reference_element_nodes(g.order, g.dim)
-    A[ωxmap[e.bot], :] .= 0
-    r[ωxmap[e.bot]] .= 0
-    A[ωymap[e.bot], :] .= 0
-    r[ωymap[e.bot]] .= 0
-    for k=1:g1.nt, ie=1:3
-        if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
-            # get local indices of each point on edge `ie`:
-            if g.order == 1
-                il = [ie, mod1(ie+1, 3)]
-            elseif g.order == 2
-                il = [ie, ie+3, mod1(ie+1, 3)]
-            end
-            ig = g.t[k, il]
-            if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
-                # get global coordinates of end points on edge
-                p1 = g.p[ig[1], :]
-                p2 = g.p[ig[end], :]
+    # # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
+    # edges, boundary_indices, emap = all_edges(g1.t, g1.e)
+    # w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
+    # ps = reference_element_nodes(g.order, g.dim)
+    # A[ωxmap[e.bot], :] .= 0
+    # r[ωxmap[e.bot]] .= 0
+    # A[ωymap[e.bot], :] .= 0
+    # r[ωymap[e.bot]] .= 0
+    # for k=1:g1.nt, ie=1:3
+    #     if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+    #         # get local indices of each point on edge `ie`:
+    #         if g.order == 1
+    #             il = [ie, mod1(ie+1, 3)]
+    #         elseif g.order == 2
+    #             il = [ie, ie+3, mod1(ie+1, 3)]
+    #         end
+    #         ig = g.t[k, il]
+    #         if (ig[1] in e.bot) && (ig[end] in e.bot) # the edge is on the *bottom* boundary
+    #             # get global coordinates of end points on edge
+    #             p1 = g.p[ig[1], :]
+    #             p2 = g.p[ig[end], :]
 
-                # get local coordinates on standard triangle of each point on edge
-                ξ1 = ps[il[1], :]
-                ξ2 = ps[il[end], :]
+    #             # get local coordinates on standard triangle of each point on edge
+    #             ξ1 = ps[il[1], :]
+    #             ξ2 = ps[il[end], :]
 
-                # get ∂ξ/∂x and ∂η/∂x
-                ξx = J.Js[k, 1, 1]
-                ηx = J.Js[k, 2, 1]
+    #             # get ∂ξ/∂x and ∂η/∂x
+    #             ξx = J.Js[k, 1, 1]
+    #             ηx = J.Js[k, 2, 1]
 
-                # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
-                ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
-                for i=il, j=1:g.nn
-                    f(t) = φ(g.s, i, ξ(t))*∂φ(g.s, j, 1, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2 # TF ∂ξ
-                    ∫f = dot(w_quad, f.(t_quad))
-                    A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
+    #             # compute ∫ φᵢ(ξ(t))*∂x(φⱼ(ξ(t)))*||ξ′(t)||*dt for t ∈ [-1, 1] where ξ(-1) = ξ1 and ξ(1) = ξ2
+    #             ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
+    #             for i=il, j=1:g.nn
+    #                 f(t) = φ(g.s, i, ξ(t))*∂φ(g.s, j, 1, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2 # TF ∂ξ
+    #                 # f(t) = φ(g.s, i, ξ(t))*(∂φ(g.s, j, 1, ξ(t))*ξx + ∂φ(g.s, j, 2, ξ(t))*ηx)*norm(p2 - p1)/2
+    #                 ∫f = dot(w_quad, f.(t_quad))
+    #                 A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
-                    f1(t) = φ(g.s, i, ξ(t))*(∂φ(g.s, j, 1, ξ(t))*ξx + ∂φ(g.s, j, 2, ξ(t))*ηx)*norm(p2 - p1)/2
-                    ∫f = dot(w_quad, f1.(t_quad))
-                    A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
-                end
-            end
-        end
-    end
+    #                 f1(t) = φ(g.s, i, ξ(t))*(∂φ(g.s, j, 1, ξ(t))*ξx + ∂φ(g.s, j, 2, ξ(t))*ηx)*norm(p2 - p1)/2
+    #                 ∫f = dot(w_quad, f1.(t_quad))
+    #                 A[ωymap[g.t[k, i]], χymap[g.t[k, j]]] += ∫f
+    #             end
+    #         end
+    #     end
+    # end
 
-    # # possible bottom b.c.'s
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
-    # # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], 0) 
-    # # A, r = add_dirichlet(A, r, ωymap[e.bot], 0) 
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0)
+    # possible bottom b.c.'s
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], 0) 
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], 0) 
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0)
 
     # corners: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
@@ -147,8 +148,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χxmap[e.bot[[1, end]]], 0)
     A, r = add_dirichlet(A, r, χymap[e.bot[[1, end]]], 0)
 
-    # off-corners: dirichlet
-    A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
+    # # off-corners: dirichlet
+    # A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
 
     # remove zeros
     dropzeros!(A)
@@ -156,6 +157,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
 
     R = rank(A)
     println("rank(A): ", R, " = N - ", N - R)
+
     # if R < N
     #     if N > 2000
     #         error("🐻")
@@ -185,17 +187,26 @@ end
 function pg_vort_res(; nref, order, showplots=false)
     # Ekman number
     # ε² = 1e-5
-    # ε² = 1e-4
+    ε² = 1e-4
     # ε² = 1e-3
     # ε² = 1e-2
     # ε² = 1e-1
-    ε² = 1
+    # ε² = 1
 
     # setup FE grids
     # gfile = "../meshes/gmsh/mesh$nref.h5"
-    gfile = "../meshes/valign/mesh$nref.h5"
+    # gfile = "../meshes/valign/mesh$nref.h5"
+    # gfile = "../meshes/jc_valign/mesh$nref.h5"
+    gfile = "../meshes/mesh.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
+    # fig, ax, im = tplot(g.p, g.t)
+    # ax.plot(g.p[:, 1], g.p[:, 2], "o", ms=1)
+    # ax.plot(g.p[g.e, 1], g.p[g.e, 2], "o", ms=1)
+    # ax.axis("equal")
+    # savefig("images/mesh.png")
+    # println("images/mesh.png")
+    # plt.close()   
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -211,12 +222,13 @@ function pg_vort_res(; nref, order, showplots=false)
     e = (bot = ebot, top = etop) 
 
     # forcing
-    H(x) = sqrt(2 - x^2) - 1
+    # H(x) = sqrt(2 - x^2) - 1
+    H(x) = 1 - x^2
     x = g.p[:, 1] 
-    # z = g.p[:, 2] 
-    # δ = 0.1
-    # b = @. z + δ*exp(-(z + H(x))/δ)
-    b = 2*x
+    z = g.p[:, 2] 
+    δ = 0.1
+    b = @. z + δ*exp(-(z + H(x))/δ)
+    # b = 2*x
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
@@ -322,7 +334,7 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=3, order=2, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=4, order=2, showplots=true)
 
 # ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
