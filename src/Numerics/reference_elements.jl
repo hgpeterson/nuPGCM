@@ -87,14 +87,17 @@ function transform_from_ref_el(ξ, p)
     # dimension of space
     dim = size(p, 2)
 
-    # build A
-    A = zeros(dim, dim)
-    for i=1:dim
-        A[:, i] = p[i+1, :] - p[1, :]
+    # build A and b
+    if dim == 1
+        A = (p[2, :] - p[1, :])/2
+        b = (p[1, :] + p[2, :])/2
+    else
+        A = [p[j+1, i] - p[1, i] for i=1:dim, j=1:dim]
+        b = p[1, :]
     end
 
-    # x = x₁ + A*ξ
-    return p[1, :] + A*reshape(ξ, (dim, 1))
+    # x = A*ξ + b
+    return A*reshape(ξ, (dim, 1)) + b
 end
 
 """
@@ -106,12 +109,15 @@ function transform_to_ref_el(x, p)
     # dimension of space
     dim = size(p, 2)
 
-    # build A
-    A = zeros(dim, dim)
-    for i=1:dim
-        A[:, i] = p[i+1, :] - p[1, :]
+    # build A and b
+    if dim == 1
+        A = (p[2, :] - p[1, :])/2
+        b = (p[1, :] + p[2, :])/2
+    else
+        A = [p[j+1, i] - p[1, i] for i=1:dim, j=1:dim]
+        b = p[1, :]
     end
 
-    # A*ξ = x - x₁
-    return A\(x - p[1, :])
+    # A*ξ = x - b
+    return A\(x - b)
 end

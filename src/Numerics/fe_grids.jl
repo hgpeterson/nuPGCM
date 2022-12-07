@@ -249,14 +249,17 @@ end
 
 Compute Jacobian terms for transformations from reference element to element on grid.
 Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation ξ ↦ x is 
-    x = x₁ + A*ξ
+    x = A*ξ + b
 where
-    A in 1D = [x₂ - x₁],
+    A in 1D = (x₂ - x₁)/2,
     A in 2D = [x₂ - x₁  x₃ - x₁],
     A in 3D = [x₂ - x₁  x₃ - x₁  x₄ - x₁].
+    b in 1D = (x₂ + x₁)/2,
+    b in 2D = x₁
+    b in 3D = x₁
 In other words, A = ∂x/∂ξ is the Jacobian. To transform from global coordinates to 
 the reference element, we then need the inverse of A, J = ∂ξ/∂x:
-    J in 1D = [∂ξ/∂x],
+    J in 1D = ∂ξ/∂x,
     J in 2D = [∂ξ/∂x  ∂ξ/∂y;  ∂η/∂x  ∂η/∂y],
     J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z;  ∂η/∂x  ∂η/∂y  ∂η/∂z;  ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
 """
@@ -268,9 +271,11 @@ function Jacobians(g::FEGrid)
     # loop through elements in g
     for k=1:g.nt
         # build A
-        A = zeros(g.dim, g.dim)
-        for i=1:g.dim
-            A[:, i] = g.p[g.t[k, i+1], :] - g.p[g.t[k, 1], :]
+        A = [g.p[g.t[k, j+1], i] - g.p[g.t[k, 1], i] for i=1:g.dim, j=1:g.dim]
+
+        if g.dim == 1
+            # A = (x₂ - x₁)/2 for 1D case
+            A /= 2.0
         end
 
         # compute determinant

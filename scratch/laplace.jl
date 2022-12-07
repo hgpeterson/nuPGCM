@@ -13,9 +13,9 @@ plt.close("all")
 pygui(false)
 
 """
-    u = solve_laplace(V, f, u₀)
+    u = solve_laplace(u, s, J, f, u₀)
 
-Solves -Δu = f with dirichlet b.c. u = u₀.
+Solves -∇²u = f with dirichlet b.c. u = u₀.
 """
 function solve_laplace(u, s, J, f, u₀)
     println("np = $(u.g.np)")
@@ -70,13 +70,23 @@ end
 
 function laplace_res(; nref, order, dim, showplots=false)
     # get grid
-    if dim == 2
+    if dim == 1
+        h = 0.1*2.0^(1-nref)
+        p = reshape(0:h:1, (:, 1))
+        np = size(p, 1)
+        t = hcat(1:np-1, 2:np)
+        e = [1, np]
+        g = FEGrid(p, t, e, order)
+        g1 = FEGrid(p, t, e, 1)
+    elseif dim == 2
         gfile = "../meshes/gmsh/mesh$nref.h5"
+        g = FEGrid(gfile, order)
+        g1 = FEGrid(gfile, 1)
     elseif dim == 3
         gfile = "../meshes/bowl3D/mesh$nref.h5"
+        g = FEGrid(gfile, order)
+        g1 = FEGrid(gfile, 1)
     end
-    g = FEGrid(gfile, order)
-    g1 = FEGrid(gfile, 1)
 
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -88,20 +98,25 @@ function laplace_res(; nref, order, dim, showplots=false)
     h = 1/g.np^(1/dim)
 
     # solution
-    x = g.p[:, 1]
-    y = g.p[:, 2]
-    if dim == 3
-        z = g.p[:, 3]
-    end
-    if dim == 2
+    if dim == 1 
+        x = g.p[:, 1]
+        ua = @. -exp(x^2)
+    elseif dim == 2
+        x = g.p[:, 1]
+        y = g.p[:, 2]
         ua = @. -exp(x^2)*sin(y)
     elseif dim == 3
+        x = g.p[:, 1]
+        y = g.p[:, 2]
+        z = g.p[:, 3]
         ua = @. -exp(x^2)*sin(y)*z^5
     end
     u₀ = ua[g.e]
 
     # pick f such that -∇²u = f
-    if dim == 2
+    if dim == 1
+        f = @. exp(x^2)*(2 + 4*x^2)
+    elseif dim == 2
         f = @. exp(x^2)*(1 + 4*x^2)*sin(y)
     elseif dim == 3
         f = @. exp(x^2)*z^3*(20 + (1 + 4*x^2)*z^2)*sin(y)
@@ -115,7 +130,15 @@ function laplace_res(; nref, order, dim, showplots=false)
     u = solve_laplace(u, s, J, f, u₀)
 
     if showplots
-        if dim == 2
+        if dim == 1
+            fig, ax = subplots()
+            ax.plot(g.p[:, 1], u.values, "o", ms=1)
+            ax.set_xlabel(L"x")
+            ax.set_ylabel(L"u")
+            savefig("images/u.png")
+            println("images/u.png")
+            plt.close()
+        elseif dim == 2
             quickplot(u, L"u", "images/u.png")
         elseif dim == 3
             write_vtk(g, "../output/laplace", ["u"=>u, "error"=>abs(u - ua)])
@@ -149,5 +172,5 @@ function laplace_convergence(; nrefs, dim)
     plt.close()
 end
 
-laplace_res(nref=3, order=1, dim=3, showplots=true)
-# laplace_convergence(nrefs=0:5, dim=2)
+# laplace_res(nref=3, order=1, dim=1, showplots=true)
+laplace_convergence(nrefs=0:5, dim=1)
