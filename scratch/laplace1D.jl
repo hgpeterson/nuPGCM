@@ -23,14 +23,12 @@ function solve_laplace1D(u, s, J, f, u₀)
     # stamp
     for k=1:u.g.nt
         # matrices
-        # JJ = J.Js[k, :, :]*J.Js[k, :, :]'
-        # K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        JJ = J.Js[k, 1, 1]^2
-        K = J.dets[k]*JJ*s.K[1, 1, :, :]
+        JJ = J.Js[k, :, :]*J.Js[k, :, :]'
+        K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
 
         # rhs
-        b[u.g.t[k, :]] = M*f.values[u.g.t[k, :]]
+        b[u.g.t[k, :]] += M*f.values[u.g.t[k, :]]
 
         # add to global system
         for i=1:u.g.nn, j=1:u.g.nn
