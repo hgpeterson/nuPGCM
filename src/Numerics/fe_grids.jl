@@ -159,8 +159,7 @@ function add_nodes(p, t, e, order)
         tnew[:, 10] = np2 .+ (1:size(t,1))'
 
         # add points that were on boundary to `e`
-        enew = [e; np0 .+ boundary_indices]
-        enew = [enew; np1 .+ boundary_indices]
+        enew = [e; np0 .+ boundary_indices; np1 .+ boundary_indices]
     else
         error("Unsupported grid order `$order` for dimension `$dim`.")
     end
@@ -178,77 +177,78 @@ function get_idx(p, p₀)
     return argmin(Δp)
 end
 
+function all_faces(t)
+    # form all faces
+    ftag = [t[:, [1,2,3]]; t[:, [1,2,4]]; t[:, [1,3,4]]; t[:, [2,3,4]]]
+    nfaces = size(ftag, 1)
+
+    # sort columns and tag with global indices in 4th column
+    ftag = [sort(ftag, dims=2)  1:nfaces]
+
+    # sort rows
+    ftag = sortslices(ftag, dims=1)
+
+    # unique faces
+    faces = unique(ftag[:, 1:3], dims=1)
+    
+    # indices of unique faces
+    keep = zeros(Bool, nfaces)
+    keep[unique(i -> ftag[i, 1:3], 1:nfaces)] .= 1
+
+    # face `i` has no duplicates if `i` and `i+1` are in `keep`
+    i_surf = findall(i -> keep[i]*keep[i+1], 1:nfaces-1)
+    if keep[nfaces]
+        i_surf = [i_surf; nfaces]
+    end
+
+    # non-duplicates are surface triangles
+    surf_faces = ftag[i_surf, 1:3]
+
+    # mapping from local to global face index
+    fmap = cumsum(keep)
+    invpermute!(fmap, ftag[:, 4])
+    fmap = reshape(fmap, :, 4)
+    return faces, surf_faces, fmap
+end
+
 """
-    edges, boundary_indices, emap = all_edges(t)
+    emap, edges, e = all_edges(t)
 
 Find all unique `edges` (ne x 2 array) in the triangulation `t`.
 Second output is indices to the boundary edges.
 Third output `emap` (nt x dim+1 array) is a mapping from local edges
 to the global edge list, i.e., emap[it,k] is the global edge number
-for local edge k (1,2,3) in elemnt it.
+for local edge k (1,2,3) in element it.
 """
 function all_edges(t)
-    # dimension of space
-    dim = size(t, 2) - 1
+    # find all edges
+    etag = [t[:,[1,2]]; t[:,[2,3]]; t[:,[3,1]]]
 
-    if dim == 2
-        # find all edges
-        etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
+    # sort columns and tag with global indices in 3rd column
+    etag = [sort(etag, dims=2)  1:3*size(t,1)]
 
-        # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
-        etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
+    # now sort so that first column goes from lowest to highest node index
+    etag = sortslices(etag, dims=1)
 
-        # now sort so that first column goes from lowest to highest node index
-        etag = sortslices(etag, dims=1)
+    # determine if edge is a duplicate or should be kept
+    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
+    keep = .![false;dup]
 
-        # determine if edge is a duplicate or should be kept
-        dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
-        keep = .![false;dup]
+    # only keep unique edges
+    edges = etag[keep,1:2]
 
-        # only keep unique edges
-        edges = etag[keep,1:2]
+    # compute mapping to global indices
+    emap = cumsum(keep)
+    invpermute!(emap, etag[:,3])
+    emap = reshape(emap,:,3)
 
-        # compute mapping to global indices
-        emap = cumsum(keep)
-        invpermute!(emap, etag[:,3])
-        emap = reshape(emap,:,3)
+    # boundary nodes don't share an edge
+    dup = [dup;false]
+    dup = dup[keep]
+    bndix = findall(.!dup)
+    e = unique(edges[bndix, :][:])
 
-        # boundary nodes don't share an edge
-        dup = [dup;false]
-        dup = dup[keep]
-        bndix = findall(.!dup)
-
-        return edges, bndix, emap
-    elseif dim == 3
-        # form all faces
-        faces = [t[:, [1,2,3]]
-                 t[:, [1,2,4]]
-                 t[:, [1,3,4]]
-                 t[:, [2,3,4]]]
-
-        # sort columns
-        sort!(faces, dims=2)
-
-        # unique faces
-        ufaces = unique(faces, dims=1)
-        
-        # indices of unique faces
-        ix = unique(i->faces[i, :], 1:size(faces, 1))
-
-        # face `j` has no duplicates if `j` and `j+1` are in `ix`
-        jx = findall(j->j∈ix && j+1∈ix, 1:size(faces, 1))
-        if size(faces, 1) ∈ ix
-            jx = [jx; size(faces, 1)]
-        end
-
-        # non-duplicates are surface triangles
-        surf_tri = faces[jx, :]
-        return faces, surf_tri
-    end
-end
-function boundary_nodes(t)
-    edges, boundary_indices, _ = all_edges(t)
-    return unique(edges[boundary_indices,:][:])
+    return emap, edges, e
 end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
