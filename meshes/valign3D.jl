@@ -83,8 +83,13 @@ end
 
 p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
 
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-# vtk_grid("mesh.vtu", p', cells) do vtk
-# end
+cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh1.vtu", p', cells) do vtk
+end
+
+p, t, e = nuPGCM.add_nodes(p, t, e, 2)
+cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh2.vtu", p', cells) do vtk
+end
 
 println("Done.")
