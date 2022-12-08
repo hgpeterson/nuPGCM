@@ -111,7 +111,7 @@ Add nodes to mesh for higher-order shape functions.
 """
 function add_nodes(p, t, e, order)
     # get edges
-    edges, boundary_indices, emap = all_edges(t, e)
+    edges, boundary_indices, emap = all_edges(t)
 
     # dimension of space
     dim = size(p, 2)
@@ -187,53 +187,68 @@ Third output `emap` (nt x dim+1 array) is a mapping from local edges
 to the global edge list, i.e., emap[it,k] is the global edge number
 for local edge k (1,2,3) in elemnt it.
 """
-function all_edges(t, e)
+function all_edges(t)
     # dimension of space
     dim = size(t, 2) - 1
 
-    # get all possible edge index pairs
-    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
-    pairs = [1 2
-             2 3
-             1 3
-             1 4
-             2 4
-             3 4]
+    if dim == 2
+        # find all edges
+        etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
 
-    # find all edges
-    etag = t[:, pairs[1, :]]
-    for i=2:ne
-        etag = vcat(etag, t[:, pairs[i, :]])
-    end
+        # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
+        etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
 
-    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
-    etag = hcat(sort(etag, dims=2), 1:ne*size(t, 1))
+        # now sort so that first column goes from lowest to highest node index
+        etag = sortslices(etag, dims=1)
 
-    # now sort so that first column goes from lowest to highest node index
-    etag = sortslices(etag, dims=1)
+        # determine if edge is a duplicate or should be kept
+        dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
+        keep = .![false;dup]
 
-    # determine if edge is a duplicate or should be kept
-    keep = unique(i -> etag[i, 1:2], 1:size(etag, 1))
+        # only keep unique edges
+        edges = etag[keep,1:2]
 
-    # only keep unique edges
-    edges = etag[keep, 1:2]
+        # compute mapping to global indices
+        emap = cumsum(keep)
+        invpermute!(emap, etag[:,3])
+        emap = reshape(emap,:,3)
 
-    # boundary edges have both nodes in `e`
-    bndix = Vector{Int64}([])
-    for i in axes(edges, 1)
-        if edges[i, 1] in e && edges[i, 2] in e
-            push!(bndix, i)
+        # boundary nodes don't share an edge
+        dup = [dup;false]
+        dup = dup[keep]
+        bndix = findall(.!dup)
+
+        return edges, bndix, emap
+    elseif dim == 3
+        # form all faces
+        faces = [t[:, [1,2,3]]
+                 t[:, [1,2,4]]
+                 t[:, [1,3,4]]
+                 t[:, [2,3,4]]]
+
+        # sort columns
+        sort!(faces, dims=2)
+
+        # unique faces
+        ufaces = unique(faces, dims=1)
+        
+        # indices of unique faces
+        ix = unique(i->faces[i, :], 1:size(faces, 1))
+
+        # face `j` has no duplicates if `j` and `j+1` are in `ix`
+        jx = findall(j->j∈ix && j+1∈ix, 1:size(faces, 1))
+        if size(faces, 1) ∈ ix
+            jx = [jx; size(faces, 1)]
         end
+
+        # non-duplicates are surface triangles
+        surf_tri = faces[jx, :]
+        return faces, surf_tri
     end
-
-    # compute mapping to global indices
-    kept = zeros(Bool, ne*size(t, 1))
-    kept[keep] .= 1
-    emap = cumsum(kept)
-    invpermute!(emap, etag[:, 3])
-    emap = reshape(emap, :, ne)
-
-    return edges, bndix, emap
+end
+function boundary_nodes(t)
+    edges, boundary_indices, _ = all_edges(t)
+    return unique(edges[boundary_indices,:][:])
 end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
