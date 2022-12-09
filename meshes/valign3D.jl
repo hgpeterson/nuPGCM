@@ -85,24 +85,24 @@ end
 
 p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
 
-faces, surf_faces, fmap = nuPGCM.all_faces(t)
-cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, surf_faces[i, :]) for i in axes(surf_faces, 1)]
+bfaces = nuPGCM.boundary_faces(t)
+cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, bfaces[i, :]) for i in axes(bfaces, 1)]
 vtk_grid("mesh_surf.vtu", p', cells) do vtk
 end
 
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-# vtk_grid("mesh1.vtu", p', cells) do vtk
-#     bdy = zeros(size(p, 1))
-#     bdy[e] .= 1
-#     vtk["boundary"] = bdy
-# end
+cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh1.vtu", p', cells) do vtk
+    bdy = zeros(size(p, 1))
+    bdy[e] .= 1
+    vtk["boundary"] = bdy
+end
 
-# p, t, e = nuPGCM.add_nodes(p, t, e, 2)
-# cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
-# vtk_grid("mesh2.vtu", p', cells) do vtk
-#     bdy = zeros(size(p, 1))
-#     bdy[e] .= 1
-#     vtk["boundary"] = bdy
-# end
+p, t, e = nuPGCM.add_nodes(p, t, e, 2)
+cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh2.vtu", p', cells) do vtk
+    bdy = zeros(size(p, 1))
+    bdy[e] .= 1
+    vtk["boundary"] = bdy
+end
 
 println("Done.")

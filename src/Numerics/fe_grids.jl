@@ -110,56 +110,96 @@ end
 Add nodes to mesh for higher-order shape functions.
 """
 function add_nodes(p, t, e, order)
-    # get edges
-    edges, boundary_indices, emap = all_edges(t)
-
     # dimension of space
     dim = size(p, 2)
 
-    if order == 2
-        # add midpoints
-        np0 = size(p, 1)
-        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
-        pnew = [p; new_pts]
+    if order == 2 
+        if dim == 2
+            # get edges
+            emap, edges, bndix = all_edges(t)
 
-        # map to triangle data structure
-        tnew = hcat(t, np0 .+ emap)
+            # add midpoints
+            np = size(p, 1)
+            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
+            pnew = [p; new_pts]
 
-        # add points that were on the boundary to `e`
-        enew = [e; np0 .+ boundary_indices]
-    elseif order == 3 && dim == 2
-        # number of nodes per triangle
-        n = 10
+            # map to triangle data structure
+            tnew = [t  np.+emap]
 
-        # first add 1/3 points
-        np0 = size(p, 1)
-        new_pts = reshape(p[edges[:, 1], :] + 1/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
-        pnew = [p; new_pts]
-        np1 = size(pnew, 1)
-        # then add 2/3 points
-        new_pts = reshape(p[edges[:, 1], :] + 2/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
-        pnew = [pnew; new_pts]
-        np2 = size(pnew, 1)
-        # finally add center points
-        new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
-        pnew = [pnew; new_pts]
+            # add points that were on the boundary to `e`
+            enew = [e; np.+bndix]
+        elseif dim == 3
+            # get faces
+            fmap, faces, bndix = all_faces(t)
 
-        # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
-        # the 2/3rd point for another... this works but it is slow
-        tnew = zeros(Int64, size(t, 1), n)
-        ps = reference_element_nodes(order, 2)
-        tnew[:, 1:3] = t
-        @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
-            for i=4:n-1
-                p₀ = transform_from_ref_el(ps[i, :], pnew[t[k, :], :])
-                idx = get_idx(pnew, p₀)
-                tnew[k, i] = idx
-            end
+            # get edges on faces
+            emap, edges, _ = all_edges(faces)
+
+            # add midpoints
+            np = size(p, 1)
+            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
+            pnew = [p; new_pts]
+
+            # fmap[k, i] = face i of tet k
+            # emap[fmap[k, i], j] = edge j of face i of tet k
+            #  pairs = [1 2 -> f1 e1
+            #           2 3 -> f1 e2
+            #           1 3 -> f1 e3
+            #           1 4 -> f2 e3
+            #           2 4 -> f2 e2
+            #           3 4] -> f3 e2
+            tnew = zeros(Int64, size(t, 1), 10)
+            tnew[:, 1:4] = t
+            tnew[:, 5] = np .+ emap[fmap[:, 1], 1]
+            tnew[:, 6] = np .+ emap[fmap[:, 1], 2]
+            tnew[:, 7] = np .+ emap[fmap[:, 1], 3]
+            tnew[:, 8] = np .+ emap[fmap[:, 2], 3]
+            tnew[:, 9] = np .+ emap[fmap[:, 2], 2]
+            tnew[:, 10] = np .+ emap[fmap[:, 3], 2]
+            #FIXME I think this fails because we sort the indices?
+
+            # add edges that were on boundary faces 
+            enew = [e; np.+unique(emap[bndix, :][:])]
+        else
+            error("Unsupported grid order `$order` for dimension `$dim`.")
         end
-        tnew[:, 10] = np2 .+ (1:size(t,1))'
+    elseif order == 3 
+        if dim == 2
+            # number of nodes per triangle
+            n = 10
 
-        # add points that were on boundary to `e`
-        enew = [e; np0 .+ boundary_indices; np1 .+ boundary_indices]
+            # first add 1/3 points
+            np0 = size(p, 1)
+            new_pts = reshape(p[edges[:, 1], :] + 1/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
+            pnew = [p; new_pts]
+            np1 = size(pnew, 1)
+            # then add 2/3 points
+            new_pts = reshape(p[edges[:, 1], :] + 2/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
+            pnew = [pnew; new_pts]
+            np2 = size(pnew, 1)
+            # finally add center points
+            new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
+            pnew = [pnew; new_pts]
+
+            # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
+            # the 2/3rd point for another... this works but it is slow
+            tnew = zeros(Int64, size(t, 1), n)
+            ps = reference_element_nodes(order, 2)
+            tnew[:, 1:3] = t
+            @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
+                for i=4:n-1
+                    p₀ = transform_from_ref_el(ps[i, :], pnew[t[k, :], :])
+                    idx = get_idx(pnew, p₀)
+                    tnew[k, i] = idx
+                end
+            end
+            tnew[:, 10] = np2 .+ (1:size(t,1))'
+
+            # add points that were on boundary to `e`
+            enew = [e; np0 .+ boundary_indices; np1 .+ boundary_indices]
+        else
+            error("Unsupported grid order `$order` for dimension `$dim`.")
+        end
     else
         error("Unsupported grid order `$order` for dimension `$dim`.")
     end
@@ -177,6 +217,14 @@ function get_idx(p, p₀)
     return argmin(Δp)
 end
 
+"""
+    fmap, faces, bndix = all_faces(t)
+
+1) Find all unique `faces` (nf x 3 array) in the tetrahedral mesh `t`.
+2) Determine indices of boundary faces with `bndix`.
+3) Map local faces to global faces with `fmap` (nt x 4 array): `fmap[k,i]` is the 
+global face number for local face `i` in tetrahedron `k`.
+"""
 function all_faces(t)
     # form all faces
     ftag = [t[:, [1,2,3]]; t[:, [1,2,4]]; t[:, [1,3,4]]; t[:, [2,3,4]]]
@@ -188,37 +236,35 @@ function all_faces(t)
     # sort rows
     ftag = sortslices(ftag, dims=1)
 
-    # unique faces
-    faces = unique(ftag[:, 1:3], dims=1)
-    
     # indices of unique faces
     keep = zeros(Bool, nfaces)
     keep[unique(i -> ftag[i, 1:3], 1:nfaces)] .= 1
 
-    # face `i` has no duplicates if `i` and `i+1` are in `keep`
-    i_surf = findall(i -> keep[i]*keep[i+1], 1:nfaces-1)
-    if keep[nfaces]
-        i_surf = [i_surf; nfaces]
-    end
-
-    # non-duplicates are surface triangles
-    surf_faces = ftag[i_surf, 1:3]
+    # keep unique faces
+    faces = ftag[keep, 1:3]
 
     # mapping from local to global face index
     fmap = cumsum(keep)
     invpermute!(fmap, ftag[:, 4])
     fmap = reshape(fmap, :, 4)
-    return faces, surf_faces, fmap
+
+    # face `i` has no duplicates if `i` and `i+1` are in `keep`
+    bndix = findall(i -> keep[i]*keep[i+1], 1:nfaces-1)
+    if keep[nfaces]
+        bndix = [bndix; nfaces]
+    end
+    bndix = cumsum(keep)[bndix]
+
+    return fmap, faces, bndix
 end
 
 """
-    emap, edges, e = all_edges(t)
+    emap, edges, bndix = all_edges(t)
 
-Find all unique `edges` (ne x 2 array) in the triangulation `t`.
-Second output is indices to the boundary edges.
-Third output `emap` (nt x dim+1 array) is a mapping from local edges
-to the global edge list, i.e., emap[it,k] is the global edge number
-for local edge k (1,2,3) in element it.
+1) Find all unique `edges` (ne x 2 array) in the triangulation `t`.
+2) Determine indices of boundary edges with `bndix`.
+3) Map local edges to global edges with `emap` (nt x 3 array): `emap[k,i]` is the 
+global edge number for local edge `i` in triangle `k`.
 """
 function all_edges(t)
     # find all edges
@@ -246,9 +292,21 @@ function all_edges(t)
     dup = [dup;false]
     dup = dup[keep]
     bndix = findall(.!dup)
-    e = unique(edges[bndix, :][:])
 
-    return emap, edges, e
+    return emap, edges, bndix
+end
+
+function boundary_faces(t)
+    fmap, faces, bndix = all_faces(t)
+    return faces[bndix, :]
+end
+function boundary_nodes(t)
+    if size(t, 2) == 3
+        emap, edges, bndix = all_edges(t)
+        return unique(edges[bndix, :])
+    elseif size(t, 2) == 4
+        return unique(boundary_faces(t))
+    end
 end
 
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}

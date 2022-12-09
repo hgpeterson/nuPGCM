@@ -220,6 +220,6 @@ function pg_vort_res(; nref, order, showplots=false)
     return ωx, ωy, χx, χy
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=2, order=2, showplots=true)
 
 println("Done.")
