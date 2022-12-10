@@ -28,9 +28,8 @@ function valign3D(ifile; savefile=nothing)
     interior = findall(!in(e_circ), 1:np_circ)
 
     # mesh res
-    # edges, boundary_indices, emap = all_edges(t_circ, e_circ)
-    # h = sum(norm(p_circ[edges[i, 1], :] - p_circ[edges[i, 2], :]) for i in axes(edges, 1))/size(edges, 1)
-    h = 0.08
+    emap, edges, bndix = all_edges(t_circ)
+    h = sum(norm(p_circ[edges[i, 1], :] - p_circ[edges[i, 2], :]) for i in axes(edges, 1))/size(edges, 1)
 
     # depth
     H = @. 1 - x^2 - y^2
@@ -57,17 +56,18 @@ function valign3D(ifile; savefile=nothing)
     mesh = delaunay(p)
     t = mesh.simplices
 
-    # remove bad tetras
-    nt = size(t, 1)
-    mask = ones(Bool, nt)
-    for k=1:nt
-        A = [p[t[k, i+1], j] - p[t[k, 1], j] for i=1:3, j=1:3]
-        if det(A) == 0 # volume of tet = 0
-            println("Removing tet $k")
-            mask[k] = 0
-        end
-    end
-    t = t[mask, :]
+    # # remove bad tetras
+    # nt = size(t, 1)
+    # mask = ones(Bool, nt)
+    # for k=1:nt
+    #     A = [p[t[k, i+1], j] - p[t[k, 1], j] for i=1:3, j=1:3]
+    #     # if det(A) == 0 # volume of tet = 0
+    #     if abs(det(A)) ≤ 1e-4 # volume of tet = 0
+    #         println("Removing tet $k")
+    #         mask[k] = 0
+    #     end
+    # end
+    # t = t[mask, :]
 
     println("np = ", size(p, 1))
 
@@ -83,12 +83,7 @@ function valign3D(ifile; savefile=nothing)
     return p, t, e
 end
 
-p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
-
-bfaces = nuPGCM.boundary_faces(t)
-cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, bfaces[i, :]) for i in axes(bfaces, 1)]
-vtk_grid("mesh_surf.vtu", p', cells) do vtk
-end
+p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
 
 cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
 vtk_grid("mesh1.vtu", p', cells) do vtk

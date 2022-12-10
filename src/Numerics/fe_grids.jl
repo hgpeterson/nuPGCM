@@ -113,58 +113,20 @@ function add_nodes(p, t, e, order)
     # dimension of space
     dim = size(p, 2)
 
-    if order == 2 
-        if dim == 2
-            # get edges
-            emap, edges, bndix = all_edges(t)
+    emap, edges, bndix = all_edges(t)
 
-            # add midpoints
-            np = size(p, 1)
-            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
-            pnew = [p; new_pts]
+    if order == 2
+        # add midpoints
+        np0 = size(p, 1)
+        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
+        pnew = [p; new_pts]
 
-            # map to triangle data structure
-            tnew = [t  np.+emap]
+        # map to triangle data structure
+        tnew = hcat(t, np0 .+ emap)
 
-            # add points that were on the boundary to `e`
-            enew = [e; np.+bndix]
-        elseif dim == 3
-            # get faces
-            fmap, faces, bndix = all_faces(t)
-
-            # get edges on faces
-            emap, edges, _ = all_edges(faces)
-
-            # add midpoints
-            np = size(p, 1)
-            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
-            pnew = [p; new_pts]
-
-            # fmap[k, i] = face i of tet k
-            # emap[fmap[k, i], j] = edge j of face i of tet k
-            #  pairs = [1 2 -> f1 e1
-            #           2 3 -> f1 e2
-            #           1 3 -> f1 e3
-            #           1 4 -> f2 e3
-            #           2 4 -> f2 e2
-            #           3 4] -> f3 e2
-            tnew = zeros(Int64, size(t, 1), 10)
-            tnew[:, 1:4] = t
-            tnew[:, 5] = np .+ emap[fmap[:, 1], 1]
-            tnew[:, 6] = np .+ emap[fmap[:, 1], 2]
-            tnew[:, 7] = np .+ emap[fmap[:, 1], 3]
-            tnew[:, 8] = np .+ emap[fmap[:, 2], 3]
-            tnew[:, 9] = np .+ emap[fmap[:, 2], 2]
-            tnew[:, 10] = np .+ emap[fmap[:, 3], 2]
-            #FIXME I think this fails because we sort the indices?
-
-            # add edges that were on boundary faces 
-            enew = [e; np.+unique(emap[bndix, :][:])]
-        else
-            error("Unsupported grid order `$order` for dimension `$dim`.")
-        end
-    elseif order == 3 
-        if dim == 2
+        # add points that were on the boundary to `e`
+        enew = [e; np0 .+ bndix]
+    elseif order == 3 && dim == 2
             # number of nodes per triangle
             n = 10
 
@@ -196,10 +158,7 @@ function add_nodes(p, t, e, order)
             tnew[:, 10] = np2 .+ (1:size(t,1))'
 
             # add points that were on boundary to `e`
-            enew = [e; np0 .+ boundary_indices; np1 .+ boundary_indices]
-        else
-            error("Unsupported grid order `$order` for dimension `$dim`.")
-        end
+            enew = [e; np0 .+ bndix; np1 .+ bndix]
     else
         error("Unsupported grid order `$order` for dimension `$dim`.")
     end
@@ -261,37 +220,60 @@ end
 """
     emap, edges, bndix = all_edges(t)
 
-1) Find all unique `edges` (ne x 2 array) in the triangulation `t`.
+1) Find all unique `edges` (ne x 2 array) in the tessellation `t`.
 2) Determine indices of boundary edges with `bndix`.
-3) Map local edges to global edges with `emap` (nt x 3 array): `emap[k,i]` is the 
-global edge number for local edge `i` in triangle `k`.
+3) Map local edges to global edges with `emap` (nt x dim+1 array): `emap[k,i]` is the 
+global edge number for local edge `i` in element `k`.
 """
 function all_edges(t)
-    # find all edges
-    etag = [t[:,[1,2]]; t[:,[2,3]]; t[:,[3,1]]]
+    # dimension of space
+    dim = size(t, 2) - 1
 
-    # sort columns and tag with global indices in 3rd column
-    etag = [sort(etag, dims=2)  1:3*size(t,1)]
+    # get all possible edge index pairs
+    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
+    pairs = [1 2
+             2 3
+             1 3
+             1 4
+             2 4
+             3 4]
+
+    # find all edges
+    etag = t[:, pairs[1, :]]
+    for i=2:ne
+        etag = vcat(etag, t[:, pairs[i, :]])
+    end
+    nedges = size(etag, 1)
+
+    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
+    etag = [sort(etag, dims=2)  1:nedges]
 
     # now sort so that first column goes from lowest to highest node index
     etag = sortslices(etag, dims=1)
 
     # determine if edge is a duplicate or should be kept
-    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
-    keep = .![false;dup]
+    keep = zeros(Bool, nedges)
+    keep[unique(i -> etag[i, 1:2], 1:size(etag, 1))] .= 1
 
     # only keep unique edges
-    edges = etag[keep,1:2]
+    edges = etag[keep, 1:2]
+
+    # boundary edges
+    if dim == 2
+        # in 2D, no duplicates
+        dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
+        dup = [dup; false]
+        dup = dup[keep]
+        bndix = findall(.!dup)
+    elseif dim == 3
+        # in 3D... not sure yet
+        bndix = []
+    end
 
     # compute mapping to global indices
     emap = cumsum(keep)
-    invpermute!(emap, etag[:,3])
-    emap = reshape(emap,:,3)
-
-    # boundary nodes don't share an edge
-    dup = [dup;false]
-    dup = dup[keep]
-    bndix = findall(.!dup)
+    invpermute!(emap, etag[:, 3])
+    emap = reshape(emap, :, ne)
 
     return emap, edges, bndix
 end
@@ -355,7 +337,12 @@ function Jacobians(g::FEGrid)
         dets[k] = abs(det(A))
 
         # invert for J
-        Js[k, :, :] = inv(A)
+        try
+            Js[k, :, :] = inv(A)
+        catch
+            printstyled("Warning: ", color=:red)
+            println("Element $k has volume 0.")
+        end
     end
     return Jacobians(dets, Js)
 end
