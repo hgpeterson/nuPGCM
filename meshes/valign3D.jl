@@ -30,6 +30,7 @@ function valign3D(ifile; savefile=nothing)
     # mesh res
     emap, edges, bndix = all_edges(t_circ)
     h = sum(norm(p_circ[edges[i, 1], :] - p_circ[edges[i, 2], :]) for i in axes(edges, 1))/size(edges, 1)
+    println(h)
 
     # depth
     H = @. 1 - x^2 - y^2
@@ -83,21 +84,24 @@ function valign3D(ifile; savefile=nothing)
     return p, t, e
 end
 
-p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
-
-cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-vtk_grid("mesh1.vtu", p', cells) do vtk
-    bdy = zeros(size(p, 1))
-    bdy[e] .= 1
-    vtk["boundary"] = bdy
+# p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
+for i=0:5
+    p, t, e = valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
 end
 
-p, t, e = nuPGCM.add_nodes(p, t, e, 2)
-cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
-vtk_grid("mesh2.vtu", p', cells) do vtk
-    bdy = zeros(size(p, 1))
-    bdy[e] .= 1
-    vtk["boundary"] = bdy
-end
+# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+# vtk_grid("mesh1.vtu", p', cells) do vtk
+#     bdy = zeros(size(p, 1))
+#     bdy[e] .= 1
+#     vtk["boundary"] = bdy
+# end
+
+# p, t, e = nuPGCM.add_nodes(p, t, e, 2)
+# cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
+# vtk_grid("mesh2.vtu", p', cells) do vtk
+#     bdy = zeros(size(p, 1))
+#     bdy[e] .= 1
+#     vtk["boundary"] = bdy
+# end
 
 println("Done.")

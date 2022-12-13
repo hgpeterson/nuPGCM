@@ -91,7 +91,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     A, r = add_dirichlet(A, r, χymap[e.top], 0)
 
     # # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
-    # edges, boundary_indices, emap = all_edges(g1.t, g1.e)
+    # emap, edges, bndix = all_edges(g1.t)
     # w_quad, t_quad = quad_weights_points(2*g.order-1, 1)
     # ps = reference_element_nodes(g.order, g.dim)
     # A[ωxmap[e.bot], :] .= 0
@@ -99,7 +99,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # A[ωymap[e.bot], :] .= 0
     # r[ωymap[e.bot]] .= 0
     # for k=1:g1.nt, ie=1:3
-    #     if emap[k, ie] in boundary_indices # edge `ie` of triangle `k` is on the boundary
+    #     if emap[k, ie] in bndix # edge `ie` of triangle `k` is on the boundary
     #         # get local indices of each point on edge `ie`:
     #         if g.order == 1
     #             il = [ie, mod1(ie+1, 3)]
@@ -124,7 +124,6 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     #             ξ(t) = (ξ2 - ξ1)/2*t + (ξ2 + ξ1)/2
     #             for i=il, j=1:g.nn
     #                 f(t) = φ(g.s, i, ξ(t))*∂φ(g.s, j, 1, ξ(t))*norm(p2 - p1)/(p2[1] - p1[1])/2 # TF ∂ξ
-    #                 # f(t) = φ(g.s, i, ξ(t))*(∂φ(g.s, j, 1, ξ(t))*ξx + ∂φ(g.s, j, 2, ξ(t))*ηx)*norm(p2 - p1)/2
     #                 ∫f = dot(w_quad, f.(t_quad))
     #                 A[ωxmap[g.t[k, i]], ωxmap[g.t[k, j]]] += ∫f
 
@@ -187,27 +186,20 @@ end
 function pg_vort_res(; nref, order, showplots=false)
     # Ekman number
     # ε² = 1e-5
-    ε² = 1e-4
+    # ε² = 1e-4
     # ε² = 1e-3
-    # ε² = 1e-2
+    ε² = 1e-2
     # ε² = 1e-1
     # ε² = 1
 
     # setup FE grids
     # gfile = "../meshes/gmsh/mesh$nref.h5"
-    # gfile = "../meshes/valign/mesh$nref.h5"
+    gfile = "../meshes/valign/mesh$nref.h5"
     # gfile = "../meshes/jc_valign/mesh$nref.h5"
-    gfile = "../meshes/mesh.h5"
+    # gfile = "../meshes/mesh.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
-    # fig, ax, im = tplot(g.p, g.t)
-    # ax.plot(g.p[:, 1], g.p[:, 2], "o", ms=1)
-    # ax.plot(g.p[g.e, 1], g.p[g.e, 2], "o", ms=1)
-    # ax.axis("equal")
-    # savefig("images/mesh.png")
-    # println("images/mesh.png")
-    # plt.close()   
-
+    
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
  
@@ -334,7 +326,7 @@ function get_velocities(χx, χy; showplots=false)
     return ux, uy, uz
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=4, order=2, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=3, order=2, showplots=true)
 
 # ux, uy, uz = get_velocities(χx, χy; showplots=true)
 
