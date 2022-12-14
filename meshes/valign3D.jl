@@ -30,7 +30,6 @@ function valign3D(ifile; savefile=nothing)
     # mesh res
     emap, edges, bndix = all_edges(t_circ)
     h = sum(norm(p_circ[edges[i, 1], :] - p_circ[edges[i, 2], :]) for i in axes(edges, 1))/size(edges, 1)
-    println(h)
 
     # depth
     H = @. 1 - x^2 - y^2
@@ -38,7 +37,6 @@ function valign3D(ifile; savefile=nothing)
     # mapping from points to triangles:
     # `p_to_tri[i]` = vector of cartesian indices pointing to where point `i` is in `t_circ`
     p_to_tri = [findall(I -> i ∈ t_circ[I], CartesianIndices(size(t_circ))) for i ∈ axes(p_circ, 1)]
-    display(p_to_tri)
 
     # mapping from triangles to points in 3D: 
     # `tri_to_p[k, i][j]` = the `j`th point in the vertical for the `i`th point of triangle `k`
@@ -73,13 +71,29 @@ function valign3D(ifile; savefile=nothing)
         end
     end
     println("np = ", size(p, 1))
-    display(tri_to_p)
 
     # # delaunay tesselation (for now)
     # mesh = delaunay(p)
     # t = mesh.simplices
 
     # compute tesselation
+    # for k ∈ axes(tri_to_p, 1)
+    #     println([length(tri_to_p[k, i]) for i=1:3])
+    # end
+    t = Matrix{Int64}[]
+    for k ∈ axes(tri_to_p, 1)
+        if length(tri_to_p[k, 1]) == length(tri_to_p[k, 2]) == length(tri_to_p[k, 3])
+            for j=1:length(tri_to_p[k, 1])-1
+                if isempty(t)
+                    t = [tri_to_p[k, 1][j] tri_to_p[k, 2][j]   tri_to_p[k, 3][j]   tri_to_p[k, 1][j+1]]
+                else
+                    t = [t; tri_to_p[k, 1][j] tri_to_p[k, 2][j]   tri_to_p[k, 3][j]   tri_to_p[k, 1][j+1]]
+                end
+                t = [t; tri_to_p[k, 2][j] tri_to_p[k, 3][j]   tri_to_p[k, 1][j+1] tri_to_p[k, 2][j+1]]
+                t = [t; tri_to_p[k, 3][j] tri_to_p[k, 1][j+1] tri_to_p[k, 2][j+1] tri_to_p[k, 3][j+1]]
+            end
+        end
+    end
 
     if savefile !== nothing
         h5open(savefile, "w") do file
