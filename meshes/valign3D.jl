@@ -35,42 +35,51 @@ function valign3D(ifile; savefile=nothing)
     # depth
     H = @. 1 - x^2 - y^2
 
-    # first add coastline
+    # mapping from points to triangles:
+    # `p_to_tri[i]` = vector of cartesian indices pointing to where point `i` is in `t_circ`
+    p_to_tri = [findall(I -> i ∈ t_circ[I], CartesianIndices(size(t_circ))) for i ∈ axes(p_circ, 1)]
+    display(p_to_tri)
+
+    # mapping from triangles to points in 3D: 
+    # `tri_to_p[k, i][j]` = the `j`th point in the vertical for the `i`th point of triangle `k`
+    # begin by populating it with the surface nodes `t_circ`
+    tri_to_p = [[t_circ[k, i]] for k ∈ axes(t_circ, 1), i ∈ axes(t_circ, 2)]
+
+    # add coastline to p and e
     p = [x[e_circ]  y[e_circ]  zeros(ne_circ)]
     e = collect(1:ne_circ)
 
-    # then add interior points
+    # add interior points to p, e, and tri_to_p
     for i=interior
-        n = size(p, 1)
+        # current index
+        np = size(p, 1)
+
+        # vertical grid
         nz = Int64(ceil(H[i]/h))
-        # if nz == 2
-        #     nz += 1
-        # end
         z = range(-H[i], 0, length=nz)
-        # z = @. -H[i]*(cos(π*(0:nz-1)/(nz-1)) + 1)/2  
+
+        # add to p
         p = vcat(p, [x[i]*ones(nz)  y[i]*ones(nz)  z])
-        push!(e, n+1)
-        push!(e, size(p, 1))
+
+        # add to e
+        push!(e, np + 1)
+        push!(e, np + nz)
+
+        # add to tri_to_p
+        for I ∈ p_to_tri[i]
+            for j=np+2:np+nz
+                push!(tri_to_p[I], j)
+            end
+        end
     end
-
-    # delaunay tesselation (for now)
-    mesh = delaunay(p)
-    t = mesh.simplices
-
-    # # remove bad tetras
-    # nt = size(t, 1)
-    # mask = ones(Bool, nt)
-    # for k=1:nt
-    #     A = [p[t[k, i+1], j] - p[t[k, 1], j] for i=1:3, j=1:3]
-    #     # if det(A) == 0 # volume of tet = 0
-    #     if abs(det(A)) ≤ 1e-4 # volume of tet = 0
-    #         println("Removing tet $k")
-    #         mask[k] = 0
-    #     end
-    # end
-    # t = t[mask, :]
-
     println("np = ", size(p, 1))
+    display(tri_to_p)
+
+    # # delaunay tesselation (for now)
+    # mesh = delaunay(p)
+    # t = mesh.simplices
+
+    # compute tesselation
 
     if savefile !== nothing
         h5open(savefile, "w") do file
@@ -84,17 +93,15 @@ function valign3D(ifile; savefile=nothing)
     return p, t, e
 end
 
-# p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
-for i=0:5
-    p, t, e = valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
-end
+p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
 
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-# vtk_grid("mesh1.vtu", p', cells) do vtk
-#     bdy = zeros(size(p, 1))
-#     bdy[e] .= 1
-#     vtk["boundary"] = bdy
+# for i=0:5
+#     p, t, e = valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
 # end
+
+cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh1.vtu", p', cells) do vtk
+end
 
 # p, t, e = nuPGCM.add_nodes(p, t, e, 2)
 # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
