@@ -34,16 +34,22 @@ function valign3D(ifile; savefile=nothing)
 
     # mapping from points to triangles:
     #   `p_to_tri[i]` is vector of cartesian indices pointing to where point `i` is in `t_circ`
-    p_to_tri = [findall(I -> i ∈ t_circ[I], CartesianIndices(size(t_circ))) for i ∈ axes(p_circ, 1)]
+    p_to_tri = [findall(I -> i ∈ t_circ[I], CartesianIndices(size(t_circ))) for i=1:np_circ]
 
     # mapping from triangles to points in 3D: 
     #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
-    # begin by populating it with the surface nodes `t_circ`
-    tri_to_p = [[t_circ[k, i]] for k=1:nt_circ, i=1:3]
+    tri_to_p = [[] for k=1:nt_circ, i=1:3] # allocate
 
     # add coastline to p and e
     p = [x[e_circ]  y[e_circ]  zeros(ne_circ)]
     e = collect(1:ne_circ)
+
+    # add coastline to tri_to_p
+    for j=1:ne_circ
+        for I ∈ p_to_tri[e_circ[j]]
+            push!(tri_to_p[I], j)
+        end
+    end
 
     # add interior points to p, e, and tri_to_p
     for i=interior
@@ -80,7 +86,7 @@ function valign3D(ifile; savefile=nothing)
         # column lengths
         lens = length.(tri_to_p[k, :])
 
-        # first top tri is at sfc (j = 1)
+        # first top tri is at sfc
         top = [tri_to_p[k, i][1] for i=1:3]
 
         # continue down to bottom
@@ -92,7 +98,8 @@ function valign3D(ifile; savefile=nothing)
             t = [t; tessellate(top, bot)]
 
             # continue
-            top = bot
+            # top = bot
+            top = copy(bot)
         end
     end
     t = t[2:end, :] # remove init 0's
@@ -111,29 +118,55 @@ end
 
 function tessellate(top, bot)
     # get unique bot indices
-    bot = [i for i ∈ bot if i ∉ top]
-    if length(bot) == 3
-        return [top[1] top[2] top[3] bot[1]
-                top[2] top[3] bot[1] bot[2]
-                top[3] bot[1] bot[2] bot[3]]
-    elseif length(bot) == 2
-        return [top[1] top[2] top[3] bot[1]
-                top[2] top[3] bot[1] bot[2]]
-    elseif length(bot) == 1
-        return [top[1] top[2] top[3] bot[1]]
+    ubot = [i for i ∈ bot if i ∉ top]
+
+    # return tesselations for each case
+    if length(ubot) == 3
+        return [top[1] top[2] top[3] ubot[1]
+                top[2] top[3] ubot[1] ubot[2]
+                top[3] ubot[1] ubot[2] ubot[3]]
+    elseif length(ubot) == 2
+        if bot[1] == top[1]
+            return [top[1] top[2] top[3] ubot[1]
+                    top[1] top[3] ubot[1] ubot[2]]
+        else
+            return [top[1] top[2] top[3] ubot[1]
+                    top[2] top[3] ubot[1] ubot[2]]
+        end
+    elseif length(ubot) == 1
+        return [top[1] top[2] top[3] ubot[1]]
+    else
+        error("Invalid bottom triangle $bot.")
     end
 end
 
-p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
+# p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
 
-# for i=0:5
-#     p, t, e = valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
-# end
-
-cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-vtk_grid("mesh.vtu", p', cells) do vtk
+for i=0:3
+    valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
 end
-println("mesh.vtu")
+
+# p = [0 0 0
+#      1 0 0
+#      0 1 0
+#      0 0 1
+#      1 0 1
+#      0 1 1]
+# t = tessellate([1, 2, 3], [4, 5, 6])
+# t = tessellate([1, 2, 3], [4, 2, 6])
+# t = tessellate([1, 2, 3], [4, 5, 3])
+# t = tessellate([1, 2, 3], [1, 5, 6]) #!!
+# t = tessellate([1, 2, 3], [4, 2, 3])
+# t = tessellate([1, 2, 3], [1, 5, 3])
+# t = tessellate([1, 2, 3], [1, 2, 6])
+
+# t = [1 2 3 5
+#      1 3 5 6]
+
+# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+# vtk_grid("mesh.vtu", p', cells) do vtk
+# end
+# println("mesh.vtu")
 
 # p, t, e = nuPGCM.add_nodes(p, t, e, 2)
 # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]

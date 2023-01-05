@@ -125,81 +125,81 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, bdy, ε², β)
     # A, r = add_dirichlet(A, r, χxmap[bdy.sfc_nodes], g.p[bdy.sfc_nodes, 1])
     # A, r = add_dirichlet(A, r, χymap[bdy.sfc_nodes], g.p[bdy.sfc_nodes, 1])
 
-    # special dirichlet conditions at z = -H:
-    #              ∂x(χy) - ∂y(χx) = 0, 
-    # -ε²*(∂x(ωx) + ∂y(ωy)) - β*χx = 0.
-    A[ωxmap[bdy.bot_nodes], :] .= 0
-    r[ωxmap[bdy.bot_nodes]] .= 0
-    A[ωymap[bdy.bot_nodes], :] .= 0
-    r[ωymap[bdy.bot_nodes]] .= 0
-    w_quad, ξ_quad = quad_weights_points(2*g.order, 2)
-    ref = reference_element_nodes(1, 3)
-    for k_tri in axes(bdy.bot_tris, 1)
-        # get tet associated with this bdy tri 
-        k_tet = 0
-        for i=1:g1.nt
-            if sum(j ∈ g1.t[i, :] for j ∈ bdy.bot_tris[k_tri, :]) == 3
-                k_tet = i
-                break
-            end
-        end
-        # println("Triangle $k_tri is in tetrahedron $k_tet.")
+    # # special dirichlet conditions at z = -H:
+    # #              ∂x(χy) - ∂y(χx) = 0, 
+    # # -ε²*(∂x(ωx) + ∂y(ωy)) - β*χx = 0.
+    # A[ωxmap[bdy.bot_nodes], :] .= 0
+    # r[ωxmap[bdy.bot_nodes]] .= 0
+    # A[ωymap[bdy.bot_nodes], :] .= 0
+    # r[ωymap[bdy.bot_nodes]] .= 0
+    # w_quad, ξ_quad = quad_weights_points(2*g.order, 2)
+    # ref = reference_element_nodes(1, 3)
+    # for k_tri in axes(bdy.bot_tris, 1)
+    #     # get tet associated with this bdy tri 
+    #     k_tet = 0
+    #     for i=1:g1.nt
+    #         if sum(j ∈ g1.t[i, :] for j ∈ bdy.bot_tris[k_tri, :]) == 3
+    #             k_tet = i
+    #             break
+    #         end
+    #     end
+    #     # println("Triangle $k_tri is in tetrahedron $k_tet.")
 
-        # get indices of tetrahedron on boundary
-        il = findall(i->g1.t[k_tet, i] in bdy.bot_tris[k_tri, :], 1:4)
+    #     # get indices of tetrahedron on boundary
+    #     il = findall(i->g1.t[k_tet, i] in bdy.bot_tris[k_tri, :], 1:4)
 
-        # bdy tri -> ref tri in x-y plane
-        x1 = g.p[bdy.bot_tris[k_tri, 1], :]
-        x2 = g.p[bdy.bot_tris[k_tri, 2], :]
-        x3 = g.p[bdy.bot_tris[k_tri, 3], :]
-        area1 = norm(cross(x3-x1, x2-x1))
+    #     # bdy tri -> ref tri in x-y plane
+    #     x1 = g.p[bdy.bot_tris[k_tri, 1], :]
+    #     x2 = g.p[bdy.bot_tris[k_tri, 2], :]
+    #     x3 = g.p[bdy.bot_tris[k_tri, 3], :]
+    #     area1 = norm(cross(x3-x1, x2-x1))
 
-        # ref tri in x-y plane to face of ref tet
-        x1 = ref[il[1], :]
-        x2 = ref[il[2], :]
-        x3 = ref[il[3], :]
-        ξ(x) = x1 + x[1]*(x2 - x1) + x[2]*(x3 - x1)
-        area2 = norm(cross(x3-x1, x2-x1))
+    #     # ref tri in x-y plane to face of ref tet
+    #     x1 = ref[il[1], :]
+    #     x2 = ref[il[2], :]
+    #     x3 = ref[il[3], :]
+    #     ξ(x) = x1 + x[1]*(x2 - x1) + x[2]*(x3 - x1)
+    #     area2 = norm(cross(x3-x1, x2-x1))
 
-        # get ∂ξ/∂x, ∂ξ/∂y, ∂η/∂x, ∂η/∂y from J
-        ξx = J.Js[k_tet, 1, 1]
-        ξy = J.Js[k_tet, 1, 2]
-        ηx = J.Js[k_tet, 2, 1]
-        ηy = J.Js[k_tet, 2, 2]
+    #     # get ∂ξ/∂x, ∂ξ/∂y, ∂η/∂x, ∂η/∂y from J
+    #     ξx = J.Js[k_tet, 1, 1]
+    #     ξy = J.Js[k_tet, 1, 2]
+    #     ηx = J.Js[k_tet, 2, 1]
+    #     ηy = J.Js[k_tet, 2, 2]
 
-        # compute ∫ φᵢ*∂x(φⱼ) dS,  ∫ φᵢ*∂y(φⱼ) dS, and ∫ φᵢ*φⱼ dS
-        # for i's on the triangle and all j's in the tetrahedra
-        f_M(x, i, j) = φ(g.s, i, ξ(x))*φ(g.s, j, ξ(x))*area1*area2
-        M = [sum(w_quad[k]*f_M(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
-        f_Cx(x, i, j) = φ(g.s, i, ξ(x))*(∂φ(g.s, j, 1, ξ(x))*ξx +  ∂φ(g.s, j, 2, ξ(x))*ηx)*area1*area2
-        Cx = [sum(w_quad[k]*f_Cx(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
-        f_Cy(x, i, j) = φ(g.s, i, ξ(x))*(∂φ(g.s, j, 1, ξ(x))*ξy +  ∂φ(g.s, j, 2, ξ(x))*ηy)*area1*area2
-        Cy = [sum(w_quad[k]*f_Cy(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
+    #     # compute ∫ φᵢ*∂x(φⱼ) dS,  ∫ φᵢ*∂y(φⱼ) dS, and ∫ φᵢ*φⱼ dS
+    #     # for i's on the triangle and all j's in the tetrahedra
+    #     f_M(x, i, j) = φ(g.s, i, ξ(x))*φ(g.s, j, ξ(x))*area1*area2
+    #     M = [sum(w_quad[k]*f_M(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
+    #     f_Cx(x, i, j) = φ(g.s, i, ξ(x))*(∂φ(g.s, j, 1, ξ(x))*ξx +  ∂φ(g.s, j, 2, ξ(x))*ηx)*area1*area2
+    #     Cx = [sum(w_quad[k]*f_Cx(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
+    #     f_Cy(x, i, j) = φ(g.s, i, ξ(x))*(∂φ(g.s, j, 1, ξ(x))*ξy +  ∂φ(g.s, j, 2, ξ(x))*ηy)*area1*area2
+    #     Cy = [sum(w_quad[k]*f_Cy(ξ_quad[k, :], i, j) for k ∈ eachindex(w_quad)) for i=il, j=1:4]
 
-        # χx = 0
-        A[ωxmap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .+= M
+    #     # χx = 0
+    #     A[ωxmap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .+= M
 
-        # χy = 0
-        A[ωymap[g.t[k_tet, il]], χymap[g.t[k_tet, 1:4]]] .+= M
+    #     # χy = 0
+    #     A[ωymap[g.t[k_tet, il]], χymap[g.t[k_tet, 1:4]]] .+= M
 
-        # # ∂x(χy) - ∂y(χx) = 0
-        # A[ωymap[g.t[k_tet, il]], χymap[g.t[k_tet, 1:4]]] .+= Cx
-        # A[ωymap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .-= Cy
+    #     # # ∂x(χy) - ∂y(χx) = 0
+    #     # A[ωymap[g.t[k_tet, il]], χymap[g.t[k_tet, 1:4]]] .+= Cx
+    #     # A[ωymap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .-= Cy
 
-        # # -ε²*(∂x(ωx) + ∂y(ωy)) - β*χx = 0.
-        # A[ωxmap[g.t[k_tet, il]], ωxmap[g.t[k_tet, 1:4]]] .+= ε²*Cx
-        # A[ωxmap[g.t[k_tet, il]], ωymap[g.t[k_tet, 1:4]]] .+= ε²*Cy
-        # A[ωxmap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .+= β*M
+    #     # # -ε²*(∂x(ωx) + ∂y(ωy)) - β*χx = 0.
+    #     # A[ωxmap[g.t[k_tet, il]], ωxmap[g.t[k_tet, 1:4]]] .+= ε²*Cx
+    #     # A[ωxmap[g.t[k_tet, il]], ωymap[g.t[k_tet, 1:4]]] .+= ε²*Cy
+    #     # A[ωxmap[g.t[k_tet, il]], χxmap[g.t[k_tet, 1:4]]] .+= β*M
 
-        # if you want something on the RHS other than 0
-        r[ωxmap[g.t[k_tet, il]]] .+= M*g.p[g.t[k_tet, 1:4], 3]
-        r[ωymap[g.t[k_tet, il]]] .+= M*g.p[g.t[k_tet, 1:4], 3]
-    end
+    #     # if you want something on the RHS other than 0
+    #     r[ωxmap[g.t[k_tet, il]]] .+= M*g.p[g.t[k_tet, 1:4], 3]
+    #     r[ωymap[g.t[k_tet, il]]] .+= M*g.p[g.t[k_tet, 1:4], 3]
+    # end
 
-    # # bottom: dirichlet
-    # # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], 0) 
-    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], 0) 
-    # A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], 0) 
+    # bottom: dirichlet
+    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], 0) 
+    A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], 0) 
+    A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], 0) 
 
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
@@ -248,12 +248,13 @@ function pg_vort_res(; nref, order, showplots=false)
     sfc_tris = bdy_tris[on_sfc, :]
     bot_tris = bdy_tris[.!on_sfc, :]
 
-    # cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, bot_tris[i, :]) for i in axes(bot_tris, 1)]
-    # vtk_grid("../output/bot.vtu", g1.p', cells) do vtk
-    # end
-    # cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, sfc_tris[i, :]) for i in axes(sfc_tris, 1)]
-    # vtk_grid("../output/sfc.vtu", g1.p', cells) do vtk
-    # end
+    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, bot_tris[i, :]) for i in axes(bot_tris, 1)]
+    vtk_grid("../output/bot.vtu", g1.p', cells) do vtk
+    end
+    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, sfc_tris[i, :]) for i in axes(sfc_tris, 1)]
+    vtk_grid("../output/sfc.vtu", g1.p', cells) do vtk
+    end
+    error()
 
     # boundary struct
     bdy = (bot_nodes=ebot, sfc_nodes=etop, bot_tris=bot_tris, sfc_tris=sfc_tris) 
@@ -292,6 +293,6 @@ function pg_vort_res(; nref, order, showplots=false)
     return ωx, ωy, χx, χy
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=1, order=2, showplots=true)
 
 println("Done.")
