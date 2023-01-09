@@ -140,11 +140,18 @@ function tessellate(top, bot)
     end
 end
 
-# p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
+p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
 
-for i=0:3
-    valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
+fmap, faces, bndix = nuPGCM.all_faces(t)
+# cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in axes(faces, 1)]
+cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in bndix]
+vtk_grid("faces.vtu", p', cells) do vtk
 end
+println("faces.vtu")
+
+# for i=0:3
+#     valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
+# end
 
 # p = [0 0 0
 #      1 0 0
@@ -163,10 +170,10 @@ end
 # t = [1 2 3 5
 #      1 3 5 6]
 
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-# vtk_grid("mesh.vtu", p', cells) do vtk
-# end
-# println("mesh.vtu")
+cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+vtk_grid("mesh.vtu", p', cells) do vtk
+end
+println("mesh.vtu")
 
 # p, t, e = nuPGCM.add_nodes(p, t, e, 2)
 # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]

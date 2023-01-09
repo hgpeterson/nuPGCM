@@ -21,8 +21,8 @@ function vertical_align(hx, hz; savefile=nothing)
         if nz == 2
             nz += 1
         end
-        # z = range(-H[i], 0, length=nz)
-        z = @. -H[i]*(cos(π*(0:nz-1)/(nz-1)) + 1)/2  
+        z = range(-H[i], 0, length=nz)
+        # z = @. -H[i]*(cos(π*(0:nz-1)/(nz-1)) + 1)/2  
         p = vcat(p, [x[i]*ones(nz) z])
         push!(e, n+1)
         push!(e, size(p, 1))
@@ -56,11 +56,9 @@ function vertical_align(hx, hz; savefile=nothing)
     return p, t, e
 end
 
-# hs = [0.16, 0.08, 0.04, 0.02, 0.01, 0.005]
-# for i in eachindex(hs)
-#     p, t, e = vertical_align(hs[i], hs[i]; savefile="valign/mesh$(i-1).h5")
-# end
-
-# p, t, e = vertical_align(0.01, 0.01; savefile="mesh.h5")
+hs = [0.16, 0.08, 0.04, 0.02, 0.01, 0.005]
+for i in eachindex(hs)
+    p, t, e = vertical_align(hs[i], hs[i]; savefile="valign/mesh$(i-1).h5")
+end
 
 println("Done.")
