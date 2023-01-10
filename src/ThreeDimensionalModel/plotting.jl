@@ -4,8 +4,8 @@
 If `u` === nothing: Plot triangular mesh with nodes `p` and triangles `t`.
 If `u` === solution vector: Plot filled contour color plot of solution `u`.
 """
-function tplot(p, t, u=nothing; ax=nothing, cmap="RdBu_r", vext=nothing)
-    if ax === nothing
+function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing)
+    if fig === nothing
         fig, ax = subplots(1)
     end
 
