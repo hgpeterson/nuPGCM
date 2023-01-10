@@ -86,6 +86,46 @@ function valign3D(ifile; savefile=nothing)
         # column lengths
         lens = length.(tri_to_p[k, :])
 
+        if minimum(lens) > 1 && maximum(lens) > 11
+            face1 = vcat(p[tri_to_p[k, 1][:], :], p[tri_to_p[k, 2][:], :])
+            l1 = norm(face1[1, :] - face1[lens[1]+1, :])
+            face1[1:lens[1], 1] .= 0
+            face1[lens[1]+1:end, 1] .= l1
+            face1 = face1[:, [1, 3]]
+            face2 = vcat(p[tri_to_p[k, 2][:], :], p[tri_to_p[k, 3][:], :])
+            l2 = norm(face2[1, :] - face2[lens[2]+1, :])
+            face2[1:lens[2], 1] .= l1
+            face2[lens[2]+1:end, 1] .= l2 + l1
+            face2 = face2[:, [1, 3]]
+            face3 = vcat(p[tri_to_p[k, 3][:], :], p[tri_to_p[k, 1][:], :])
+            l3 = norm(face3[1, :] - face3[lens[3]+1, :])
+            face3[1:lens[3], 1] .= l2 + l1
+            face3[lens[3]+1:end, 1] .= l3 + l2 + l1
+            face3 = face3[:, [1, 3]]
+            t1 = delaunay(face1).simplices
+            t2 = delaunay(face2).simplices
+            t3 = delaunay(face3).simplices
+            fig, ax = subplots(1)
+            tplot(face1, t1, fig=fig, ax=ax)
+            ax.plot(face1[:, 1], face1[:, 2], "o", ms=1)
+            tplot(face2, t2, fig=fig, ax=ax)
+            ax.plot(face2[:, 1], face2[:, 2], "o", ms=1)
+            tplot(face3, t3, fig=fig, ax=ax)
+            ax.plot(face3[:, 1], face3[:, 2], "o", ms=1)
+            ax.set_xlim(-0.1, l1+l2+l3+0.1)
+            ax.set_ylim(-1.1, 0.1)
+            savefig("faces$k.png")
+            plt.close()
+
+            # col = vcat(p[tri_to_p[k, 1][:], :], p[tri_to_p[k, 2][:], :], p[tri_to_p[k, 3][:], :])
+            # t = delaunay(col).simplices
+            # cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
+            # vtk_grid("col.vtu", col', cells) do vtk
+            # end
+
+            # error()
+        end
+
         # first top tri is at sfc
         top = [tri_to_p[k, i][1] for i=1:3]
 
@@ -140,7 +180,7 @@ function tessellate(top, bot)
     end
 end
 
-p, t, e = valign3D("circle/mesh1.h5"; savefile="mesh.h5")
+p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
 
 fmap, faces, bndix = nuPGCM.all_faces(t)
 # cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in axes(faces, 1)]
