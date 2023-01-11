@@ -41,8 +41,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, bdy, ε², β)
     χxmap = (2*g.np+1):3*g.np
     χymap = (3*g.np+1):4*g.np
     N = 4*g.np
-    println("np = $N")
-    println("nt = $(g.nt)")
+    println("N = $N")
 
     # stamp system
     print("Building... ")
@@ -204,7 +203,7 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, bdy, ε², β)
     dropzeros!(A)
     println(@sprintf("%.1f s", time() - t₀))
 
-    if N < 100000
+    if N < 10000
         R = rank(A)
         println("rank(A): ", R, " = N - ", N - R)
     end
@@ -293,6 +292,6 @@ function pg_vort_res(; nref, order, showplots=false)
     return ωx, ωy, χx, χy
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=1, order=2, showplots=true)
+ωx, ωy, χx, χy = pg_vort_res(nref=2, order=2, showplots=true)
 
 println("Done.")

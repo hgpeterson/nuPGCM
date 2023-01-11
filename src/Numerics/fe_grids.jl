@@ -266,8 +266,10 @@ function all_edges(t)
         dup = dup[keep]
         bndix = findall(.!dup)
     elseif dim == 3
-        # in 3D... not sure yet
-        bndix = []
+        # in 3D, on boundary face
+        bfaces = boundary_faces(t)
+        _, bedges, _ = all_edges(bfaces)
+        bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
     end
 
     # compute mapping to global indices

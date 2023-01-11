@@ -38,7 +38,7 @@ function valign3D(ifile; savefile=nothing)
 
     # mapping from triangles to points in 3D: 
     #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
-    tri_to_p = [[] for k=1:nt_circ, i=1:3] # allocate
+    tri_to_p = [Int64[] for k=1:nt_circ, i=1:3] # allocate
 
     # add coastline to p and e
     p = [x[e_circ]  y[e_circ]  zeros(ne_circ)]
@@ -76,70 +76,24 @@ function valign3D(ifile; savefile=nothing)
     end
     println("np = ", size(p, 1))
 
-    # # delaunay tesselation (for now)
-    # mesh = delaunay(p)
-    # t = mesh.simplices
-
-    # compute tesselation
+    # compute tessellation
     t = [0 0 0 0] # allocate
     for k=1:nt_circ
-        # column lengths
-        lens = length.(tri_to_p[k, :])
+        # local delaunay tessellation of column
+        i_col = vcat(tri_to_p[k, 1][:], tri_to_p[k, 2][:], tri_to_p[k, 3][:])
+        t_col = delaunay(p[i_col, :]).simplices
 
-        if minimum(lens) > 1 && maximum(lens) > 11
-            face1 = vcat(p[tri_to_p[k, 1][:], :], p[tri_to_p[k, 2][:], :])
-            l1 = norm(face1[1, :] - face1[lens[1]+1, :])
-            face1[1:lens[1], 1] .= 0
-            face1[lens[1]+1:end, 1] .= l1
-            face1 = face1[:, [1, 3]]
-            face2 = vcat(p[tri_to_p[k, 2][:], :], p[tri_to_p[k, 3][:], :])
-            l2 = norm(face2[1, :] - face2[lens[2]+1, :])
-            face2[1:lens[2], 1] .= l1
-            face2[lens[2]+1:end, 1] .= l2 + l1
-            face2 = face2[:, [1, 3]]
-            face3 = vcat(p[tri_to_p[k, 3][:], :], p[tri_to_p[k, 1][:], :])
-            l3 = norm(face3[1, :] - face3[lens[3]+1, :])
-            face3[1:lens[3], 1] .= l2 + l1
-            face3[lens[3]+1:end, 1] .= l3 + l2 + l1
-            face3 = face3[:, [1, 3]]
-            t1 = delaunay(face1).simplices
-            t2 = delaunay(face2).simplices
-            t3 = delaunay(face3).simplices
-            fig, ax = subplots(1)
-            tplot(face1, t1, fig=fig, ax=ax)
-            ax.plot(face1[:, 1], face1[:, 2], "o", ms=1)
-            tplot(face2, t2, fig=fig, ax=ax)
-            ax.plot(face2[:, 1], face2[:, 2], "o", ms=1)
-            tplot(face3, t3, fig=fig, ax=ax)
-            ax.plot(face3[:, 1], face3[:, 2], "o", ms=1)
-            ax.set_xlim(-0.1, l1+l2+l3+0.1)
-            ax.set_ylim(-1.1, 0.1)
-            savefig("faces$k.png")
-            plt.close()
+        # add to global t
+        t = [t; i_col[t_col]]
 
-            # col = vcat(p[tri_to_p[k, 1][:], :], p[tri_to_p[k, 2][:], :], p[tri_to_p[k, 3][:], :])
-            # t = delaunay(col).simplices
-            # cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-            # vtk_grid("col.vtu", col', cells) do vtk
-            # end
-
-            # error()
-        end
-
-        # first top tri is at sfc
-        top = [tri_to_p[k, i][1] for i=1:3]
-
-        # continue down to bottom
-        for j=2:maximum(lens)
-            # make bottom tri from next nodes down or top tri nodes
-            bot = [j ≤ lens[i] ? tri_to_p[k, i][j] : top[i] for i=1:3]
-
-            # add to t
-            t = [t; tessellate(top, bot)]
-
-            # continue
-            # top = bot
-            top = copy(bot)
+        # compute volume of each tet
+        nt = size(t, 1)
+        vols = [abs(det([p[t[k, j+1], i] - p[t[k, 1], i] for i=1:3, j=1:3])) for k=nt-size(t_col, 1)+1:nt]
+        if 0 ∈ vols
+            cells = [MeshCell(VTKCellTypes.VTK_TETRA, t_col[i, :]) for i in axes(t_col, 1)]
+            vtk_grid("col$k.vtu", p[i_col, :]', cells) do vtk
+            end
+            println("col$k.vtu")
         end
     end
     t = t[2:end, :] # remove init 0's
@@ -156,64 +110,19 @@ function valign3D(ifile; savefile=nothing)
     return p, t, e
 end
 
-function tessellate(top, bot)
-    # get unique bot indices
-    ubot = [i for i ∈ bot if i ∉ top]
-
-    # return tesselations for each case
-    if length(ubot) == 3
-        return [top[1] top[2] top[3] ubot[1]
-                top[2] top[3] ubot[1] ubot[2]
-                top[3] ubot[1] ubot[2] ubot[3]]
-    elseif length(ubot) == 2
-        if bot[1] == top[1]
-            return [top[1] top[2] top[3] ubot[1]
-                    top[1] top[3] ubot[1] ubot[2]]
-        else
-            return [top[1] top[2] top[3] ubot[1]
-                    top[2] top[3] ubot[1] ubot[2]]
-        end
-    elseif length(ubot) == 1
-        return [top[1] top[2] top[3] ubot[1]]
-    else
-        error("Invalid bottom triangle $bot.")
-    end
-end
-
 p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
 
-fmap, faces, bndix = nuPGCM.all_faces(t)
-# cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in axes(faces, 1)]
-cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in bndix]
-vtk_grid("faces.vtu", p', cells) do vtk
-end
-println("faces.vtu")
-
-# for i=0:3
-#     valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
+# fmap, faces, bndix = nuPGCM.all_faces(t)
+# # cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in axes(faces, 1)]
+# cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in bndix]
+# vtk_grid("faces.vtu", p', cells) do vtk
 # end
-
-# p = [0 0 0
-#      1 0 0
-#      0 1 0
-#      0 0 1
-#      1 0 1
-#      0 1 1]
-# t = tessellate([1, 2, 3], [4, 5, 6])
-# t = tessellate([1, 2, 3], [4, 2, 6])
-# t = tessellate([1, 2, 3], [4, 5, 3])
-# t = tessellate([1, 2, 3], [1, 5, 6]) #!!
-# t = tessellate([1, 2, 3], [4, 2, 3])
-# t = tessellate([1, 2, 3], [1, 5, 3])
-# t = tessellate([1, 2, 3], [1, 2, 6])
-
-# t = [1 2 3 5
-#      1 3 5 6]
+# println("faces.vtu")
 
 cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
-vtk_grid("mesh.vtu", p', cells) do vtk
+vtk_grid("mesh1.vtu", p', cells) do vtk
 end
-println("mesh.vtu")
+println("mesh1.vtu")
 
 # p, t, e = nuPGCM.add_nodes(p, t, e, 2)
 # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TETRA, t[i, :]) for i in axes(t, 1)]
@@ -222,5 +131,11 @@ println("mesh.vtu")
 #     bdy[e] .= 1
 #     vtk["boundary"] = bdy
 # end
+# println("mesh2.vtu")
+
+# for i=0:2
+#     valign3D("circle/mesh$i.h5"; savefile="valign3D/mesh$i.h5")
+# end
+
 
 println("Done.")
