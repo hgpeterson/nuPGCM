@@ -30,6 +30,7 @@ export
     ∂φ,
     FEGrid,
     all_edges,
+    all_faces,
     boundary_nodes,
     Jacobians,
     FEField,
