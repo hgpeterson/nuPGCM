@@ -83,18 +83,14 @@ function valign3D(ifile; savefile=nothing)
         i_col = vcat(tri_to_p[k, 1][:], tri_to_p[k, 2][:], tri_to_p[k, 3][:])
         t_col = delaunay(p[i_col, :]).simplices
 
+        # remove zeros vols
+        t_col_g = i_col[t_col]
+        vols = [abs(det([p[t_col_g[k, j+1], i] - p[t_col_g[k, 1], i] for i=1:3, j=1:3])) for k ∈ axes(t_col_g, 1)]
+        keep = findall(i -> vols[i] != 0, 1:size(vols, 1))
+        t_col = t_col[keep, :]
+
         # add to global t
         t = [t; i_col[t_col]]
-
-        # compute volume of each tet
-        nt = size(t, 1)
-        vols = [abs(det([p[t[k, j+1], i] - p[t[k, 1], i] for i=1:3, j=1:3])) for k=nt-size(t_col, 1)+1:nt]
-        if 0 ∈ vols
-            cells = [MeshCell(VTKCellTypes.VTK_TETRA, t_col[i, :]) for i in axes(t_col, 1)]
-            vtk_grid("col$k.vtu", p[i_col, :]', cells) do vtk
-            end
-            println("col$k.vtu")
-        end
     end
     t = t[2:end, :] # remove init 0's
 
@@ -112,12 +108,11 @@ end
 
 p, t, e = valign3D("circle/mesh2.h5"; savefile="mesh.h5")
 
-# fmap, faces, bndix = nuPGCM.all_faces(t)
-# # cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in axes(faces, 1)]
-# cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in bndix]
-# vtk_grid("faces.vtu", p', cells) do vtk
-# end
-# println("faces.vtu")
+fmap, faces, bndix = nuPGCM.all_faces(t)
+cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, faces[i, :]) for i in bndix]
+vtk_grid("faces.vtu", p', cells) do vtk
+end
+println("faces.vtu")
 
 cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i in axes(t, 1)]
 vtk_grid("mesh1.vtu", p', cells) do vtk
