@@ -186,25 +186,33 @@ global face number for local face `i` in tetrahedron `k`.
 """
 function all_faces(t)
     # form all faces
-    ftag = [t[:, [1,2,3]]; t[:, [1,2,4]]; t[:, [1,3,4]]; t[:, [2,3,4]]]
+    if size(t, 2) == 10
+        # support for second order tetrahedra
+        ftag = [t[:, [1,2,3,5,6,7]]; t[:, [1,2,4,5,9,8]]; t[:, [1,3,4,7,10,8]]; t[:, [2,3,4,6,10,9]]]
+        nn = 6
+    else
+        # otherwise just do corners
+        ftag = [t[:, [1,2,3]]; t[:, [1,2,4]]; t[:, [1,3,4]]; t[:, [2,3,4]]]
+        nn = 3
+    end
     nfaces = size(ftag, 1)
 
-    # sort columns and tag with global indices in 4th column
-    ftag = [sort(ftag, dims=2)  1:nfaces]
+    # sort columns and tag with global indices in last column
+    ftag = hcat(sort(ftag, dims=2), 1:nfaces)
 
     # sort rows
     ftag = sortslices(ftag, dims=1)
 
     # indices of unique faces
     keep = zeros(Bool, nfaces)
-    keep[unique(i -> ftag[i, 1:3], 1:nfaces)] .= 1
+    keep[unique(i -> ftag[i, 1:nn], 1:nfaces)] .= 1
 
     # keep unique faces
-    faces = ftag[keep, 1:3]
+    faces = ftag[keep, 1:nn]
 
     # mapping from local to global face index
     fmap = cumsum(keep)
-    invpermute!(fmap, ftag[:, 4])
+    invpermute!(fmap, ftag[:, nn+1])
     fmap = reshape(fmap, :, 4)
 
     # face `i` has no duplicates if `i` and `i+1` are in `keep`
