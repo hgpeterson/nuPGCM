@@ -88,6 +88,7 @@ function valign3D(ifile; savefile=nothing)
         vols = [abs(det([p[t_col_g[k, j+1], i] - p[t_col_g[k, 1], i] for i=1:3, j=1:3])) for k ∈ axes(t_col_g, 1)]
         keep = vols .!= 0
         if !all(keep)
+            # save vtu of bad egg
             cells = [MeshCell(VTKCellTypes.VTK_TETRA, t_col_g[i, :]) for i ∈ axes(t_col_g, 1)]
             vtk_grid("col$k.vtu", p', cells) do vtk
                 bad_egg = zeros(size(p, 1))
@@ -96,37 +97,28 @@ function valign3D(ifile; savefile=nothing)
             end
             println("col$k.vtu")
 
+            # mesh faces
             lens = length.(tri_to_p[k, :])
-            face1 = vcat(p[tri_to_p[k, 1][:], :], p[tri_to_p[k, 2][:], :])
-            l1 = norm(face1[1, :] - face1[lens[1]+1, :])
-            face1[1:lens[1], 1] .= 0
-            face1[lens[1]+1:end, 1] .= l1
-            face1 = face1[:, [1, 3]]
+            edges = [(1,2), (2,3), (3,1)]
+            faces = []
+            ts = []
+            for (i, (e1, e2)) in enumerate(edges)
+                face = vcat(p[tri_to_p[k, e1][:], :], p[tri_to_p[k, e2][:], :])
+                l = norm(face[1, :] - face[lens[i]+1, :])
+                face[1:lens[i], 1] .= isempty(faces) ? 0 : faces[end][end, 1]
+                face[lens[i]+1:end, 1] .= l + face[1, 1]
+                face = face[:, [1, 3]]
+                push!(faces, face)
+                push!(ts, delaunay(face).simplices)
+            end
 
-            face2 = vcat(p[tri_to_p[k, 2][:], :], p[tri_to_p[k, 3][:], :])
-            l2 = norm(face2[1, :] - face2[lens[2]+1, :])
-            face2[1:lens[2], 1] .= l1
-            face2[lens[2]+1:end, 1] .= l2 + l1
-            face2 = face2[:, [1, 3]]
-
-            face3 = vcat(p[tri_to_p[k, 3][:], :], p[tri_to_p[k, 1][:], :])
-            l3 = norm(face3[1, :] - face3[lens[3]+1, :])
-            face3[1:lens[3], 1] .= l2 + l1
-            face3[lens[3]+1:end, 1] .= l3 + l2 + l1
-            face3 = face3[:, [1, 3]]
-
-            t1 = delaunay(face1).simplices
-            t2 = delaunay(face2).simplices
-            t3 = delaunay(face3).simplices
-
+            # plot
             fig, ax = subplots(1)
-            tplot(face1, t1, fig=fig, ax=ax)
-            ax.plot(face1[:, 1], face1[:, 2], "o", ms=1)
-            tplot(face2, t2, fig=fig, ax=ax)
-            ax.plot(face2[:, 1], face2[:, 2], "o", ms=1)
-            tplot(face3, t3, fig=fig, ax=ax)
-            ax.plot(face3[:, 1], face3[:, 2], "o", ms=1)
-            ax.set_xlim(-0.1, l1+l2+l3+0.1)
+            for i=1:3
+                tplot(faces[i], ts[i], fig=fig, ax=ax)
+                ax.plot(faces[i][:, 1], faces[i][:, 2], "o", ms=1)
+            end
+            ax.set_xlim(-0.1, faces[3][end, 1]+0.1)
             ax.set_ylim(-1.1, 0.1)
             savefig("faces$k.png")
             plt.close()
