@@ -77,26 +77,24 @@ end
     perms = iter_permutations(n, d)
 
 Compute all permutations (i₁, i₂, ..., i_d) such that i₁ + i₂ + ... + i_d = n.
-(Currently hard-coded for d = 1, 2, 3 only).
 """
 function iter_permutations(n, d)
-    perms = Vector{Tuple}([])
     if d == 1
-        push!(perms, Tuple(n))
-    elseif d == 2
-        for i=0:n
-            push!(perms, (n - i, i))
-        end
-    elseif d == 3
-        for i=0:n
-            k = n - i
-            for j=0:k
-                push!(perms, (k - j, j, i))
-            end
+        return [(n,)]
+    end
+
+    perms = Vector{Tuple}([])
+    # loop over each possible first element of the perm, `i`
+    for i=0:n
+        # recursively call `iter_permutations` on the remaining elements
+        for sub_perm ∈ iter_permutations(n-i, d-1)
+            # use `...` to unpack `sub_perm` and add `i` to it
+            push!(perms, (sub_perm..., i))
         end
     end
     return perms
 end
+
 
 struct ShapeFunctionIntegrals{A2<:AbstractMatrix, A3<:AbstractArray, A4<:AbstractArray}
     # mass matrix of form ∫ φᵢ*φⱼ
@@ -191,10 +189,14 @@ Evaluate `n` degree polynomial in `d` dimensions defined by coefficients `c` at 
 function eval_poly(c, ξ, n, d)
     f = 0 
     i = 1
+    # loop over each degree ≤ n
     for k=0:n
+        # get all permutations of exponents
         perms = iter_permutations(k, d)
-        for j in eachindex(perms)
-            f += c[i]*prod(ξ.^perms[j]) # (btw: julia says 0^0 is 1)
+
+        # add each term of the form ξᵃηᵇζᶜ...
+        for perm ∈ perms
+            f += c[i]*prod(ξ.^perm) # (btw: julia says 0^0 is 1)
             i += 1
         end
     end
