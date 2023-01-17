@@ -133,9 +133,9 @@ function pg_res(geo, nref; showplots=false)
     # ε² = 1e-5
     # ε² = 1e-4
     # ε² = 1e-3
-    # ε² = 1e-2
+    ε² = 1e-2
     # ε² = 1e-1
-    ε² = 1
+    # ε² = 1
 
     # setup FE grids
     gfile = "../meshes/$geo/mesh$nref.h5"
@@ -168,14 +168,12 @@ function pg_res(geo, nref; showplots=false)
          botu = ebotu, topu = etopu)
 
     # forcing
-    H(x) = 1 - x^2
-    # H(x) = sqrt(2 - x^2) - 1
+    # H(x) = 1 - x^2
+    H(x) = sqrt(2 - x^2) - 1
     x = gb.p[:, 1] 
     z = gb.p[:, 2] 
     δ = 0.1
-    # b = @. z + δ*exp(-(z + H(x))/δ)
-    # b = z
-    b = @. δ*exp(-(z + H(x))/δ)
+    b = @. z + δ*exp(-(z + H(x))/δ)
 
     # initialize FE fields
     ux = FEField(zeros(gu.np), gu, g1)
@@ -192,15 +190,15 @@ function pg_res(geo, nref; showplots=false)
         quickplot(uy, L"u^y", "images/uy.png")
         quickplot(uz, L"u^z", "images/uz.png")
         quickplot(p,  L"p",   "images/p.png")
-        plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
-        plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
-        plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
-        plot_profile(p,  0.5, -H(0.5):1e-3:0, L"$p$ at $x = 0.5$",   L"z", "images/p_profile.png")
+        # plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
+        # plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
+        # plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
+        # plot_profile(p,  0.5, -H(0.5):1e-3:0, L"$p$ at $x = 0.5$",   L"z", "images/p_profile.png")
     end
 
     return ux, uy, uz, p
 end
 
-ux, uy, uz, p = pg_res("valign2D", 3; showplots=true)
-# ux, uy, uz, p = pg_res("gmsh", 3; showplots=true)
+# ux, uy, uz, p = pg_res("valign2D", 3; showplots=true)
+ux, uy, uz, p = pg_res("gmsh", 4; showplots=true)
 println("Done.")
