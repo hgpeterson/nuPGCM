@@ -51,10 +51,10 @@ function solve_pg_vort(ωx, ωy, χx, χy, f, diri, J, s, bdy, ε²)
         M = J.dets[k]*s.M
 
         # RHSs
-        r[ωxmap[g.t[k, :]]] += f.f1.values[g.t[k, :]]
-        r[ωymap[g.t[k, :]]] += f.f2.values[g.t[k, :]]
-        r[χxmap[g.t[k, :]]] += f.f3.values[g.t[k, :]]
-        r[χymap[g.t[k, :]]] += f.f4.values[g.t[k, :]]
+        r[ωxmap[g.t[k, :]]] += M*f.f1.values[g.t[k, :]]
+        r[ωymap[g.t[k, :]]] += M*f.f2.values[g.t[k, :]]
+        r[χxmap[g.t[k, :]]] += M*f.f3.values[g.t[k, :]]
+        r[χymap[g.t[k, :]]] += M*f.f4.values[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
             # indices
@@ -88,15 +88,19 @@ function solve_pg_vort(ωx, ωy, χx, χy, f, diri, J, s, bdy, ε²)
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
+    # bottom: dirichlet
+    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], diri.χx_bot) 
+    # A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], diri.χy_bot) 
+    A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], diri.ωx_bot)
+    A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], diri.ωy_bot)
+    A, r = add_dirichlet(A, r, χxmap[bdy.bot_nodes], diri.χx_bot)
+    A, r = add_dirichlet(A, r, χymap[bdy.bot_nodes], diri.χy_bot)
+
     # top: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[bdy.sfc_nodes], diri.ωx_sfc)
     A, r = add_dirichlet(A, r, ωymap[bdy.sfc_nodes], diri.ωy_sfc)
     A, r = add_dirichlet(A, r, χxmap[bdy.sfc_nodes], diri.χx_sfc)
     A, r = add_dirichlet(A, r, χymap[bdy.sfc_nodes], diri.χy_sfc)
-
-    # bottom: dirichlet
-    A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], diri.χx_bot) 
-    A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], diri.χy_bot) 
 
     # # special dirichlet conditions at z = -H:
     # #              ∂x(χy) - ∂y(χx) = 0, 
@@ -262,6 +266,13 @@ function pg_vort_res(; nref, order, showplots=false)
     if showplots
         write_vtk(g, "../output/pg_vort", ["ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy])
         println("../output/pg_vort.vtu")
+
+        ωx_a = FEField(ωx_a, g, g1)
+        ωy_a = FEField(ωy_a, g, g1)
+        χx_a = FEField(χx_a, g, g1)
+        χy_a = FEField(χy_a, g, g1)
+        write_vtk(g, "../output/pg_vort_sol", ["ωx"=>ωx_a, "ωy"=>ωy_a, "χx"=>χx_a, "χy"=>χy_a])
+        println("../output/pg_vort_sol.vtu")
     end
 
     return ωx, ωy, χx, χy
