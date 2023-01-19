@@ -209,6 +209,9 @@ function pg_vort_res(; nref, order, showplots=false)
     g1 = FEGrid(gfile, 1)
     println(@sprintf("h   = %1.1e", 1/cbrt(g.np)))
 
+    # mesh resolution 
+    h = 1/cbrt(g.np)
+
     # top and bottom nodes
     ebot, etop = get_sides(g)
 
@@ -235,24 +238,24 @@ function pg_vort_res(; nref, order, showplots=false)
     H = @. 1 - x^2 - y^2
     ωx_a = @. x*exp(x*y*z)
     ωy_a = @. y*exp(x*y*z)
-    χx_a = @. exp(1)*(exp(z/H) - 1)*x*H - x*z
-    χy_a = @. exp(1)*(exp(z/H) - 1)*y*H - y*z
-    diri = (ωx_bot = ωx_a[bdy.bot_nodes], ωx_sfc = ωx_a[bdy.sfc_nodes],
-            ωy_bot = ωy_a[bdy.bot_nodes], ωy_sfc = ωy_a[bdy.sfc_nodes],
-            χx_bot = χx_a[bdy.bot_nodes], χx_sfc = χx_a[bdy.sfc_nodes],
-            χy_bot = χy_a[bdy.bot_nodes], χy_sfc = χy_a[bdy.sfc_nodes],
+    χx_a = @. -(1 - H + exp(z)*(-1 + H + z))*cos(y)*sin(x)
+    χy_a = @. -(1 - H + exp(z)*(-1 + H + z))*cos(x)*sin(y)
+    diri = (ωx_bot=ωx_a[bdy.bot_nodes], ωx_sfc=ωx_a[bdy.sfc_nodes],
+            ωy_bot=ωy_a[bdy.bot_nodes], ωy_sfc=ωy_a[bdy.sfc_nodes],
+            χx_bot=χx_a[bdy.bot_nodes], χx_sfc=χx_a[bdy.sfc_nodes],
+            χy_bot=χy_a[bdy.bot_nodes], χy_sfc=χy_a[bdy.sfc_nodes],
            )
 
     # forcing
     f1 = @. -y*exp(x*y*z)*(1 + ε²*x^3*y)
     f2 = @.  x*exp(x*y*z)*(1 - ε²*x*y^3)
-    f3 = @. x*exp(x*y*z) + x/H*exp(1 + z/H)
-    f4 = @. y*exp(x*y*z) + y/H*exp(1 + z/H)
+    f3 = @. x*exp(x*y*z) + (-2*exp(z) - exp(z)*(-1 + H + z))*cos(y)*sin(x)
+    f4 = @. y*exp(x*y*z) + (-2*exp(z) - exp(z)*(-1 + H + z))*cos(x)*sin(y)
     f1 = FEField(f1, g, g1)
     f2 = FEField(f2, g, g1)
     f3 = FEField(f3, g, g1)
     f4 = FEField(f4, g, g1)
-    f = (f1 = f1, f2 = f2, f3 = f3, f4 = f4)
+    f = (f1=f1, f2=f2, f3=f3, f4=f4)
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
@@ -271,13 +274,46 @@ function pg_vort_res(; nref, order, showplots=false)
         ωy_a = FEField(ωy_a, g, g1)
         χx_a = FEField(χx_a, g, g1)
         χy_a = FEField(χy_a, g, g1)
-        write_vtk(g, "../output/pg_vort_sol", ["ωx"=>ωx_a, "ωy"=>ωy_a, "χx"=>χx_a, "χy"=>χy_a])
-        println("../output/pg_vort_sol.vtu")
+        # write_vtk(g, "../output/pg_vort_sol", ["ωx"=>ωx_a, "ωy"=>ωy_a, "χx"=>χx_a, "χy"=>χy_a])
+        # println("../output/pg_vort_sol.vtu")
+        # write_vtk(g, "../output/pg_vort_errs", ["ωx"=>abs(ωx - ωx_a), "ωy"=>abs(ωy - ωy_a), "χx"=>abs(χx - χx_a), "χy"=>abs(χy - χy_a)])
+        # println("../output/pg_vort_errs.vtu")
     end
 
-    return ωx, ωy, χx, χy
+    err = L2norm(ωx - ωx_a, s, J) +
+          L2norm(ωy - ωy_a, s, J) +
+          L2norm(χx - χx_a, s, J) +
+          L2norm(χy - χy_a, s, J)
+
+    println(@sprintf("(h, err) = (%1.1e, %1.1e)", h, err))
+    return h, err
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=2, order=1, showplots=true)
+h, err = pg_vort_res(nref=2, order=2, showplots=true)
+
+# Errors: 
+
+# setting χ through ω, neumann implied
+# order = 1
+# h       err
+# 2.6e-1  2.2e-1
+# 1.3e-1  1.1e-1
+# 6.6e-2  6.0e-2
+# 3.3e-2  3.4e-2
+# ----------------> O(h)
+
+# setting χ and ω normally, no neumann implied
+# order = 1
+# h       err
+# 2.6e-1  2.8e-3
+# 1.3e-1  1.4e-3
+# 6.6e-2  7.6e-4
+# ----------------> O(h)
+# order = 2
+# h       err
+# 2.6e-1  1.1e-3
+# 1.3e-1  2.0e-4
+# 6.6e-2  4.1e-5
+# ----------------> O(h^2)
 
 println("Done.")
