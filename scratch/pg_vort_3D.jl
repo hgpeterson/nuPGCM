@@ -89,12 +89,12 @@ function solve_pg_vort(ωx, ωy, χx, χy, f, diri, J, s, bdy, ε²)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # bottom: dirichlet
-    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], diri.χx_bot) 
-    # A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], diri.χy_bot) 
-    A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], diri.ωx_bot)
-    A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], diri.ωy_bot)
-    A, r = add_dirichlet(A, r, χxmap[bdy.bot_nodes], diri.χx_bot)
-    A, r = add_dirichlet(A, r, χymap[bdy.bot_nodes], diri.χy_bot)
+    A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], χxmap[bdy.bot_nodes], diri.χx_bot) 
+    A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], χymap[bdy.bot_nodes], diri.χy_bot) 
+    # A, r = add_dirichlet(A, r, ωxmap[bdy.bot_nodes], diri.ωx_bot)
+    # A, r = add_dirichlet(A, r, ωymap[bdy.bot_nodes], diri.ωy_bot)
+    # A, r = add_dirichlet(A, r, χxmap[bdy.bot_nodes], diri.χx_bot)
+    # A, r = add_dirichlet(A, r, χymap[bdy.bot_nodes], diri.χy_bot)
 
     # top: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[bdy.sfc_nodes], diri.ωx_sfc)
@@ -301,6 +301,12 @@ h, err = pg_vort_res(nref=2, order=2, showplots=true)
 # 6.6e-2  6.0e-2
 # 3.3e-2  3.4e-2
 # ----------------> O(h)
+# order = 2
+# h       err
+# 1.5e-1  1.8e-1
+# 7.2e-2  5.0e-2
+# 3.4e-2  1.3e-2
+# ----------------> O(h^2)
 
 # setting χ and ω normally, no neumann implied
 # order = 1
@@ -311,8 +317,8 @@ h, err = pg_vort_res(nref=2, order=2, showplots=true)
 # ----------------> O(h)
 # order = 2
 # h       err
-# 2.6e-1  1.1e-3
-# 1.3e-1  2.0e-4
+# 1.5e-1  1.1e-3
+# 7.2e-2  2.0e-4
 # 6.6e-2  4.1e-5
 # ----------------> O(h^2)
 

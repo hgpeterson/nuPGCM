@@ -12,20 +12,19 @@ plt.close("all")
 pygui(false)
 
 """
-    ωx, ωy, χx, χy = solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+    ωx, ωy, χx, χy = solve_pg_vort(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
 
 PG Inversion:
-    -ε²∂zz(ωx) - ωy = 0, 
-    -ε²∂zz(ωy) + ωx = -∂x(b),
-       ∂zz(χx) + ωx = 0,
-       ∂zz(χy) + ωy = 0,
+    -ε²∂zz(ωx) - ωy = f₁, 
+    -ε²∂zz(ωy) + ωx = f₂,
+       ∂zz(χx) + ωx = f₃,
+       ∂zz(χy) + ωy = f₄,
 with boundary conditions 
-    χx = χy = ωx = ωy = 0  at  z = 0,
-      ∂z(χx) = ∂z(χy) = 0  at  z = -H,
-              χy = ωx = 0  at  z = -H. (*)
-(*) should actually have ∂x(ωx) = ∂x(χy) = 0 at z = -H.
+    ωx, ωy, χx, χy dirichlet at z = 0,
+    ∂z(χx) = ∂z(χy) = 0  at  z = -H,
+    χx, χy dirichlet at z = -H.
 """
-function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+function solve_pg_vort_2D(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
     # unpack grids
     g1 = ωx.g1
     g = ωx.g
@@ -35,11 +34,8 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     χxmap = (2*g.np+1):3*g.np
     χymap = (3*g.np+1):4*g.np
     N = 4*g.np
-    println("N = $N")
 
     # stamp system
-    print("Building... ")
-    t₀ = time()
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
     for k=1:g1.nt
@@ -48,9 +44,11 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
 
-        # -∂x(b)
-        Cx = J.dets[k]*sum(s.C.*J.Js[k, :, 1], dims=1)[1, :, :]
-        r[ωymap[g.t[k, :]]] -= Cx*b.values[g.t[k, :]]
+        # RHSs
+        r[ωxmap[g.t[k, :]]] += M*f.f1.values[g.t[k, :]]
+        r[ωymap[g.t[k, :]]] += M*f.f2.values[g.t[k, :]]
+        r[χxmap[g.t[k, :]]] += M*f.f3.values[g.t[k, :]]
+        r[χymap[g.t[k, :]]] += M*f.f4.values[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
             # indices
@@ -84,11 +82,19 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
-    # top: dirichlet 
-    A, r = add_dirichlet(A, r, ωxmap[e.top], 0)
-    A, r = add_dirichlet(A, r, ωymap[e.top], 0)
-    A, r = add_dirichlet(A, r, χxmap[e.top], 0)
-    A, r = add_dirichlet(A, r, χymap[e.top], 0)
+    # bottom: dirichlet
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], diri.χx_bot) 
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], diri.χy_bot)
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], diri.ωx_bot)
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], diri.ωy_bot)
+    # A, r = add_dirichlet(A, r, χxmap[e.bot], diri.χx_bot)
+    # A, r = add_dirichlet(A, r, χymap[e.bot], diri.χy_bot)
+
+    # sfc: dirichlet 
+    A, r = add_dirichlet(A, r, ωxmap[e.sfc], diri.ωx_sfc)
+    A, r = add_dirichlet(A, r, ωymap[e.sfc], diri.ωy_sfc)
+    A, r = add_dirichlet(A, r, χxmap[e.sfc], diri.χx_sfc)
+    A, r = add_dirichlet(A, r, χymap[e.sfc], diri.χy_sfc)
 
     # # special dirichlet conditions ∂x(ωx) = ∂x(χy) = 0 at z = -H
     # emap, edges, bndix = all_edges(g1.t)
@@ -135,45 +141,11 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     #     end
     # end
 
-    # possible bottom b.c.'s
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], 0) 
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], 0) 
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], 0) 
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], 0)
-
-    # corners: dirichlet 
-    A, r = add_dirichlet(A, r, ωxmap[e.bot[[1, end]]], 0)
-    A, r = add_dirichlet(A, r, ωymap[e.bot[[1, end]]], 0)
-    A, r = add_dirichlet(A, r, χxmap[e.bot[[1, end]]], 0)
-    A, r = add_dirichlet(A, r, χymap[e.bot[[1, end]]], 0)
-
-    # # off-corners: dirichlet
-    # A, r = add_dirichlet(A, r, ωymap[e.bot[[2, end-2]]], χymap[e.bot[[2, end-2]]], 0)
-
     # remove zeros
     dropzeros!(A)
-    println(@sprintf("%.1f s", time() - t₀))
-
-    R = rank(A)
-    println("rank(A): ", R, " = N - ", N - R)
-
-    # if R < N
-    #     if N > 2000
-    #         error("🐻")
-    #     end
-    #     null = nullspace(Matrix(A))
-    #     ωx.values[:] = null[ωxmap]
-    #     ωy.values[:] = null[ωymap]
-    #     χx.values[:] = null[χxmap]
-    #     χy.values[:] = null[χymap]
-    #     return ωx, ωy, χx, χy
-    # end
 
     # solve
-    print("Solving... ")
-    t₀ = time()
     sol = A\r
-    println(@sprintf("%.1f s", time() - t₀))
 
     # reshape to get ω and χ
     ωx.values[:] = sol[ωxmap]
@@ -183,22 +155,22 @@ function solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
     return ωx, ωy, χx, χy
 end
 
-function pg_vort_res(; nref, order, showplots=false)
+function pg_vort_2D_res(; nref, order, showplots=false)
     # Ekman number
-    # ε² = 1e-5
-    # ε² = 1e-4
-    # ε² = 1e-3
-    ε² = 1e-2
-    # ε² = 1e-1
-    # ε² = 1
+    ε² = 1
 
     # setup FE grids
     # gfile = "../meshes/gmsh/mesh$nref.h5"
-    gfile = "../meshes/valign/mesh$nref.h5"
-    # gfile = "../meshes/jc_valign/mesh$nref.h5"
-    # gfile = "../meshes/mesh.h5"
+    gfile = "../meshes/valign2D/mesh$nref.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
+
+    # mesh resolution 
+    h = 1/sqrt(g.np)
+
+    # sfc and bottom edges
+    ebot, esfc = get_sides(g)
+    e = (bot=ebot, sfc=esfc) 
     
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -206,128 +178,82 @@ function pg_vort_res(; nref, order, showplots=false)
     # get Jacobians
     J = Jacobians(g1)   
 
-    println(@sprintf("q⁻¹ = %1.1e", sqrt(2*ε²)))
-    println(@sprintf("h   = %1.1e", 1/sqrt(g1.np)))
-
-    # top and bottom edges
-    ebot, etop = get_sides(g)
-    e = (bot = ebot, top = etop) 
-
-    # forcing
-    # H(x) = sqrt(2 - x^2) - 1
-    H(x) = 1 - x^2
+    # constructed solution
     x = g.p[:, 1] 
     z = g.p[:, 2] 
-    δ = 0.1
-    b = @. z + δ*exp(-(z + H(x))/δ)
-    # b = 2*x
+    H = @. 1 - x^2
+    # H = @. sqrt(2 - x^2) - 1
+    ωx_a = @. x*exp(x*z)
+    ωy_a = @. x*exp(x*z)
+    χx_a = @. -(1 - H + exp(z)*(-1 + H + z))*sin(x)
+    χy_a = @. -(1 - H + exp(z)*(-1 + H + z))*cos(x)
+    diri = (ωx_bot=ωx_a[e.bot], ωx_sfc=ωx_a[e.sfc],
+            ωy_bot=ωy_a[e.bot], ωy_sfc=ωy_a[e.sfc],
+            χx_bot=χx_a[e.bot], χx_sfc=χx_a[e.sfc],
+            χy_bot=χy_a[e.bot], χy_sfc=χy_a[e.sfc],
+           )
+    ωx_a = FEField(ωx_a, g, g1)
+    ωy_a = FEField(ωy_a, g, g1)
+    χx_a = FEField(χx_a, g, g1)
+    χy_a = FEField(χy_a, g, g1)
+
+    # forcing
+    f1 = @. -x*exp(x*z) - ε²*x^3*exp(x*z)
+    f2 = @.  x*exp(x*z) - ε²*x^3*exp(x*z)
+    f3 = @. x*exp(x*z) + (-2*exp(z) - exp(z)*(-1 + H + z))*sin(x)
+    f4 = @. x*exp(x*z) + (-2*exp(z) - exp(z)*(-1 + H + z))*cos(x)
+    f1 = FEField(f1, g, g1)
+    f2 = FEField(f2, g, g1)
+    f3 = FEField(f3, g, g1)
+    f4 = FEField(f4, g, g1)
+    f = (f1=f1, f2=f2, f3=f3, f4=f4)
 
     # initialize FE fields
     ωx = FEField(zeros(g.np), g, g1)
     ωy = FEField(zeros(g.np), g, g1)    
     χx = FEField(zeros(g.np), g, g1)
     χy = FEField(zeros(g.np), g, g1)
-    b  = FEField(b,           g, g1)
 
     # solve 
-    ωx, ωy, χx, χy = solve_pg_vort(ωx, ωy, χx, χy, b, J, s, e, ε²)
+    ωx, ωy, χx, χy = solve_pg_vort_2D(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
 
     if showplots
         quickplot(ωx, L"\omega^x", "images/omegax.png")
         quickplot(ωy, L"\omega^y", "images/omegay.png")
         quickplot(χx, L"\chi^x",   "images/chix.png")
         quickplot(χy, L"\chi^y",   "images/chiy.png")
-        plot(g.p[e.bot, 1], ωy.values[e.bot], "o", ms=1)
-        xlabel(L"x")
-        ylabel(L"\omega^y(z = -H)")
-        savefig("images/omegay_bot.png")
-        println("images/omegay_bot.png")
-        plt.close()
-        plot_profile(ωx, 0.5, -H(0.5):1e-3:0, L"$\omega^x$ at $x = 0.5$", L"z", "images/omegax_profile.png")
-        plot_profile(ωy, 0.5, -H(0.5):1e-3:0, L"$\omega^y$ at $x = 0.5$", L"z", "images/omegay_profile.png")
-        plot_profile(χx, 0.5, -H(0.5):1e-3:0, L"$\chi^x$ at $x = 0.5$",   L"z", "images/chix_profile.png")
-        plot_profile(χy, 0.5, -H(0.5):1e-3:0, L"$\chi^y$ at $x = 0.5$",   L"z", "images/chiy_profile.png")
     end
 
-    return ωx, ωy, χx, χy
+    err = L2norm(ωx - ωx_a, s, J) +
+          L2norm(ωy - ωy_a, s, J) +
+          L2norm(χx - χx_a, s, J) +
+          L2norm(χy - χy_a, s, J)
+
+    return h, err
 end
 
-"""
-    ux, uy, uz = get_velocities(χx, χy)
-
-Solve the equations
-    ux = -∂z(χy)
-    uy = ∂z(χx)
-    uz = ∂x(χy)
-With b.c. 
-       ux = uy = uz = 0  at  z = -H,
-    ∂z(ux) = ∂z(uy) = 0  at  z = 0,
-                 uz = 0  at  z = 0.
-"""
-function get_velocities(χx, χy; showplots=false)
-    # unpack grids
-    g1 = χx.g1
-    g2 = χx.g
-
-    # set up order 1 velocity fields
-    ux = FEField(zeros(g1.np), g1, g1)
-    uy = FEField(zeros(g1.np), g1, g1)
-    uz = FEField(zeros(g1.np), g1, g1)
-
-    # Jacobians
-    J = Jacobians(g1)   
-
-    # integrals
-    s1 = ShapeFunctionIntegrals(g1.s, g1.s)
-    s21 = ShapeFunctionIntegrals(g2.s, g1.s)
-
-    # stamp system
-    M = Tuple{Int64,Int64,Float64}[]
-    Cx = Tuple{Int64,Int64,Float64}[]
-    Cz = Tuple{Int64,Int64,Float64}[]
-    for k=1:g1.nt
-        # matrices
-        Mᵏ = abs(J.J[k])*s1.φφ
-        Cxᵏ = abs(J.J[k])*(s21.φξφ*J.ξx[k] + s21.φηφ*J.ηx[k])
-        Czᵏ = abs(J.J[k])*(s21.φξφ*J.ξy[k] + s21.φηφ*J.ηy[k])
-        for i=1:g1.nn, j=1:g2.nn
-            push!(Cx, (g1.t[k, i], g2.t[k, j], Cxᵏ[i, j]))
-            push!(Cz, (g1.t[k, i], g2.t[k, j], Czᵏ[i, j]))
+function pg_vort_2D_conv(; nrefs)
+    fig, ax = subplots(1)
+    ax.set_xlabel(L"Resolution $h$")
+    ax.set_ylabel(L"$L^2$ Error")
+    for o=1:2
+        println("Order ", o)
+        h = zeros(size(nrefs, 1))
+        err = zeros(size(nrefs, 1))
+        for i in eachindex(nrefs)
+            println("\tRefinement ", nrefs[i])
+            h[i], err[i] = pg_vort_2D_res(nref=nrefs[i], order=o)
         end
-        for i=1:g1.nn, j=1:g1.nn
-            push!(M, (g1.t[k, i], g1.t[k, j], Mᵏ[i, j]))
-        end
+        ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o)], "k-", alpha=o/3, label=latexstring(L"$h^", o, L"$"))
+        ax.loglog(h, err, "o", label="Order $o")
     end
-
-    # make CSC matrices
-    M = sparse((x -> x[1]).(M), (x -> x[2]).(M), (x -> x[3]).(M), g1.np, g1.np)
-    Cx = sparse((x -> x[1]).(Cx), (x -> x[2]).(Cx), (x -> x[3]).(Cx), g1.np, g2.np)
-    Cz = sparse((x -> x[1]).(Cz), (x -> x[2]).(Cz), (x -> x[3]).(Cz), g1.np, g2.np)
-
-    # ux = -∂z(χy)
-    ux.values[:] = -M\(Cz*χy.values)
-
-    # uy = ∂z(χx)
-    uy.values[:] = M\(Cz*χx.values)
-
-    # uz = ∂x(χy)
-    uz.values[:] = M\(Cx*χy.values)
-
-    if showplots
-        quickplot(ux, L"u^x", "images/ux.png")
-        quickplot(uy, L"u^y", "images/uy.png")
-        quickplot(uz, L"u^z", "images/uz.png")
-        H(x) = sqrt(2 - x^2) - 1
-        # plot_profile(ux, 0.5, -H(0.5):1e-3:0, L"$u^x$ at $x = 0.5$", L"z", "images/ux_profile.png")
-        # plot_profile(uy, 0.5, -H(0.5):1e-3:0, L"$u^y$ at $x = 0.5$", L"z", "images/uy_profile.png")
-        # plot_profile(uz, 0.5, -H(0.5):1e-3:0, L"$u^z$ at $x = 0.5$", L"z", "images/uz_profile.png")
-    end
-
-    return ux, uy, uz
+    ax.legend(ncol=2, loc=(0.0, 1.05))
+    savefig("images/pg_vort_2D.png")
+    println("images/pg_vort_2D.png")
+    plt.close()
 end
 
-ωx, ωy, χx, χy = pg_vort_res(nref=3, order=2, showplots=true)
-
-# ux, uy, uz = get_velocities(χx, χy; showplots=true)
+# h, err = pg_vort_2D_res(nref=3, order=2, showplots=true)
+pg_vort_2D_conv(nrefs=0:3)
 
 println("Done.")
