@@ -115,52 +115,63 @@ function add_nodes(p, t, e, order)
 
     emap, edges, bndix = all_edges(t)
 
-    if order == 2
-        # add midpoints
-        np0 = size(p, 1)
-        new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), dim))
-        pnew = [p; new_pts]
-
-        # map to triangle data structure
-        tnew = hcat(t, np0 .+ emap)
-
-        # add points that were on the boundary to `e`
-        enew = [e; np0 .+ bndix]
-    elseif order == 3 && dim == 2
-            # number of nodes per triangle
-            n = 10
-
-            # first add 1/3 points
-            np0 = size(p, 1)
-            new_pts = reshape(p[edges[:, 1], :] + 1/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
-            pnew = [p; new_pts]
-            np1 = size(pnew, 1)
-            # then add 2/3 points
-            new_pts = reshape(p[edges[:, 1], :] + 2/3*(p[edges[:, 2], :] - p[edges[:, 1], :]), (size(edges, 1), 2))
+    if dim == 1
+        pnew = copy(p)
+        tnew = copy(t)
+        for i=2:order
+            new_pts = reshape((order - i + 1)/order*p[edges[:, 1], :] + (i - 1)/order*p[edges[:, 2], :], (size(edges, 1), :))
             pnew = [pnew; new_pts]
-            np2 = size(pnew, 1)
-            # finally add center points
-            new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), 2))
-            pnew = [pnew; new_pts]
-
-            # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
-            # the 2/3rd point for another... this works but it is slow
-            tnew = zeros(Int64, size(t, 1), n)
-            ps = reference_element_nodes(order, 2)
-            tnew[:, 1:3] = t
-            @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
-                for i=4:n-1
-                    p₀ = transform_from_ref_el(ps[i, :], pnew[t[k, :], :])
-                    idx = get_idx(pnew, p₀)
-                    tnew[k, i] = idx
-                end
-            end
-            tnew[:, 10] = np2 .+ (1:size(t,1))'
-
-            # add points that were on boundary to `e`
-            enew = [e; np0 .+ bndix; np1 .+ bndix]
+            tnew = hcat(tnew, size(p, 1) + (i - 2)*(size(p, 1) - 1) .+ emap)
+        end
+        enew = e
     else
-        error("Unsupported grid order `$order` for dimension `$dim`.")
+        if order == 2
+            # add midpoints
+            np0 = size(p, 1)
+            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), :))
+            pnew = [p; new_pts]
+
+            # map to triangle data structure
+            tnew = hcat(t, np0 .+ emap)
+
+            # add points that were on the boundary to `e`
+            enew = [e; np0 .+ bndix]
+        elseif order == 3 && dim == 2
+                # number of nodes per triangle
+                n = 10
+
+                # first add 1/3 points
+                np0 = size(p, 1)
+                new_pts = reshape(2/3*p[edges[:, 1], :] + 1/3*p[edges[:, 2], :], (size(edges, 1), :))
+                pnew = [p; new_pts]
+                np1 = size(pnew, 1)
+                # then add 2/3 points
+                new_pts = reshape(1/3*p[edges[:, 1], :] + 2/3*p[edges[:, 2], :], (size(edges, 1), :))
+                pnew = [pnew; new_pts]
+                np2 = size(pnew, 1)
+                # finally add center points
+                new_pts = reshape(1/3*(p[t[:, 1], :] + p[t[:, 2], :] + p[t[:, 3], :]), (size(t, 1), :))
+                pnew = [pnew; new_pts]
+
+                # not as easy to determine the indices for each triangle because the 1/3rd point for one triangle is
+                # the 2/3rd point for another... this works but it is slow
+                tnew = zeros(Int64, size(t, 1), n)
+                ps = reference_element_nodes(order, 2)
+                tnew[:, 1:3] = t
+                @showprogress "Triangulating 3rd-order mesh..." for k in axes(t, 1)
+                    for i=4:n-1
+                        p₀ = transform_from_ref_el(ps[i, :], pnew[t[k, :], :])
+                        idx = get_idx(pnew, p₀)
+                        tnew[k, i] = idx
+                    end
+                end
+                tnew[:, 10] = np2 .+ (1:size(t,1))'
+
+                # add points that were on boundary to `e`
+                enew = [e; np0 .+ bndix; np1 .+ bndix]
+        else
+            error("Unsupported grid order `$order` for dimension `$dim`.")
+        end
     end
 
     return pnew, tnew, enew

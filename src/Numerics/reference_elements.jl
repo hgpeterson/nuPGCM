@@ -7,18 +7,8 @@ function reference_element_nodes(order, dim)
     if dim == 1
         if order == 0
             return [0.0]
-        elseif order == 1
-            return [-1.0
-                     1.0]
-        elseif order == 2
-            return [-1.0
-                     1.0
-                     0.0]
-        elseif order == 3
-            return [-1.0
-                     1.0
-                    -1/3
-                     1/3]
+        elseif order ≥ 1
+            return vcat([-1.0, 1.0], [-1.0 + (i - 1)*(2/order) for i=2:order])
         else
             error("Unsupported reference element order `$order` for dimension `$dim`.")
         end
