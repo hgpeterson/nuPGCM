@@ -267,8 +267,8 @@ function all_edges(t)
     edges = etag[keep, 1:2]
 
     # boundary edges
-    if dim == 2
-        # in 2D, no duplicates
+    if dim == 1 || dim == 2
+        # in 1D and 2D, no duplicates
         dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
         dup = [dup; false]
         dup = dup[keep]
