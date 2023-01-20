@@ -116,7 +116,7 @@ function laplace_hydro_conv(; nrefs, dim)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||u - u_a||_{L^2}$")
-    for o=1:1
+    for o=1:2
         println("Order ", o)
         h = zeros(size(nrefs, 1))
         err = zeros(size(nrefs, 1))
@@ -127,11 +127,11 @@ function laplace_hydro_conv(; nrefs, dim)
         ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
         ax.loglog(h, err, "o", label="Order $o")
     end
-    ax.legend(ncol=3, loc=(0.0, 1.05))
+    ax.legend(ncol=2, loc=(0.0, 1.05))
     savefig("images/laplace_hydro.png")
     println("images/laplace_hydro.png")
     plt.close()
 end
 
-laplace_hydro_res(nref=2, order=1, dim=3, plot=true)
-# laplace_hydro_conv(nrefs=0:3, dim=3)
+# laplace_hydro_res(nref=2, order=1, dim=3, plot=true)
+laplace_hydro_conv(nrefs=0:2, dim=3)

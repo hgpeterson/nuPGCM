@@ -18,21 +18,15 @@ pygui(false)
 Solves -∇²u = f with dirichlet b.c. u = u₀.
 """
 function solve_laplace(u, s, J, f, u₀)
-    println("np = $(u.g.np)")
-    println("nt = $(u.g.nt)")
-
     # setup matrix and vector
     K = Tuple{Int64,Int64,Float64}[]
     b = zeros(u.g.np)
 
     # tag whether node of triangle is on boundary or not
-    print("Creating edge tags... ")
-    t₀ = time()
     edge_tags = [u.g.t[k, i] in u.g.e for k=1:u.g.nt, i in axes(u.g.t, 2)]
-    println(time() - t₀, " s")
 
     # stamp
-    @showprogress "Building... " for k=1:u.g.nt
+    for k=1:u.g.nt
         # calculate contribution to K from element k
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
         Kᵏ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
@@ -61,10 +55,7 @@ function solve_laplace(u, s, J, f, u₀)
     K = sparse((x -> x[1]).(K), (x -> x[2]).(K), (x -> x[3]).(K), u.g.np, u.g.np)
 
     # solve
-    print("Solving... ")
-    t₀ = time()
     u.values[:] = K\b
-    println(time() - t₀, " s")
     return u
 end
 
@@ -173,4 +164,4 @@ function laplace_convergence(; nrefs, dim)
 end
 
 # laplace_res(nref=3, order=1, dim=1, showplots=true)
-laplace_convergence(nrefs=0:5, dim=1)
+laplace_convergence(nrefs=0:2, dim=3)
