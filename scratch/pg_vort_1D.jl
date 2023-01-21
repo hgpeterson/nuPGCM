@@ -60,8 +60,7 @@ function solve_pg_vort_1D(u, v, f, diri, J, s)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # dirichlet
-    A, r = add_dirichlet(A, r, umap[g.e[1]], diri.u0) 
-    A, r = add_dirichlet(A, r, vmap[g.e[1]], diri.v0)
+    A, r = add_dirichlet(A, r, umap[g.e[1]], vmap[g.e[1]], diri.v0) 
     A, r = add_dirichlet(A, r, umap[g.e[end]], diri.u1) 
     A, r = add_dirichlet(A, r, vmap[g.e[end]], diri.v1)
 
@@ -98,8 +97,8 @@ function pg_vort_1D_res(; nref, order, showplots=false)
 
     # constructed solution
     x = g.p[:, 1] 
-    ua = @. x*exp(x*z)
-    va = @. x*exp(x*z)
+    ua = @. sin(x)
+    va = @. -exp(x)*(x - 1)
     diri = (u0=ua[g.e[1]], u1=ua[g.e[end]],
             v0=va[g.e[1]], v1=va[g.e[end]]
            )
@@ -107,8 +106,8 @@ function pg_vort_1D_res(; nref, order, showplots=false)
     va = FEField(va, g, g1)
 
     # forcing
-    f1 = @. -x*exp(x*z) - ε²*x^3*exp(x*z)
-    f2 = @.  x*exp(x*z) - ε²*x^3*exp(x*z)
+    f1 = @. sin(x)
+    f2 = @. -exp(x)*(x + 1) + sin(x)
     f1 = FEField(f1, g, g1)
     f2 = FEField(f2, g, g1)
     f = (f1=f1, f2=f2)
@@ -118,45 +117,56 @@ function pg_vort_1D_res(; nref, order, showplots=false)
     v = FEField(zeros(g.np), g, g1)    
 
     # solve 
-    ωx, ωy, χx, χy = solve_pg_vort_2D(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
+    u, v = solve_pg_vort_1D(u, v, f, diri, J, s)
 
     if showplots
-        quickplot(ωx, L"\omega^x", "images/omegax.png")
-        quickplot(ωy, L"\omega^y", "images/omegay.png")
-        quickplot(χx, L"\chi^x",   "images/chix.png")
-        quickplot(χy, L"\chi^y",   "images/chiy.png")
+        fig, ax = subplots()
+        ax.plot(g.p[:, 1], u.values, "o", ms=1, label="Numerical")
+        ax.plot(g.p[:, 1], ua.values, "o", ms=0.5, label="Exact")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"u")
+        ax.legend()
+        savefig("images/u.png")
+        println("images/u.png")
+        plt.close()
+        fig, ax = subplots()
+        ax.plot(g.p[:, 1], v.values, "o", ms=1, label="Numerical")
+        ax.plot(g.p[:, 1], va.values, "o", ms=0.5, label="Exact")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"v")
+        ax.legend()
+        savefig("images/v.png")
+        println("images/v.png")
+        plt.close()
     end
 
-    err = L2norm(ωx - ωx_a, s, J) +
-          L2norm(ωy - ωy_a, s, J) +
-          L2norm(χx - χx_a, s, J) +
-          L2norm(χy - χy_a, s, J)
+    err = L2norm(u - ua, s, J) + L2norm(v - va, s, J)
 
     return h, err
 end
 
-function pg_vort_2D_conv(; nrefs)
+function pg_vort_1D_conv(; nrefs)
     fig, ax = subplots(1)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"$L^2$ Error")
-    for o=1:2
+    for o=1:3
         println("Order ", o)
         h = zeros(size(nrefs, 1))
         err = zeros(size(nrefs, 1))
         for i in eachindex(nrefs)
             println("\tRefinement ", nrefs[i])
-            h[i], err[i] = pg_vort_2D_res(nref=nrefs[i], order=o)
+            h[i], err[i] = pg_vort_1D_res(nref=nrefs[i], order=o)
         end
-        ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o)], "k-", alpha=o/3, label=latexstring(L"$h^", o, L"$"))
+        ax.loglog([h[1], h[end]], [err[1], err[1]*(h[end]/h[1])^(o+1)], "k-", alpha=o/3, label=latexstring(L"$h^", o+1, L"$"))
         ax.loglog(h, err, "o", label="Order $o")
     end
-    ax.legend(ncol=2, loc=(0.0, 1.05))
-    savefig("images/pg_vort_2D.png")
-    println("images/pg_vort_2D.png")
+    ax.legend(ncol=3, loc=(0.0, 1.05))
+    savefig("images/pg_vort_1D.png")
+    println("images/pg_vort_1D.png")
     plt.close()
 end
 
-# h, err = pg_vort_2D_res(nref=3, order=2, showplots=true)
-pg_vort_2D_conv(nrefs=0:3)
+h, err = pg_vort_1D_res(nref=3, order=3, showplots=true)
+# pg_vort_1D_conv(nrefs=0:3)
 
 println("Done.")

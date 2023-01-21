@@ -83,12 +83,12 @@ function solve_pg_vort_2D(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # bottom: dirichlet
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], diri.χx_bot) 
-    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], diri.χy_bot)
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], diri.ωx_bot)
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], diri.ωy_bot)
-    # A, r = add_dirichlet(A, r, χxmap[e.bot], diri.χx_bot)
-    # A, r = add_dirichlet(A, r, χymap[e.bot], diri.χy_bot)
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], diri.χx_bot) 
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], diri.χy_bot)
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], diri.ωx_bot)
+    A, r = add_dirichlet(A, r, ωymap[e.bot], diri.ωy_bot)
+    A, r = add_dirichlet(A, r, χxmap[e.bot], diri.χx_bot)
+    A, r = add_dirichlet(A, r, χymap[e.bot], diri.χy_bot)
 
     # sfc: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.sfc], diri.ωx_sfc)
@@ -160,8 +160,8 @@ function pg_vort_2D_res(; nref, order, showplots=false)
     ε² = 1
 
     # setup FE grids
-    # gfile = "../meshes/gmsh/mesh$nref.h5"
-    gfile = "../meshes/valign2D/mesh$nref.h5"
+    gfile = "../meshes/gmsh/mesh$nref.h5"
+    # gfile = "../meshes/valign2D/mesh$nref.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
 
@@ -181,8 +181,8 @@ function pg_vort_2D_res(; nref, order, showplots=false)
     # constructed solution
     x = g.p[:, 1] 
     z = g.p[:, 2] 
-    H = @. 1 - x^2
-    # H = @. sqrt(2 - x^2) - 1
+    # H = @. 1 - x^2
+    H = @. sqrt(2 - x^2) - 1
     ωx_a = @. x*exp(x*z)
     ωy_a = @. x*exp(x*z)
     χx_a = @. -(1 - H + exp(z)*(-1 + H + z))*sin(x)
