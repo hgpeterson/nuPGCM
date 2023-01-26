@@ -3,21 +3,27 @@
 import nuPGCM: tplot
 using WriteVTK
 
-function get_sides(g::FEGrid)
+function get_sides(g::FEGrid; tol=1e-4)
     # bottom
-    ebot = g.e[abs.(g.p[g.e, end]) .>= 1e-4]
+    bot = g.e[abs.(g.p[g.e, end]) .≥ tol]
 
     # top
-    etop = g.e[abs.(g.p[g.e, end]) .< 1e-4]
+    sfc = g.e[abs.(g.p[g.e, end]) .< tol]
 
     if g.dim == 2
-        # for 2D, add corners to ebot and remove them from etop
-        eleft = g.e[abs.(g.p[g.e, 1] .+ 1) .<= 1e-4]
-        eright = g.e[abs.(g.p[g.e, 1] .- 1) .<= 1e-4]
-        ebot = [eleft[1]; ebot; eright[1]]
+        # for 2D, add corners to bot and remove them from sfc
+        left = g.e[abs.(g.p[g.e, 1] .+ 1) .≤ tol]
+        right = g.e[abs.(g.p[g.e, 1] .- 1) .≤ tol]
+        bot = [left[1]; bot; right[1]]
+    elseif g.dim == 3
+        # for 3D, add coastline to bot
+        coast = g.e[abs.(1 .- sqrt.(g.p[g.e, 1].^2 + g.p[g.e, 2].^2)) .≤ 1e2*tol]
+        bot = [bot; coast]
     end
 
-    return ebot, etop
+    # println(findall(i->i∈bot && i∈sfc, 1:g.np) == sort(coast))
+
+    return bot, sfc
 end
 
 function tplot(u::FEField)
@@ -120,15 +126,16 @@ end
 function write_vtk(g, fname, data)
     # define points and cells for vtk
     points = g.p'
-    cells = Vector{MeshCell}([])
-    if g.order == 1
+
+    # cells
+    if g.order == 0 
+        cell_type = VTKCellTypes.VTK_VERTEX
+    elseif g.order == 1
         cell_type = VTKCellTypes.VTK_TETRA
     elseif g.order == 2
         cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
     end
-    for i in axes(g.t, 1)
-        push!(cells, MeshCell(cell_type, g.t[i, :]))
-    end
+    cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
 
     # save as vtu file
     vtk_grid(fname, points, cells) do vtk
