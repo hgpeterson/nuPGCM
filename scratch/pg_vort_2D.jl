@@ -83,12 +83,12 @@ function solve_pg_vort_2D(ωx, ωy, χx, χy, f, diri, J, s, e, ε²)
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
 
     # bottom: dirichlet
-    # A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], diri.χx_bot) 
-    # A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], diri.χy_bot)
-    A, r = add_dirichlet(A, r, ωxmap[e.bot], diri.ωx_bot)
-    A, r = add_dirichlet(A, r, ωymap[e.bot], diri.ωy_bot)
-    A, r = add_dirichlet(A, r, χxmap[e.bot], diri.χx_bot)
-    A, r = add_dirichlet(A, r, χymap[e.bot], diri.χy_bot)
+    A, r = add_dirichlet(A, r, ωxmap[e.bot], χxmap[e.bot], diri.χx_bot) 
+    A, r = add_dirichlet(A, r, ωymap[e.bot], χymap[e.bot], diri.χy_bot)
+    # A, r = add_dirichlet(A, r, ωxmap[e.bot], diri.ωx_bot)
+    # A, r = add_dirichlet(A, r, ωymap[e.bot], diri.ωy_bot)
+    # A, r = add_dirichlet(A, r, χxmap[e.bot], diri.χx_bot)
+    # A, r = add_dirichlet(A, r, χymap[e.bot], diri.χy_bot)
 
     # sfc: dirichlet 
     A, r = add_dirichlet(A, r, ωxmap[e.sfc], diri.ωx_sfc)
@@ -160,8 +160,8 @@ function pg_vort_2D_res(; nref, order, showplots=false)
     ε² = 1
 
     # setup FE grids
-    gfile = "../meshes/gmsh/mesh$nref.h5"
-    # gfile = "../meshes/valign2D/mesh$nref.h5"
+    # gfile = "../meshes/gmsh/mesh$nref.h5"
+    gfile = "../meshes/valign2D/mesh$nref.h5"
     g  = FEGrid(gfile, order)
     g1 = FEGrid(gfile, 1)
 
@@ -169,8 +169,8 @@ function pg_vort_2D_res(; nref, order, showplots=false)
     h = 1/sqrt(g.np)
 
     # sfc and bottom edges
-    ebot, esfc = get_sides(g)
-    e = (bot=ebot, sfc=esfc) 
+    bot, sfc = get_sides(g)
+    e = (bot=bot, sfc=sfc) 
     
     # get shape function integrals
     s = ShapeFunctionIntegrals(g.s, g.s)
@@ -181,15 +181,15 @@ function pg_vort_2D_res(; nref, order, showplots=false)
     # constructed solution
     x = g.p[:, 1] 
     z = g.p[:, 2] 
-    # H = @. 1 - x^2
-    H = @. sqrt(2 - x^2) - 1
+    H = @. 1 - x^2
+    # H = @. sqrt(2 - x^2) - 1
     ωx_a = @. x*exp(x*z)
     ωy_a = @. x*exp(x*z)
     χx_a = @. -(1 - H + exp(z)*(-1 + H + z))*sin(x)
     χy_a = @. -(1 - H + exp(z)*(-1 + H + z))*cos(x)
     diri = (ωx_bot=ωx_a[e.bot], ωx_sfc=ωx_a[e.sfc],
             ωy_bot=ωy_a[e.bot], ωy_sfc=ωy_a[e.sfc],
-            χx_bot=χx_a[e.bot], χx_sfc=χx_a[e.sfc],
+            χx_bot=1.1*χx_a[e.bot], χx_sfc=χx_a[e.sfc],
             χy_bot=χy_a[e.bot], χy_sfc=χy_a[e.sfc],
            )
     ωx_a = FEField(ωx_a, g, g1)
@@ -222,6 +222,10 @@ function pg_vort_2D_res(; nref, order, showplots=false)
         quickplot(ωy, L"\omega^y", "images/omegay.png")
         quickplot(χx, L"\chi^x",   "images/chix.png")
         quickplot(χy, L"\chi^y",   "images/chiy.png")
+        quickplot(ωx_a, L"\omega^x_a", "images/omegax_a.png")
+        quickplot(ωy_a, L"\omega^y_a", "images/omegay_a.png")
+        quickplot(χx_a, L"\chi^x_a",   "images/chix_a.png")
+        quickplot(χy_a, L"\chi^y_a",   "images/chiy_a.png")
     end
 
     err = L2norm(ωx - ωx_a, s, J) +
@@ -253,7 +257,7 @@ function pg_vort_2D_conv(; nrefs)
     plt.close()
 end
 
-# h, err = pg_vort_2D_res(nref=3, order=2, showplots=true)
-pg_vort_2D_conv(nrefs=0:3)
+h, err = pg_vort_2D_res(nref=3, order=2, showplots=true)
+# pg_vort_2D_conv(nrefs=0:3)
 
 println("Done.")
