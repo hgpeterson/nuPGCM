@@ -1,88 +1,79 @@
 """
-    barotropic_LHS = get_barotropic_LHS(p, t, e, C₀, ρ₀, f₀, β, H, Hx, Hy, r_sym, r_asym)
+    barotropic_LHS = get_barotropic_LHS(g, ρ₀, f₀, β, H, Hx, Hy, r_sym, r_asym)
 
-Construct FE LHS matrix for barotropic vorticity equation
-    ∇⋅(r/ρ₀/H^3∇Ψ) - σ⋅(∇r'/ρ₀/H^3×∇Ψ) - J(f/H, Ψ) = -J(1/H, γ) + σ⋅∇×[(τ₀ - τ_w - τ_b)/ρ₀/H]
-with Dirichlet boundary condition Ψ = 0 on the boundary. Returns LU-factored matrix.
+Construct LHS matrix for barotropic vorticity equation with Dirichlet b.c. Ψ = 0. 
+Returns LU-factored matrix.
 """
-function get_barotropic_LHS(p::AbstractMatrix{FT}, t::AbstractMatrix{IT}, e::AbstractVector{IT},
-                            C₀::AbstractArray{FT,3}, ρ₀::FT, f₀::FT, β::FT, H::AbstractVector{FT}, 
-                            Hx::AbstractVector{FT}, Hy::AbstractVector{FT}, r_sym::AbstractVector{FT}, 
-                            r_asym::AbstractVector{FT}) where {FT <: Real, IT <: Integer}
-    # indices
-    np = size(p, 1)
-    nt = size(t, 1)
-    ne = size(e, 1)
-
-    # number of shape functions per triangle
-    n = size(t, 2)
-
-    # functions
-    H_func(ξ, η, k)        = fem_evaluate(H,        ξ, η, p, t, C₀, k)
-    Hx_func(ξ, η, k)       = fem_evaluate(Hx,       ξ, η, p, t, C₀, k)
-    Hy_func(ξ, η, k)       = fem_evaluate(Hy,       ξ, η, p, t, C₀, k)
-    r_sym_func(ξ, η, k)    = fem_evaluate(r_sym,    ξ, η, p, t, C₀, k)
-    r_asym_func(ξ, η, k)   = fem_evaluate(r_asym,   ξ, η, p, t, C₀, k)
-    r_sym_z_func(ξ, η, k)  = fem_evaluate(r_sym_z,  ξ, η, p, t, C₀, k)
-    r_asym_z_func(ξ, η, k) = fem_evaluate(r_asym_z, ξ, η, p, t, C₀, k)
+function get_barotropic_LHS(g1::G, g::G, ε², β, H::F, Hx::F, Hy::F, r_sym::F, r_asym::F) where {F <: FEField, G <: FEGrid}
+    J = Jacobians(g1)
+    w, ξ = quad_weights_points(4, 2)
 
     # create global linear system using stamping method
-    A = Tuple{IT,IT,FT}[]
-    @showprogress "Building barotropic_LHS..." for k = 1:nt
+    A = Tuple{Int64,Int64,Float64}[]
+    @showprogress "Building barotropic LHS..." for k=1:g.nt
+        dξ = J.dets[k]
+        ξx = J.Js[k, 1, 1]
+        ξy = J.Js[k, 1, 2]
+        ηx = J.Js[k, 2, 1]
+        ηy = J.Js[k, 2, 2]
+
         # calculate contribution to K from element k
-        Kᵏ = zeros(FT, n, n)
-        for i=1:n
-            for j=1:n
-                func(ξ, η) = -r_sym_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
-                            (shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) + 
-                             shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
-                Kᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+        K = zeros(g.nn, g.nn)
+        for i=1:g.nn
+            for j=1:g.nn
+                func(ξ) = -evaluate(r_sym, transform_from_ref_el(ξ, g1.p[g1.t[k, :], :]), k)*
+                            (∂φ(g.s, j, 1, ξ)*∂φ(g.s, i, 1, ξ)*(ξx^2 + ξy^2) + 
+                             ∂φ(g.s, j, 1, ξ)*∂φ(g.s, i, 2, ξ)*(ξx*ηx + ξy*ηy) + 
+                             ∂φ(g.s, j, 2, ξ)*∂φ(g.s, i, 1, ξ)*(ηx*ξx + ηy*ξy) +
+                             ∂φ(g.s, j, 2, ξ)*∂φ(g.s, i, 2, ξ)*(ηx^2 + ηy^2))*dξ
+                K[i, j] = ref_el_quad(func, w, ξ)
             end
         end
 
-        # calculate contribution to K′ from element k
-        K′ᵏ = zeros(FT, n, n)
-        for i=1:n
-            for j=1:n
-                func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
-                            (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
-                             shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
-                K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
-            end
-        end
+        # # calculate contribution to K′ from element k
+        # K′ᵏ = zeros(FT, n, n)
+        # for i=1:n
+        #     for j=1:n
+        #         func(ξ, η) = r_asym_func(ξ, η, k)/ρ₀/H_func(ξ, η, k)^3*
+        #                     (shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η; dξ=1) - 
+        #                      shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η; dη=1))
+        #         K′ᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+        #     end
+        # end
 
-        # calculate contribution to C from element k
-        Cᵏ = zeros(FT, n, n)
-        for i=1:n
-            for j=1:n
-                func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
-                            shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
-                            -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
-                            shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
-                Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
-            end
-        end
+        # # calculate contribution to C from element k
+        # Cᵏ = zeros(FT, n, n)
+        # for i=1:n
+        #     for j=1:n
+        #         func(ξ, η) = (β/H_func(ξ, η, k) - (f₀ + β*η)*Hy_func(ξ, η, k)/H_func(ξ, η, k)^2)*
+        #                     shape_func(C₀[k, j, :], ξ, η; dξ=1)*shape_func(C₀[k, i, :], ξ, η) -
+        #                     -(f₀ + β*η)*Hx_func(ξ, η, k)/H_func(ξ, η, k)^2*
+        #                     shape_func(C₀[k, j, :], ξ, η; dη=1)*shape_func(C₀[k, i, :], ξ, η)
+        #         Cᵏ[i, j] = tri_quad(func, p[t[k, 1:3], :]; degree=4)
+        #     end
+        # end
 
         # add to global system
-        for i=1:n
-            for j=1:n
-                if t[k, i] in e
+        for i=1:g.nn
+            for j=1:g.nn
+                if g.t[k, i] ∈ g.e
                     # edge node, leave for dirichlet
                     continue
                 end
-                push!(A, (t[k, i], t[k, j], Kᵏ[i, j]))
-                push!(A, (t[k, i], t[k, j], K′ᵏ[i, j]))
-                push!(A, (t[k, i], t[k, j], Cᵏ[i, j]))
+                push!(A, (g.t[k, i], g.t[k, j], K[i, j]))
+                # push!(A, (t[k, i], t[k, j], K′ᵏ[i, j]))
+                # push!(A, (t[k, i], t[k, j], Cᵏ[i, j]))
             end
         end
     end
+
     # dirichlet Ψ = 0 along edges
-    for i=1:ne
-        push!(A, (e[i], e[i], 1))
+    for i=1:g.ne
+        push!(A, (g.e[i], g.e[i], 1))
     end
 
     # make CSC matrix
-    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), np, np)
+    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, g.np)
 
     return lu(A)
 end
@@ -90,14 +81,11 @@ end
 """
     barotropic_RHS = get_barotropic_RHS(m, τξ, τη)
 
-Construct FE RHS vector for barotropic vorticity equation
-    ∇⋅(r/ρ₀/H^3∇Ψ) - σ⋅(∇r'/ρ₀/H^3×∇Ψ) - J(f/H, Ψ) = -J(1/H, γ) + σ⋅∇×[(τ₀ - τ_w - τ_b)/ρ₀/H]
-with Dirichlet boundary condition Ψ = 0 on the boundary.
+Construct RHS vector for barotropic vorticity equation with b.c. Ψ = 0.
 """
-function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::AbstractVector{FT}, 
-                            τη::AbstractVector{FT}) where FT <: Real
-    # number of shape functions per triangle
-    n = size(m.t, 2)
+function get_barotropic_RHS(g1::G, g::G, ρ₀, γ::F, τξ::F, τη::F, H::F, Hx::F, Hy::F) where {G <: FEGrid, F <: FEField}
+    J = Jacobians(g1)
+    w, ξ = quad_weights_points(4, 2)
 
     # functions
     H_func(ξ, η, k)   = fem_evaluate(m, m.H,  ξ, η, k)
@@ -107,22 +95,28 @@ function get_barotropic_RHS(m::ModelSetup3DPG, γ::AbstractVector{FT}, τξ::Abs
     τη_func(ξ, η, k)  = fem_evaluate(m, τη,   ξ, η, k)
     curl_τ(ξ, η, k)   = ∂ξ(m, τη, ξ, η, k)/H_func(ξ, η, k) - τη_func(ξ, η, k)/H_func(ξ, η, k)^2*Hx_func(ξ, η, k) -
                        (∂η(m, τξ, ξ, η, k)/H_func(ξ, η, k) - τξ_func(ξ, η, k)/H_func(ξ, η, k)^2*Hy_func(ξ, η, k))
-    JEBAR(ξ, η, k)    = 1/H_func(ξ, η, k)^2*(Hx_func(ξ, η, k)*∂η(m, γ, ξ, η, k) - Hy_func(ξ, η, k)*∂ξ(m, γ, ξ, η, k))
+    JEBAR(ξ, k) = 0
 
-	# stamp curl_τ
-    b = zeros(FT, m.np)
-	@showprogress "Building barotropic_RHS..." for k=1:m.nt
-        for i=1:n
-            if m.t[k, i] in m.e
+	# stamp
+    RHS = zeros(g.np)
+	@showprogress "Building barotropic RHS..." for k=1:g.nt
+        dξ = J.dets[k]
+        ξx = J.Js[k, 1, 1]
+        ξy = J.Js[k, 1, 2]
+        ηx = J.Js[k, 2, 1]
+        ηy = J.Js[k, 2, 2]
+
+        for i=1:g.nn
+            if g.t[k, i] in g.e
                 # edge node, leave as zero so that Ψ = 0
                 continue
             end
-            func(ξ, η) = (-JEBAR(ξ, η, k) + curl_τ(ξ, η, k)/m.ρ₀)*shape_func(m.C₀[k, i, :], ξ, η)
-            b[m.t[k, i]] += tri_quad(func, m.p[m.t[k, 1:3], :]; degree=4)
+            func(ξ) = (-JEBAR(ξ, k) + curl_τ(ξ, k)/ρ₀)*φ(g.s, i, ξ)*dξ
+            RHS[g.t[k, i]] += ref_el_quad(func, w, ξ)
         end
 	end
 
-    return b
+    return RHS
 end
 
 """
