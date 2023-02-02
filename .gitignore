@@ -20,3 +20,6 @@
 
 # ignore nohup files
 *.out
+
+# ignore VScode stuff
+*.vscode
