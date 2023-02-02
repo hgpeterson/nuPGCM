@@ -3,7 +3,7 @@ using PyPlot
 using SparseArrays
 using LinearAlgebra
 
-plt.style.use("../plots.mplstyle")
+plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
@@ -75,7 +75,7 @@ end
 
 nz = 2^8
 z = -1:1/(nz - 1):0
-bx = ones(nz)
+bx = @. exp(-(z + 1)/0.01)
 ε² = 0.01
 ωx, ωy = solve_baroclinic(z, bx, ε²)
 
@@ -85,5 +85,5 @@ ax.plot(ωy, z, label=L"\omega^y")
 ax.legend()
 ax.set_xlabel(L"\omega")
 ax.set_ylabel(L"z")
-savefig("images/omega.png")
-println("images/omega.png")
+savefig("scratch/images/omega.png")
+println("scratch/images/omega.png")
