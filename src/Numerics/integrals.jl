@@ -32,13 +32,16 @@ function ref_el_quad(f, w, ξ)
     dim = size(ξ, 2)
     
     # sum contributions and multiply by volume of reference element 
-    if dim == 1 || dim == 2
-        return 1/2*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
+    if dim == 1 
+        scale = 1
+    elseif dim == 2
+        scale = 1/2
     elseif dim == 3
-        return 1/6*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
+        scale = 1/6
     else
         error("Unsupported dimension `$dim`.")
     end
+    return scale*dot(w, [f(ξ[i, :]) for i in axes(ξ, 1)])
 end
 
 """
@@ -57,19 +60,19 @@ function quad_weights_points(degree, dim)
         if degree == 1
             w = [2.0]
             ξ = [0.0]
-        elseif 1 < degree <= 3
+        elseif 1 < degree ≤ 3
             w = [1.0
                  1.0]
             ξ = [-1/√3
                   1/√3]
-        elseif 3 < degree <= 5
+        elseif 3 < degree ≤ 5
             w = [5.0/9
                  8.0/9
                  5.0/9]
             ξ = [-√(3/5)
                   0.0
                   √(3/5)]
-        elseif 5 < degree <= 7
+        elseif 5 < degree ≤ 7
             w = [(18 - √30)/36
                  (18 + √30)/36
                  (18 + √30)/36
@@ -78,6 +81,17 @@ function quad_weights_points(degree, dim)
                  -√(3/7 - 2/7*√(6/5))
                   √(3/7 - 2/7*√(6/5))
                   √(3/7 + 2/7*√(6/5))]
+        elseif 7 < degree ≤ 9
+            w = [(322 - 13*√70)/900,
+                 (322 + 13*√70)/900,
+                 128/225,
+                 (322 + 13*√70)/900,
+                 (322 - 13*√70)/900]
+            ξ = [-1/3*√(5 + 2*√(10/7)),
+                 -1/3*√(5 - 2*√(10/7)),
+                  0.0,
+                  1/3*√(5 - 2*√(10/7)),
+                  1/3*√(5 + 2*√(10/7))]
         else
             error("Degree of integration unsupported.")
         end
