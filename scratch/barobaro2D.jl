@@ -200,7 +200,7 @@ function baroclinic_fd_fe(; order)
     plt.close()
 end
 
-nz = 2^5
+nz = 2^8
 H = 1
 z = -H:H/(nz - 1):0
 z_hr = -H:H/1000:0

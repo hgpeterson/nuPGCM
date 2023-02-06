@@ -1,6 +1,5 @@
 ### utility function for some of the stokes/laplace/pg tests
 
-import nuPGCM: tplot
 using WriteVTK
 
 function get_sides(g::FEGrid; tol=1e-4)
@@ -24,14 +23,6 @@ function get_sides(g::FEGrid; tol=1e-4)
     # println(findall(i->i∈bot && i∈sfc, 1:g.np) == sort(coast))
 
     return bot, sfc
-end
-
-function tplot(u::FEField)
-    if u.order == 0
-        return tplot(u.g1.p, u.g1.t, u.values)
-    else
-        return tplot(u.g.p, u.g.t, u.values)
-    end
 end
 
 function quickplot(u::FEField, clabel, ofile)

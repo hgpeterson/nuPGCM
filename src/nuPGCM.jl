@@ -91,40 +91,10 @@ export
     # plotting
     ridge_plot,
     plot_state_2DPG,
+    tplot,
 
     # BL theory
-    get_full_soln,
-
-    ### 3D Model ###
-
-    # loading
-    load_setup_3D,
-    load_state_3D,
-
-    # model structs 
-    ModelSetup3DPG,
-    ModelState3DPG,
-
-    # inversion
-    get_barotropic_LHS,
-    get_barotropic_RHS,
-    get_baroclinic_LHS,
-    get_baroclinic_RHS,
-    solve_baroclinic_systems,
-    get_τ_b,
-    get_full_τ,
-    get_u,
-
-    # plotting
-    tplot,
-    plot_horizontal,
-    plot_ξ_slice,
-    plot_η_slice,
-
-    # operators
-    ∂ξ,
-    ∂η,
-    curl
+    get_full_soln
 
 # packages
 using PyPlot
@@ -173,13 +143,5 @@ include("TwoDimensionalModel/inversion.jl")
 include("TwoDimensionalModel/evolution.jl")
 include("TwoDimensionalModel/plotting.jl")
 include("TwoDimensionalModel/boundary_layer.jl")
-
-include("ThreeDimensionalModel/setup.jl")
-include("ThreeDimensionalModel/logging.jl")
-include("ThreeDimensionalModel/operators.jl")
-include("ThreeDimensionalModel/inversion.jl")
-include("ThreeDimensionalModel/evolution.jl")
-include("ThreeDimensionalModel/plotting.jl")
-include("ThreeDimensionalModel/boundary_layer.jl")
 
 end # module

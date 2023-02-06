@@ -191,3 +191,48 @@ function plot_state(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
     savefig(@sprintf("%sv%03d.png", out_folder, i_img))
     plt.close()
 end
+
+"""
+    fig, ax, im = tplot(p, t, u=nothing)
+    fig, ax, im = tplot(u)
+
+If `u` === nothing: Plot triangular mesh with nodes `p` and triangles `t`.
+If `u` === solution vector: Plot filled contour color plot of solution `u`.
+"""
+function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing)
+    if fig === nothing
+        fig, ax = subplots(1)
+    end
+
+    if u === nothing
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors="k", linewidth=0.1, rasterized=true)
+    else
+        if vext === nothing
+            vmax = maximum(abs.(u))
+        else
+            vmax = vext
+        end
+
+        if size(u, 1) == size(t, 1)
+            # `u` represents values on triangle faces
+            shading = "flat"
+        elseif size(u, 1) == size(p, 1)
+            # `u` represents values on triangle vertices
+            shading = "gouraud"
+        end
+
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
+    end
+
+    # no spines
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    return fig, ax, im
+end
+function tplot(u::FEField)
+    if u.order == 0
+        return tplot(u.g1.p, u.g1.t, u.values)
+    else
+        return tplot(u.g.p, u.g.t, u.values)
+    end
+end
