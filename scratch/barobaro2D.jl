@@ -155,8 +155,8 @@ function get_u(ωx, ωy, z)
 end
 
 function baroclinic_fd_fe(; order)
-    # solve fd
-    ωx_fd, ωy_fd = solve_baroclinic_fd(z, bx.(z), ε², Ux)
+    # solve fd at high res
+    ωx_fd, ωy_fd = solve_baroclinic_fd(z_hr, bx.(z_hr), ε², Ux)
 
     # FE grid
     p = reshape(z, (nz, 1))
@@ -171,8 +171,8 @@ function baroclinic_fd_fe(; order)
     # plot
     fig, ax = subplots(1, figsize=(2, 3.2))
     perm = sortperm(g.p[:, 1])
-    ax.plot(ωx_fd, z, label=L"$\omega^x$")
-    ax.plot(ωy_fd, z, label=L"$\omega^y$")
+    ax.plot(ωx_fd, z_hr, label=L"$\omega^x$")
+    ax.plot(ωy_fd, z_hr, label=L"$\omega^y$")
     ax.plot(ωx_fe.values[perm], g.p[perm], "k--", lw=0.5, label="FE")
     ax.plot(ωy_fe.values[perm], g.p[perm], "k--", lw=0.5)
     ax.legend()
@@ -183,14 +183,13 @@ function baroclinic_fd_fe(; order)
     plt.close()
 
     # velocities
-    ux_fd, uy_fd = get_u(ωx_fd, ωy_fd, z)
+    ux_fd, uy_fd = get_u(ωx_fd, ωy_fd, z_hr)
     ux_fe, uy_fe = get_u(ωx_fe.values[perm], ωy_fe.values[perm], g.p[perm])
-    println("∫uˣ = ", trapz(ux_fd, z))
 
     # plot
     fig, ax = subplots(1, figsize=(2, 3.2))
-    ax.plot(ux_fd, z, label=L"$u^x$")
-    ax.plot(uy_fd, z, label=L"$u^y$")
+    ax.plot(ux_fd, z_hr, label=L"$u^x$")
+    ax.plot(uy_fd, z_hr, label=L"$u^y$")
     ax.plot(ux_fe, g.p[perm], "k--", lw=0.5, label="FE")
     ax.plot(uy_fe, g.p[perm], "k--", lw=0.5)
     ax.legend()
@@ -201,9 +200,11 @@ function baroclinic_fd_fe(; order)
     plt.close()
 end
 
-nz = 2^8
-z = -1:1/(nz - 1):0
-bx(z) = exp(-(z + 1)/0.01)
+nz = 2^5
+H = 1
+z = -H:H/(nz - 1):0
+z_hr = -H:H/1000:0
+bx(z) = exp(-(z + H)/0.01)
 ε² = 0.01
-Ux = 1
+Ux = 0
 baroclinic_fd_fe(order=2)
