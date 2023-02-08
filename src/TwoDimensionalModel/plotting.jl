@@ -229,6 +229,9 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=not
     ax.spines["bottom"].set_visible(false)
     return fig, ax, im
 end
+function tplot(g::FEGrid)
+    return tplot(g.p, g.t)
+end
 function tplot(u::FEField)
     if u.order == 0
         return tplot(u.g1.p, u.g1.t, u.values)
