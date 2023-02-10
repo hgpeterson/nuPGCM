@@ -11,12 +11,15 @@ pygui(false)
 
 """
 Solve
-    -∂zz(u) + u = 0,
+    -∂zz(u) + u = ∂x(b),
 with
     • u = 0 at z = 0,
     • u = 0 at z = -H.
 """
-function solve_toyDG1D(g)
+function solve_toyDG1D(g, b)
+    # for finding edge connectivities
+    emap, edges, bndix = all_edges(g.t)
+
     # for element matricies
     s = ShapeFunctionIntegrals(g.s, g.s)
     J = Jacobians(g)
@@ -32,22 +35,58 @@ function solve_toyDG1D(g)
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
     for col ∈ cols, k ∈ col
+        # matrices
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
+        Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
         M = J.dets[k]*s.M
+
+        # interior terms
         for i=1:g.nn, j=1:g.nn
             if t_dg[k, i] ∉ e_dg
+                # ∫_Ω ∂z(φᵢ)∂z(φⱼ) dxdz
                 push!(A, (t_dg[k, i], t_dg[k, j], K[i, j]))
+                # ∫_Ω φᵢφⱼ dxdz
                 push!(A, (t_dg[k, i], t_dg[k, j], M[i, j]))
             end
         end
-        # r[t_dg[k, :]] = M*ones(g.nn)
+
+        # boundary terms
+        w, ξ = quad_weights_points(2, 1)
+        s1D = ShapeFunctions(1, 1)
+        # is vertical edge on left or right?
+        # sign_multiplier = ...
+        for i_e=1:3 # local edge index
+            if emap[k, i_e] ∉ bndix # leave boundary edges for dirichlet
+                # local indices for local edge i_e
+                edge = [i_e, mod1(i_e+1, 3)]
+
+                # parametric line 
+                p1 = g.p[g.t[k, edge[1]], :]
+                p2 = g.p[g.t[k, edge[2]], :]
+                p(t) = (p2 - p1)/2*t + (p2 + p1)/2
+
+                # connectivity pair for this edge
+                edge_pair = findall(I -> emap[I] == emap[k, i_e] && I != CartesianIndex(k, i_e), CartesianIndices(emap))[1]
+
+                # do ∫_∂Ωᵢₑ bφᵢ dz for each i
+                for i=1:2
+                    f(t) = b(p(t)[1], p(t)[2])*φ(s1D, i, t)*norm(p2 - p1)/2
+                    ∫f = dot(w, f.(ξ))
+                    # simple flux closure: take average of the two
+                    r[t_dg[k, edge[i]]] += ∫f/2 
+                    r[t_dg[edge_pair[1], edge[mod1(i+1, 2)]]] += ∫f/2 
+                end
+            end
+        end
+        # -∫_Ω b∂x(φ) dxdz
+        r[t_dg[k, :]] -= Cx*b.(p_dg[t_dg[k, :], 1], p_dg[t_dg[k, :], 2])
     end
 
     # dirichlet
     for i ∈ e_dg
         push!(A, (i, i, 1))
-        r[i] = 1
+        r[i] = 0
     end
 
     # sparse matrix
@@ -87,66 +126,44 @@ function get_cols(p, t)
 end
 
 function get_pte_dg(p, t, e, cols)
-    p_dg = [0.0 0.0]
+    # new dg mesh
+    p_dg = zeros(Float64, (2*size(p, 1)-2, 2))
     t_dg = zeros(Int64, size(t))
-    e_dg = [0]
+    e_dg = zeros(Int64, (2*size(e, 1)-2,))
+
+    # current node index
+    i_p = 0
+
+    # current edge node index
+    i_e = 0
+
     # all the nodes within each column will have a unique tag
     for col ∈ cols
-        # current size of p_dg
-        np = size(p_dg, 1) - 1
-
         # new nodes in column
         t_col = t[col, :]
         nodes = sort(unique(t_col))
+        n = size(nodes, 1)
 
         # add them to p_dg
-        p_dg = [p_dg; p[nodes, :]]
+        p_dg[i_p+1:i_p+n, :] = p[nodes, :]
 
         # mapping for new global node indices for each element
-        tmap(i) = np + searchsorted(nodes, i).start
+        tmap(i) = i_p + searchsorted(nodes, i).start
         for k ∈ col
             t_dg[k, :] = tmap.(t[k, :])
         end
 
         # add nodes that were on the edge to e_dg
-        edge_nodes = np .+ findall(i -> nodes[i] ∈ e, 1:size(nodes, 1))
-        e_dg = [e_dg; edge_nodes]
+        edge_nodes = i_p .+ findall(i -> nodes[i] ∈ e, 1:size(nodes, 1))
+        e_dg[i_e+1:i_e+size(edge_nodes,1)] = edge_nodes
+
+        # add to current node indices
+        i_p += n
+        i_e += size(edge_nodes, 1)
     end
-    return p_dg[2:end, :], t_dg, e_dg[2:end]
+    return p_dg, t_dg, e_dg
 end
 
-# g = FEGrid("meshes/valign2D/mesh0.h5", 1)
-# cols = get_cols(g.p, g.t)
-# fig, ax, im = tplot(g)
-# ax.axis("equal")
-# cycle = [1, 2, 3, 1]
-# for i ∈ eachindex(cols)
-#     color = "C$(i-1)"
-#     for k ∈ cols[i]
-#         ax.plot(g.p[g.t[k, cycle], 1], g.p[g.t[k, cycle], 2], c=color, lw=0.5)
-#     end
-# end
-# savefig("scratch/images/cols.png")
-# println("scratch/images/cols.png")
-# plt.close()
-
-# g = FEGrid("meshes/valign2D/mesh0.h5", 1)
-# cols = get_cols(g.p, g.t)
-# p_dg, t_dg, e_dg = get_pte_dg(g.p, g.t, g.e, cols)
-# fig, ax, im = tplot(g)
-# ax.axis("equal")
-# cycle = [1, 2, 3, 1]
-# for i ∈ eachindex(cols)
-#     color = "C$(i-1)"
-#     for k ∈ cols[i]
-#         ax.plot(p_dg[t_dg[k, cycle], 1], p_dg[t_dg[k, cycle], 2], c=color, lw=0.5)
-#         savefig("scratch/images/debug.png")
-#         sleep(0.1)
-#     end
-# end
-# savefig("scratch/images/debug.png")
-# println("scratch/images/debug.png")
-# plt.close()
-
-g = FEGrid("meshes/valign2D/mesh5.h5", 1)
-solve_toyDG1D(g)
+g = FEGrid("meshes/valign2D/mesh0.h5", 1)
+b(x, z) = x
+solve_toyDG1D(g, b)
