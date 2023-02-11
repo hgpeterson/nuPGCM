@@ -3,6 +3,9 @@ using WriteVTK
 using PyPlot
 using SparseArrays
 using LinearAlgebra
+using PyCall
+
+Polygon = pyimport("matplotlib.patches").Polygon
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
@@ -54,8 +57,8 @@ function solve_toyDG1D(g, b)
         # boundary terms
         w, ξ = quad_weights_points(2, 1)
         s1D = ShapeFunctions(1, 1)
-        # is vertical edge on left or right?
-        # sign_multiplier = ...
+        # is vertical edge on left or right? +1 if right, -1 if left
+        side = side_of_vert_edge(g.p[g.t[k, 1:3], :])
         for i_e=1:3 # local edge index
             if emap[k, i_e] ∉ bndix # leave boundary edges for dirichlet
                 # local indices for local edge i_e
@@ -66,6 +69,11 @@ function solve_toyDG1D(g, b)
                 p2 = g.p[g.t[k, edge[2]], :]
                 p(t) = (p2 - p1)/2*t + (p2 + p1)/2
 
+                # is this the vertical edge?
+                is_vert_edge = (p1[1] == p2[1]) ? 1 : -1
+                sign_multiplier = is_vert_edge*side
+                # sign_multiplier = 1
+
                 # connectivity pair for this edge
                 edge_pair = findall(I -> emap[I] == emap[k, i_e] && I != CartesianIndex(k, i_e), CartesianIndices(emap))[1]
 
@@ -74,8 +82,8 @@ function solve_toyDG1D(g, b)
                     f(t) = b(p(t)[1], p(t)[2])*φ(s1D, i, t)*norm(p2 - p1)/2
                     ∫f = dot(w, f.(ξ))
                     # simple flux closure: take average of the two
-                    r[t_dg[k, edge[i]]] += ∫f/2 
-                    r[t_dg[edge_pair[1], edge[mod1(i+1, 2)]]] += ∫f/2 
+                    r[t_dg[k, edge[i]]] += sign_multiplier*∫f*3/4
+                    r[t_dg[edge_pair[1], edge[mod1(i+1, 2)]]] += sign_multiplier*∫f*1/4 
                 end
             end
         end
@@ -100,6 +108,42 @@ function solve_toyDG1D(g, b)
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, t_dg[i, :]) for i ∈ axes(t_dg, 1)]
     vtk_grid("output/u.vtu", points, cells) do vtk
         vtk["u"] = u
+    end
+end
+
+"""
+Given a triangle with points `p` that looks like 
+    <| or |>
+find which side the vertical edge is on.
+Return -1 for left, +1 for right.
+"""
+function side_of_vert_edge(p)
+    # first, suppose first vertex is part of vertical edge
+    if p[1, 1] == p[2, 1]
+        # 1 and 2 make vertical edge
+        if p[1, 2] > p[2, 2]
+            # 1 is on top of 2 -> left
+            return -1
+        else
+            # 2 is on top of 1 -> right
+            return 1
+        end
+    elseif p[1, 1] == p[3, 1]
+        if p[1, 2] > p[3, 2]
+            # 1 is on top of 3 -> right
+            return 1
+        else
+            # 3 is on top of 1 -> left
+            return -1
+        end
+    end
+    # 2 and 3 make vertical edge
+    if p[2, 2] > p[3, 2]
+        # 2 is on top of 3 -> left
+        return -1
+    else
+        # 3 is on top of 2 -> right
+        return 1
     end
 end
 
@@ -164,6 +208,16 @@ function get_pte_dg(p, t, e, cols)
     return p_dg, t_dg, e_dg
 end
 
-g = FEGrid("meshes/valign2D/mesh0.h5", 1)
-b(x, z) = x
+# g = FEGrid("meshes/valign2D/mesh3.h5", 1)
+# fig, ax, im = tplot(g)
+# for k ∈ axes(g.t, 1)
+#     side = side_of_vert_edge(g.p[g.t[k, 1:3], :])
+#     ax.add_patch(Polygon(g.p[g.t[k, 1:3], :], facecolor = (side == 1 ? "tab:blue" : "tab:orange")))
+# end
+# ax.axis("equal")
+# savefig("scratch/images/side_test.png")
+# println("scratch/images/side_test.png")
+
+g = FEGrid("meshes/valign2D/mesh2.h5", 1)
+b(x, z) = x^2 - z*sin(x)/exp(z)
 solve_toyDG1D(g, b)
