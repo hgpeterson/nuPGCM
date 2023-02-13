@@ -71,7 +71,7 @@ function FEGrid(p, t, e, order::IN) where IN <: Integer
     ne = size(e, 1)
 
     # setup shape functions
-    s = ShapeFunctions(order, dim)
+    s = ShapeFunctions(order=order, dim=dim)
 
     return FEGrid(order, dim, s, p, np, t, nt, nn, e, ne)
 end

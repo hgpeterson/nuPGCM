@@ -53,26 +53,26 @@ Integration weights `w` and points `ξ` for quadrature rules on
     `dim` = 3: the reference tetrahedron [0 0 0; 1 0 0; 0 1 0; 0 0 1].
 The integration should be exact for polynomials up to degree `degree`.
 """
-function quad_weights_points(degree, dim)
+function quad_weights_points(; deg, dim)
     if dim == 1
         # https://en.wikipedia.org/wiki/Gaussian_quadrature
         # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_legendre/quadrature_rules_legendre.html
-        if degree == 1
+        if deg == 1
             w = [2.0]
             ξ = [0.0]
-        elseif 1 < degree ≤ 3
+        elseif 1 < deg ≤ 3
             w = [1.0
                  1.0]
             ξ = [-1/√3
                   1/√3]
-        elseif 3 < degree ≤ 5
+        elseif 3 < deg ≤ 5
             w = [5.0/9
                  8.0/9
                  5.0/9]
             ξ = [-√(3/5)
                   0.0
                   √(3/5)]
-        elseif 5 < degree ≤ 7
+        elseif 5 < deg ≤ 7
             w = [(18 - √30)/36
                  (18 + √30)/36
                  (18 + √30)/36
@@ -81,7 +81,7 @@ function quad_weights_points(degree, dim)
                  -√(3/7 - 2/7*√(6/5))
                   √(3/7 - 2/7*√(6/5))
                   √(3/7 + 2/7*√(6/5))]
-        elseif 7 < degree ≤ 9
+        elseif 7 < deg ≤ 9
             w = [(322 - 13*√70)/900,
                  (322 + 13*√70)/900,
                  128/225,
@@ -97,17 +97,17 @@ function quad_weights_points(degree, dim)
         end
     elseif dim == 2
         # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tri/quadrature_rules_tri.html,
-        if degree == 1
+        if deg == 1
             w = [1.0]
             ξ = [0.33333333333333333333  0.33333333333333333333]
-        elseif degree == 2
+        elseif deg == 2
             w = [0.33333333333333333333
                 0.33333333333333333333
                 0.33333333333333333333]
             ξ = [0.66666666666666666667  0.16666666666666666667
                 0.16666666666666666667  0.66666666666666666667
                 0.16666666666666666667  0.16666666666666666667]
-        elseif degree == 3
+        elseif deg == 3
             w = [-0.56250000000000000000
                 0.52083333333333333333
                 0.52083333333333333333
@@ -116,7 +116,7 @@ function quad_weights_points(degree, dim)
                 0.60000000000000000000  0.20000000000000000000
                 0.20000000000000000000  0.60000000000000000000
                 0.20000000000000000000  0.20000000000000000000]
-        elseif degree == 4
+        elseif deg == 4
             w = [0.109951743655322
                 0.109951743655322
                 0.109951743655322
@@ -129,7 +129,7 @@ function quad_weights_points(degree, dim)
                 0.108103018168070  0.445948490915965
                 0.445948490915965  0.108103018168070
                 0.445948490915965  0.445948490915965]
-        elseif degree == 5
+        elseif deg == 5
             w = [0.22500000000000000
                 0.12593918054482717
                 0.12593918054482717
@@ -144,7 +144,7 @@ function quad_weights_points(degree, dim)
                 0.05971587178976981  0.47014206410511505
                 0.47014206410511505  0.05971587178976981
                 0.47014206410511505  0.47014206410511505]
-        elseif degree == 6
+        elseif deg == 6
             w = [0.205950504760887
                 0.205950504760887
                 0.205950504760887
@@ -163,7 +163,7 @@ function quad_weights_points(degree, dim)
                 0.165409927389841  0.037477420750088
                 0.037477420750088  0.797112651860071
                 0.037477420750088  0.165409927389841]
-        elseif degree == 7
+        elseif deg == 7
             w = [0.04713673637581137
                 0.07077613579259895
                 0.04516809856187617
@@ -201,10 +201,10 @@ function quad_weights_points(degree, dim)
         end
     elseif dim == 3
         # https://people.sc.fsu.edu/~jburkardt/datasets/quadrature_rules_tet/quadrature_rules_tet.html
-        if degree == 1
+        if deg == 1
             w = [1.0000000000000000]
             ξ = [0.2500000000000000  0.2500000000000000  0.2500000000000000]
-        elseif degree == 2
+        elseif deg == 2
             w = [0.2500000000000000
                  0.2500000000000000
                  0.2500000000000000
@@ -213,7 +213,7 @@ function quad_weights_points(degree, dim)
                  0.1381966011250105  0.1381966011250105  0.1381966011250105
                  0.1381966011250105  0.1381966011250105  0.5854101966249685
                  0.1381966011250105  0.5854101966249685  0.1381966011250105]
-        elseif degree == 3
+        elseif deg == 3
             w = [-0.8000000000000000
                   0.4500000000000000
                   0.4500000000000000
@@ -224,7 +224,7 @@ function quad_weights_points(degree, dim)
                  0.1666666666666667  0.1666666666666667  0.1666666666666667
                  0.1666666666666667  0.1666666666666667  0.5000000000000000
                  0.1666666666666667  0.5000000000000000  0.1666666666666667]
-        elseif degree == 4
+        elseif deg == 4
             w = [-0.0789333333333333
                   0.0457333333333333
                   0.0457333333333333
@@ -247,7 +247,7 @@ function quad_weights_points(degree, dim)
                  0.3994035761667992  0.1005964238332008  0.1005964238332008
                  0.1005964238332008  0.3994035761667992  0.1005964238332008
                  0.1005964238332008  0.1005964238332008  0.3994035761667992]
-        elseif degree == 5
+        elseif deg == 5
             w = [0.1817020685825351
                  0.0361607142857143
                  0.0361607142857143
@@ -278,7 +278,7 @@ function quad_weights_points(degree, dim)
                  0.0665501535736643  0.4334498464263357  0.4334498464263357
                  0.4334498464263357  0.0665501535736643  0.4334498464263357
                  0.4334498464263357  0.4334498464263357  0.0665501535736643] 
-        elseif degree == 6
+        elseif deg == 6
             w = [0.0399227502581679
                  0.0399227502581679
                  0.0399227502581679
@@ -327,7 +327,7 @@ function quad_weights_points(degree, dim)
                  0.0636610018750175  0.6030056647916491  0.2696723314583159
                  0.2696723314583159  0.0636610018750175  0.6030056647916491
                  0.6030056647916491  0.2696723314583159  0.0636610018750175]
-        elseif degree == 7
+        elseif deg == 7
             w = [0.1095853407966528
                  0.0635996491464850
                  0.0635996491464850
