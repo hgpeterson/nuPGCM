@@ -22,11 +22,11 @@ with
 """
 function solve_toyDG1D()
     # for finding edge connectivities
-    emap, edges, bndix = all_edges(g.t)
+    emap, edges, bndix = all_edges(g1.t)
 
     # for element matricies
     s = ShapeFunctionIntegrals(g.s, g.s)
-    J = Jacobians(g)
+    J = Jacobians(g1)
 
     # separate mesh into columns
     # cols = get_cols(g.p, g.t)
@@ -131,11 +131,14 @@ function solve_toyDG1D()
 
     # exact solution
     u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
+    err = FEField(abs.(u - u_a), g, g1)
     println(@sprintf("Max error: %1.1e", maximum(abs.(u - u_a))))
+    println(@sprintf("L2 error: %1.1e", L2norm(err, s, J)))
 
     # save as .vtu
     points = p_dg'
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, t_dg[i, :]) for i ∈ axes(t_dg, 1)]
+    # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TRIANGLE, t_dg[i, :]) for i ∈ axes(t_dg, 1)]
     vtk_grid("output/u.vtu", points, cells) do vtk
         vtk["u"] = u
         vtk["uₐ"] = u_a
@@ -243,38 +246,46 @@ end
 # println("scratch/images/side_test.png")
 
 # g = FEGrid("meshes/valign2D/mesh3.h5", 1)
-# h = 0.5
-H(x) = 1
+
+# h = 0.05
 # nz = Int64(round(H(0)/h)) + 1
 # p = zeros(2*nz, 2)
 # for i=1:nz
-#     p[2i-1, :] = [0 -(i-1)*h]
-#     p[2i,   :] = [h -(i-1)*h]
+#     p[2i-1, :] = [0  -(i-1)*h]
+#     p[2i,   :] = [h  -(i-1)*h]
 # end
-# t = [i + j for i=1:2nz-2, j=0:2]
-# e = [1, 2, 2nz-1, 2nz]
-h = 2/3
-p = [0  0
-     h  0
-     0 -h/2 
-     h -h 
-     0 -3h/2
-     h -3h/2]
-t = [1 2 3
-     2 3 4
-     3 4 5
-     4 5 6]
-e = [1, 2, 3, 4]
 
-tplot(p, t)
-axis("equal")
+nz = 40
+h = 2/(2nz - 3)
+println(h)
+p = zeros(2*nz, 2)
+p[1, :] = [0 0]
+p[2, :] = [h 0]
+for i=2:nz-1
+    p[2i-1, :] = [0  -(2i-3)*h/2]
+    p[2i,   :] = [h  -(i-1)*h]
+end
+p[2nz-1, :] = [0 -(2nz-3)*h/2]
+p[2nz,   :] = [h -(2nz-3)*h/2]
+
+t = [i + j for i=1:2nz-2, j=0:2]
+e = [1, 2, 2nz-1, 2nz]
+
+fig, ax = subplots(1, figsize=(1, 3))
+tplot(p, t, fig=fig, ax=ax)
+ax.axis("equal")
+ax.set_ylim(-1.1, 0.1)
 savefig("mesh.png")
+println("mesh.png")
+plt.close()
 
+g1 = FEGrid(p, t, e, 1)
 g = FEGrid(p, t, e, 1)
 
 b(x, z) = x
 bx(x, z) = 1
 # H(x) = 1 - x^2
+H(x) = 1
 solve_toyDG1D()
 
 # h e
