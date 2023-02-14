@@ -29,10 +29,13 @@ function solve_toyDG1D()
     J = Jacobians(g)
 
     # separate mesh into columns
-    cols = get_cols(g.p, g.t)
+    # cols = get_cols(g.p, g.t)
 
     # get p, t, e for dg mesh
-    p_dg, t_dg, e_dg = get_pte_dg(g.p, g.t, g.e, cols)
+    # p_dg, t_dg, e_dg = get_pte_dg(g.p, g.t, g.e, cols)
+    p_dg = g.p
+    t_dg = g.t
+    e_dg = g.e
     x = p_dg[:, 1]
     z = p_dg[:, 2]
     N = size(p_dg, 1) # should be 2*g.np - 2
@@ -43,7 +46,13 @@ function solve_toyDG1D()
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
     r = zeros(N)
-    for col ∈ cols, k ∈ col
+
+    # debug
+    Kg = zeros(N, N)
+    Mg = zeros(N, N)
+
+    # for col ∈ cols, k ∈ col
+    for k=1:g.nt
         # matrices
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
@@ -58,6 +67,8 @@ function solve_toyDG1D()
                 # ∫_Ω φᵢφⱼ dxdz
                 push!(A, (t_dg[k, i], t_dg[k, j], M[i, j]))
             end
+            Kg[t_dg[k, i], t_dg[k, j]] += K[i, j]
+            Mg[t_dg[k, i], t_dg[k, j]] += M[i, j]
         end
 
         # 1D quadrature
@@ -76,18 +87,20 @@ function solve_toyDG1D()
         z1 = g.p[g.t[k, edge[1]], 2]
         z2 = g.p[g.t[k, edge[2]], 2]
 
-        # connectivity pair for this edge
-        pair = findall(I -> emap[I] == emap[k, ie] && I != CartesianIndex(k, ie), CartesianIndices(emap))[1]
-        k_pair = pair[1]
-        ie_pair = pair[2]
-        edge_pair = [ie_pair, mod1(ie_pair+1, 3)]
-        if g.p[g.t[k_pair, edge_pair]] != g.p[g.t[k, edge]]
-            edge_pair = [mod1(ie_pair+1, 3), ie_pair]
-        end
+        # # connectivity pair for this edge
+        # pair = findall(I -> emap[I] == emap[k, ie] && I != CartesianIndex(k, ie), CartesianIndices(emap))[1]
+        # k_pair = pair[1]
+        # ie_pair = pair[2]
+        # edge_pair = [ie_pair, mod1(ie_pair+1, 3)]
+        # if g.p[g.t[k_pair, edge_pair]] != g.p[g.t[k, edge]]
+        #     edge_pair = [mod1(ie_pair+1, 3), ie_pair]
+        # end
 
         # average b values
-        b1 = (b_dg[t_dg[k, edge[1]]] + b_dg[t_dg[k_pair, edge_pair[1]]])/2
-        b2 = (b_dg[t_dg[k, edge[2]]] + b_dg[t_dg[k_pair, edge_pair[2]]])/2
+        # b1 = (b_dg[t_dg[k, edge[1]]] + b_dg[t_dg[k_pair, edge_pair[1]]])/2
+        # b2 = (b_dg[t_dg[k, edge[2]]] + b_dg[t_dg[k_pair, edge_pair[2]]])/2
+        b1 = b_dg[t_dg[k, edge[1]]]
+        b2 = b_dg[t_dg[k, edge[2]]]
 
         # ∫_∂Ωᵢₑ bφᵢ dz 
         for i=1:2
@@ -109,11 +122,15 @@ function solve_toyDG1D()
     # sparse matrix
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
+    # debug
+    display(Kg)
+    display(Mg)
+
     # solve
     u = A\r
 
     # exact solution
-    u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x, z) + z)))/(1 + exp(H(x, z)))
+    u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
     println(@sprintf("Max error: %1.1e", maximum(abs.(u - u_a))))
 
     # save as .vtu
@@ -225,10 +242,39 @@ end
 # savefig("scratch/images/side_test.png")
 # println("scratch/images/side_test.png")
 
-g = FEGrid("meshes/valign2D/mesh3.h5", 1)
+# g = FEGrid("meshes/valign2D/mesh3.h5", 1)
+# h = 0.5
+H(x) = 1
+# nz = Int64(round(H(0)/h)) + 1
+# p = zeros(2*nz, 2)
+# for i=1:nz
+#     p[2i-1, :] = [0 -(i-1)*h]
+#     p[2i,   :] = [h -(i-1)*h]
+# end
+# t = [i + j for i=1:2nz-2, j=0:2]
+# e = [1, 2, 2nz-1, 2nz]
+h = 2/3
+p = [0  0
+     h  0
+     0 -h/2 
+     h -h 
+     0 -3h/2
+     h -3h/2]
+t = [1 2 3
+     2 3 4
+     3 4 5
+     4 5 6]
+e = [1, 2, 3, 4]
+
+tplot(p, t)
+axis("equal")
+savefig("mesh.png")
+
+g = FEGrid(p, t, e, 1)
+
 b(x, z) = x
 bx(x, z) = 1
-H(x, z) = 1 - x^2
+# H(x) = 1 - x^2
 solve_toyDG1D()
 
 # h e
