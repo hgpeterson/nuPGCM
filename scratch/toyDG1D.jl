@@ -42,10 +42,83 @@ function get_LHS(col)
                 push!(A, (col.t[k, i], col.t[k, j], M[i, j]))
             end
         end
+    end
 
-        # dirichlet
-        for i ∈ col.e
-            push!(A, (i, i, 1))
+    ### boundary terms 
+
+    # surface nodes -> just u = 0
+    sfc = col.e[col.p[col.e, 2] .== 0.0]
+    for i ∈ sfc
+        println("node $i: u = 0")
+        push!(A, (i, i, 1))
+    end
+
+    # bottom nodes -> integral condition
+    bot = col.e[col.p[col.e, 2] .!= 0.0]
+
+    # 1D quadrature weights and points
+    w, ξ = quad_weights_points(deg=2, dim=1)
+
+    # 1D shape functions
+    s1D = ShapeFunctions(order=1, dim=1)
+
+    # map [-1, 1] to [x1, x2]
+    x1 = minimum(col.p[bot, 1])
+    x2 = maximum(col.p[bot, 1])
+    x(t) = (x2 - x1)*t/2 + (x1 + x2)/2
+
+    for i ∈ eachindex(bot)
+        println("node $(bot[i]): ∫ φ$i (∫ zu dz) dx = 0")
+        for k=1:col.nt
+            # triangle's vertices
+            p_tri = col.p[col.t[k, :], :]
+
+            # find vertical edge
+            ie, edge = vert_edge(p_tri)
+            side = side_of_vert_edge(p_tri, ie)
+
+            # determine which node on vertical edge is on top/bot
+            vedge_bot = edge[argmin(p_tri[edge, 2])]
+            vedge_top = edge[argmax(p_tri[edge, 2])]
+
+            # call the other node the "corner"
+            corner = mod1(edge[2]+1, 3)
+            
+            # z1 and z2 as a function of x
+            function zj(x, j)
+                if j == 2
+                    vedge = vedge_top
+                elseif j == 1
+                    vedge = vedge_bot
+                else
+                    error("Invalid tag $j.")
+                end
+
+                if side == 1
+                    # <|
+                    zj1 = p_tri[corner, 2]
+                    zj2 = p_tri[vedge, 2]
+                else
+                    # |>
+                    zj1 = p_tri[vedge, 2]
+                    zj2 = p_tri[corner, 2]
+                end
+
+                return zj1*(x - x2)/(x1 - x2) + zj2*(x - x1)/(x2 - x1)
+            end
+
+            for j=1:col.nn
+                function ∫zφⱼdz(x)
+                    z1 = zj(x, 1)
+                    z2 = zj(x, 2)
+                    z(t) = (z2 - z1)*t/2 + (z2 + z1)/2
+                    f(t) = z(t)*φ(col.s, j, [x, z(t)])
+                    return dot(w, f.(ξ))*abs(z2 - z1)/2
+                end
+                f(t) = ∫zφⱼdz(x(t))*φ(s1D, i, t)
+                ∫f = dot(w, f.(ξ))*abs(x2 - x1)/2
+                push!(A, (bot[i], col.t[k, j], ∫f))
+            end
         end
     end
 
@@ -111,11 +184,11 @@ function get_RHS(col)
 
         # -∫_Ω b∂x(φ) dxdz
         r[col.t[k, :]] -= Cx*b(p_tri[:, 1], p_tri[:, 2])
+    end
 
-        # dirichlet
-        for i ∈ col.e
-            r[i] = 0
-        end
+    # dirichlet or integral
+    for i ∈ col.e
+        r[i] = 0
     end
 
     return r
@@ -135,6 +208,7 @@ function solve(col)
     x = col.p[:, 1]
     z = col.p[:, 2]
     u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
+    # u_a = @. E^-z (-1 + E^z) (bx - (bx E^H (-1 + E^H - H))/(-1 + E^H)^2 - (bx E^(H + z) (-1 + E^H - H))/(-1 + E^H)^2)
     err = FEField(abs.(u - u_a), col, col)
     println(@sprintf("Max error: %1.1e", maximum(abs.(u - u_a))))
     s = ShapeFunctionIntegrals(col.s, col.s)
