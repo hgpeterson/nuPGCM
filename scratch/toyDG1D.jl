@@ -3,10 +3,7 @@ using WriteVTK
 using PyPlot
 using SparseArrays
 using LinearAlgebra
-using PyCall
 using Printf
-
-Polygon = pyimport("matplotlib.patches").Polygon
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
@@ -20,56 +17,59 @@ with
     • u = 0 at z = 0,
     • u = 0 at z = -H.
 """
-function solve_toyDG1D()
-    # for finding edge connectivities
-    emap, edges, bndix = all_edges(g1.t)
+function get_LHS(col)
+    # DOF in column
+    N = col.np
 
     # for element matricies
-    s = ShapeFunctionIntegrals(g.s, g.s)
-    J = Jacobians(g1)
-
-    # separate mesh into columns
-    # cols = get_cols(g.p, g.t)
-
-    # get p, t, e for dg mesh
-    # p_dg, t_dg, e_dg = get_pte_dg(g.p, g.t, g.e, cols)
-    p_dg = g.p
-    t_dg = g.t
-    e_dg = g.e
-    x = p_dg[:, 1]
-    z = p_dg[:, 2]
-    N = size(p_dg, 1) # should be 2*g.np - 2
-
-    # for now, b is just b(x, z) on the dg mesh
-    b_dg = b.(x, z)
+    s = ShapeFunctionIntegrals(col.s, col.s)
 
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
-    r = zeros(N)
-
-    # debug
-    Kg = zeros(N, N)
-    Mg = zeros(N, N)
-
-    # for col ∈ cols, k ∈ col
-    for k=1:g.nt
+    for k=1:col.nt
         # matrices
+        J = Jacobians(col)
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
         M = J.dets[k]*s.M
 
         # interior terms
-        for i=1:g.nn, j=1:g.nn
-            if t_dg[k, i] ∉ e_dg
+        for i=1:col.nn, j=1:col.nn
+            if col.t[k, i] ∉ col.e
                 # ∫_Ω ∂z(φᵢ)∂z(φⱼ) dxdz
-                push!(A, (t_dg[k, i], t_dg[k, j], K[i, j]))
+                push!(A, (col.t[k, i], col.t[k, j], K[i, j]))
                 # ∫_Ω φᵢφⱼ dxdz
-                push!(A, (t_dg[k, i], t_dg[k, j], M[i, j]))
+                push!(A, (col.t[k, i], col.t[k, j], M[i, j]))
             end
-            Kg[t_dg[k, i], t_dg[k, j]] += K[i, j]
-            Mg[t_dg[k, i], t_dg[k, j]] += M[i, j]
         end
+
+        # dirichlet
+        for i ∈ col.e
+            push!(A, (i, i, 1))
+        end
+    end
+
+    # sparse matrix
+    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
+    return lu(A)
+end
+
+function get_RHS(col)
+    # DOF in column
+    N = col.np
+
+    # for element matricies
+    s = ShapeFunctionIntegrals(col.s, col.s)
+
+    # stamp
+    r = zeros(N)
+    for k=1:col.nt
+        # triangle nodes
+        p_tri = col.p[col.t[k, 1:3], :]
+
+        # matrices
+        J = Jacobians(col)
+        Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
 
         # 1D quadrature
         w, ξ = quad_weights_points(deg=2, dim=1)
@@ -78,17 +78,17 @@ function solve_toyDG1D()
         s1D = ShapeFunctions(order=1, dim=1)
 
         # which edge is vertical edge
-        ie, edge = vert_edge(g.p[g.t[k, 1:3], :])
+        ie, edge = vert_edge(p_tri)
 
         # is it on left or right? +1 if right, -1 if left
-        sign_multiplier = side_of_vert_edge(g.p[g.t[k, 1:3], :], ie)
+        sign_multiplier = side_of_vert_edge(p_tri, ie)
 
         # z-coords of edge nodes
-        z1 = g.p[g.t[k, edge[1]], 2]
-        z2 = g.p[g.t[k, edge[2]], 2]
+        z1 = p_tri[edge[1], 2]
+        z2 = p_tri[edge[2], 2]
 
         # # connectivity pair for this edge
-        # pair = findall(I -> emap[I] == emap[k, ie] && I != CartesianIndex(k, ie), CartesianIndices(emap))[1]
+        # pair = connectivities[k, ie] # findall(I -> emap[I] == emap[k, ie] && I != CartesianIndex(k, ie), CartesianIndices(emap))[1]
         # k_pair = pair[1]
         # ie_pair = pair[2]
         # edge_pair = [ie_pair, mod1(ie_pair+1, 3)]
@@ -99,51 +99,56 @@ function solve_toyDG1D()
         # average b values
         # b1 = (b_dg[t_dg[k, edge[1]]] + b_dg[t_dg[k_pair, edge_pair[1]]])/2
         # b2 = (b_dg[t_dg[k, edge[2]]] + b_dg[t_dg[k_pair, edge_pair[2]]])/2
-        b1 = b_dg[t_dg[k, edge[1]]]
-        b2 = b_dg[t_dg[k, edge[2]]]
+        b1 = b(p_tri[edge[1], 1], p_tri[edge[1], 2])
+        b2 = b(p_tri[edge[2], 1], p_tri[edge[2], 2])
 
         # ∫_∂Ωᵢₑ bφᵢ dz 
         for i=1:2
             f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
             ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
-            r[t_dg[k, edge[i]]] += sign_multiplier*∫f
+            r[col.t[k, edge[i]]] += sign_multiplier*∫f
         end
 
         # -∫_Ω b∂x(φ) dxdz
-        r[t_dg[k, :]] -= Cx*b_dg[t_dg[k, :]]
+        r[col.t[k, :]] -= Cx*b(p_tri[:, 1], p_tri[:, 2])
+
+        # dirichlet
+        for i ∈ col.e
+            r[i] = 0
+        end
     end
 
-    # dirichlet
-    for i ∈ e_dg
-        push!(A, (i, i, 1))
-        r[i] = 0
-    end
+    return r
+end
 
-    # sparse matrix
-    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
+function solve(col)
+    # get LHSs
+    A = get_LHS(col)
 
-    # debug
-    display(Kg)
-    display(Mg)
+    # get RHSs
+    r = get_RHS(col)
 
-    # solve
+    # solve each column
     u = A\r
 
     # exact solution
+    x = col.p[:, 1]
+    z = col.p[:, 2]
     u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
-    err = FEField(abs.(u - u_a), g, g1)
+    err = FEField(abs.(u - u_a), col, col)
     println(@sprintf("Max error: %1.1e", maximum(abs.(u - u_a))))
+    s = ShapeFunctionIntegrals(col.s, col.s)
+    J = Jacobians(col)
     println(@sprintf("L2 error: %1.1e", L2norm(err, s, J)))
 
     # save as .vtu
-    points = p_dg'
-    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, t_dg[i, :]) for i ∈ axes(t_dg, 1)]
-    # cells = [MeshCell(VTKCellTypes.VTK_QUADRATIC_TRIANGLE, t_dg[i, :]) for i ∈ axes(t_dg, 1)]
-    vtk_grid("output/u.vtu", points, cells) do vtk
+    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, col.t[i, :]) for i ∈ axes(col.t, 1)]
+    vtk_grid("output/u.vtu", col.p', cells) do vtk
         vtk["u"] = u
         vtk["uₐ"] = u_a
     end
 end
+
 
 """
     ie, edge = function vert_edge(p)
@@ -257,7 +262,7 @@ end
 
 nz = 40
 h = 2/(2nz - 3)
-println(h)
+println("h = ", h)
 p = zeros(2*nz, 2)
 p[1, :] = [0 0]
 p[2, :] = [h 0]
@@ -275,21 +280,14 @@ fig, ax = subplots(1, figsize=(1, 3))
 tplot(p, t, fig=fig, ax=ax)
 ax.axis("equal")
 ax.set_ylim(-1.1, 0.1)
-savefig("mesh.png")
-println("mesh.png")
+savefig("scratch/images/mesh.png")
+println("scratch/images/mesh.png")
 plt.close()
 
-g1 = FEGrid(p, t, e, 1)
-g = FEGrid(p, t, e, 1)
+col = FEGrid(p, t, e, 1)
 
 b(x, z) = x
 bx(x, z) = 1
 # H(x) = 1 - x^2
 H(x) = 1
-solve_toyDG1D()
-
-# h e
-# 0 7.7e-3
-# 1 2.5e-3
-# 2 1.0e-3
-# 3 6.0e-4
+solve(col)
