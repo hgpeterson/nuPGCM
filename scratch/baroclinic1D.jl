@@ -125,7 +125,7 @@ function solve_baroclinic_fe(g, g1, ε², bx, Ux)
     r[ωxmap[1]] = Ux/ε²
 
     # ∫ zωʸ dz = -Ux
-    w, ξ = quad_weights_points(g.order+1, 1)
+    w, ξ = quad_weights_points(deg=g.order+1, dim=1)
     for k=1:g.nt
         for i=1:g.nn
             func(ξ) = transform_from_ref_el(ξ, g1.p[g1.t[k, :], :])*φ(g.s, i, ξ)*J.dets[k]
@@ -204,7 +204,8 @@ nz = 2^8
 H = 1
 z = -H:H/(nz - 1):0
 z_hr = -H:H/1000:0
-bx(z) = exp(-(z + H)/0.01)
+# bx(z) = exp(-(z + H)/0.01)
+bx(z) = 1
 ε² = 0.01
 Ux = 0
 baroclinic_fd_fe(order=2)
