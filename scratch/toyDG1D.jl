@@ -22,13 +22,13 @@ function get_LHS(col)
     N = col.np
 
     # for element matricies
+    J = Jacobians(col)
     s = ShapeFunctionIntegrals(col.s, col.s)
 
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:col.nt
         # matrices
-        J = Jacobians(col)
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
@@ -57,7 +57,7 @@ function get_LHS(col)
     bot = col.e[col.p[col.e, 2] .!= 0.0]
 
     # 1D quadrature weights and points
-    w, ξ = quad_weights_points(deg=2, dim=1)
+    w, ξ = quad_weights_points(deg=4, dim=1)
 
     # 1D shape functions
     s1D = ShapeFunctions(order=1, dim=1)
@@ -112,7 +112,7 @@ function get_LHS(col)
                     z1 = zj(x, 1)
                     z2 = zj(x, 2)
                     z(t) = (z2 - z1)*t/2 + (z2 + z1)/2
-                    f(t) = z(t)*φ(col.s, j, [x, z(t)])
+                    f(t) = z(t)*φ(col.s, j, transform_to_ref_el([x, z(t)], p_tri))#*J.dets[k]
                     return dot(w, f.(ξ))*abs(z2 - z1)/2
                 end
                 f(t) = ∫zφⱼdz(x(t))*φ(s1D, i, t)
@@ -207,8 +207,8 @@ function solve(col)
     # exact solution
     x = col.p[:, 1]
     z = col.p[:, 2]
-    u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
-    # u_a = @. E^-z (-1 + E^z) (bx - (bx E^H (-1 + E^H - H))/(-1 + E^H)^2 - (bx E^(H + z) (-1 + E^H - H))/(-1 + E^H)^2)
+    # u_a = @. -(bx(x, z)*exp(-z)*(-1 + exp(z))*(-1 + exp(H(x) + z)))/(1 + exp(H(x)))
+    u_a = @. exp(-z)*(-1 + exp(z))*(bx(x, z) - (bx(x, z)*exp(H(x))*(-1 + exp(H(x)) - H(x)))/(-1 + exp(H(x)))^2 - (bx(x, z)*exp(H(x) + z)*(-1 + exp(H(x)) - H(x)))/(-1 + exp(H(x)))^2)
     err = FEField(abs.(u - u_a), col, col)
     println(@sprintf("Max error: %1.1e", maximum(abs.(u - u_a))))
     s = ShapeFunctionIntegrals(col.s, col.s)
@@ -334,7 +334,7 @@ end
 #     p[2i,   :] = [h  -(i-1)*h]
 # end
 
-nz = 40
+nz = 20
 h = 2/(2nz - 3)
 println("h = ", h)
 p = zeros(2*nz, 2)
