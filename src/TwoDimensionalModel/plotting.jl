@@ -199,13 +199,13 @@ end
 If `u` === nothing: Plot triangular mesh with nodes `p` and triangles `t`.
 If `u` === solution vector: Plot filled contour color plot of solution `u`.
 """
-function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing, lw=0.2)
+function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing, lw=0.2, edgecolors="k")
     if fig === nothing
         fig, ax = subplots(1)
     end
 
     if u === nothing
-        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors="k", linewidth=lw, rasterized=true)
+        im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors=edgecolors, linewidth=lw, rasterized=true)
     else
         if vext === nothing
             vmax = maximum(abs.(u))

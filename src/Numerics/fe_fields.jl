@@ -1,9 +1,5 @@
 # for defining operations on FEField's
-import Base: -
-import Base: +
-import Base: *
-import Base: /
-import Base: abs
+import Base: -, +, *, /, abs, maximum, minimum, argmax, argmin, getindex
 
 struct FEField{IN<:Integer,V<:AbstractVector}
     # order of polynomials defining shape functions
@@ -48,6 +44,21 @@ function /(u::FEField, v::FEField)
 end
 function abs(u::FEField)
     return FEField(u.order, abs.(u.values), u.g, u.g1)
+end
+function maximum(u::FEField)
+    return maximum(u.values)
+end
+function minimum(u::FEField)
+    return minimum(u.values)
+end
+function argmax(u::FEField)
+    return argmax(u.values)
+end
+function argmin(u::FEField)
+    return argmin(u.values)
+end
+function getindex(u::FEField, I)
+    return u.values[I]
 end
 
 """
