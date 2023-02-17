@@ -1,3 +1,16 @@
+"""
+Solve
+    -ε²∂zz(ωˣ) - ωʸ = 0,
+    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
+       ∂zz(χˣ) + ωˣ = 0,
+       ∂zz(χʸ) + ωʸ = 0,
+with bc
+At z = 0:
+    • ωˣ = 0, ωʸ = 0, χˣ = 0, χʸ = -Uˣ
+At z = -H:
+    • ωˣ = Uˣ/ε², χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0
+"""
+
 using nuPGCM
 using WriteVTK
 using Delaunay
@@ -11,32 +24,32 @@ plt.close("all")
 pygui(false)
 
 
-"""
-Solve
-    -ε²∂zz(ωˣ) - ωʸ = 0,
-    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
-       ∂zz(χˣ) + ωˣ = 0,
-       ∂zz(χʸ) + ωʸ = 0,
-with bc
-At z = 0:
-    • ωˣ = 0, ωʸ = 0, χˣ = 0, χʸ = -Uˣ
-At z = -H:
-    • ωˣ = Uˣ/ε², χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0
-"""
-function get_LHS(; col_i)
-    # column
-    col = cols[col_i]
+function var_indices(col)
+    ωxmap = 0*col.np+1:1*col.np
+    ωymap = 1*col.np+1:2*col.np
+    χxmap = 2*col.np+1:3*col.np
+    χymap = 3*col.np+1:4*col.np
+    return ωxmap, ωymap, χxmap, χymap
+end
 
+function sfc_and_bot(col)
+    perm = sortperm(col.p[col.e, 2], rev=true)
+    if mod(size(perm, 1), 2) == 1
+        # corner node → put it on the surface
+        half = Int64(ceil(size(perm, 1)/2)) 
+    else
+        half = Int64(size(perm, 1)/2)
+    end
+    return col.e[perm[1:half]], col.e[perm[half+1:end]]
+end
+
+function get_LHS(col)
     # indices
-    ωxmap = 1:col.np
-    ωymap = (col.np+1):2*col.np
-    χxmap = (2*col.np+1):3*col.np
-    χymap = (3*col.np+1):4*col.np
+    ωxmap, ωymap, χxmap, χymap = var_indices(col)
     N = 4*col.np
 
-    # sfc and bot
-    sfc = col.e[col.p[col.e, 2] .== 0.0]
-    bot = col.e[col.p[col.e, 2] .!= 0.0]
+    # surface and bottom nodes
+    sfc, bot = sfc_and_bot(col)
 
     # for element matricies
     J = Jacobians(col)
@@ -101,16 +114,13 @@ function get_LHS(; col_i)
     return lu(A)
 end
 
-function get_RHS(; col_i)
-    # column
-    col = cols[col_i]
-
+function get_RHS(col, col_i)
     # indices
-    ωxmap = 1:col.np
-    ωymap = (col.np+1):2*col.np
-    χxmap = (2*col.np+1):3*col.np
-    χymap = (3*col.np+1):4*col.np
+    ωxmap, ωymap, χxmap, χymap = var_indices(col)
     N = 4*col.np
+
+    # surface and bottom nodes
+    sfc, bot = sfc_and_bot(col)
 
     # for surface integrals
     s = ShapeFunctionIntegrals(col.s, col.s)
@@ -159,7 +169,6 @@ function get_RHS(; col_i)
     end
 
     # surface nodes 
-    sfc = col.e[col.p[col.e, 2] .== 0.0]
     for i ∈ sfc
         r[ωxmap[i]] = 0
         r[ωymap[i]] = 0
@@ -168,65 +177,12 @@ function get_RHS(; col_i)
     end
 
     # bottom nodes
-    bot = col.e[col.p[col.e, 2] .!= 0.0]
     for i ∈ bot
         r[ωxmap[i]] = Ux/ε²
         r[ωymap[i]] = 0
     end
 
     return r
-end
-
-function solve(; col_i)
-    # column
-    col = cols[col_i]
-
-    # indices
-    ωxmap = 1:col.np
-    ωymap = (col.np+1):2*col.np
-    χxmap = (2*col.np+1):3*col.np
-    χymap = (3*col.np+1):4*col.np
-
-    # get LHSs
-    A = get_LHS(col_i=col_i)
-
-    # get RHSs
-    r = get_RHS(col_i=col_i)
-
-    # solve each column
-    sol = A\r
-    ωx = FEField(sol[ωxmap], col, col)
-    ωy = FEField(sol[ωymap], col, col)
-    χx = FEField(sol[χxmap], col, col)
-    χy = FEField(sol[χymap], col, col)
-
-    # compare with high res FD solution
-    x = col.p[1, 1]
-    z = -H(x):H(x)/2^10:0
-    ωx_fd, ωy_fd = fd_sol(z, bx.(x, z), ε², Ux)
-    ωx_f(z) = evaluate(ωx, [x, z])
-    ωy_f(z) = evaluate(ωy, [x, z])
-    χx_f(z) = evaluate(χx, [x, z])
-    χy_f(z) = evaluate(χy, [x, z])
-    println(@sprintf("Max error ωx: %1.1e", maximum(abs.(ωx_f.(z) - ωx_fd))))
-    println(@sprintf("Max error ωy: %1.1e", maximum(abs.(ωy_f.(z) - ωy_fd))))
-
-    # plot
-    fig, ax = subplots(1, 2, figsize=(2*2, 3.2), sharey=true)
-    ax[1].plot(ωx_f.(z), z, label=L"\omega^x")
-    ax[1].plot(ωy_f.(z), z, label=L"\omega^y")
-    ax[1].plot(ωx_fd, z, "k--", lw=0.5, label="“Truth”")
-    ax[1].plot(ωy_fd, z, "k--", lw=0.5)
-    ax[2].plot(χx_f.(z), z, label=L"\chi^x")
-    ax[2].plot(χy_f.(z), z, label=L"\chi^y")
-    ax[1].legend()
-    ax[2].legend()
-    ax[1].set_xlabel(L"\omega")
-    ax[1].set_ylabel(L"z")
-    ax[2].set_xlabel(L"\chi")
-    savefig("scratch/images/omega_chi.png")
-    println("scratch/images/omega_chi.png")
-    plt.close()
 end
 
 function fd_sol(z, bx, ε², Ux)
@@ -284,7 +240,6 @@ function fd_sol(z, bx, ε², Ux)
     sol = A\r
     return sol[ωxmap], sol[ωymap]
 end
-
 
 """
     ie, edge = function vert_edge(p)
@@ -401,6 +356,46 @@ function gen_mesh(h)
     return g, cols, node_conns
 end
 
+function plot_1D(col, sol)
+    # indices
+    ωxmap, ωymap, χxmap, χymap = var_indices(col)
+
+    # solve each column
+    ωx = FEField(sol[ωxmap], col, col)
+    ωy = FEField(sol[ωymap], col, col)
+    χx = FEField(sol[χxmap], col, col)
+    χy = FEField(sol[χymap], col, col)
+
+    # compare with high res FD solution
+    x = col.p[1, 1]
+    # x = maximum(col.p[:, 1])
+    z = -H(x):H(x)/2^10:0
+    ωx_fd, ωy_fd = fd_sol(z, bx.(x, z), ε², Ux)
+    ωx_f(z) = evaluate(ωx, [x, z])
+    ωy_f(z) = evaluate(ωy, [x, z])
+    χx_f(z) = evaluate(χx, [x, z])
+    χy_f(z) = evaluate(χy, [x, z])
+    println(@sprintf("Max error ωx: %1.1e", maximum(abs.(ωx_f.(z) - ωx_fd))))
+    println(@sprintf("Max error ωy: %1.1e", maximum(abs.(ωy_f.(z) - ωy_fd))))
+
+    # plot
+    fig, ax = subplots(1, 2, figsize=(2*2, 3.2), sharey=true)
+    ax[1].plot(ωx_f.(z), z, label=L"\omega^x")
+    ax[1].plot(ωy_f.(z), z, label=L"\omega^y")
+    ax[1].plot(ωx_fd, z, "k--", lw=0.5, label="“Truth”")
+    ax[1].plot(ωy_fd, z, "k--", lw=0.5)
+    ax[2].plot(χx_f.(z), z, label=L"\chi^x")
+    ax[2].plot(χy_f.(z), z, label=L"\chi^y")
+    ax[1].legend()
+    ax[2].legend()
+    ax[1].set_xlabel(L"\omega")
+    ax[1].set_ylabel(L"z")
+    ax[2].set_xlabel(L"\chi")
+    savefig("scratch/images/omega_chi.png")
+    println("scratch/images/omega_chi.png")
+    plt.close()
+end
+
 function plot_2D()
     # global p, t, e
     np = 2*g.np-2
@@ -451,13 +446,16 @@ function plot_2D()
         vtk["χx"] = χx
         vtk["χy"] = χy
     end
+    println("output/pg_vort_DG.vtu")
 end
 
-ε² = 1
+ε² = 0.1
 Ux = 0
-b(x, z) = x
-bx(x, z) = 1
+δ = 0.1
+b(x, z) = z + δ*exp(-(z + H(x))/δ)
+bx(x, z) = -Hx(x)*exp(-(z + H(x))/δ)
 H(x) = 1 - x^2
+Hx(x) = -2*x
 
 # nz = 10
 # h = 2/(2nz - 3)
@@ -479,10 +477,11 @@ g, cols, node_conns = gen_mesh(0.01)
 
 b_cols = [b.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
 
-# LHSs = [get_LHS(col_i=i) for i ∈ eachindex(cols)]
-# RHSs = [get_RHS(col_i=i) for i ∈ eachindex(cols)]
-# sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
+LHSs = [get_LHS(cols[i]) for i ∈ eachindex(cols)]
+RHSs = [get_RHS(cols[i], i) for i ∈ eachindex(cols)]
+sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
 
-# plot_2D()
+col_i = size(cols, 1) - 29
+plot_1D(cols[col_i], sols[col_i])
 
-solve(col_i=40)
+plot_2D()
