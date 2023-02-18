@@ -56,7 +56,11 @@ function FEGrid(p, t, e, order::IN) where IN <: Integer
         t[:, 1] = 1:size(t, 1)
         e = ee
     elseif order == 1
-        # grid already order 1
+        # in case grid is higher order, downscale
+        t = t[:, 1:dim+1]
+        np = maximum(t)
+        p = p[1:np, :]
+        e = e[e .≤ np]
     elseif order > 1
         # add nodes for higher orders
         p, t, e = add_nodes(p, t, e, order)
@@ -75,11 +79,14 @@ function FEGrid(p, t, e, order::IN) where IN <: Integer
 
     return FEGrid(order, dim, s, p, np, t, nt, nn, e, ne)
 end
-function FEGrid(gfile, order)
+function FEGrid(gfile::String, order)
     # read grid data
     p, t, e = read_gfile_h5(gfile)
 
     return FEGrid(p, t, e, order) 
+end
+function FEGrid(g::FEGrid, order)
+    return FEGrid(g.p, g.t, g.e, order) 
 end
 
 """

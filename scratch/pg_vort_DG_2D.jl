@@ -1,15 +1,13 @@
-"""
-Solve
-    -ε²∂zz(ωˣ) - ωʸ = 0,
-    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
-       ∂zz(χˣ) + ωˣ = 0,
-       ∂zz(χʸ) + ωʸ = 0,
-with bc
-At z = 0:
-    • ωˣ = 0, ωʸ = 0, χˣ = 0, χʸ = -Uˣ
-At z = -H:
-    • ωˣ = Uˣ/ε², χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0
-"""
+## Solve
+##     -ε²∂zz(ωˣ) - ωʸ = 0,
+##     -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
+##        ∂zz(χˣ) + ωˣ = 0,
+##        ∂zz(χʸ) + ωʸ = 0,
+## with bc
+## At z = 0:
+##     • ωˣ = 0, ωʸ = 0, χˣ = 0, χʸ = -Uˣ
+## At z = -H:
+##     • ωˣ = Uˣ/ε², χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0
 
 using nuPGCM
 using WriteVTK
@@ -23,6 +21,92 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+function gen_mesh(h)
+    # surface "mesh"
+    nx = Int64(ceil(2/h))
+    x = range(-1, 1, length=nx)
+
+    # store an array of columns
+    cols = Vector{FEGrid}(undef, nx-1)
+
+    # store node connectivities: col_j, conn_node = node_conns[col_i][node]
+    node_conns = [[] for i=1:nx-1]
+
+    # mesh each column
+    left = [-1.0 0.0]
+    p = copy(left)
+    left_e = [1]
+    e = copy(left_e)
+    t = [0 0 0]
+    push!(node_conns[1], nothing) # left corner has no connections
+    for i=2:nx
+        # column index
+        col_i = i - 1
+
+        # "mesh" right side of column
+        if i == nx
+            right = [1.0 0.0]
+            right_e = [1]
+        else
+            nz = Int64(ceil(H(x[i])/h)) 
+            nz += 1*(nz == 2)
+            z = range(-H(x[i]), 0, length=nz)
+            right = [x[i]*ones(nz)  z]
+            right_e = [1, nz]
+        end
+
+        # points, triangles, and edges of column
+        p_col = [left; right]
+        t_col = delaunay(p_col).simplices
+        e_col = [left_e; size(left, 1) .+ right_e]
+        cols[col_i] = FEGrid(p_col, t_col, e_col, 1)
+
+        # save node connectivities
+        if col_i < nx - 1
+            for j ∈ axes(right, 1)
+                push!(node_conns[col_i+1], [col_i, size(left, 1) + j])
+                push!(node_conns[col_i], [col_i+1, j])
+            end
+        end
+
+        # add to global mesh
+        e = [e; size(p, 1) .+ right_e]
+        t = [t; size(p, 1) .- size(left, 1) .+ t_col]
+        p = [p; right]
+
+        # right is new left
+        left = right
+        left_e = right_e
+    end
+    push!(node_conns[end], nothing) # right corner has no connections
+    t = t[2:end, :]
+
+    g = FEGrid(p, t, e, 1)
+
+    println("np = ", g.np)
+    println("ncol = ", nx-1)
+
+    # # plot full mesh
+    # fig, ax, im = tplot(p, t)
+    # ax.plot(p[:, 1], p[:, 2], "o", ms=1)
+    # ax.plot(p[e, 1], p[e, 2], "o", ms=1)
+    # ax.axis("equal")
+    # savefig("scratch/images/full_mesh.png")
+    # println("scratch/images/full_mesh.png")
+    # plt.close()
+    
+    # # plot cols
+    # fig, ax, im = tplot(p, t)
+    # ax.axis("equal")
+    # for i ∈ eachindex(cols)
+    #     tplot(cols[i], fig=fig, ax=ax, edgecolors="C$i")
+    # end
+    # savefig("scratch/images/cols.png")
+    # println("scratch/images/cols.png")
+    # plt.close()
+
+    return g, cols, node_conns
+end
 
 function var_indices(col)
     ωxmap = 0*col.np+1:1*col.np
@@ -52,7 +136,8 @@ function get_LHS(col)
     sfc, bot = sfc_and_bot(col)
 
     # for element matricies
-    J = Jacobians(col)
+    col1 = FEGrid(col, 1)
+    J = Jacobians(col1)
     s = ShapeFunctionIntegrals(col.s, col.s)
 
     # stamp
@@ -156,14 +241,14 @@ function get_RHS(col, col_i)
         b1 = (b_cols[col_i][node1] + b_cols[col_j][conn_node1])/2
         b2 = (b_cols[col_i][node2] + b_cols[col_j][conn_node2])/2
 
-        # ∫_∂Ωᵢₑ bφᵢ dz 
+        # -∫_∂Ωᵢₑ bφᵢ dz 
         for i=1:2
             f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
             ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
             r[ωymap[col.t[k, edge[i]]]] -= sign_multiplier*∫f
         end
 
-        # -∫_Ω b∂x(φ) dxdz
+        # +∫_Ω b∂x(φ) dxdz
         Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
         r[ωymap[col.t[k, :]]] += Cx*b_cols[col_i][col.t[k, :]]
     end
@@ -269,93 +354,6 @@ function side_of_vert_edge(p, ie)
     end
 end
 
-function gen_mesh(h)
-    # surface "mesh"
-    nx = Int64(ceil(2/h))
-    x = range(-1, 1, length=nx)
-
-    # store an array of columns
-    cols = Vector{FEGrid}(undef, nx-1)
-
-    # store node connectivities: col_j, conn_node = node_conns[col_i][node]
-    node_conns = [[] for i=1:nx-1]
-
-    # mesh each column
-    left = [-1.0 0.0]
-    p = copy(left)
-    left_e = [1]
-    e = copy(left_e)
-    t = [0 0 0]
-    push!(node_conns[1], nothing) # left corner has no connections
-    for i=2:nx
-        # column index
-        col_i = i - 1
-
-        # "mesh" right side of column
-        if i == nx
-            right = [1.0 0.0]
-            right_e = [1]
-        else
-            nz = Int64(ceil(H(x[i])/h)) 
-            nz += 1*(nz == 2)
-            z = range(-H(x[i]), 0, length=nz)
-            right = [x[i]*ones(nz)  z]
-            right_e = [1, nz]
-        end
-
-        # points, triangles, and edges of column
-        p_col = [left; right]
-        t_col = delaunay(p_col).simplices
-        e_col = [left_e; size(left, 1) .+ right_e]
-        cols[col_i] = FEGrid(p_col, t_col, e_col, 1)
-
-        # save node connectivities
-        if col_i < nx - 1
-            for j ∈ axes(right, 1)
-                push!(node_conns[col_i+1], [col_i, size(left, 1) + j])
-                push!(node_conns[col_i], [col_i+1, j])
-            end
-        end
-
-        # add to global mesh
-        e = [e; size(p, 1) .+ right_e]
-        t = [t; size(p, 1) .- size(left, 1) .+ t_col]
-        p = [p; right]
-
-        # right is new left
-        left = right
-        left_e = right_e
-    end
-    push!(node_conns[end], nothing) # right corner has no connections
-    t = t[2:end, :]
-
-    g = FEGrid(p, t, e, 1)
-
-    println("np = ", g.np)
-    println("ncol = ", nx-1)
-
-    # # plot full mesh
-    # fig, ax, im = tplot(p, t)
-    # ax.plot(p[:, 1], p[:, 2], "o", ms=1)
-    # ax.plot(p[e, 1], p[e, 2], "o", ms=1)
-    # ax.axis("equal")
-    # savefig("scratch/images/full_mesh.png")
-    # println("scratch/images/full_mesh.png")
-    # plt.close()
-    
-    # # plot cols
-    # fig, ax, im = tplot(p, t)
-    # ax.axis("equal")
-    # for i ∈ eachindex(cols)
-    #     tplot(cols[i], fig=fig, ax=ax, edgecolors="C$i")
-    # end
-    # savefig("scratch/images/cols.png")
-    # println("scratch/images/cols.png")
-    # plt.close()
-
-    return g, cols, node_conns
-end
-
 function plot_1D(col, sol)
     # indices
     ωxmap, ωymap, χxmap, χymap = var_indices(col)
@@ -367,7 +365,7 @@ function plot_1D(col, sol)
     χy = FEField(sol[χymap], col, col)
 
     # compare with high res FD solution
-    x = col.p[1, 1]
+    x = minimum(col.p[:, 1])
     # x = maximum(col.p[:, 1])
     z = -H(x):H(x)/2^10:0
     ωx_fd, ωy_fd = fd_sol(z, bx.(x, z), ε², Ux)
@@ -440,20 +438,24 @@ function plot_2D()
 
     # save as .vtu
     cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, t[i, :]) for i ∈ axes(t, 1)]
-    vtk_grid("output/pg_vort_DG.vtu", p', cells) do vtk
+    vtk_grid("output/pg_vort_DG_2D.vtu", p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
         vtk["χx"] = χx
         vtk["χy"] = χy
     end
-    println("output/pg_vort_DG.vtu")
+    println("output/pg_vort_DG_2D.vtu")
 end
 
 ε² = 0.1
 Ux = 0
 δ = 0.1
-b(x, z) = z + δ*exp(-(z + H(x))/δ)
-bx(x, z) = -Hx(x)*exp(-(z + H(x))/δ)
+b(x, z) = x
+bx(x, z) = 1
+# b(x, z) = x^2
+# bx(x, z) = 2*x
+# b(x, z) = z + δ*exp(-(z + H(x))/δ)
+# bx(x, z) = -Hx(x)*exp(-(z + H(x))/δ)
 H(x) = 1 - x^2
 Hx(x) = -2*x
 
@@ -473,7 +475,7 @@ Hx(x) = -2*x
 # e = [1, 2, 2nz-1, 2nz]
 # col = FEGrid(p, t, e, 1)
 
-g, cols, node_conns = gen_mesh(0.01)
+g, cols, node_conns = gen_mesh(0.02)
 
 b_cols = [b.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
 
@@ -481,7 +483,7 @@ LHSs = [get_LHS(cols[i]) for i ∈ eachindex(cols)]
 RHSs = [get_RHS(cols[i], i) for i ∈ eachindex(cols)]
 sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
 
-col_i = size(cols, 1) - 29
+col_i = Int64(round(size(cols, 1)/4))
 plot_1D(cols[col_i], sols[col_i])
 
 plot_2D()
