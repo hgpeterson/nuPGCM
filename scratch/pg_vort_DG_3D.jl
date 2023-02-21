@@ -33,10 +33,6 @@ function gen_mesh(ifile)
     y = p_sfc[:, 2]
     np_sfc = size(p_sfc, 1)
     nt_sfc = size(t_sfc, 1)
-    ne_sfc = size(e_sfc, 1)
-
-    # interior
-    interior = findall(!in(e_sfc), 1:np_sfc)
 
     # mesh res
     emap, edges, bndix = all_edges(t_sfc)
@@ -86,6 +82,7 @@ function gen_mesh(ifile)
 
     # columnwise and global tessellation
     cols = Vector{FEGrid}(undef, nt_sfc)
+    t_cols_g = Vector{Matrix{Int64}}(undef, nt_sfc)
     t = Matrix{Int64}(undef, 0, 4) 
     for k=1:nt_sfc
         # number of points in vertical for each vertex of sfc tri
@@ -115,7 +112,7 @@ function gen_mesh(ifile)
             t = [t; ig[tl]]
 
             # add to t_col
-            i_col = indexin(ig, nodes_col)
+            i_col = Int64.(indexin(ig, nodes_col))
             t_col = [t_col; i_col[tl]]
 
             # continue
@@ -124,9 +121,12 @@ function gen_mesh(ifile)
 
         # save column data
         cols[k] = FEGrid(p_col, t_col, e_col, 1)
+
+        # map t_col to global t
+        t_cols_g[k] = nodes_col[t_col]
     end
 
-    return cols, p, t, e
+    return cols, t_cols_g, p, t, e
 end
 
 function var_indices(col)
@@ -138,7 +138,7 @@ function var_indices(col)
 end
 
 function sfc_and_bot(col)
-    perm = sortperm(col.p[col.e, 2], rev=true)
+    perm = sortperm(col.p[col.e, 3], rev=true)
     if mod(size(perm, 1), 2) == 1
         # corner node → put it on the surface
         half = Int64(ceil(size(perm, 1)/2)) 
@@ -147,6 +147,30 @@ function sfc_and_bot(col)
     end
     return col.e[perm[1:half]], col.e[perm[half+1:end]]
 end
+
+function vert_faces(p)
+    ie, edge = vert_edge(p)
+    i_faces = [ie, mod1(ie-1, 4)]
+    faces = [ie             mod1(ie+1, 4)  mod1(ie+2, 4)
+             mod1(ie-1, 4)  ie             mod1(ie+1, 4)]
+    return i_faces, faces
+end
+function vert_edge(p)
+    for ie=1:6
+        edge = [ie, mod1(ie+1, 4)]
+        if p[edge[1], 1:2] == p[edge[2], 1:2]
+            return ie, edge
+        end
+    end
+end
+
+# function side_of_vert_edge(p, ie)
+#     if p[mod1(ie+2, 3), 1] > p[ie, 1]
+#         return -1
+#     else
+#         return +1
+#     end
+# end
 
 function get_LHS(col)
     # indices
@@ -221,6 +245,10 @@ function get_LHS(col)
 end
 
 function get_RHS(col, col_i)
+    # x, y
+    x = col.p[:, 1]
+    y = col.p[:, 2]
+
     # indices
     ωxmap, ωymap, χxmap, χymap = var_indices(col)
     N = 4*col.np
@@ -232,54 +260,56 @@ function get_RHS(col, col_i)
     s = ShapeFunctionIntegrals(col.s, col.s)
     J = Jacobians(col)
 
-    # for edge integrals
-    w, ξ = quad_weights_points(deg=2*col.order, dim=1)
-    s1D = ShapeFunctions(order=col.order, dim=1)
+    # # for edge integrals
+    # w, ξ = quad_weights_points(deg=2*col.order, dim=1)
+    # s1D = ShapeFunctions(order=col.order, dim=1)
 
-    # # stamp
-    # r = zeros(N)
-    # for k=1:col.nt
-    #     # triangle nodes
-    #     p_tri = col.p[col.t[k, 1:3], :]
+    # stamp
+    r = zeros(N)
+    for k=1:col.nt
+        M = J.dets[k]*s.M
+        r[ωxmap[col.t[k, :]]] += M*ones(col.nn)
+        # # triangle nodes
+        # p_tri = col.p[col.t[k, 1:3], :]
 
-    #     # which edge is vertical edge
-    #     ie, edge = vert_edge(p_tri)
-    #     node1 = col.t[k, edge[1]]
-    #     node2 = col.t[k, edge[2]]
+        # # which edge is vertical edge
+        # ie, edge = vert_edge(p_tri)
+        # node1 = col.t[k, edge[1]]
+        # node2 = col.t[k, edge[2]]
 
-    #     # is it on left or right? +1 if right, -1 if left
-    #     sign_multiplier = side_of_vert_edge(p_tri, ie)
+        # # is it on left or right? +1 if right, -1 if left
+        # sign_multiplier = side_of_vert_edge(p_tri, ie)
 
-    #     # z-coords of edge nodes
-    #     z1 = col.p[node1, 2]
-    #     z2 = col.p[node2, 2]
+        # # z-coords of edge nodes
+        # z1 = col.p[node1, 2]
+        # z2 = col.p[node2, 2]
 
-    #     # connected nodes in neighboring column 
-    #     col_j, conn_node1 = node_conns[col_i][node1]
-    #     col_j, conn_node2 = node_conns[col_i][node2]
+        # # connected nodes in neighboring column 
+        # col_j, conn_node1 = node_conns[col_i][node1]
+        # col_j, conn_node2 = node_conns[col_i][node2]
 
-    #     # average b values        
-    #     b1 = (b_cols[col_i][node1] + b_cols[col_j][conn_node1])/2
-    #     b2 = (b_cols[col_i][node2] + b_cols[col_j][conn_node2])/2
+        # # average b values        
+        # b1 = (b_cols[col_i][node1] + b_cols[col_j][conn_node1])/2
+        # b2 = (b_cols[col_i][node2] + b_cols[col_j][conn_node2])/2
 
-    #     # -∫_∂Ωᵢₑ bφᵢ dz 
-    #     for i=1:2
-    #         f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
-    #         ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
-    #         r[ωymap[col.t[k, edge[i]]]] -= sign_multiplier*∫f
-    #     end
+        # # -∫_∂Ωᵢₑ bφᵢ dz 
+        # for i=1:2
+        #     f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
+        #     ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
+        #     r[ωymap[col.t[k, edge[i]]]] -= sign_multiplier*∫f
+        # end
 
-    #     # +∫_Ω b∂x(φ) dxdz
-    #     Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
-    #     r[ωymap[col.t[k, :]]] += Cx*b_cols[col_i][col.t[k, :]]
-    # end
+        # # +∫_Ω b∂x(φ) dxdz
+        # Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
+        # r[ωymap[col.t[k, :]]] += Cx*b_cols[col_i][col.t[k, :]]
+    end
 
     # surface nodes 
     for i ∈ sfc
         r[ωxmap[i]] = 0
         r[ωymap[i]] = 0
-        r[χxmap[i]] = Uy
-        r[χymap[i]] = -Ux
+        r[χxmap[i]] = Uy(x[i], y[i])
+        r[χymap[i]] = -Ux(x[i], y[i])
     end
 
     # bottom nodes
@@ -352,16 +382,91 @@ function fd_sol(z, bx, by, ε², Ux, Uy)
     return sol[ωxmap], sol[ωymap]
 end
 
-ε² = 0.01
+function plot_3D()
+    # global p, t, e
+    np = sum(col.np for col ∈ cols)
+    nt = sum(col.nt for col ∈ cols)
+    ne = sum(col.ne for col ∈ cols) 
+    p = zeros(Float64, (np, 3))
+    t = zeros(Int64, (nt, 4))
+    e = zeros(Int64, (ne,))
+
+    # global solutions
+    ωx = zeros(np)
+    ωy = zeros(np)
+    χx = zeros(np)
+    χy = zeros(np)
+
+    # current indices
+    i_p = 0
+    i_t = 0
+    i_e = 0
+
+    # all the nodes within each column will have a unique tag
+    for i ∈ eachindex(cols)
+        # column
+        col = cols[i]
+
+        # add nodes, triangles, and edge nodes
+        p[i_p+1:i_p+col.np, :] = col.p
+        t[i_t+1:i_t+col.nt, :] = i_p .+ col.t
+        e[i_e+1:i_e+col.ne] = i_e .+ col.e
+
+        # unpack solutions
+        ωx[i_p+1:i_p+col.np] = sols[i][0*col.np+1:1*col.np]
+        ωy[i_p+1:i_p+col.np] = sols[i][1*col.np+1:2*col.np]
+        χx[i_p+1:i_p+col.np] = sols[i][2*col.np+1:3*col.np]
+        χy[i_p+1:i_p+col.np] = sols[i][3*col.np+1:4*col.np]
+
+        # increment
+        i_p += col.np
+        i_t += col.nt
+        i_e += col.ne
+    end
+
+    # save as .vtu
+    cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
+    vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
+        vtk["ωx"] = ωx
+        vtk["ωy"] = ωy
+        vtk["χx"] = χx
+        vtk["χy"] = χy
+    end
+    println("output/pg_vort_DG_3D.vtu")
+end
+
+ε² = 1
 Ux(x, y) = 0
 Uy(x, y) = 0
-b(x, y, z) = x + y
+b(x, y, z) = x
 bx(x, y, z) = 1
-by(x, y, z) = 1
+by(x, y, z) = 0
 H(x, y) = 1 - x^2 - y^2
 
-cols, p, t, e = gen_mesh("meshes/circle/mesh2.h5")
-cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
-vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
-end
-println("output/pg_vort_DG_3D.vtu")
+cols, t_cols_g, p, t, e = gen_mesh("meshes/circle/mesh2.h5")
+
+LHSs = [get_LHS(cols[i]) for i ∈ eachindex(cols)]
+RHSs = [get_RHS(cols[i], i) for i ∈ eachindex(cols)]
+sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
+
+plot_3D()
+
+# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
+# vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
+# end
+# println("output/pg_vort_DG_3D.vtu")
+
+# i = 100
+# cells = [MeshCell(VTKCellTypes.VTK_TETRA, cols[i].t[k, :]) for k=1:cols[i].nt]
+# vtk_grid("output/col$i.vtu", cols[i].p', cells) do vtk
+#     sfc, bot = sfc_and_bot(cols[i])
+#     bdy = zeros(cols[i].np)
+#     bdy[sfc] .= 1
+#     vtk["sfc"] = bdy
+#     bdy = zeros(cols[i].np)
+#     bdy[bot] .= 1
+#     vtk["bot"] = bdy
+# end
+# println("output/col$i.vtu")
+
+println("Done.")
