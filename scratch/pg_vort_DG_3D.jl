@@ -35,49 +35,95 @@ function gen_mesh(ifile)
     nt_sfc = size(t_sfc, 1)
     ne_sfc = size(e_sfc, 1)
 
-    # store an array of columns
-    cols = Vector{FEGrid}(undef, nt_sfc)
+    # interior
+    interior = findall(!in(e_sfc), 1:np_sfc)
 
     # mesh res
     emap, edges, bndix = all_edges(t_sfc)
     h = 1/size(edges, 1)*sum(norm(p_sfc[edges[i, 1], :] - p_sfc[edges[i, 2], :]) for i in axes(edges, 1))
 
-    # loop over columns
-    for k=1:nt_sfc
-        # start with nodes at the surface
-        p_col = hcat(x[t_sfc[k, :]], y[t_sfc[k, :]], zeros(3))
-        e_col = [1, 2, 3]
-        
-        # add nodes in vertical if not on coastline
-        for i=1:3
-            if t_sfc[k, i] ∉ e_sfc
-                depth = H(x[t_sfc[k, i]], y[t_sfc[k, i]])
-                nz = Int64(ceil(depth/h))
-                z = -range(0, depth, length=nz)[2:end] # remove sfc node
+    # mapping from points to triangles:
+    #   `p_to_tri[i]` is vector of cartesian indices pointing to where point `i` is in `t_sfc`
+    p_to_tri = [findall(I -> i ∈ t_sfc[I], CartesianIndices(size(t_sfc))) for i=1:np_sfc]
 
-                # add to p
-                p_col = vcat(p_col, [x[t_sfc[k, i]]*ones(nz-1)  y[t_sfc[k, i]]*ones(nz-1)  z])
+    # mapping from triangles to points in 3D: 
+    #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
+    tri_to_p = [Int64[] for k=1:nt_sfc, i=1:3] # allocate
 
-                # add to e
-                e_col = [e_col; size(p_col, 1)]
+    # add points to p, e, and tri_to_p
+    nzs = Int64[i ∈ e_sfc ? 1 : ceil(H(x[i], y[i])/h) for i=1:np_sfc]
+    p = zeros(sum(nzs), 3)
+    println("np = ", size(p, 1))
+    e = Int64[]
+    np = 0
+    for i=1:np_sfc
+        # vertical grid
+        nz = nzs[i]
+        if nz == 1
+            z = [0]
+        else
+            z = -range(0, H(x[i], y[i]), length=nz)
+        end
+
+        # add to p
+        p[np+1:np+nz, :] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
+
+        # add to e
+        push!(e, np+1)
+        push!(e, np+nz)
+
+        # add to tri_to_p
+        for I ∈ p_to_tri[i]
+            for j=np+1:np+nz
+                push!(tri_to_p[I], j)
             end
         end
 
-        # mesh
-        t_col = delaunay(p_col).simplices
-
-        # save column
-        cols[k] = FEGrid(p_col, t_col, e_col, 1)
+        # iterate
+        np += nz
     end
+    unique!(e)
 
-    p = cols[1].p
-    t = cols[1].t
-    e = cols[1].e
-    for k=2:size(cols, 1)
-        np = size(p, 1)
-        p = [p; cols[k].p]
-        t = [t; np .+ cols[k].t]
-        e = [e; np .+ cols[k].e]
+    # columnwise and global tessellation
+    cols = Vector{FEGrid}(undef, nt_sfc)
+    t = Matrix{Int64}(undef, 0, 4) 
+    for k=1:nt_sfc
+        # number of points in vertical for each vertex of sfc tri
+        lens = length.(tri_to_p[k, :])
+
+        # local p and e for column
+        nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
+        p_col = p[nodes_col, :]  
+        e_col = unique([1, lens[1], 1+lens[1], lens[1]+lens[2], 1+lens[1]+lens[2], lens[1]+lens[2]+lens[3]])
+
+        # start local t
+        t_col = Matrix{Int64}(undef, 0, 4) 
+
+        # first top tri is at sfc
+        top = [tri_to_p[k, i][1] for i=1:3]
+
+        # continue down to bottom
+        for j=2:maximum(lens)
+            # make bottom tri from next nodes down or top tri nodes
+            bot = [j ≤ lens[i] ? tri_to_p[k, i][j] : top[i] for i=1:3]
+
+            # use delaunay to tessellate
+            ig = unique(vcat(top, bot))
+            tl = delaunay(p[ig, :]).simplices
+
+            # add to t
+            t = [t; ig[tl]]
+
+            # add to t_col
+            i_col = indexin(ig, nodes_col)
+            t_col = [t_col; i_col[tl]]
+
+            # continue
+            top = bot
+        end
+
+        # save column data
+        cols[k] = FEGrid(p_col, t_col, e_col, 1)
     end
 
     return cols, p, t, e
