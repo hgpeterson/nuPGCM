@@ -142,7 +142,12 @@ function add_nodes(p, t, e, order)
             tnew = hcat(t, np0 .+ emap)
 
             # add points that were on the boundary to `e`
-            enew = [e; np0 .+ bndix]
+            enew = e
+            for i ∈ axes(edges, 1)
+                if edges[i, 1] ∈ e && edges[i, 2] ∈ e
+                    push!(enew, np0 + i)
+                end
+            end
         elseif order == 3 && dim == 2
                 # number of nodes per triangle
                 n = 10

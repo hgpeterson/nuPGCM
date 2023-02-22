@@ -21,7 +21,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_mesh(h)
+function gen_mesh(h; order)
     # surface "mesh"
     nx = Int64(ceil(2/h))
     x = range(-1, 1, length=nx)
@@ -29,16 +29,12 @@ function gen_mesh(h)
     # store an array of columns
     cols = Vector{FEGrid}(undef, nx-1)
 
-    # store node connectivities: col_j, conn_node = node_conns[col_i][node]
-    node_conns = [[] for i=1:nx-1]
-
     # mesh each column
     left = [-1.0 0.0]
     p = copy(left)
     left_e = [1]
     e = copy(left_e)
-    t = [0 0 0]
-    push!(node_conns[1], nothing) # left corner has no connections
+    t = Matrix{Int64}(undef, 0, 3)
     for i=2:nx
         # column index
         col_i = i - 1
@@ -59,15 +55,7 @@ function gen_mesh(h)
         p_col = [left; right]
         t_col = delaunay(p_col).simplices
         e_col = [left_e; size(left, 1) .+ right_e]
-        cols[col_i] = FEGrid(p_col, t_col, e_col, 1)
-
-        # save node connectivities
-        if col_i < nx - 1
-            for j ∈ axes(right, 1)
-                push!(node_conns[col_i+1], [col_i, size(left, 1) + j])
-                push!(node_conns[col_i], [col_i+1, j])
-            end
-        end
+        cols[col_i] = FEGrid(p_col, t_col, e_col, order)
 
         # add to global mesh
         e = [e; size(p, 1) .+ right_e]
@@ -78,34 +66,8 @@ function gen_mesh(h)
         left = right
         left_e = right_e
     end
-    push!(node_conns[end], nothing) # right corner has no connections
-    t = t[2:end, :]
 
-    g = FEGrid(p, t, e, 1)
-
-    println("np = ", g.np)
-    println("ncol = ", nx-1)
-
-    # # plot full mesh
-    # fig, ax, im = tplot(p, t)
-    # ax.plot(p[:, 1], p[:, 2], "o", ms=1)
-    # ax.plot(p[e, 1], p[e, 2], "o", ms=1)
-    # ax.axis("equal")
-    # savefig("scratch/images/full_mesh.png")
-    # println("scratch/images/full_mesh.png")
-    # plt.close()
-    
-    # # plot cols
-    # fig, ax, im = tplot(p, t)
-    # ax.axis("equal")
-    # for i ∈ eachindex(cols)
-    #     tplot(cols[i], fig=fig, ax=ax, edgecolors="C$i")
-    # end
-    # savefig("scratch/images/cols.png")
-    # println("scratch/images/cols.png")
-    # plt.close()
-
-    return g, cols, node_conns
+    return cols
 end
 
 function var_indices(col)
@@ -127,7 +89,7 @@ function sfc_and_bot(col)
     return col.e[perm[1:half]], col.e[perm[half+1:end]]
 end
 
-function get_LHS(col)
+function get_sol(col, b)
     # indices
     ωxmap, ωymap, χxmap, χymap = var_indices(col)
     N = 4*col.np
@@ -142,11 +104,13 @@ function get_LHS(col)
 
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
+    r = zeros(N)
     for k=1:col.nt
         # matrices
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
+        Cx = J.dets[k]*sum(s.C.*J.Js[k, :, 1], dims=1)[1, :, :]
 
         # interior terms
         for i=1:col.nn, j=1:col.nn
@@ -178,6 +142,9 @@ function get_LHS(col)
                 push!(A, (χyi[i], ωyi[j],  M[i, j]))
             end
         end
+
+        # -∂x(b)ωʸ
+        r[ωymap[col.t[k, :]]] -= Cx*b[col.t[k, :]]
     end
 
     # surface nodes 
@@ -186,75 +153,6 @@ function get_LHS(col)
         push!(A, (ωymap[i], ωymap[i], 1))
         push!(A, (χxmap[i], χxmap[i], 1))
         push!(A, (χymap[i], χymap[i], 1))
-    end
-
-    # bottom nodes
-    for i ∈ bot
-        push!(A, (ωxmap[i], ωxmap[i], 1))
-        push!(A, (ωymap[i], χymap[i], 1))
-    end
-
-    # sparse matrix
-    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
-    return lu(A)
-end
-
-function get_RHS(col, col_i)
-    # indices
-    ωxmap, ωymap, χxmap, χymap = var_indices(col)
-    N = 4*col.np
-
-    # surface and bottom nodes
-    sfc, bot = sfc_and_bot(col)
-
-    # for surface integrals
-    s = ShapeFunctionIntegrals(col.s, col.s)
-    J = Jacobians(col)
-
-    # for edge integrals
-    w, ξ = quad_weights_points(deg=2*col.order, dim=1)
-    s1D = ShapeFunctions(order=col.order, dim=1)
-
-    # stamp
-    r = zeros(N)
-    for k=1:col.nt
-        # triangle nodes
-        p_tri = col.p[col.t[k, 1:3], :]
-
-        # which edge is vertical edge
-        ie, edge = vert_edge(p_tri)
-        node1 = col.t[k, edge[1]]
-        node2 = col.t[k, edge[2]]
-
-        # is it on left or right? +1 if right, -1 if left
-        sign_multiplier = side_of_vert_edge(p_tri, ie)
-
-        # z-coords of edge nodes
-        z1 = col.p[node1, 2]
-        z2 = col.p[node2, 2]
-
-        # connected nodes in neighboring column 
-        col_j, conn_node1 = node_conns[col_i][node1]
-        col_j, conn_node2 = node_conns[col_i][node2]
-
-        # average b values        
-        b1 = (b_cols[col_i][node1] + b_cols[col_j][conn_node1])/2
-        b2 = (b_cols[col_i][node2] + b_cols[col_j][conn_node2])/2
-
-        # -∫_∂Ωᵢₑ bφᵢ dz 
-        for i=1:2
-            f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
-            ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
-            r[ωymap[col.t[k, edge[i]]]] -= sign_multiplier*∫f
-        end
-
-        # +∫_Ω b∂x(φ) dxdz
-        Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
-        r[ωymap[col.t[k, :]]] += Cx*b_cols[col_i][col.t[k, :]]
-    end
-
-    # surface nodes 
-    for i ∈ sfc
         r[ωxmap[i]] = 0
         r[ωymap[i]] = 0
         r[χxmap[i]] = 0
@@ -263,11 +161,17 @@ function get_RHS(col, col_i)
 
     # bottom nodes
     for i ∈ bot
+        push!(A, (ωxmap[i], ωxmap[i], 1))
+        push!(A, (ωymap[i], χymap[i], 1))
         r[ωxmap[i]] = Ux/ε²
         r[ωymap[i]] = 0
     end
 
-    return r
+    # sparse matrix
+    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
+
+    # solve
+    return A\r
 end
 
 function fd_sol(z, bx, ε², Ux)
@@ -326,34 +230,6 @@ function fd_sol(z, bx, ε², Ux)
     return sol[ωxmap], sol[ωymap]
 end
 
-"""
-    ie, edge = function vert_edge(p)
-
-Given a triangle with points `p` of the form 
-    <| or |>, 
-find the local edge index and edge nodes of the vertical edge.
-"""
-function vert_edge(p)
-    for ie=1:3
-        edge = [ie, mod1(ie+1, 3)]
-        if p[edge[1], 1] == p[edge[2], 1]
-            return ie, edge
-        end
-    end
-end
-
-"""
-Given a triangle with points `p` and a vertical edge at local edge index `ie`,
-find which side the vertical edge is on. Return -1 for left, +1 for right.
-"""
-function side_of_vert_edge(p, ie)
-    if p[mod1(ie+2, 3), 1] > p[ie, 1]
-        return -1
-    else
-        return +1
-    end
-end
-
 function plot_1D(col, sol)
     # indices
     ωxmap, ωymap, χxmap, χymap = var_indices(col)
@@ -396,11 +272,11 @@ end
 
 function plot_2D()
     # global p, t, e
-    np = 2*g.np-2
-    nt = g.nt
-    ne = 2*g.ne-2
+    np = sum(col.np for col ∈ cols)
+    nt = sum(col.nt for col ∈ cols)
+    ne = sum(col.ne for col ∈ cols) 
     p = zeros(Float64, (np, 2))
-    t = zeros(Int64, (nt, 3))
+    t = zeros(Int64, (nt, cols[1].nn))
     e = zeros(Int64, (ne,))
 
     # global solutions
@@ -437,7 +313,12 @@ function plot_2D()
     end
 
     # save as .vtu
-    cells = [MeshCell(VTKCellTypes.VTK_TRIANGLE, t[i, :]) for i ∈ axes(t, 1)]
+    if cols[1].order == 1
+        cell_type = VTKCellTypes.VTK_TRIANGLE
+    elseif cols[1].order == 2
+        cell_type = VTKCellTypes.VTK_QUADRATIC_TRIANGLE
+    end
+    cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
     vtk_grid("output/pg_vort_DG_2D.vtu", p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
@@ -450,12 +331,8 @@ end
 ε² = 0.1
 Ux = 0
 δ = 0.1
-b(x, z) = x
-bx(x, z) = 1
-# b(x, z) = x^2
-# bx(x, z) = 2*x
-# b(x, z) = z + δ*exp(-(z + H(x))/δ)
-# bx(x, z) = -Hx(x)*exp(-(z + H(x))/δ)
+b(x, z) = z + δ*exp(-(z + H(x))/δ)
+bx(x, z) = -Hx(x)*exp(-(z + H(x))/δ)
 H(x) = 1 - x^2
 Hx(x) = -2*x
 
@@ -475,15 +352,14 @@ Hx(x) = -2*x
 # e = [1, 2, 2nz-1, 2nz]
 # col = FEGrid(p, t, e, 1)
 
-g, cols, node_conns = gen_mesh(0.02)
+cols = gen_mesh(0.04, order=2)
 
 b_cols = [b.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
 
-LHSs = [get_LHS(cols[i]) for i ∈ eachindex(cols)]
-RHSs = [get_RHS(cols[i], i) for i ∈ eachindex(cols)]
-sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
+sols = [get_sol(cols[i], b_cols[i])  for i ∈ eachindex(cols)]
 
 col_i = Int64(round(size(cols, 1)/4))
-plot_1D(cols[col_i], sols[col_i])
-
+col = cols[col_i]
+sol = sols[col_i]
+plot_1D(col, sol)
 plot_2D()

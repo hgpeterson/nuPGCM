@@ -17,12 +17,13 @@ using PyPlot
 using SparseArrays
 using LinearAlgebra
 using Printf
+using ProgressMeter
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_mesh(ifile)
+function gen_mesh(ifile; order)
     # load mesh of circle
     file = h5open(ifile, "r")
     p_sfc = read(file, "p")
@@ -82,7 +83,6 @@ function gen_mesh(ifile)
 
     # columnwise and global tessellation
     cols = Vector{FEGrid}(undef, nt_sfc)
-    t_cols_g = Vector{Matrix{Int64}}(undef, nt_sfc)
     t = Matrix{Int64}(undef, 0, 4) 
     for k=1:nt_sfc
         # number of points in vertical for each vertex of sfc tri
@@ -120,13 +120,12 @@ function gen_mesh(ifile)
         end
 
         # save column data
-        cols[k] = FEGrid(p_col, t_col, e_col, 1)
-
-        # map t_col to global t
-        t_cols_g[k] = nodes_col[t_col]
+        cols[k] = FEGrid(p_col, t_col, e_col, order)
     end
 
-    return cols, t_cols_g, p, t, e
+    g = FEGrid(p, t, e, order)
+
+    return cols, g
 end
 
 function var_indices(col)
@@ -148,31 +147,7 @@ function sfc_and_bot(col)
     return col.e[perm[1:half]], col.e[perm[half+1:end]]
 end
 
-function vert_faces(p)
-    ie, edge = vert_edge(p)
-    i_faces = [ie, mod1(ie-1, 4)]
-    faces = [ie             mod1(ie+1, 4)  mod1(ie+2, 4)
-             mod1(ie-1, 4)  ie             mod1(ie+1, 4)]
-    return i_faces, faces
-end
-function vert_edge(p)
-    for ie=1:6
-        edge = [ie, mod1(ie+1, 4)]
-        if p[edge[1], 1:2] == p[edge[2], 1:2]
-            return ie, edge
-        end
-    end
-end
-
-# function side_of_vert_edge(p, ie)
-#     if p[mod1(ie+2, 3), 1] > p[ie, 1]
-#         return -1
-#     else
-#         return +1
-#     end
-# end
-
-function get_LHS(col)
+function get_sol(col, b, Ux, Uy)
     # indices
     ωxmap, ωymap, χxmap, χymap = var_indices(col)
     N = 4*col.np
@@ -187,11 +162,14 @@ function get_LHS(col)
 
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
+    r = zeros(N)
     for k=1:col.nt
         # matrices
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
+        Cx = J.dets[k]*sum(s.C.*J.Js[k, :, 1], dims=1)[1, :, :]
+        Cy = J.dets[k]*sum(s.C.*J.Js[k, :, 2], dims=1)[1, :, :]
 
         # interior terms
         for i=1:col.nn, j=1:col.nn
@@ -223,6 +201,19 @@ function get_LHS(col)
                 push!(A, (χyi[i], ωyi[j],  M[i, j]))
             end
         end
+
+        # # ∂y(b)ωˣ
+        # r[ωxmap[col.t[k, :]]] += Cy*b[col.t[k, :]]
+        # # -∂x(b)ωʸ
+        # r[ωymap[col.t[k, :]]] -= Cx*b[col.t[k, :]]
+        p_tet = col.p[col.t[k, :], :]
+        x = p_tet[:, 1]
+        y = p_tet[:, 2]
+        z = p_tet[:, 3]
+        r[ωxmap[col.t[k, :]]] += M*f1.(x, y, z)
+        r[ωymap[col.t[k, :]]] += M*f2.(x, y, z)
+        r[χxmap[col.t[k, :]]] += M*f3.(x, y, z)
+        r[χymap[col.t[k, :]]] += M*f4.(x, y, z)
     end
 
     # surface nodes 
@@ -231,94 +222,43 @@ function get_LHS(col)
         push!(A, (ωymap[i], ωymap[i], 1))
         push!(A, (χxmap[i], χxmap[i], 1))
         push!(A, (χymap[i], χymap[i], 1))
+        # r[ωxmap[i]] = 0
+        # r[ωymap[i]] = 0
+        # r[χxmap[i]] = Uy[i]
+        # r[χymap[i]] = -Ux[i]
+        x = col.p[i, 1]
+        y = col.p[i, 2]
+        r[ωxmap[i]] = ωx_a(x, y, 0)
+        r[ωymap[i]] = ωy_a(x, y, 0)
+        r[χxmap[i]] = χx_a(x, y, 0)
+        r[χymap[i]] = χy_a(x, y, 0)
     end
 
     # bottom nodes
     for i ∈ bot
-        push!(A, (ωxmap[i], χxmap[i], 1))
-        push!(A, (ωymap[i], χymap[i], 1))
+        # push!(A, (ωxmap[i], χxmap[i], 1))
+        # push!(A, (ωymap[i], χymap[i], 1))
+        push!(A, (ωxmap[i], ωxmap[i], 1))
+        push!(A, (ωymap[i], ωymap[i], 1))
+        push!(A, (χxmap[i], χxmap[i], 1))
+        push!(A, (χymap[i], χymap[i], 1))
+        # r[ωxmap[i]] = 0
+        # r[ωymap[i]] = 0
+        x = col.p[i, 1]
+        y = col.p[i, 2]
+        # r[ωxmap[i]] = χx_a(x, y, -H(x, y))
+        # r[ωymap[i]] = χy_a(x, y, -H(x, y))
+        r[ωxmap[i]] = ωx_a(x, y, -H(x, y))
+        r[ωymap[i]] = ωy_a(x, y, -H(x, y))
+        r[χxmap[i]] = χx_a(x, y, -H(x, y))
+        r[χymap[i]] = χy_a(x, y, -H(x, y))
     end
 
     # sparse matrix
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
-    return lu(A)
-end
 
-function get_RHS(col, col_i)
-    # x, y
-    x = col.p[:, 1]
-    y = col.p[:, 2]
-
-    # indices
-    ωxmap, ωymap, χxmap, χymap = var_indices(col)
-    N = 4*col.np
-
-    # surface and bottom nodes
-    sfc, bot = sfc_and_bot(col)
-
-    # for surface integrals
-    s = ShapeFunctionIntegrals(col.s, col.s)
-    J = Jacobians(col)
-
-    # # for edge integrals
-    # w, ξ = quad_weights_points(deg=2*col.order, dim=1)
-    # s1D = ShapeFunctions(order=col.order, dim=1)
-
-    # stamp
-    r = zeros(N)
-    for k=1:col.nt
-        M = J.dets[k]*s.M
-        r[ωxmap[col.t[k, :]]] += M*ones(col.nn)
-        # # triangle nodes
-        # p_tri = col.p[col.t[k, 1:3], :]
-
-        # # which edge is vertical edge
-        # ie, edge = vert_edge(p_tri)
-        # node1 = col.t[k, edge[1]]
-        # node2 = col.t[k, edge[2]]
-
-        # # is it on left or right? +1 if right, -1 if left
-        # sign_multiplier = side_of_vert_edge(p_tri, ie)
-
-        # # z-coords of edge nodes
-        # z1 = col.p[node1, 2]
-        # z2 = col.p[node2, 2]
-
-        # # connected nodes in neighboring column 
-        # col_j, conn_node1 = node_conns[col_i][node1]
-        # col_j, conn_node2 = node_conns[col_i][node2]
-
-        # # average b values        
-        # b1 = (b_cols[col_i][node1] + b_cols[col_j][conn_node1])/2
-        # b2 = (b_cols[col_i][node2] + b_cols[col_j][conn_node2])/2
-
-        # # -∫_∂Ωᵢₑ bφᵢ dz 
-        # for i=1:2
-        #     f(t) = (b1*φ(s1D, 1, t) + b2*φ(s1D, 2, t))*φ(s1D, i, t)
-        #     ∫f = dot(w, f.(ξ))*abs(z2 - z1)/2
-        #     r[ωymap[col.t[k, edge[i]]]] -= sign_multiplier*∫f
-        # end
-
-        # # +∫_Ω b∂x(φ) dxdz
-        # Cx = J.dets[k]*sum(s.CT.*J.Js[k, :, 1], dims=1)[1, :, :]
-        # r[ωymap[col.t[k, :]]] += Cx*b_cols[col_i][col.t[k, :]]
-    end
-
-    # surface nodes 
-    for i ∈ sfc
-        r[ωxmap[i]] = 0
-        r[ωymap[i]] = 0
-        r[χxmap[i]] = Uy(x[i], y[i])
-        r[χymap[i]] = -Ux(x[i], y[i])
-    end
-
-    # bottom nodes
-    for i ∈ bot
-        r[ωxmap[i]] = 0
-        r[ωymap[i]] = 0
-    end
-
-    return r
+    # solve
+    return A\r
 end
 
 function fd_sol(z, bx, by, ε², Ux, Uy)
@@ -388,7 +328,7 @@ function plot_3D()
     nt = sum(col.nt for col ∈ cols)
     ne = sum(col.ne for col ∈ cols) 
     p = zeros(Float64, (np, 3))
-    t = zeros(Int64, (nt, 4))
+    t = zeros(Int64, (nt, cols[1].nn))
     e = zeros(Int64, (ne,))
 
     # global solutions
@@ -425,16 +365,26 @@ function plot_3D()
     end
 
     # save as .vtu
-    cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
+    if cols[1].order == 1
+        cell_type = VTKCellTypes.VTK_TETRA
+    elseif cols[1].order == 2
+        cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    end
+    cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
     vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
         vtk["χx"] = χx
         vtk["χy"] = χy
+        vtk["ωx_a"] = ωx_a.(p[:, 1], p[:, 2], p[:, 3])
+        vtk["ωy_a"] = ωy_a.(p[:, 1], p[:, 2], p[:, 3])
+        vtk["χx_a"] = χx_a.(p[:, 1], p[:, 2], p[:, 3])
+        vtk["χy_a"] = χy_a.(p[:, 1], p[:, 2], p[:, 3])
     end
     println("output/pg_vort_DG_3D.vtu")
 end
 
+# params
 ε² = 1
 Ux(x, y) = 0
 Uy(x, y) = 0
@@ -443,30 +393,31 @@ bx(x, y, z) = 1
 by(x, y, z) = 0
 H(x, y) = 1 - x^2 - y^2
 
-cols, t_cols_g, p, t, e = gen_mesh("meshes/circle/mesh2.h5")
+# grid
+cols, g = gen_mesh("meshes/circle/mesh2.h5", order=1)
+println("ncols = ", size(cols, 1))
 
-LHSs = [get_LHS(cols[i]) for i ∈ eachindex(cols)]
-RHSs = [get_RHS(cols[i], i) for i ∈ eachindex(cols)]
-sols = [LHSs[i]\RHSs[i]  for i ∈ eachindex(cols)]
+# b, Ux, Uy in each column
+b_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ cols]
+Ux_cols = [Ux.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
+Uy_cols = [Uy.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
+
+# constructed solution and forcing
+ωx_a(x, y, z) = x*z*exp(x*y*z)
+ωy_a(x, y, z) = y*z*exp(x*y*z)
+χx_a(x, y, z) = -(1 - H(x, y) + exp(z)*(-1 + H(x, y) + z))*cos(y)*sin(x)
+χy_a(x, y, z) = -(1 - H(x, y) + exp(z)*(-1 + H(x, y) + z))*cos(x)*sin(y)
+f1(x, y, z) = -y*exp(x*y*z)*(z + 2*x^2*ε² + x^3*y*z*ε²)
+f2(x, y, z) = -x*exp(x*y*z)*(2*y^2*ε² + z*(-1 + x*y^3*ε²))
+f3(x, y, z) = x*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(y)*sin(x)
+f4(x, y, z) = y*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(x)*sin(y)
+
+# sols = [get_sol(cols[i], b_cols[i], Ux_cols[i], Uy_cols[i]) for i ∈ eachindex(cols)]
+sols = []
+@showprogress "Solving..." for i ∈ eachindex(cols)
+    push!(sols, get_sol(cols[i], b_cols[i], Ux_cols[i], Uy_cols[i]))
+end
 
 plot_3D()
-
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
-# vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
-# end
-# println("output/pg_vort_DG_3D.vtu")
-
-# i = 100
-# cells = [MeshCell(VTKCellTypes.VTK_TETRA, cols[i].t[k, :]) for k=1:cols[i].nt]
-# vtk_grid("output/col$i.vtu", cols[i].p', cells) do vtk
-#     sfc, bot = sfc_and_bot(cols[i])
-#     bdy = zeros(cols[i].np)
-#     bdy[sfc] .= 1
-#     vtk["sfc"] = bdy
-#     bdy = zeros(cols[i].np)
-#     bdy[bot] .= 1
-#     vtk["bot"] = bdy
-# end
-# println("output/col$i.vtu")
 
 println("Done.")
