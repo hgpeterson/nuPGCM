@@ -1,4 +1,6 @@
-struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+abstract type Grid{FM, IM, IV, IN} end
+
+struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer} <: Grid{FM, IM, IV, IN}
     # order of shape functions on this grid
     order::IN
 
@@ -6,7 +8,7 @@ struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:In
     dim::IN
 
     # shape functions on this grid
-    s::ShapeFunctions
+    sf::ShapeFunctions
 
     # node positions
     p::FM # float matrix
@@ -351,17 +353,21 @@ the reference element, we then need the inverse of A, J = ∂ξ/∂x:
     J in 2D = [∂ξ/∂x  ∂ξ/∂y;  ∂η/∂x  ∂η/∂y],
     J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z;  ∂η/∂x  ∂η/∂y  ∂η/∂z;  ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
 """
-function Jacobians(g::FEGrid)
+function Jacobians(p, t)
+    # indices
+    nt = size(t, 1)
+    dim = size(p, 2)
+
     # pre-allocate
-    dets = zeros(g.nt)
-    Js = zeros(g.nt, g.dim, g.dim)
+    dets = zeros(nt)
+    Js = zeros(nt, dim, dim)
 
-    # loop through elements in g
-    for k=1:g.nt
+    # loop through elements in grid
+    for k=1:nt
         # build A
-        A = [g.p[g.t[k, j+1], i] - g.p[g.t[k, 1], i] for i=1:g.dim, j=1:g.dim]
+        A = [p[t[k, j+1], i] - p[t[k, 1], i] for i=1:dim, j=1:dim]
 
-        if g.dim == 1
+        if dim == 1
             # A = (x₂ - x₁)/2 for 1D case
             A /= 2.0
         end
@@ -370,14 +376,12 @@ function Jacobians(g::FEGrid)
         dets[k] = abs(det(A))
 
         # invert for J
-        try
-            Js[k, :, :] = inv(A)
-        catch
-            printstyled("Warning: ", color=:red)
-            println("Element $k has volume 0.")
-        end
+        Js[k, :, :] = inv(A)
     end
     return Jacobians(dets, Js)
+end
+function Jacobians(g::FEGrid)
+    return Jacobians(g.p, g.t)
 end
 function Jacobians(gfile::String)
     # get order 1 FE grid

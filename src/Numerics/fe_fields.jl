@@ -9,10 +9,7 @@ struct FEField{IN<:Integer,V<:AbstractVector}
     values::V
 
     # grid FE field exists on
-    g::FEGrid
-
-    # grid of order 1
-    g1::FEGrid
+    g::Grid
 end
 
 """
@@ -22,28 +19,27 @@ Construct FE field from grid saved at `gfile` of order `order` with node values 
 """
 function FEField(gfile::String, order::Integer, values)
     g = FEGrid(gfile, order)
-    g1 = FEGrid(gfile, 1)
-    return FEField(order, values, g, g1)
+    return FEField(order, values, g)
 end
-function FEField(values, g::FEGrid, g1::FEGrid)
-    return FEField(g.order, values, g, g1)
+function FEField(values, g::Grid)
+    return FEField(g.order, values, g)
 end
 
 # define operations on FEField's
 function -(u::FEField, v::FEField)
-    return FEField(u.order, u.values - v.values, u.g, u.g1)
+    return FEField(u.order, u.values - v.values, u.g)
 end
 function +(u::FEField, v::FEField)
-    return FEField(u.order, u.values + v.values, u.g, u.g1)
+    return FEField(u.order, u.values + v.values, u.g)
 end
 function *(u::FEField, v::FEField)
-    return FEField(u.order, u.values.*v.values, u.g, u.g1)
+    return FEField(u.order, u.values.*v.values, u.g)
 end
 function /(u::FEField, v::FEField)
-    return FEField(u.order, u.values./v.values, u.g, u.g1)
+    return FEField(u.order, u.values./v.values, u.g)
 end
 function abs(u::FEField)
-    return FEField(u.order, abs.(u.values), u.g, u.g1)
+    return FEField(u.order, abs.(u.values), u.g)
 end
 function maximum(u::FEField)
     return maximum(u.values)
@@ -79,6 +75,15 @@ function L2norm(u::FEField, s::ShapeFunctionIntegrals, J::Jacobians)
 end
 
 """
+    bool = pt_in_line(x, p)
+
+Determine if point `x` is in line segment with nodes `p`.
+"""
+function pt_in_line(x, p)
+    return p[1] ≤ x ≤ p[2]
+end
+
+"""
     bool = pt_in_tri(x, p)
 
 Determine if point `x` is in triangle with nodes `p`.
@@ -98,19 +103,51 @@ function pt_sign(p₁, p₂, p₃)
     return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 end
 
+"""
+    bool = pt_in_tet(x, p)
+
+Determine if point `x` is in tetrahedron with nodes `p`.
+(See https://stackoverflow.com/questions/25179693/how-to-check-whether-the-point-is-in-the-tetrahedron-or-not).
+"""
+function pt_in_tet(x, p)
+    v1 = p[1, :]
+    v2 = p[2, :]
+    v3 = p[3, :]
+    v4 = p[4, :]
+    return same_side(x, v1, v2, v3, v4) &&
+           same_side(x, v2, v3, v4, v1) &&
+           same_side(x, v3, v4, v1, v2) &&
+           same_side(x, v4, v1, v2, v3)
+end
+function same_side(x, v1, v2, v3, v4)
+    normal = cross(v2 - v1, v3 - v1)
+    dotv4 = dot(normal, v4 - v1)
+    dotx = dot(normal, x - v1)
+    return (sign(dotv4) == sign(dotx)) || dotx == 0
+end
+
 
 """
-    k = get_tri(x, g)
+    k = get_k(x, g)
 
-Determine index `k` of triangle on grid `g` in which the point `x` lies.
+Determine index `k` of element on grid `g` in which the point `x` lies.
 """
-function get_tri(x, g::FEGrid)
+function get_k(x, g)
+    if g.dim == 1
+        pt_check = pt_in_line
+    elseif g.dim == 2
+        pt_check = pt_in_tri
+    elseif g.dim == 3
+        pt_check = pt_in_tet
+    else
+        error("Dimension $dim not supported for evaluation.")
+    end
     for k=1:g.nt 
-        if pt_in_tri(x, g.p[g.t[k, :], :])
+        if pt_check(x, g.p[g.t[k, 1:g.dim+1], :])
             return k
         end
     end
-    error("Cannot find triangle; p₀=($(x[1]), $(x[2])) is not inside mesh domain.")
+    error("Cannot find element; p₀=$x is not inside mesh domain.")
 end
 
 """
@@ -120,21 +157,21 @@ Evaluate FEField `u` at point `x` on the grid.
 """
 function evaluate(u::FEField, x)
     try
-        # find triangle x is in
-        k = get_tri(x, u.g1)
+        # find element x is in
+        k = get_k(x, u.g)
 
         # evaluate there
         return evaluate(u, x, k)
     catch
-        # if triangle not found, return NaN
-        println("p₀=($(x[1]), $(x[2])) outside mesh domain.")
+        # if element not found, return NaN
+        # println("p₀=$x outside mesh domain.")
         return NaN
     end
 end
 function evaluate(u::FEField, x, k)
-    # transform to standard triangle
-    ξ = transform_to_ref_el(x, u.g1.p[u.g1.t[k, :], :])
+    # transform to reference element
+    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
 
-    # sum weighted combinations of triangle k's basis functions at x
-    return sum([u.values[u.g.t[k, i]]*φ(u.g.s, i, ξ) for i=1:u.g.nn])
+    # sum weighted combinations of element k's basis functions at x
+    return sum([u.values[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn])
 end
