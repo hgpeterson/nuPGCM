@@ -9,7 +9,7 @@ struct FEField{IN<:Integer,V<:AbstractVector}
     values::V
 
     # grid FE field exists on
-    g::Grid
+    g::FEGrid
 end
 
 """
@@ -21,7 +21,7 @@ function FEField(gfile::String, order::Integer, values)
     g = FEGrid(gfile, order)
     return FEField(order, values, g)
 end
-function FEField(values, g::Grid)
+function FEField(values, g::FEGrid)
     return FEField(g.order, values, g)
 end
 
