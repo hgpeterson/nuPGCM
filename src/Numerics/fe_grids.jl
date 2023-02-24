@@ -129,7 +129,7 @@ function read_gfile_h5(gfile)
     e = read(file, "e")
     close(file)
     t = convert(Matrix{Int64}, t)
-    e = convert(Vector{Int64}, e)
+    e = convert(Vector{Int64}, e[:])
     return p, t, e
 end
 

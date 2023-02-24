@@ -448,21 +448,26 @@ end
 
 # params
 ε² = 1
-Ux(x, y) = 0
-Uy(x, y) = 0
-# b(x, y, z) = x
-# bx(x, y, z) = 1
-# by(x, y, z) = 0
-δ = 0.1
-b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 H(x, y) = 1 - x^2 - y^2
 Hx(x, y) = -2*x
 Hy(x, y) = -2*y
+# Ux(x, y) = 0
+Uy(x, y) = 0
+Ux(x, y) = 1
+# Uy(x, y) = 1
+b(x, y, z) = 0
+bx(x, y, z) = 0
+by(x, y, z) = 0
+# b(x, y, z) = x
+# bx(x, y, z) = 1
+# by(x, y, z) = 0
+# δ = 0.1
+# b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+# bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
+# by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
 # grid
-cols, g = gen_mesh("meshes/circle/mesh2.h5", order=2)
+cols, g = gen_mesh("meshes/circle/mesh1.h5", order=2)
 println("ncols = ", size(cols, 1))
 
 # b, Ux, Uy in each column
