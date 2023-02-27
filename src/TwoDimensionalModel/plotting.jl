@@ -199,7 +199,7 @@ end
 If `u` === nothing: Plot triangular mesh with nodes `p` and triangles `t`.
 If `u` === solution vector: Plot filled contour color plot of solution `u`.
 """
-function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing, lw=0.2, edgecolors="k")
+function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing, lw=0.2, edgecolors="k", contour=false)
     if fig === nothing
         fig, ax = subplots(1)
     end
@@ -222,6 +222,10 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=not
         end
 
         im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
+        if contour
+            ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-")
+        end
+
     end
 
     # no spines
@@ -233,9 +237,5 @@ function tplot(g::FEGrid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 function tplot(u::FEField; kwargs...)
-    if u.order == 0
-        return tplot(u.g1.p, u.g1.t, u.values; kwargs...)
-    else
-        return tplot(u.g.p, u.g.t, u.values; kwargs...)
-    end
+    return tplot(u.g.p, u.g.t, u.values; kwargs...)
 end
