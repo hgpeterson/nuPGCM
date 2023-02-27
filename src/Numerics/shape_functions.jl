@@ -154,13 +154,7 @@ for i = 1, .., n and j = 1, ..., m. Quadrature rule defined by weights `w` and i
 points `ξ`.
 """
 function compute_integral_matrix(f, w, ξ, n, m)
-    M = zeros(n, m)
-    for i=1:n
-        for j=1:m
-            M[i, j] = ref_el_quad(ξ -> f(ξ, i, j), w, ξ)
-        end
-    end
-    return M
+    return [ref_el_quad(ξ -> f(ξ, i, j), w, ξ) for i=1:n, j=1:m]
 end
 
 """

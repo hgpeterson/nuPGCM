@@ -335,12 +335,16 @@ function plot_1D(col, sol)
     y = 1/size(col.e["sfc"],1)*sum(col.p[col.e["sfc"][:], 2])
     z = -H(x, y):H(x, y)/2^10:0
     ωx_fd, ωy_fd = fd_sol(z, bx.(x, y, z), by.(x, y, z), ε², Ux(x, y), Uy(x, y))
+    χx_fd = -cumtrapz(cumtrapz(ωx_fd, z), z)
+    χy_fd = -cumtrapz(cumtrapz(ωy_fd, z), z)
     ωx_f(z) = evaluate(ωx, [x, y, z])
     ωy_f(z) = evaluate(ωy, [x, y, z])
     χx_f(z) = evaluate(χx, [x, y, z])
     χy_f(z) = evaluate(χy, [x, y, z])
     println(@sprintf("Max error ωx: %1.1e", maximum(x->isnan(x) ? -Inf : x, abs.(ωx_f.(z) - ωx_fd))))
     println(@sprintf("Max error ωy: %1.1e", maximum(x->isnan(x) ? -Inf : x, abs.(ωy_f.(z) - ωy_fd))))
+    println(@sprintf("Max error χx: %1.1e", maximum(x->isnan(x) ? -Inf : x, abs.(χx_f.(z) - χx_fd))))
+    println(@sprintf("Max error χy: %1.1e", maximum(x->isnan(x) ? -Inf : x, abs.(χy_f.(z) - χy_fd))))
 
     # plot
     fig, ax = subplots(1, 2, figsize=(2*2, 3.2), sharey=true)
@@ -350,6 +354,8 @@ function plot_1D(col, sol)
     ax[1].plot(ωy_fd, z, "k--", lw=0.5)
     ax[2].plot(χx_f.(z), z, label=L"\chi^x")
     ax[2].plot(χy_f.(z), z, label=L"\chi^y")
+    ax[2].plot(χx_fd, z, "k--", lw=0.5, label="“Truth”")
+    ax[2].plot(χy_fd, z, "k--", lw=0.5)
     ax[1].legend()
     ax[2].legend()
     ax[1].set_xlabel(L"\omega")
@@ -453,8 +459,8 @@ Hx(x, y) = -2*x
 Hy(x, y) = -2*y
 # Ux(x, y) = 0
 Uy(x, y) = 0
-Ux(x, y) = 1
-# Uy(x, y) = 1
+Ux(x, y) = H(x, y)^2
+# Uy(x, y) = H(x, y)^2
 b(x, y, z) = 0
 bx(x, y, z) = 0
 by(x, y, z) = 0
@@ -493,13 +499,14 @@ sols = []
 end
 
 i_col = argmax([col.nt for col ∈ cols])
+# i_col = argmin([col.nt for col ∈ cols])
 plot_1D(cols[i_col], sols[i_col])
 
 plot_3D()
 
 # Notes:
 # dirichlet: O(h), O(h^2)
-# neumann + dirichlet: O(h), O(h^2) for χ
+# neumann + dirichlet: O(h), O(h^2) for ω
 # fd: O(h^2), ~O(h^3) for tallest column
 
 println("Done.")
