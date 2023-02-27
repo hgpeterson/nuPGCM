@@ -15,7 +15,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function solve_barotropic(g, r_sym, r_asym)
+function solve_barotropic(g, r_sym, r_asym, β)
     # indices
     N = g.np
 
@@ -24,6 +24,9 @@ function solve_barotropic(g, r_sym, r_asym)
     J = g.J
     s = g.sfi
 
+    # integration
+    quad_wts, quad_pts = quad_weights_points(deg=7, dim=2)
+
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
     rhs = zeros(N)
@@ -31,18 +34,33 @@ function solve_barotropic(g, r_sym, r_asym)
         # matrices
         JJ = J.Js[k, :, :]*J.Js[k, :, :]'
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        K′ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
+        ξx = J.Js[k, 1, 1]; ξy = J.Js[k, 1, 2]; ηx = J.Js[k, 2, 1]; ηy = J.Js[k, 2, 2]
+        K′ = J.dets[k]*((ηx*ξy - ηy*ξx)*s.K[2, 1, :, :] - (ηx*ξy - ηy*ξx)*s.K[1, 2, :, :])
+
+        # transformation from reference triangle
+        T(ξ) = transform_from_ref_el(ξ, g.p[g.t[k, 1:3], :])
+
+        # J(f/H, Ψ) term
+        function func(ξ, i, j)
+            x, y = T(ξ)
+            f = 1 + β*y
+            ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
+            ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
+            return J.dets[k]*((H(x, y)*β - f*Hy(x, y)) * ∂xφ_j + f*Hx(x, y) * ∂yφ_j)*φ(g.sf, i, ξ)/H(x, y)^2
+        end
+        C = [nuPGCM.ref_el_quad(ξ -> func(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
         # interior terms
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∉ bdy 
                 push!(A, (g.t[k, i], g.t[k, j], r_sym*K[i, j]))
                 push!(A, (g.t[k, i], g.t[k, j], r_asym*K′[i, j]))
+                push!(A, (g.t[k, i], g.t[k, j], C[i, j]))
             end
         end
 
         # rhs
-        rhs[g.t[k, :]] += J.dets[k]*s.M*ones(g.nn)
+        rhs[g.t[k, :]] += J.dets[k]*s.M*curl.(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2])
     end
 
     # boundary nodes 
@@ -59,12 +77,13 @@ function solve_barotropic(g, r_sym, r_asym)
 end
 
 function main(; order)
-    g = FEGrid("meshes/circle/mesh3.h5", order)
+    g = FEGrid("meshes/circle/mesh2.h5", order)
     r_sym = -0.1
-    r_asym = +3.0
-    Ψ = solve_barotropic(g, r_sym, r_asym)
+    r_asym = 3.0
+    β = 1.0
+    Ψ = solve_barotropic(g, r_sym, r_asym, β)
 
-    fig, ax, im = tplot(Ψ)
+    fig, ax, im = tplot(Ψ, contour=true)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
@@ -73,5 +92,14 @@ function main(; order)
     println("scratch/images/psi.png")
     plt.close()
 end
+
+# H(x, y) = 1 - x^2 - y^2
+# Hx(x, y) = -2*x
+# Hy(x, y) = -2*y
+H(x, y) = 1
+Hx(x, y) = 0
+Hy(x, y) = 0
+curl(x, y) = sin(π*y)/H(x, y) + cos(π*y)/H(x, y)^2*Hy(x, y)
+# curl(x, y) = sin(π*y)
 
 main(order=2)
