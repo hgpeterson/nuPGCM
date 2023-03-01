@@ -150,7 +150,95 @@ with bc
     • ωˣ = 0, ωʸ = 0 at z = 0
     • ∫ zωˣ dz = Uʸ, ∫ zωʸ dz = -Uˣ
 """
-function solve_baroclinic_fd(z, bx, by, ε², Ux, Uy)
+function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
+    nz = size(z, 1)
+    p = reshape(z, (nz, 1))
+    t = [i + j - 1 for i=1:nz-1, j=1:2]
+    e = Dict("bot"=>[nz], "sfc"=>[1])
+    g = FEGrid(1, p, t, e)
+
+    # indices
+    ωxmap = 1:g.np
+    ωymap = (g.np+1):2*g.np
+    N = 2*g.np
+
+    # unpack
+    J = g.J
+    s = g.sfi
+    sfc = g.e["sfc"][1]
+    bot = g.e["bot"][1]
+
+    # stamp system
+    A = Tuple{Int64,Int64,Float64}[]
+    r = zeros(N)
+    for k=1:g.nt
+        # stiffness and mass matrices
+        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
+        M = J.dets[k]*s.M
+
+        # RHS
+        r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
+        r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
+
+        for i=1:g.nn, j=1:g.nn
+            if g.t[k, i] ∈ [bot, sfc]
+                continue
+            end
+
+            # indices
+            ωxi = ωxmap[g.t[k, :]]
+            ωyi = ωymap[g.t[k, :]]
+
+            # -ε²∂zz(ωx)
+            push!(A, (ωxi[i], ωxi[j], ε²*K[i, j]))
+            # -ωy
+            push!(A, (ωxi[i], ωyi[j], -M[i, j]))
+
+            # -ε²∂zz(ωy)
+            push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
+            # +ωx
+            push!(A, (ωyi[i], ωxi[j], M[i, j]))
+        end
+    end
+
+    # ωˣ(0) = ωʸ(0) = 0 at z = 0
+    push!(A, (ωxmap[sfc], ωxmap[sfc], 1))
+    push!(A, (ωymap[sfc], ωymap[sfc], 1))
+
+    # ∫ zωˣ dz = Uy, ∫ zωʸ dz = -Ux
+    w, ξ = quad_weights_points(deg=g.order+1, dim=1)
+    for k=1:g.nt, i=1:g.nn
+        f(ξ) = transform_from_ref_el(ξ, g.p[g.t[k, 1:2], :])*φ(g.sf, i, ξ)*J.dets[k]
+        ∫f = nuPGCM.ref_el_quad(f, w, ξ)
+        push!(A, (ωxmap[bot], ωxmap[g.t[k, i]], ∫f))
+        push!(A, (ωymap[bot], ωymap[g.t[k, i]], ∫f))
+    end
+    r[ωxmap[bot]] = Uy
+    r[ωymap[bot]] = -Ux
+
+    # make CSC matrix
+    A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
+
+    # solve
+    sol = A\r
+    return sol
+
+    # # reshape 
+    # ωx = FEField(sol[ωxmap], g)
+    # ωy = FEField(sol[ωymap], g)
+    # return ωx, ωy
+end
+
+"""
+Solve
+    -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
+    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
+with bc
+    • ωˣ = 0, ωʸ = 0 at z = 0
+    • ∫ zωˣ dz = Uʸ, ∫ zωʸ dz = -Uˣ
+"""
+function solve_baroclinic_1dfd(z, bx, by, ε², Ux, Uy)
     # indices
     nz = size(z, 1)
     ωxmap = 1:nz
@@ -225,7 +313,7 @@ function plot_1D(col, sol, H, bx, by, Ux, Uy)
     x = 1/size(col.e["sfc"],1)*sum(col.p[col.e["sfc"][:], 1])
     y = 1/size(col.e["sfc"],1)*sum(col.p[col.e["sfc"][:], 2])
     z = -H(x, y):H(x, y)/2^10:0
-    ωx_fd, ωy_fd = solve_baroclinic_fd(z, bx.(x, y, z), by.(x, y, z), ε², Ux(x, y), Uy(x, y))
+    ωx_fd, ωy_fd = solve_baroclinic_1dfd(z, bx.(x, y, z), by.(x, y, z), ε², Ux(x, y), Uy(x, y))
     χx_fd = -cumtrapz(cumtrapz(ωx_fd, z), z)
     χy_fd = -cumtrapz(cumtrapz(ωy_fd, z), z)
     ωx_f(z) = evaluate(ωx, [x, y, z])
@@ -271,8 +359,8 @@ function plot_3D()
     # global solutions
     ωx = zeros(np)
     ωy = zeros(np)
-    χx = zeros(np)
-    χy = zeros(np)
+    # χx = zeros(np)
+    # χy = zeros(np)
 
     # current indices
     i_p = 0
@@ -294,10 +382,12 @@ function plot_3D()
         bot[i_bot+1:i_bot+nbot_col] = i_p .+ col.e["bot"]
 
         # unpack solutions
-        ωx[i_p+1:i_p+col.np] = sols[i][0*col.np+1:1*col.np]
-        ωy[i_p+1:i_p+col.np] = sols[i][1*col.np+1:2*col.np]
-        χx[i_p+1:i_p+col.np] = sols[i][2*col.np+1:3*col.np]
-        χy[i_p+1:i_p+col.np] = sols[i][3*col.np+1:4*col.np]
+        # ωx[i_p+1:i_p+col.np] = sols[i][0*col.np+1:1*col.np]
+        # ωy[i_p+1:i_p+col.np] = sols[i][1*col.np+1:2*col.np]
+        # χx[i_p+1:i_p+col.np] = sols[i][2*col.np+1:3*col.np]
+        # χy[i_p+1:i_p+col.np] = sols[i][3*col.np+1:4*col.np]
+        ωx[i_p+1:i_p+col.np] = [sols[i, 1][1:nzs[i, 1]]; sols[i, 2][1:nzs[i, 2]]; sols[i, 3][1:nzs[i, 3]]]
+        ωy[i_p+1:i_p+col.np] = [sols[i, 1][nzs[i, 1]+1:end]; sols[i, 2][nzs[i, 2]+1:end]; sols[i, 3][nzs[i, 3]+1:end]]
 
         # increment
         i_p += col.np
@@ -325,8 +415,8 @@ function plot_3D()
     vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
-        vtk["χx"] = χx
-        vtk["χy"] = χy
+        # vtk["χx"] = χx
+        # vtk["χy"] = χy
         # vtk["ωx_a"] = ωx_a.(p[:, 1], p[:, 2], p[:, 3])
         # vtk["ωy_a"] = ωy_a.(p[:, 1], p[:, 2], p[:, 3])
         # vtk["χx_a"] = χx_a.(p[:, 1], p[:, 2], p[:, 3])

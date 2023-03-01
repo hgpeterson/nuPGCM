@@ -34,6 +34,9 @@ function gen_mesh(ifile; order)
     #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
     tri_to_p = [Int64[] for k=1:nt_sfc, i=1:3] # allocate
 
+    # stacks
+    stacks = Matrix{Vector{Float64}}(undef, nt_sfc, 3)
+
     # add points to p, e, and tri_to_p
     nzs = Int64[i ∈ e_sfc ? 1 : ceil(H(x[i], y[i])/h) for i=1:np_sfc]
     p = zeros(sum(nzs), 3)
@@ -50,6 +53,9 @@ function gen_mesh(ifile; order)
 
         # add to p
         p[np+1:np+nz, :] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
+        for I ∈ p_to_tri[i]
+            stacks[I] = collect(z)
+        end
 
         # add to e
         e["sfc"] = [e["sfc"]; np + 1]
@@ -123,7 +129,7 @@ function gen_mesh(ifile; order)
 
     g = FEGrid(order, p, t, e)
 
-    return cols, g
+    return cols, g, stacks
 end
 
 # params
@@ -147,13 +153,16 @@ by(x, y, z) = 0
 # by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
 # grid
-cols, g = gen_mesh("meshes/circle/mesh1.h5", order=2)
+cols, g, stacks = gen_mesh("meshes/circle/mesh2.h5", order=1)
+nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 println("ncols = ", size(cols, 1))
 
 # b, Ux, Uy in each column
 b_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ cols]
 Ux_cols = [Ux.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
 Uy_cols = [Uy.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
+Ux_stacks = [Ux.(cols[k].p[cols[k].e["sfc"][i], 1], cols[k].p[cols[k].e["sfc"][i], 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+Uy_stacks = [Uy.(cols[k].p[cols[k].e["sfc"][i], 1], cols[k].p[cols[k].e["sfc"][i], 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 
 # # constructed solution and forcing
 # ωx_a(x, y, z) = x*z*exp(x*y*z)
@@ -166,14 +175,7 @@ Uy_cols = [Uy.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
 # f4(x, y, z) = y*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(x)*sin(y)
 
 # solve
-sols = []
-@showprogress "Solving..." for i ∈ eachindex(cols)
-    push!(sols, solve_baroclinic(cols[i], b_cols[i], Ux_cols[i], Uy_cols[i], ε²))
-end
-
-i_col = argmax([col.nt for col ∈ cols])
-# i_col = argmin([col.nt for col ∈ cols])
-plot_1D(cols[i_col], sols[i_col], H)
+sols = [nzs[k, i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(stacks[k, i], zeros(nzs[k, i]), zeros(nzs[k, i]), Ux_stacks[k, i], Uy_stacks[k, i], ε²) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 
 plot_3D()
 
