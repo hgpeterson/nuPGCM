@@ -109,5 +109,5 @@ function transform_to_ref_el(x, p)
     end
 
     # A*ξ = x - b
-    return A\(x - b)
+    return A\(x .- b)
 end

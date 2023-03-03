@@ -151,27 +151,51 @@ function get_k(x, g)
 end
 
 """
-    u(x) = evaluate(u, x)
+    u(x)
 
 Evaluate FEField `u` at point `x` on the grid.
 """
-function evaluate(u::FEField, x)
+function (u::FEField)(x)
     try
         # find element x is in
         k = get_k(x, u.g)
 
         # evaluate there
-        return evaluate(u, x, k)
+        return u(x, k)
     catch
         # if element not found, return NaN
         # println("p₀=$x outside mesh domain.")
         return NaN
     end
 end
-function evaluate(u::FEField, x, k)
+function (u::FEField)(x, k)
     # transform to reference element
     ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum([u.values[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn])
+    return sum(u.values[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
+end
+
+"""
+    ∂(u, x, j)
+
+Evaluate the `j`th partial derivative of `u` at `x`.
+"""
+function ∂(u::FEField, x, j)
+    # try
+        # find element x is in
+        k = get_k(x, u.g)
+
+        # evaluate there
+        return ∂(u, x, k, j)
+    # catch
+    #     return NaN
+    # end
+end
+function ∂(u::FEField, x, k, j)
+    # transform to reference element
+    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+
+    # sum weighted combinations of element k's basis functions at x
+    return sum(u.values[u.g.t[k, i]]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
 end

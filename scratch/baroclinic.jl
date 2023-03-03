@@ -178,8 +178,8 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
         M = J.dets[k]*s.M
 
         # RHS
-        r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
-        r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
+        r[ωxmap[g.t[k, :]]] += by[k]*M*ones(g.nn)
+        r[ωymap[g.t[k, :]]] -= bx[k]*M*ones(g.nn)
 
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∈ [bot, sfc]
@@ -238,7 +238,7 @@ with bc
     • ωˣ = 0, ωʸ = 0 at z = 0
     • ∫ zωˣ dz = Uʸ, ∫ zωʸ dz = -Uˣ
 """
-function solve_baroclinic_1dfd(z, bx, by, ε², Ux, Uy)
+function solve_baroclinic_1dfd(z, bx, by, Ux, Uy, ε²)
     # indices
     nz = size(z, 1)
     ωxmap = 1:nz
@@ -313,7 +313,7 @@ function plot_1D(col, sol, H, bx, by, Ux, Uy)
     x = 1/size(col.e["sfc"],1)*sum(col.p[col.e["sfc"][:], 1])
     y = 1/size(col.e["sfc"],1)*sum(col.p[col.e["sfc"][:], 2])
     z = -H(x, y):H(x, y)/2^10:0
-    ωx_fd, ωy_fd = solve_baroclinic_1dfd(z, bx.(x, y, z), by.(x, y, z), ε², Ux(x, y), Uy(x, y))
+    ωx_fd, ωy_fd = solve_baroclinic_1dfd(z, bx.(x, y, z), by.(x, y, z), Ux(x, y), Uy(x, y), ε²) 
     χx_fd = -cumtrapz(cumtrapz(ωx_fd, z), z)
     χy_fd = -cumtrapz(cumtrapz(ωy_fd, z), z)
     ωx_f(z) = evaluate(ωx, [x, y, z])

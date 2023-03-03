@@ -37,7 +37,7 @@ export
     L2norm,
     transform_from_ref_el,
     transform_to_ref_el,
-    evaluate,
+    ∂,
 
     # saving models
     save_setup,
