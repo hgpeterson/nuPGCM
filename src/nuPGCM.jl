@@ -28,6 +28,9 @@ export
     ShapeFunctionIntegrals,
     φ,
     ∂φ,
+    ∂φ∂ξ,
+    ∂φ∂η,
+    ∂φ∂ζ,
     FEGrid,
     all_edges,
     all_faces,
@@ -38,6 +41,9 @@ export
     transform_from_ref_el,
     transform_to_ref_el,
     ∂,
+    ∂x,
+    ∂y,
+    ∂z,
 
     # saving models
     save_setup,

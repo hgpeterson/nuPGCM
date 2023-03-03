@@ -35,7 +35,7 @@ function gen_mesh(ifile; order)
     tri_to_p = [Int64[] for k=1:nt_sfc, i=1:3] # allocate
 
     # stacks
-    stacks = Matrix{Vector{Float64}}(undef, nt_sfc, 3)
+    stacks = Matrix{Matrix{Float64}}(undef, nt_sfc, 3)
 
     # add points to p, e, and tri_to_p
     nzs = Int64[i ∈ e_sfc ? 1 : ceil(H(x[i], y[i])/h) for i=1:np_sfc]
@@ -54,7 +54,7 @@ function gen_mesh(ifile; order)
         # add to p
         p[np+1:np+nz, :] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
         for I ∈ p_to_tri[i]
-            stacks[I] = collect(z)
+            stacks[I] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
         end
 
         # add to e
@@ -153,16 +153,25 @@ by(x, y, z) = 0
 # by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
 # grid
-cols, g, stacks = gen_mesh("meshes/circle/mesh2.h5", order=1)
+cols, g, stacks = gen_mesh("meshes/circle/mesh1.h5", order=1)
 nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 println("ncols = ", size(cols, 1))
 
-# b, Ux, Uy in each column
+# b, bx, by, Ux, Uy in each column
 b_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ cols]
-Ux_cols = [Ux.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
-Uy_cols = [Uy.(col.p[:, 1], col.p[:, 2]) for col ∈ cols]
-Ux_stacks = [Ux.(cols[k].p[cols[k].e["sfc"][i], 1], cols[k].p[cols[k].e["sfc"][i], 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
-Uy_stacks = [Uy.(cols[k].p[cols[k].e["sfc"][i], 1], cols[k].p[cols[k].e["sfc"][i], 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+Ux_stacks = [Ux.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+Uy_stacks = [Uy.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+bx_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
+by_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
+for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)
+    b_col = FEField(b_cols[k], cols[k])
+    println(stacks[k, i][1, 1])
+    println(stacks[k, i][1, 2])
+    println(stacks[k, i][1, 3])
+    println(stacks[k, i][end, 3])
+    bx_stacks[k, i] = [∂x(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
+    by_stacks[k, i] = [∂y(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
+end
 
 # # constructed solution and forcing
 # ωx_a(x, y, z) = x*z*exp(x*y*z)
@@ -175,7 +184,7 @@ Uy_stacks = [Uy.(cols[k].p[cols[k].e["sfc"][i], 1], cols[k].p[cols[k].e["sfc"][i
 # f4(x, y, z) = y*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(x)*sin(y)
 
 # solve
-sols = [nzs[k, i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(stacks[k, i], zeros(nzs[k, i]), zeros(nzs[k, i]), Ux_stacks[k, i], Uy_stacks[k, i], ε²) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+sols = [nzs[k, i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(stacks[k, i][:, 3], bx_stacks[k, i], by_stacks[k, i], Ux_stacks[k, i], Uy_stacks[k, i], ε²) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 
 plot_3D()
 

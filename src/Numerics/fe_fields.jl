@@ -163,8 +163,6 @@ function (u::FEField)(x)
         # evaluate there
         return u(x, k)
     catch
-        # if element not found, return NaN
-        # println("p₀=$x outside mesh domain.")
         return NaN
     end
 end
@@ -199,3 +197,8 @@ function ∂(u::FEField, x, k, j)
     # sum weighted combinations of element k's basis functions at x
     return sum(u.values[u.g.t[k, i]]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
 end
+
+# shortcuts
+∂x(u::FEField, x) = ∂(u, x, 1)
+∂y(u::FEField, x) = ∂(u, x, 2)
+∂z(u::FEField, x) = ∂(u, x, 3)

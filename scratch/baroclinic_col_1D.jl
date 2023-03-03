@@ -77,7 +77,7 @@ end
 ε² = 1
 
 # grid
-col, stacks = gen_col(0.1, order=1)
+col, stacks = gen_col(0.01, order=1)
 nzs = [size(s, 1) for s ∈ stacks]
 
 # buoyancy
@@ -90,8 +90,8 @@ b = FEField(exp.(z).*sin.(x).*cos.(y), col)
 bx = []
 by = []
 for i ∈ eachindex(stacks)
-    push!(bx, [∂(b, (stacks[i][k, :] + stacks[i][k+1, :])/2, 1) for k=1:nzs[i]-1])
-    push!(by, [∂(b, (stacks[i][k, :] + stacks[i][k+1, :])/2, 2) for k=1:nzs[i]-1])
+    push!(bx, [∂x(b, (stacks[i][k, :] + stacks[i][k+1, :])/2) for k=1:nzs[i]-1])
+    push!(by, [∂y(b, (stacks[i][k, :] + stacks[i][k+1, :])/2) for k=1:nzs[i]-1])
 end
 
 # transports

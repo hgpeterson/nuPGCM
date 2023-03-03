@@ -175,6 +175,11 @@ function ∂φ(sf::ShapeFunctions, i, j, ξ)
     return eval_poly(sf.∂C[j, :, i], ξ, sf.order, sf.dim)
 end
 
+# shortcuts
+∂φ∂ξ(sf::ShapeFunctions, i, ξ) = ∂φ(sf, i, 1, ξ)
+∂φ∂η(sf::ShapeFunctions, i, ξ) = ∂φ(sf, i, 2, ξ)
+∂φ∂ζ(sf::ShapeFunctions, i, ξ) = ∂φ(sf, i, 3, ξ)
+
 """
     f = eval_poly(c, ξ, n, d)
 
