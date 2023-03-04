@@ -205,6 +205,8 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
     # ωˣ(0) = ωʸ(0) = 0 at z = 0
     push!(A, (ωxmap[sfc], ωxmap[sfc], 1))
     push!(A, (ωymap[sfc], ωymap[sfc], 1))
+    r[ωxmap[sfc]] = 0
+    r[ωymap[sfc]] = 0
 
     # ∫ zωˣ dz = Uy, ∫ zωʸ dz = -Ux
     w, ξ = quad_weights_points(deg=g.order+1, dim=1)

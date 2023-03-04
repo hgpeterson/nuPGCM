@@ -202,3 +202,6 @@ end
 ∂x(u::FEField, x) = ∂(u, x, 1)
 ∂y(u::FEField, x) = ∂(u, x, 2)
 ∂z(u::FEField, x) = ∂(u, x, 3)
+∂x(u::FEField, x, k) = ∂(u, x, k, 1)
+∂y(u::FEField, x, k) = ∂(u, x, k, 2)
+∂z(u::FEField, x, k) = ∂(u, x, k, 3)

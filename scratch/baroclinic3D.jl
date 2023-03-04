@@ -137,25 +137,28 @@ end
 H(x, y) = 1 - x^2 - y^2
 Hx(x, y) = -2*x
 Hy(x, y) = -2*y
-# Ux(x, y) = 0
+Ux(x, y) = 0
 Uy(x, y) = 0
-Ux(x, y) = H(x, y)^2
+# Ux(x, y) = H(x, y)^2
 # Uy(x, y) = H(x, y)^2
-b(x, y, z) = 0
-bx(x, y, z) = 0
-by(x, y, z) = 0
+# b(x, y, z) = 0
+# bx(x, y, z) = 0
+# by(x, y, z) = 0
 # b(x, y, z) = x
 # bx(x, y, z) = 1
 # by(x, y, z) = 0
-# δ = 0.1
-# b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-# bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-# by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
+# b(x, y, z) = x^3 + y^3
+# bx(x, y, z) = 3x^2
+# by(x, y, z) = 3y^2
+δ = 0.1
+b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
+by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
-# grid
-cols, g, stacks = gen_mesh("meshes/circle/mesh1.h5", order=1)
-nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
-println("ncols = ", size(cols, 1))
+# # grid
+# cols, g, stacks = gen_mesh("meshes/circle/mesh3.h5", order=1)
+# nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+# println("ncols = ", size(cols, 1))
 
 # b, bx, by, Ux, Uy in each column
 b_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ cols]
@@ -165,12 +168,20 @@ bx_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
 by_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
 for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)
     b_col = FEField(b_cols[k], cols[k])
-    println(stacks[k, i][1, 1])
-    println(stacks[k, i][1, 2])
-    println(stacks[k, i][1, 3])
-    println(stacks[k, i][end, 3])
-    bx_stacks[k, i] = [∂x(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
-    by_stacks[k, i] = [∂y(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
+    # bx_stacks[k, i] = [∂x(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
+    # by_stacks[k, i] = [∂y(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
+    bx_stacks[k, i] = zeros(nzs[k, i]-1)
+    by_stacks[k, i] = zeros(nzs[k, i]-1)
+    for j=1:nzs[k, i]-1
+        n = i == 1 ? 0 : sum(nzs[k, i_stack] for i_stack=1:i-1)
+        k_tet = findfirst(k_tet -> n+j ∈ cols[k].t[k_tet, :] && n+j+1 ∈ cols[k].t[k_tet, :], 1:cols[k].nt)
+        if k_tet !== nothing
+            bx_stacks[k, i][j] = ∂x(b_col, [0, 0, 0], k_tet)
+            by_stacks[k, i][j] = ∂y(b_col, [0, 0, 0], k_tet)
+        else
+            println(":(")
+        end
+    end
 end
 
 # # constructed solution and forcing
