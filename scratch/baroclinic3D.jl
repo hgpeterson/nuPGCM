@@ -137,8 +137,8 @@ end
 H(x, y) = 1 - x^2 - y^2
 Hx(x, y) = -2*x
 Hy(x, y) = -2*y
-Ux(x, y) = 0
-Uy(x, y) = 0
+# Ux(x, y) = 0
+# Uy(x, y) = 0
 # Ux(x, y) = H(x, y)^2
 # Uy(x, y) = H(x, y)^2
 # b(x, y, z) = 0
@@ -150,52 +150,47 @@ Uy(x, y) = 0
 # b(x, y, z) = x^3 + y^3
 # bx(x, y, z) = 3x^2
 # by(x, y, z) = 3y^2
-δ = 0.1
-b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
+# δ = 0.1
+# b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+# bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
+# by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
-# # grid
-# cols, g, stacks = gen_mesh("meshes/circle/mesh3.h5", order=1)
-# nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
-# println("ncols = ", size(cols, 1))
+# analytical solution
+ωx_a(x, y, z) = z*exp(z)*cos(x)*sin(y)
+ωy_a(x, y, z) = z*exp(z)*cos(y)*sin(x)
+Ux(x, y) = -(2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(y)*sin(x)
+Uy(x, y) =  (2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(x)*sin(y)
+τx(x, y) = ωy_a(x, y, 0)
+τy(x, y) = -ωx_a(x, y, 0)
+b(x, y, z) = -exp(z)*(z*sin(x)*sin(y) - ε²*(z + 2)*cos(x)*cos(y))
+
+grid
+cols, g, stacks = gen_mesh("meshes/circle/mesh1.h5", order=1)
+nzs = [size(stacks[k, i], 1) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+println("ncols = ", size(cols, 1))
 
 # b, bx, by, Ux, Uy in each column
 b_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ cols]
 Ux_stacks = [Ux.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 Uy_stacks = [Uy.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+τx_stacks = [τx.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+τy_stacks = [τy.(stacks[k, i][1, 1], stacks[k, i][1, 2]) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 bx_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
 by_stacks = Matrix{Vector{Float64}}(undef, size(stacks, 1), size(stacks, 2))
 for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)
     b_col = FEField(b_cols[k], cols[k])
-    # bx_stacks[k, i] = [∂x(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
-    # by_stacks[k, i] = [∂y(b_col, (stacks[k, i][j, :] + stacks[k, i][j+1, :])/2) for j=1:nzs[k, i]-1]
     bx_stacks[k, i] = zeros(nzs[k, i]-1)
     by_stacks[k, i] = zeros(nzs[k, i]-1)
     for j=1:nzs[k, i]-1
         n = i == 1 ? 0 : sum(nzs[k, i_stack] for i_stack=1:i-1)
         k_tet = findfirst(k_tet -> n+j ∈ cols[k].t[k_tet, :] && n+j+1 ∈ cols[k].t[k_tet, :], 1:cols[k].nt)
-        if k_tet !== nothing
-            bx_stacks[k, i][j] = ∂x(b_col, [0, 0, 0], k_tet)
-            by_stacks[k, i][j] = ∂y(b_col, [0, 0, 0], k_tet)
-        else
-            println(":(")
-        end
+        bx_stacks[k, i][j] = ∂x(b_col, [0, 0, 0], k_tet)
+        by_stacks[k, i][j] = ∂y(b_col, [0, 0, 0], k_tet)
     end
 end
 
-# # constructed solution and forcing
-# ωx_a(x, y, z) = x*z*exp(x*y*z)
-# ωy_a(x, y, z) = y*z*exp(x*y*z)
-# χx_a(x, y, z) = -(1 - H(x, y) + exp(z)*(-1 + H(x, y) + z))*cos(y)*sin(x)
-# χy_a(x, y, z) = -(1 - H(x, y) + exp(z)*(-1 + H(x, y) + z))*cos(x)*sin(y)
-# f1(x, y, z) = -y*exp(x*y*z)*(z + 2*x^2*ε² + x^3*y*z*ε²)
-# f2(x, y, z) = -x*exp(x*y*z)*(2*y^2*ε² + z*(-1 + x*y^3*ε²))
-# f3(x, y, z) = x*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(y)*sin(x)
-# f4(x, y, z) = y*z*exp(x*y*z) - exp(z)*(1 + H(x, y) + z)*cos(x)*sin(y)
-
 # solve
-sols = [nzs[k, i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(stacks[k, i][:, 3], bx_stacks[k, i], by_stacks[k, i], Ux_stacks[k, i], Uy_stacks[k, i], ε²) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
+sols = [nzs[k, i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(stacks[k, i][:, 3], bx_stacks[k, i], by_stacks[k, i], Ux_stacks[k, i], Uy_stacks[k, i], τx_stacks[k, i], τy_stacks[k, i], ε²) for k ∈ axes(stacks, 1), i ∈ axes(stacks, 2)]
 
 plot_3D()
 

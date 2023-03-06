@@ -80,7 +80,7 @@ end
 Determine if point `x` is in line segment with nodes `p`.
 """
 function pt_in_line(x, p)
-    return p[1] ≤ x ≤ p[2]
+    return minimum(p) ≤ x ≤ maximum(p)
 end
 
 """

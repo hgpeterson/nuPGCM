@@ -147,10 +147,10 @@ Solve
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
     -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
 with bc
-    • ωˣ = 0, ωʸ = 0 at z = 0
+    • ωˣ = -τʸ, ωʸ = τˣ at z = 0
     • ∫ zωˣ dz = Uʸ, ∫ zωʸ dz = -Uˣ
 """
-function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
+function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
@@ -180,6 +180,7 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
         # RHS
         r[ωxmap[g.t[k, :]]] += by[k]*M*ones(g.nn)
         r[ωymap[g.t[k, :]]] -= bx[k]*M*ones(g.nn)
+        # r[ωymap[g.t[k, :]]] += bx[k]*M*ones(g.nn)
 
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∈ [bot, sfc]
@@ -199,14 +200,15 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, ε²)
             push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
             # +ωx
             push!(A, (ωyi[i], ωxi[j], M[i, j]))
+            # push!(A, (ωyi[i], ωxi[j], -M[i, j]))
         end
     end
 
-    # ωˣ(0) = ωʸ(0) = 0 at z = 0
+    # ωˣ = -τʸ, ωʸ = τˣ at z = 0
     push!(A, (ωxmap[sfc], ωxmap[sfc], 1))
     push!(A, (ωymap[sfc], ωymap[sfc], 1))
-    r[ωxmap[sfc]] = 0
-    r[ωymap[sfc]] = 0
+    r[ωxmap[sfc]] = -τy
+    r[ωymap[sfc]] = τx
 
     # ∫ zωˣ dz = Uy, ∫ zωʸ dz = -Ux
     w, ξ = quad_weights_points(deg=g.order+1, dim=1)
@@ -398,12 +400,12 @@ function plot_3D()
         i_bot += nbot_col
     end
 
-    # err_ωx = abs.(ωx - ωx_a.(p[:, 1], p[:, 2], p[:, 3]))
-    # err_ωy = abs.(ωy - ωy_a.(p[:, 1], p[:, 2], p[:, 3]))
+    err_ωx = abs.(ωx - ωx_a.(p[:, 1], p[:, 2], p[:, 3]))
+    err_ωy = abs.(ωy - ωy_a.(p[:, 1], p[:, 2], p[:, 3]))
     # err_χx = abs.(χx - χx_a.(p[:, 1], p[:, 2], p[:, 3]))
     # err_χy = abs.(χy - χy_a.(p[:, 1], p[:, 2], p[:, 3]))
-    # println(@sprintf("Error ωx: %1.1e", maximum(err_ωx)))
-    # println(@sprintf("Error ωy: %1.1e", maximum(err_ωy)))
+    println(@sprintf("Error ωx: %1.1e", maximum(err_ωx)))
+    println(@sprintf("Error ωy: %1.1e", maximum(err_ωy)))
     # println(@sprintf("Error χx: %1.1e", maximum(err_χx)))
     # println(@sprintf("Error χy: %1.1e", maximum(err_χy)))
 
