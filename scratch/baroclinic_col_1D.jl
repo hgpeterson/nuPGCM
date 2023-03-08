@@ -88,7 +88,8 @@ function main()
     x = col.p[:, 1]
     y = col.p[:, 2]
     z = col.p[:, 3]
-    b = FEField(exp.(z).*sin.(x).*cos.(y), col)
+    # b = FEField(exp.(z).*sin.(x).*cos.(y), col)
+    b = FEField(sin.(x).*cos.(y), col)
 
     # buoyancy gradients
     # bx = []
@@ -101,20 +102,20 @@ function main()
     by = Vector{Vector{Float64}}(undef, size(stacks, 1))
     n = 0
     for i ∈ axes(stacks, 1)
-        # bx[i] = zeros(nzs[i]-1)
-        # by[i] = zeros(nzs[i]-1)
-        # for j=1:nzs[i]-1
-        #     k_tet = findfirst(k_tet -> n+j ∈ col.t[k_tet, :] && n+j+1 ∈ col.t[k_tet, :], 1:col.nt)
-        #     bx[i][j] = ∂x(b, [0, 0, 0], k_tet)
-        #     by[i][j] = ∂y(b, [0, 0, 0], k_tet)
-        # end
-        # n += nzs[i]
+        bx[i] = zeros(nzs[i]-1)
+        by[i] = zeros(nzs[i]-1)
+        for j=1:nzs[i]-1
+            k_tet = findfirst(k_tet -> n+j ∈ col.t[k_tet, :] && n+j+1 ∈ col.t[k_tet, :], 1:col.nt)
+            bx[i][j] = ∂x(b, [0, 0, 0], k_tet)
+            by[i][j] = ∂y(b, [0, 0, 0], k_tet)
+        end
+        n += nzs[i]
 
-        x = stacks[i][1, 1]
-        y = stacks[i][1, 2]
-        z_half = (stacks[i][1:end-1, 3] + stacks[i][2:end, 3])/2
-        bx[i] = @.  exp(z_half)*cos(x)*cos(y)
-        by[i] = @. -exp(z_half)*sin(x)*sin(y)
+        # x = stacks[i][1, 1]
+        # y = stacks[i][1, 2]
+        # z_half = (stacks[i][1:end-1, 3] + stacks[i][2:end, 3])/2
+        # bx[i] = @.  exp(z_half)*cos(x)*cos(y)
+        # by[i] = @. -exp(z_half)*sin(x)*sin(y)
     end
 
     # transports
@@ -155,8 +156,10 @@ function main()
         x = stacks[i][1, 1]
         y = stacks[i][1, 2]
         z = range(stacks[i][end, 3], stacks[i][1, 3], length=2^10)
-        bx_a = @. exp(z)*cos(x)*cos(y)
-        by_a = @. -exp(z)*sin(x)*sin(y)
+        # bx_a = @. exp(z)*cos(x)*cos(y)
+        # by_a = @. -exp(z)*sin(x)*sin(y)
+        bx_a = @. cos(x)*cos(y) + 0*z
+        by_a = @. -sin(x)*sin(y) + 0*z
         ωx_fd, ωy_fd = solve_baroclinic_1dfd(z, bx_a, by_a, Ux, Uy, ε²)
 
         # plot b grads
