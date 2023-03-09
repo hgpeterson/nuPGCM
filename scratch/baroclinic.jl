@@ -178,9 +178,8 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
         M = J.dets[k]*s.M
 
         # RHS
-        r[ωxmap[g.t[k, :]]] += by[k]*M*ones(g.nn)
-        r[ωymap[g.t[k, :]]] -= bx[k]*M*ones(g.nn)
-        # r[ωymap[g.t[k, :]]] += bx[k]*M*ones(g.nn)
+        r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
+        r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
 
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∈ [bot, sfc]
@@ -200,7 +199,6 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
             push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
             # +ωx
             push!(A, (ωyi[i], ωxi[j], M[i, j]))
-            # push!(A, (ωyi[i], ωxi[j], -M[i, j]))
         end
     end
 
@@ -227,11 +225,6 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
     # solve
     sol = A\r
     return sol
-
-    # # reshape 
-    # ωx = FEField(sol[ωxmap], g)
-    # ωy = FEField(sol[ωymap], g)
-    # return ωx, ωy
 end
 
 """
