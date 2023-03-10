@@ -180,6 +180,8 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
         # RHS
         r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
         r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
+        # r[ωxmap[g.t[k, :]]] += by[k]*M*[1, 1]
+        # r[ωymap[g.t[k, :]]] -= bx[k]*M*[1, 1]
 
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∈ [bot, sfc]
@@ -342,89 +344,31 @@ function plot_1D(col, sol, H, bx, by, Ux, Uy)
     plt.close()
 end
 
-function plot_3D()
-    # global p, t, e
-    np = sum(col.np for col ∈ cols)
-    nt = sum(col.nt for col ∈ cols)
-    nsfc = sum(size(col.e["sfc"], 1) for col ∈ cols) 
-    nbot = sum(size(col.e["bot"], 1) for col ∈ cols) 
-    p = zeros(Float64, (np, 3))
-    t = zeros(Int64, (nt, cols[1].nn))
-    sfc = zeros(Int64, (nsfc,))
-    bot = zeros(Int64, (nbot,))
-
-    # global solutions
-    ωx = zeros(np)
-    ωy = zeros(np)
-    # χx = zeros(np)
-    # χy = zeros(np)
-
-    # current indices
-    i_p = 0
-    i_t = 0
-    i_sfc = 0
-    i_bot = 0
-
-    # all the nodes within each column will have a unique tag
-    for i ∈ eachindex(cols)
-        # column
-        col = cols[i]
-        nsfc_col = size(col.e["sfc"], 1)
-        nbot_col = size(col.e["bot"], 1)
-
-        # add nodes, triangles, and edge nodes
-        p[i_p+1:i_p+col.np, :] = col.p
-        t[i_t+1:i_t+col.nt, :] = i_p .+ col.t
-        sfc[i_sfc+1:i_sfc+nsfc_col] = i_p .+ col.e["sfc"]
-        bot[i_bot+1:i_bot+nbot_col] = i_p .+ col.e["bot"]
-
-        # unpack solutions
-        # ωx[i_p+1:i_p+col.np] = sols[i][0*col.np+1:1*col.np]
-        # ωy[i_p+1:i_p+col.np] = sols[i][1*col.np+1:2*col.np]
-        # χx[i_p+1:i_p+col.np] = sols[i][2*col.np+1:3*col.np]
-        # χy[i_p+1:i_p+col.np] = sols[i][3*col.np+1:4*col.np]
-        ωx[i_p+1:i_p+col.np] = [sols[i, 1][1:nzs[i, 1]]; sols[i, 2][1:nzs[i, 2]]; sols[i, 3][1:nzs[i, 3]]]
-        ωy[i_p+1:i_p+col.np] = [sols[i, 1][nzs[i, 1]+1:end]; sols[i, 2][nzs[i, 2]+1:end]; sols[i, 3][nzs[i, 3]+1:end]]
-
-        # increment
-        i_p += col.np
-        i_t += col.nt
-        i_sfc += nsfc_col
-        i_bot += nbot_col
+function plot_3D(g, sols)
+    # unpack solutions
+    ωx = zeros(g.np)
+    ωy = zeros(g.np)
+    j = 0
+    for i ∈ eachindex(sols)
+        nz = Int64(size(sols[i], 1)/2)
+        ωx[j+1:j+nz] = sols[i][1:nz]
+        ωy[j+1:j+nz] = sols[i][nz+1:end]
+        j += nz
     end
-
-    err_ωx = abs.(ωx - ωx_a.(p[:, 1], p[:, 2], p[:, 3]))
-    err_ωy = abs.(ωy - ωy_a.(p[:, 1], p[:, 2], p[:, 3]))
-    # err_χx = abs.(χx - χx_a.(p[:, 1], p[:, 2], p[:, 3]))
-    # err_χy = abs.(χy - χy_a.(p[:, 1], p[:, 2], p[:, 3]))
-    println(@sprintf("Error ωx: %1.1e", maximum(err_ωx)))
-    println(@sprintf("Error ωy: %1.1e", maximum(err_ωy)))
-    # println(@sprintf("Error χx: %1.1e", maximum(err_χx)))
-    # println(@sprintf("Error χy: %1.1e", maximum(err_χy)))
 
     # save as .vtu
-    if cols[1].order == 1
-        cell_type = VTKCellTypes.VTK_TETRA
-    elseif cols[1].order == 2
-        cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-    end
-    cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
-    vtk_grid("output/pg_vort_DG_3D.vtu", p', cells) do vtk
+    cell_type = VTKCellTypes.VTK_TETRA
+    cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+    vtk_grid("output/pg_vort_DG_3D.vtu", g.p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
-        # vtk["χx"] = χx
-        # vtk["χy"] = χy
-        # vtk["ωx_a"] = ωx_a.(p[:, 1], p[:, 2], p[:, 3])
-        # vtk["ωy_a"] = ωy_a.(p[:, 1], p[:, 2], p[:, 3])
-        # vtk["χx_a"] = χx_a.(p[:, 1], p[:, 2], p[:, 3])
-        # vtk["χy_a"] = χy_a.(p[:, 1], p[:, 2], p[:, 3])
 
-        bdy = zeros(np)
-        bdy[sfc] .= 1
+        bdy = zeros(g.np)
+        bdy[g.e["sfc"]] .= 1
         vtk["sfc"] = bdy
 
-        bdy = zeros(np)
-        bdy[bot] .= 1
+        bdy = zeros(g.np)
+        bdy[g.e["bot"]] .= 1
         vtk["bot"] = bdy
     end
     println("output/pg_vort_DG_3D.vtu")
