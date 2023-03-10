@@ -79,7 +79,7 @@ function gen_mesh(ifile, H; order)
     # columnwise and global tessellation
     el_cols = Vector{FEGrid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
-    for k=1:g_sfc.nt
+    @showprogress "Generating columns..." for k=1:g_sfc.nt
         # number of points in vertical for each vertex of sfc tri
         lens = length.(tri_to_p[k, :])
 
@@ -104,9 +104,6 @@ function gen_mesh(ifile, H; order)
             ig = unique(vcat(top, bot))
             tl = delaunay(p[ig, :]).simplices
 
-            # add to t
-            t = [t; ig[tl]]
-
             # add to t_col
             i_col = Int64.(indexin(ig, nodes_col))
             t_col = [t_col; i_col[tl]]
@@ -114,6 +111,9 @@ function gen_mesh(ifile, H; order)
             # continue
             top = bot
         end
+
+        # add to t
+        t = [t; nodes_col[t_col]]
 
         # create e_col dictionary
         e_col = Dict("sfc"=>e_sfc_col, "bot"=>e_bot_col)
@@ -130,7 +130,7 @@ function gen_mesh(ifile, H; order)
     return g_sfc, g, el_cols, node_cols, p_to_tri
 end
 
-function main()
+function main(; nref, b_order)
     # params
     ε² = 1
 
@@ -138,60 +138,56 @@ function main()
     H(x, y) = 1 - x^2 - y^2
     Hx(x, y) = -2*x
     Hy(x, y) = -2*y
-    τx(x, y) = 0
-    τy(x, y) = 0
-    Ux(x, y) = 0
-    Uy(x, y) = 0
+    # τx(x, y) = 0
+    # τy(x, y) = 0
+    # Ux(x, y) = 0
+    # Uy(x, y) = 0
     # Ux(x, y) = H(x, y)^2
     # Uy(x, y) = H(x, y)^2
     # b(x, y, z) = 0
     # bx(x, y, z) = 0
     # by(x, y, z) = 0
-    # b(x, y, z) = x
-    # bx(x, y, z) = 1
-    # by(x, y, z) = 0
-    # b(x, y, z) = x^3 + y^3
-    # bx(x, y, z) = 3x^2
-    # by(x, y, z) = 3y^2
-    δ = 0.1
-    b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-    bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-    by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
+    # δ = 0.1
+    # b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+    # bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
+    # by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
-    # # analytical solution
-    # ωx_a(x, y, z) = z*exp(z)*cos(x)*sin(y)
-    # ωy_a(x, y, z) = z*exp(z)*cos(y)*sin(x)
-    # Ux(x, y) = -(2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(y)*sin(x)
-    # Uy(x, y) =  (2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(x)*sin(y)
-    # τx(x, y) = ωy_a(x, y, 0)
-    # τy(x, y) = -ωx_a(x, y, 0)
-    # b(x, y, z) = -exp(z)*(z*sin(x)*sin(y) - ε²*(z + 2)*cos(x)*cos(y))
+    # analytical solution (assumes no sign flips)
+    ωx_a(x, y, z) = z*exp(z)*cos(x)*sin(y)
+    ωy_a(x, y, z) = z*exp(z)*cos(y)*sin(x)
+    Ux(x, y) = -(2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(y)*sin(x)
+    Uy(x, y) =  (2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(x)*sin(y)
+    τx(x, y) = ωy_a(x, y, 0)
+    τy(x, y) = -ωx_a(x, y, 0)
+    b(x, y, z) = -exp(z)*(z*sin(x)*sin(y) - ε²*(z + 2)*cos(x)*cos(y))
 
     # grid
-    g_sfc, g, el_cols, node_cols, p_to_tri = gen_mesh("meshes/circle/mesh3.h5", H, order=1)
+    g_sfc, g, el_cols, node_cols, p_to_tri = gen_mesh("meshes/circle/mesh$nref.h5", H, order=1)
     println("nel_cols = ", size(el_cols, 1))
     nzs = [size(col, 1) for col ∈ node_cols]
-    # el_cols2 = [FEGrid(2, col) for col ∈ el_cols]
-    el_cols2 = []
-    @showprogress for col ∈ el_cols
-        push!(el_cols2, FEGrid(2, col))
+    if b_order == 1
+        b_cols = el_cols
+    elseif b_order == 2
+        sf2 = ShapeFunctions(order=2, dim=3)
+        sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+        b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
     end
-    # el_cols2 = [FEGrid(2, col) for col ∈ el_cols]
 
     # evaluate functions for each column
-    # b_el_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ el_cols]
-    b_el_cols = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ el_cols2]
-    Ux_node_cols = Ux.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    Uy_node_cols = Uy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    τx_node_cols = τx.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    τy_node_cols = τy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    # bx_node_cols = [zeros(nz-1) for nz ∈ nzs]
-    # by_node_cols = [zeros(nz-1) for nz ∈ nzs]
-    bx_node_cols = [zeros(2nz-2) for nz ∈ nzs]
-    by_node_cols = [zeros(2nz-2) for nz ∈ nzs]
+    b0 = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ b_cols]
+    Ux0 = Ux.(g_sfc.p[:, 1], g_sfc.p[:, 2])
+    Uy0 = Uy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
+    τx0 = τx.(g_sfc.p[:, 1], g_sfc.p[:, 2])
+    τy0 = τy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
+    if b_order == 1
+        bx0 = [zeros(nz-1) for nz ∈ nzs]
+        by0 = [zeros(nz-1) for nz ∈ nzs]
+    elseif b_order == 2
+        bx0 = [zeros(2nz-2) for nz ∈ nzs]
+        by0 = [zeros(2nz-2) for nz ∈ nzs]
+    end
     for k=1:g_sfc.nt
-        # b_col = FEField(b_el_cols[k], el_cols[k])
-        b_col = FEField(b_el_cols[k], el_cols2[k])
+        b_col = FEField(b0[k], b_cols[k])
         n = 0
         for i=1:3
             ig = g_sfc.t[k, i]
@@ -200,22 +196,58 @@ function main()
             weight = 1/size(p_to_tri[ig], 1)
             for j=1:nzs[ig]-1
                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
-                # bx_node_cols[ig][j] += weight*∂x(b_col, [0, 0, 0], k_tet)
-                # by_node_cols[ig][j] += weight*∂y(b_col, [0, 0, 0], k_tet)
-                bx_node_cols[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
-                bx_node_cols[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-                by_node_cols[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
-                by_node_cols[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                if b_order == 1
+                    bx0[ig][j] += weight*∂x(b_col, [0, 0, 0], k_tet)
+                    by0[ig][j] += weight*∂y(b_col, [0, 0, 0], k_tet)
+                elseif b_order == 2
+                    bx0[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
+                    bx0[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                    by0[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
+                    by0[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                end
             end
             n += nzs[ig]
         end
     end
 
     # solve
-    sols = [nzs[i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(node_cols[i], bx_node_cols[i], by_node_cols[i], Ux_node_cols[i], Uy_node_cols[i], τx_node_cols[i], τy_node_cols[i], ε²) for i ∈ eachindex(node_cols)]
-    plot_3D(g, sols)
+    sols = [nzs[i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], Ux0[i], Uy0[i], τx0[i], τy0[i], ε²) for i ∈ eachindex(node_cols)]
+
+    # unpack 
+    ωx = zeros(g.np)
+    ωy = zeros(g.np)
+    j = 0
+    for i ∈ eachindex(sols)
+        nz = nzs[i]
+        ωx[j+1:j+nz] = sols[i][1:nz]
+        ωy[j+1:j+nz] = sols[i][nz+1:end]
+        j += nz
+    end
+
+    # error
+    println(@sprintf("Max Error ωx: %1.1e", maximum(abs.(ωx - ωx_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])))))
+    println(@sprintf("Max Error ωy: %1.1e", maximum(abs.(ωy - ωy_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])))))
+
+    # plot
+    plot_3D(g, ωx, ωy, b)
 end
 
-main()
+main(nref=2, b_order=2)
+
+# convergence tests
+
+# linear b -> O(h)
+# nref  ωx      ωy
+# 0     3.4e-2  3.0e-2
+# 1     1.5e-2  1.3e-2
+# 2     3.8e-3  3.7e-3
+# 3     1.3e-3  1.2e-3
+
+# quadratic b -> same thing??
+# nref  ωx      ωy
+# 0     3.4e-2  3.0e-2
+# 1     1.5e-2  1.3e-2
+# 2     3.8e-3  3.7e-3
+# 3     1.3e-3  1.2e-3
 
 println("Done.")

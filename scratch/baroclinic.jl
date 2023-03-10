@@ -178,10 +178,17 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
         M = J.dets[k]*s.M
 
         # RHS
-        r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
-        r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
-        # r[ωxmap[g.t[k, :]]] += by[k]*M*[1, 1]
-        # r[ωymap[g.t[k, :]]] -= bx[k]*M*[1, 1]
+        if size(bx, 1) == g.nt
+            # b is linear
+            r[ωxmap[g.t[k, :]]] += by[k]*M*[1, 1]
+            # r[ωymap[g.t[k, :]]] -= bx[k]*M*[1, 1]
+            r[ωymap[g.t[k, :]]] += bx[k]*M*[1, 1]
+        elseif size(bx, 1) == 2g.nt
+            # b is quadratic
+            r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
+            # r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
+            r[ωymap[g.t[k, :]]] += M*[bx[2k-1], bx[2k]]
+        end
 
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∈ [bot, sfc]
@@ -200,7 +207,8 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
             # -ε²∂zz(ωy)
             push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
             # +ωx
-            push!(A, (ωyi[i], ωxi[j], M[i, j]))
+            # push!(A, (ωyi[i], ωxi[j], M[i, j]))
+            push!(A, (ωyi[i], ωxi[j], -M[i, j]))
         end
     end
 
@@ -344,24 +352,13 @@ function plot_1D(col, sol, H, bx, by, Ux, Uy)
     plt.close()
 end
 
-function plot_3D(g, sols)
-    # unpack solutions
-    ωx = zeros(g.np)
-    ωy = zeros(g.np)
-    j = 0
-    for i ∈ eachindex(sols)
-        nz = Int64(size(sols[i], 1)/2)
-        ωx[j+1:j+nz] = sols[i][1:nz]
-        ωy[j+1:j+nz] = sols[i][nz+1:end]
-        j += nz
-    end
-
-    # save as .vtu
+function plot_3D(g, ωx, ωy, b)
     cell_type = VTKCellTypes.VTK_TETRA
     cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
     vtk_grid("output/pg_vort_DG_3D.vtu", g.p', cells) do vtk
         vtk["ωx"] = ωx
         vtk["ωy"] = ωy
+        vtk["b"] = b.(g.p[:, 1], g.p[:, 2], g.p[:, 3])
 
         bdy = zeros(g.np)
         bdy[g.e["sfc"]] .= 1
