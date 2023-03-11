@@ -139,28 +139,19 @@ function main(; nref, b_order)
     H(x, y) = 1 - x^2 - y^2
     Hx(x, y) = -2*x
     Hy(x, y) = -2*y
-    # τx(x, y) = 0
-    # τy(x, y) = 0
-    # Ux(x, y) = 0
-    # Uy(x, y) = 0
+    τx(x, y) = 0
+    τy(x, y) = 0
+    Ux(x, y) = 0
+    Uy(x, y) = 0
     # Ux(x, y) = H(x, y)^2
     # Uy(x, y) = H(x, y)^2
     # b(x, y, z) = 0
     # bx(x, y, z) = 0
     # by(x, y, z) = 0
-    # δ = 0.1
-    # b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-    # bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-    # by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
-
-    # analytical solution (assumes no sign flips)
-    ωx_a(x, y, z) = z*exp(z)*cos(x)*sin(y)
-    ωy_a(x, y, z) = z*exp(z)*cos(y)*sin(x)
-    Ux(x, y) = -(2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(y)*sin(x)
-    Uy(x, y) =  (2 - exp(-H(x, y))*(2 + 2*H(x, y) + H(x, y)^2))*cos(x)*sin(y)
-    τx(x, y) = ωy_a(x, y, 0)
-    τy(x, y) = -ωx_a(x, y, 0)
-    b(x, y, z) = -exp(z)*(z*sin(x)*sin(y) - ε²*(z + 2)*cos(x)*cos(y))
+    δ = 0.1
+    b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+    bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
+    by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
 
     # grid
     g_sfc, g, el_cols, node_cols, p_to_tri = gen_mesh("meshes/circle/mesh$nref.h5", H, order=1)
@@ -187,18 +178,18 @@ function main(; nref, b_order)
         bx0 = [zeros(2nz-2) for nz ∈ nzs]
         by0 = [zeros(2nz-2) for nz ∈ nzs]
     end
-    for k=1:g_sfc.nt
+    @showprogress "Computing buoyancy gradients..." for k=1:g_sfc.nt
         b_col = FEField(b0[k], b_cols[k])
         n = 0
         for i=1:3
             ig = g_sfc.t[k, i]
             x = g_sfc.p[ig, 1]
             y = g_sfc.p[ig, 2]
-            # weight = 1/size(p_to_tri[ig], 1)
-            # compute weight based on angle
-            v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-            v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-            weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
+            weight = 1/size(p_to_tri[ig], 1)
+            # # compute weight based on angle
+            # v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            # v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            # weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
             for j=1:nzs[ig]-1
                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
                 if b_order == 1
@@ -215,60 +206,31 @@ function main(; nref, b_order)
         end
     end
 
-    # solve
-    sols = [nzs[i] == 1 ? [0.0, 0.0] : solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], Ux0[i], Uy0[i], τx0[i], τy0[i], ε²) for i ∈ eachindex(node_cols)]
-
-    # unpack 
+    # solve 
     ωx = zeros(g.np)
     ωy = zeros(g.np)
+    χx = zeros(g.np)
+    χy = zeros(g.np)
     j = 0
-    for i ∈ eachindex(sols)
+    @showprogress "Solving..." for i ∈ eachindex(node_cols)
         nz = nzs[i]
-        ωx[j+1:j+nz] = sols[i][1:nz]
-        ωy[j+1:j+nz] = sols[i][nz+1:end]
+        if nz ≤ 2
+            j += nz
+            continue
+        end
+        sol = solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], Ux0[i], Uy0[i], τx0[i], τy0[i], ε²)
+        ωx[j+1:j+nz] = sol[0*nz+1:1*nz]
+        ωy[j+1:j+nz] = sol[1*nz+1:2*nz]
+        χx[j+1:j+nz] = sol[2*nz+1:3*nz]
+        χy[j+1:j+nz] = sol[3*nz+1:4*nz]
         j += nz
     end
 
-    # error
-    err_x = FEField(abs.(ωx - ωx_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])), g)
-    err_y = FEField(abs.(ωy - ωy_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])), g)
-    println(@sprintf("Max Error ωx: %1.1e", maximum(err_x)))
-    println(@sprintf("Max Error ωy: %1.1e", maximum(err_y)))
-    println(@sprintf("L2 Error ωx: %1.1e", L2norm(err_x)))
-    println(@sprintf("L2 Error ωy: %1.1e", L2norm(err_y)))
-
     # plot
     b0 = b.(g.p[:, 1], g.p[:, 2], g.p[:, 3])
-    write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "b"=>b0))
-    write_vtk(g, "output/baroclinic_errors.vtu", Dict("ωx error"=>err_x, "ωy error"=>err_y))
+    write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy, "b"=>b0))
 end
 
-main(nref=2, b_order=1)
-
-# convergence tests
-
-# linear b
-# nref  ωx      ωy
-# 0     3.4e-2  3.0e-2
-# 1     1.5e-2  1.3e-2
-# 2     3.8e-3  3.7e-3
-# 3     1.3e-3  1.2e-3 -> O(h^1.5)
-# L2 error:
-# 0     1.1e-2  1.1e-2
-# 1     2.6e-3  2.6e-3
-# 2     6.1e-4  6.0e-4
-# 3     2.1e-4  2.1e-4 -> O(h^1.5)
-
-# quadratic b
-# nref  ωx      ωy
-# 0     3.4e-2  3.0e-2
-# 1     1.5e-2  1.3e-2
-# 2     3.8e-3  3.7e-3
-# 3     1.1e-3  1.0e-3 -> O(h^1.9)
-# L2 error:
-# 0     1.0e-2  9.5e-3
-# 1     2.5e-3  2.3e-3
-# 2     4.4e-4  4.3e-4
-# 3     8.5e-5  8.4e-5 -> O(h^2.4)
+main(nref=3, b_order=2)
 
 println("Done.")
