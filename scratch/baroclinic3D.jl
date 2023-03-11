@@ -5,6 +5,7 @@ using Printf
 using ProgressMeter
 
 include("baroclinic.jl")
+include("utils.jl")
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
@@ -193,7 +194,11 @@ function main(; nref, b_order)
             ig = g_sfc.t[k, i]
             x = g_sfc.p[ig, 1]
             y = g_sfc.p[ig, 2]
-            weight = 1/size(p_to_tri[ig], 1)
+            # weight = 1/size(p_to_tri[ig], 1)
+            # compute weight based on angle
+            v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
             for j=1:nzs[ig]-1
                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
                 if b_order == 1
@@ -225,29 +230,45 @@ function main(; nref, b_order)
     end
 
     # error
-    println(@sprintf("Max Error ωx: %1.1e", maximum(abs.(ωx - ωx_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])))))
-    println(@sprintf("Max Error ωy: %1.1e", maximum(abs.(ωy - ωy_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])))))
+    err_x = FEField(abs.(ωx - ωx_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])), g)
+    err_y = FEField(abs.(ωy - ωy_a.(g.p[:, 1], g.p[:, 2], g.p[:, 3])), g)
+    println(@sprintf("Max Error ωx: %1.1e", maximum(err_x)))
+    println(@sprintf("Max Error ωy: %1.1e", maximum(err_y)))
+    println(@sprintf("L2 Error ωx: %1.1e", L2norm(err_x)))
+    println(@sprintf("L2 Error ωy: %1.1e", L2norm(err_y)))
 
     # plot
-    plot_3D(g, ωx, ωy, b)
+    b0 = b.(g.p[:, 1], g.p[:, 2], g.p[:, 3])
+    write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "b"=>b0))
+    write_vtk(g, "output/baroclinic_errors.vtu", Dict("ωx error"=>err_x, "ωy error"=>err_y))
 end
 
-main(nref=2, b_order=2)
+main(nref=2, b_order=1)
 
 # convergence tests
 
-# linear b -> O(h)
+# linear b
 # nref  ωx      ωy
 # 0     3.4e-2  3.0e-2
 # 1     1.5e-2  1.3e-2
 # 2     3.8e-3  3.7e-3
-# 3     1.3e-3  1.2e-3
+# 3     1.3e-3  1.2e-3 -> O(h^1.5)
+# L2 error:
+# 0     1.1e-2  1.1e-2
+# 1     2.6e-3  2.6e-3
+# 2     6.1e-4  6.0e-4
+# 3     2.1e-4  2.1e-4 -> O(h^1.5)
 
-# quadratic b -> same thing??
+# quadratic b
 # nref  ωx      ωy
 # 0     3.4e-2  3.0e-2
 # 1     1.5e-2  1.3e-2
 # 2     3.8e-3  3.7e-3
-# 3     1.3e-3  1.2e-3
+# 3     1.1e-3  1.0e-3 -> O(h^1.9)
+# L2 error:
+# 0     1.0e-2  9.5e-3
+# 1     2.5e-3  2.3e-3
+# 2     4.4e-4  4.3e-4
+# 3     8.5e-5  8.4e-5 -> O(h^2.4)
 
 println("Done.")

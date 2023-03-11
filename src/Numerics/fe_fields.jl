@@ -58,20 +58,12 @@ function getindex(u::FEField, I)
 end
 
 """
-    l2 = L2norm(u, s, J)
+    l2 = L2norm(u)
 
-Compute L2 norm, ‖u‖² ≡ ∫ u² dx, of finite element function `u`.
+Compute L2 norm, ‖u‖ ≡ √(∫ u² dx), of finite element function `u`.
 """
-function L2norm(u::FEField, s::ShapeFunctionIntegrals, J::Jacobians)
-    L2 = 0
-    for k=1:u.g.nt
-        for i=1:u.g.nn
-            for j=1:u.g.nn
-                L2 += u.values[u.g.t[k, j]]*u.values[u.g.t[k, i]]*s.M[i, j]*J.dets[k]
-            end
-        end
-    end
-    return sqrt(L2)
+function L2norm(u::FEField)
+    return sqrt(sum(u.values[u.g.t[k, j]]*u.values[u.g.t[k, i]]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
 end
 
 """

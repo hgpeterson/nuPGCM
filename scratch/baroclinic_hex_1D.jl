@@ -13,22 +13,22 @@ pygui(false)
 function gen_hex(h, H, θs; order)
     # surface triangles
     r = 2h/√3
-    p_sfc = [0 0; r 0]
+    p = [0 0; r 0]
     for θ ∈ θs
-        p_sfc = [p_sfc; r*cos(θ) r*sin(θ)]
+        p = [p; r*cos(θ) r*sin(θ)]
     end
-    t_sfc = [1 2 3]
+    t = [1 2 3]
     for i = 1:size(θs, 1)-1
-        t_sfc = [t_sfc; 1 i+2 i+3]
+        t = [t; 1 i+2 i+3]
     end
-    t_sfc = [t_sfc; 1 size(θs, 1)+2 2]
-    x = p_sfc[:, 1]
-    y = p_sfc[:, 2]
-    np_sfc = size(p_sfc, 1)
-    nt_sfc = size(t_sfc, 1)
+    t = [t; 1 size(θs, 1)+2 2]
+    e = Dict("coastline"=>collect(2:size(p, 1)))
+    g_sfc = FEGrid(1, p, t, e)
+    x = g_sfc.p[:, 1]
+    y = g_sfc.p[:, 2]
 
     if order == 1
-        tplot(p_sfc, t_sfc)
+        tplot(g_sfc)
         axis("equal")
         ylim(-1.1*r, 1.1*r)
         savefig("scratch/images/hex.png")
@@ -37,18 +37,18 @@ function gen_hex(h, H, θs; order)
     end
 
     # depths
-    Hs = H.(p_sfc[:, 1], p_sfc[:, 2])
+    Hs = H.(g_sfc.p[:, 1], g_sfc.p[:, 2])
 
     # number of nodes in vertical
     nzs = Int64.(ceil.(Hs./h))
 
     # mapping from points to triangles:
-    #   `p_to_tri[i]` is vector of cartesian indices pointing to where point `i` is in `t_sfc`
-    p_to_tri = [findall(I -> i ∈ t_sfc[I], CartesianIndices(size(t_sfc))) for i=1:np_sfc]
+    #   `p_to_tri[i]` is vector of cartesian indices pointing to where point `i` is in `g_sfc.t`
+    p_to_tri = [findall(I -> i ∈ g_sfc.t[I], CartesianIndices(size(g_sfc.t))) for i=1:g_sfc.np]
 
     # mapping from triangles to points in 3D: 
     #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
-    tri_to_p = [Int64[] for k=1:nt_sfc, i=1:3] # allocate
+    tri_to_p = [Int64[] for k=1:g_sfc.nt, i=1:3] # allocate
 
     # save middle node_col
     node_col = zeros(nzs[1])
@@ -57,7 +57,7 @@ function gen_hex(h, H, θs; order)
     p = zeros(sum(nzs), 3)
     e = Dict("sfc"=>Int64[], "bot"=>Int64[])
     np = 0
-    for i=1:np_sfc
+    for i=1:g_sfc.np
         # vertical grid
         nz = nzs[i]
         if nz == 1
@@ -95,9 +95,9 @@ function gen_hex(h, H, θs; order)
     sfi = ShapeFunctionIntegrals(sf, sf)
 
     # columnwise and global tessellation
-    el_cols = Vector{FEGrid}(undef, nt_sfc)
+    el_cols = Vector{FEGrid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
-    for k=1:nt_sfc
+    for k=1:g_sfc.nt
         # number of points in vertical for each vertex of sfc tri
         lens = length.(tri_to_p[k, :])
 
@@ -145,7 +145,7 @@ function gen_hex(h, H, θs; order)
 
     g = FEGrid(order, p, t, e)
 
-    return el_cols, g, node_col
+    return g_sfc, g, el_cols, node_col
 end
 
 function main()
@@ -159,7 +159,7 @@ function main()
     h = 0.05
     fracs = [6, 4, 3, 5, 2, 4]/24
     θs = cumsum(2π*fracs[1:end-1])
-    el_cols, g, node_col = gen_hex(h, H, θs, order=1)
+    g_sfc, g, el_cols, node_col = gen_hex(h, H, θs, order=1)
     el_cols2 = [FEGrid(2, col) for col ∈ el_cols]
     nz = size(node_col, 1)
 
@@ -174,7 +174,10 @@ function main()
     by_node_col = zeros(2nz-2)
     for k ∈ eachindex(el_cols)
         b_col = FEField(b_el_cols[k], el_cols2[k])
-        weight = fracs[k]
+        # compute weight based on angle
+        v1 = g_sfc.p[g_sfc.t[k, 2], :] - g_sfc.p[g_sfc.t[k, 1], :]
+        v2 = g_sfc.p[g_sfc.t[k, 3], :] - g_sfc.p[g_sfc.t[k, 1], :]
+        weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
         for j=1:nz-1
             k_tet = findfirst(k_tet -> j ∈ el_cols[k].t[k_tet, :] && j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
             bx_node_col[2j-1] += weight*∂x(b_col, [0, 0, node_col[j]], k_tet)

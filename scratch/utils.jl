@@ -130,8 +130,13 @@ function write_vtk(g, fname, data)
 
     # save as vtu file
     vtk_grid(fname, points, cells) do vtk
-        for d in data
-            vtk[d.first] = d.second.values
+        for d ∈ data
+            if typeof(d.second) <: FEField
+                vtk[d.first] = d.second.values
+            else
+                vtk[d.first] = d.second
+            end
         end
     end
+    println(fname)
 end
