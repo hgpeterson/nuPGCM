@@ -50,7 +50,7 @@ function solve_barotropic(g, r_sym, r_asym, β)
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
-            return r_sym/H(x, y)^2*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*∂x∂ξ
+            return r_sym/H(x, y)^3*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*∂x∂ξ
         end
         K = [nuPGCM.ref_el_quad(ξ -> func_K(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
@@ -61,17 +61,18 @@ function solve_barotropic(g, r_sym, r_asym, β)
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
-            return r_asym/H(x, y)^2*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*∂x∂ξ
+            return r_asym/H(x, y)^3*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*∂x∂ξ
         end
         K′ = [nuPGCM.ref_el_quad(ξ -> func_K′(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
         # J(f/H, Ψ) term
         function func_C(ξ, i, j)
             x, y = T(ξ)
-            f = 1 + β*y
+            f = β*y
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
-            return ∂x∂ξ*((H(x, y)*β - f*Hy(x, y)) * ∂xφ_j + f*Hx(x, y) * ∂yφ_j)*φ(g.sf, i, ξ)/H(x, y)^2
+            φi = φ(g.sf, i, ξ)
+            return ((H(x, y)*β - f*Hy(x, y))*∂xφ_j + f*Hx(x, y)*∂yφ_j)*φi/H(x, y)^2*∂x∂ξ
         end
         C = [nuPGCM.ref_el_quad(ξ -> func_C(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
@@ -85,7 +86,7 @@ function solve_barotropic(g, r_sym, r_asym, β)
         end
 
         # rhs
-        rhs[g.t[k, :]] += J.dets[k]*s.M*curl.(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2])
+        rhs[g.t[k, :]] += s.M*curl.(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2])*∂x∂ξ
     end
 
     # boundary nodes 
@@ -102,10 +103,37 @@ function solve_barotropic(g, r_sym, r_asym, β)
 end
 
 function main(; order)
-    g = FEGrid("meshes/circle/mesh1.h5", order)
-    r_sym = -0.1
-    r_asym = 3.0
-    β = 1.0
+    g = FEGrid("meshes/circle/mesh2.h5", order)
+    # g = FEGrid("meshes/square/mesh2.h5", order)
+
+    fig, ax, im = tplot(g.p, g.t, H.(g.p[:, 1], g.p[:, 2]), contour=true)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    ax.axis("equal")
+    colorbar(im, ax=ax, label=L"H")
+    savefig("scratch/images/H.png")
+    println("scratch/images/H.png")
+    plt.close()
+    fig, ax, im = tplot(g.p, g.t, Hx.(g.p[:, 1], g.p[:, 2]), contour=true)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    ax.axis("equal")
+    colorbar(im, ax=ax, label=L"H_x")
+    savefig("scratch/images/Hx.png")
+    println("scratch/images/Hx.png")
+    plt.close()
+    fig, ax, im = tplot(g.p, g.t, Hy.(g.p[:, 1], g.p[:, 2]), contour=true)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    ax.axis("equal")
+    colorbar(im, ax=ax, label=L"H_y")
+    savefig("scratch/images/Hy.png")
+    println("scratch/images/Hy.png")
+    plt.close()
+
+    r_sym = -1e-2
+    r_asym = 1e-4
+    β = 1
     Ψ = solve_barotropic(g, r_sym, r_asym, β)
 
     fig, ax, im = tplot(Ψ, contour=true)
@@ -118,14 +146,26 @@ function main(; order)
     plt.close()
 end
 
-# H(x, y) = 1.1 - x^2 - y^2
-H(x, y) = 1 - x^2 - y^2
-Hx(x, y) = -2*x
-Hy(x, y) = -2*y
 # H(x, y) = 1
 # Hx(x, y) = 0
 # Hy(x, y) = 0
-curl(x, y) = π*sin(π*y)/H(x, y) + cos(π*y)*Hy(x, y)/H(x, y)^2
-# curl(x, y) = sin(π*y)
 
-main(order=2)
+# H(x, y) = 1.01 - x^2 - y^2
+# # H(x, y) = 1 - x^2 - y^2
+# Hx(x, y) = -2*x
+# Hy(x, y) = -2*y
+
+Δ = 0.2
+G(r) = 1 - exp(-r^2/(2Δ^2))
+Gr(r) = r/Δ^2*exp(-r^2/(2Δ^2))
+# H(x, y) = G(x + 1)*G(1 - x)*G(y + 1)*G(1 - y) + 0.1
+# Hx(x, y) = (Gr(x + 1)*G(1 - x) - G(x + 1)*Gr(1 - x))*G(y + 1)*G(1 - y)
+# Hy(x, y) = (Gr(y + 1)*G(1 - y) - G(y + 1)*Gr(1 - y))*G(x + 1)*G(1 - x)
+H(x, y) = G(1 - x^2 - y^2) + 0.1
+Hx(x, y) = -2x*Gr(1 - x^2 - y^2)
+Hy(x, y) = -2y*Gr(1 - x^2 - y^2)
+
+# τˣ = -cos(πy), τʸ = 0
+curl(x, y) = π*sin(π*y)/H(x, y) + cos(π*y)*Hy(x, y)/H(x, y)^2
+
+main(order=1)

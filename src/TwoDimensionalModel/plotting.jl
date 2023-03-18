@@ -223,7 +223,7 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=not
 
         im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
         if contour
-            levels = range(-vmax, vmax, length=6)
+            levels = vmax*[-3/4, -1/2, -1/4, 1/4, 1/2, 3/4]
             ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
         end
 
