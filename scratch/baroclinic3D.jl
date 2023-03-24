@@ -11,15 +11,8 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_mesh(ifile, H; order)
-    # load mesh of circle
-    file = h5open(ifile, "r")
-    p = read(file, "p")
-    t = Int64.(read(file, "t"))
-    e = Int64.(read(file, "e")[:, 1])
-    close(file)
-    e = Dict("coastline"=>e)
-    g_sfc = FEGrid(1, p, t, e)
+function gen_3D_valign_mesh(g_sfc, H; order)
+    # save x and y for convenience
     x = g_sfc.p[:, 1]
     y = g_sfc.p[:, 2]
 
@@ -39,7 +32,7 @@ function gen_mesh(ifile, H; order)
     node_cols = Vector{Vector{Float64}}(undef, g_sfc.np)
 
     # add points to p, e, and tri_to_p
-    nzs = Int64[i ∈ g_sfc.e["coastline"] ? 1 : ceil(H(x[i], y[i])/h) for i=1:g_sfc.np]
+    nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : ceil(H(x[i], y[i])/h) for i=1:g_sfc.np]
     p = zeros(sum(nzs), 3)
     e = Dict("sfc"=>Int64[], "bot"=>Int64[])
     np = 0
@@ -58,7 +51,12 @@ function gen_mesh(ifile, H; order)
 
         # add to e
         e["sfc"] = [e["sfc"]; np + 1]
-        if nz != 1
+        # if nz != 1
+        #     e["bot"] = [e["bot"]; np + nz]
+        # end
+        if nz == 1
+            e["bot"] = [e["bot"]; np + 1]
+        else
             e["bot"] = [e["bot"]; np + nz]
         end
 
@@ -128,33 +126,63 @@ function gen_mesh(ifile, H; order)
 
     g = FEGrid(order, p, t, e)
 
-    return g_sfc, g, el_cols, node_cols, p_to_tri
+    return g, el_cols, node_cols, p_to_tri
 end
 
-function main(; nref, b_order)
-    # params
-    ε² = 1
-
-    # functions
-    H(x, y) = 1 - x^2 - y^2
-    Hx(x, y) = -2*x
-    Hy(x, y) = -2*y
-    τx(x, y) = 0
-    τy(x, y) = 0
-    Ux(x, y) = 0
-    Uy(x, y) = 0
-    # Ux(x, y) = H(x, y)^2
-    # Uy(x, y) = H(x, y)^2
-    # b(x, y, z) = 0
-    # bx(x, y, z) = 0
-    # by(x, y, z) = 0
-    δ = 0.1
-    b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-    bx(x, y, z) = -Hx(x, y)*exp(-(z + H(x, y))/δ)
-    by(x, y, z) = -Hy(x, y)*exp(-(z + H(x, y))/δ)
-
+function get_ω_U(H, ε², g_sfc)
     # grid
-    g_sfc, g, el_cols, node_cols, p_to_tri = gen_mesh("meshes/circle/mesh$nref.h5", H, order=1)
+    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+    println("nel_cols = ", size(el_cols, 1))
+    nzs = [size(col, 1) for col ∈ node_cols]
+
+    # solve Ux
+    ωx_Ux = zeros(g.np)
+    ωy_Ux = zeros(g.np)
+    χx_Ux = zeros(g.np)
+    χy_Ux = zeros(g.np)
+    j = 0
+    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+        nz = nzs[i]
+        if nz == 1
+            j += nz
+            continue
+        end
+        x = g_sfc.p[i, 1]
+        y = g_sfc.p[i, 2]
+        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), H(x, y)^2, 0, 0, 0, ε²)
+        ωx_Ux[j+1:j+nz] = sol[0*nz+1:1*nz]
+        ωy_Ux[j+1:j+nz] = sol[1*nz+1:2*nz]
+        χx_Ux[j+1:j+nz] = sol[2*nz+1:3*nz]
+        χy_Ux[j+1:j+nz] = sol[3*nz+1:4*nz]
+        j += nz
+    end
+
+    # symmetry
+    ωx_Uy = -ωy_Ux
+    ωy_Uy = ωx_Ux
+    χx_Uy = -χy_Ux
+    χy_Uy = χx_Ux
+    
+    # r
+    x = g_sfc.p[:, 1]
+    y = g_sfc.p[:, 2]
+    r_sym = @. ε²*ωy_Ux[g.e["bot"]]/H(x, y)^3
+    r_asym = @. ε²*ωx_Ux[g.e["bot"]]/H(x, y)^3
+    r_sym = FEField(r_sym, g_sfc)
+    r_asym = FEField(r_asym, g_sfc)
+
+    # plot
+    quick_plot(FEField(ωx_Ux[g.e["bot"]], g_sfc), L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
+    quick_plot(FEField(ωy_Ux[g.e["bot"]], g_sfc), L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
+    quick_plot(r_sym, L"r_\mathrm{sym}", "scratch/images/r_sym.png")
+    quick_plot(r_asym, L"r_\mathrm{asym}", "scratch/images/r_asym.png")
+
+    return r_sym, r_asym
+end
+
+function get_ω_b(b, H, ε², g_sfc; b_order)
+    # grid
+    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
     println("nel_cols = ", size(el_cols, 1))
     nzs = [size(col, 1) for col ∈ node_cols]
     if b_order == 1
@@ -167,10 +195,6 @@ function main(; nref, b_order)
 
     # evaluate functions for each column
     b0 = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ b_cols]
-    Ux0 = Ux.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    Uy0 = Uy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    τx0 = τx.(g_sfc.p[:, 1], g_sfc.p[:, 2])
-    τy0 = τy.(g_sfc.p[:, 1], g_sfc.p[:, 2])
     if b_order == 1
         bx0 = [zeros(nz-1) for nz ∈ nzs]
         by0 = [zeros(nz-1) for nz ∈ nzs]
@@ -218,7 +242,7 @@ function main(; nref, b_order)
             j += nz
             continue
         end
-        sol = solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], Ux0[i], Uy0[i], τx0[i], τy0[i], ε²)
+        sol = solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], 0, 0, 0, 0, ε²)
         ωx[j+1:j+nz] = sol[0*nz+1:1*nz]
         ωy[j+1:j+nz] = sol[1*nz+1:2*nz]
         χx[j+1:j+nz] = sol[2*nz+1:3*nz]
@@ -231,6 +255,9 @@ function main(; nref, b_order)
     write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy, "b"=>b0))
 end
 
-main(nref=3, b_order=2)
+# H(x, y) = 1 - x^2 - y^2
+# ε² = 1
+# g_sfc = FEGrid("meshes/circle/mesh2.h5", 1)
+# r_sym, r_asym = get_ω_U(H, ε², g_sfc)
 
 println("Done.")
