@@ -129,20 +129,15 @@ function gen_3D_valign_mesh(g_sfc, H; order)
     return g, el_cols, node_cols, p_to_tri
 end
 
-function get_ω_U(H, ε², g_sfc)
-    # grid
-    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
-    println("nel_cols = ", size(el_cols, 1))
-    nzs = [size(col, 1) for col ∈ node_cols]
-
-    # solve Ux
+function get_ω_U(g_sfc, g, node_cols, H, ε²)
+    # solve for ω_Uˣ
     ωx_Ux = zeros(g.np)
     ωy_Ux = zeros(g.np)
     χx_Ux = zeros(g.np)
     χy_Ux = zeros(g.np)
     j = 0
     @showprogress "Solving..." for i ∈ eachindex(node_cols)
-        nz = nzs[i]
+        nz = size(node_cols[i], 1)
         if nz == 1
             j += nz
             continue
@@ -178,6 +173,44 @@ function get_ω_U(H, ε², g_sfc)
     quick_plot(r_asym, L"r_\mathrm{asym}", "scratch/images/r_asym.png")
 
     return r_sym, r_asym
+end
+
+function get_ω_τ(g_sfc, g, node_cols, ε²)
+    # solve for ω_τˣ
+    ωx_τx = zeros(g.np)
+    ωy_τx = zeros(g.np)
+    χx_τx = zeros(g.np)
+    χy_τx = zeros(g.np)
+    j = 0
+    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+        nz = size(node_cols[i], 1)
+        if nz == 1
+            j += nz
+            continue
+        end
+        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, 1, 0, ε²)
+        ωx_τx[j+1:j+nz] = sol[0*nz+1:1*nz]
+        ωy_τx[j+1:j+nz] = sol[1*nz+1:2*nz]
+        χx_τx[j+1:j+nz] = sol[2*nz+1:3*nz]
+        χy_τx[j+1:j+nz] = sol[3*nz+1:4*nz]
+        j += nz
+    end
+
+    # symmetry
+    ωx_τy = -ωy_τx
+    ωy_τy =  ωx_τx
+    χx_τy = -χy_τx
+    χy_τy =  χx_τx
+    
+    # plot
+    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
+    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+    quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "scratch/images/omegax_taux.png")
+    quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "scratch/images/omegay_taux.png")
+    ωx_τy_bot = FEField(ωx_τy[g.e["bot"]], g_sfc)
+    ωy_τy_bot = FEField(ωy_τy[g.e["bot"]], g_sfc)
+
+    return ωx_τx_bot, ωy_τx_bot, ωx_τy_bot, ωy_τy_bot
 end
 
 function get_ω_b(b, H, ε², g_sfc; b_order)

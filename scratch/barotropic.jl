@@ -18,7 +18,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function solve_barotropic(g, r_sym, r_asym, β)
+function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot)
     # indices
     N = g.np
 
@@ -79,6 +79,17 @@ function solve_barotropic(g, r_sym, r_asym, β)
         end
         C = [nuPGCM.ref_el_quad(ξ -> func_C(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
+        # rhs
+        function func_r(ξ, i)
+            x, y = T(ξ)
+            τ_curl = (∂x(τy, [x, y], k) - ∂y(τx, [x, y], k))/H(x, y) - 
+                     (τy([x, y], k)*Hx(x, y) - τx([x, y], k)*Hy(x, y))/H(x, y)^2
+            ω_bot_div = ∂x(ωx_bot, [x, y], k) + ∂y(ωy_bot, [x, y], k)
+            φi = φ(g.sf, i, ξ)
+            return ε²*(τ_curl - ω_bot_div)*φi*∂x∂ξ
+        end
+        r = [nuPGCM.ref_el_quad(ξ -> func_r(ξ, i), quad_wts, quad_pts) for i=1:g.nn]
+
         # interior terms
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ∉ bdy 
@@ -87,14 +98,7 @@ function solve_barotropic(g, r_sym, r_asym, β)
                 push!(A, (g.t[k, i], g.t[k, j], C[i, j]))
             end
         end
-
-        # rhs
-        r = s.M*curl.(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2])*∂x∂ξ
-        for i=1:g.nn
-            if g.t[k, i] ∉ bdy 
-                rhs[g.t[k, i]] += r[i]
-            end
-        end
+        rhs[g.t[k, :]] += r
     end
 
     # boundary nodes 
@@ -107,52 +111,61 @@ function solve_barotropic(g, r_sym, r_asym, β)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
     # solve
+    println("Solving...")
     return FEField(A\rhs, g)
 end
 
 function main(; order)
-    g = FEGrid("meshes/circle/mesh2.h5", order)
-    # g = FEGrid("meshes/square/mesh2.h5", order)
-    x = g.p[:, 1]
-    y = g.p[:, 2]
+    # surface mesh
+    g_sfc = FEGrid("meshes/circle/mesh2.h5", order)
+    x = g_sfc.p[:, 1]
+    y = g_sfc.p[:, 2]
 
-    quick_plot(FEField(H.(x, y), g), L"H", "scratch/images/H.png")
-    quick_plot(FEField(Hx.(x, y), g), L"H_x", "scratch/images/Hx.png")
-    quick_plot(FEField(Hy.(x, y), g), L"H_y", "scratch/images/Hy.png")
-    quick_plot(FEField(curl.(x, y), g), L"\mathbf{z} \cdot \nabla \times (\tau / H)", "scratch/images/curl.png")
+    # # depth
+    # H = FEField(1 .- x.^2 - y.^2, g_sfc)
+    # Hx = FEField(-2x, g_sfc)
+    # Hy = FEField(-2y, g_sfc)
 
-    # r_sym, r_asym = get_ω_U(H, ε², g)
-    r_sym = FEField(-1e-2./H.(x, y).^3, g)
-    r_asym =FEField( 1e-4./H.(x, y).^3, g)
+    # quick_plot(H, L"H", "scratch/images/H.png")
+    # quick_plot(Hx, L"H_x", "scratch/images/Hx.png")
+    # quick_plot(Hy, L"H_y", "scratch/images/Hy.png")
+
+    # wind stress
+    τx = FEField(-cos.(π*y), g_sfc)
+    τy = FEField(zeros(g_sfc.np), g_sfc)
+    f_curl(x, y) = (∂x(τy, [x, y]) - ∂y(τx, [x, y]))/(H(x, y)) - 
+                 (τy([x, y])*Hx(x, y) - τx([x, y])*Hy(x, y))/H(x, y)^2
+    curl = f_curl.(x, y) 
+    curl[g_sfc.e["bdy"]] .= 0
+    quick_plot(FEField(curl, g_sfc), L"\mathbf{z} \cdot \nabla \times (\tau / H)", "scratch/images/curl.png")
+
+    # 3D mesh
+    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+
+    # get ω's
+    # r_sym, r_asym = get_ω_U(g_sfc, g, node_cols, H, ε²)
+    r_sym = @. -1e-2/H(x, y)^3
+    # r_sym[g_sfc.e["bdy"]] .= 0
+    r_asym = @. 1e-4/H(x, y)^3
+    # r_asym[g_sfc.e["bdy"]] .= 0
+    r_sym = FEField(r_sym, g_sfc)
+    r_asym = FEField(r_asym, g_sfc)
+    quick_plot(r_sym, L"r_\mathrm{sym}", "scratch/images/r_sym0.png")
+    quick_plot(r_asym, L"r_\mathrm{asym}", "scratch/images/r_asym0.png")
+
+    ωx_τx_bot, ωy_τx_bot, ωx_τy_bot, ωy_τy_bot = get_ω_τ(g_sfc, g, node_cols, ε²)
+    ωx_bot = (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H.(x, y), g_sfc)
+    ωy_bot = (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H.(x, y), g_sfc)
 
     β = 1
 
-    Ψ = solve_barotropic(g, r_sym, r_asym, β)
+    Ψ = solve_barotropic(g_sfc, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot)
     quick_plot(Ψ, L"\Psi", "scratch/images/psi.png")
 end
 
 ε² = 1
-
-# H(x, y) = 1
-# Hx(x, y) = 0
-# Hy(x, y) = 0
-
 H(x, y) = 1 - x^2 - y^2
-Hx(x, y) = -2*x
-Hy(x, y) = -2*y
-
-# Δ = 0.2
-# G(r) = 1 - exp(-r^2/(2Δ^2))
-# Gr(r) = r/Δ^2*exp(-r^2/(2Δ^2))
-# # H(x, y) = G(x + 1)*G(1 - x)*G(y + 1)*G(1 - y) + 0.1
-# # Hx(x, y) = (Gr(x + 1)*G(1 - x) - G(x + 1)*Gr(1 - x))*G(y + 1)*G(1 - y)
-# # Hy(x, y) = (Gr(y + 1)*G(1 - y) - G(y + 1)*Gr(1 - y))*G(x + 1)*G(1 - x)
-# H(x, y) = G(1 - x^2 - y^2) + 0.1
-# Hx(x, y) = -2x*Gr(1 - x^2 - y^2)
-# Hy(x, y) = -2y*Gr(1 - x^2 - y^2)
-
-# τˣ = -cos(πy), τʸ = 0
-δ = 1e-2
-curl(x, y) = ε²*(π*sin(π*y)/(H(x, y) + δ) + cos(π*y)*Hy(x, y)/(H(x, y) + δ)^2)
+Hx(x, y) = -2x
+Hy(x, y) = -2y
 
 main(order=1)
