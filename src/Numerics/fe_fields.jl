@@ -29,11 +29,17 @@ end
 function -(u::FEField, v::FEField)
     return FEField(u.order, u.values - v.values, u.g)
 end
+function -(u::FEField)
+    return FEField(u.order, -u.values, u.g)
+end
 function +(u::FEField, v::FEField)
     return FEField(u.order, u.values + v.values, u.g)
 end
 function *(u::FEField, v::FEField)
     return FEField(u.order, u.values.*v.values, u.g)
+end
+function *(u::FEField, c)
+    return FEField(u.order, u.values*c, u.g)
 end
 function /(u::FEField, v::FEField)
     return FEField(u.order, u.values./v.values, u.g)

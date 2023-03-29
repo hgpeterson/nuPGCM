@@ -157,22 +157,16 @@ function get_ω_U(g_sfc, g, node_cols, H, ε²)
     ωy_Uy = ωx_Ux
     χx_Uy = -χy_Ux
     χy_Uy = χx_Ux
-    
-    # r
-    x = g_sfc.p[:, 1]
-    y = g_sfc.p[:, 2]
-    r_sym = @. ε²*ωy_Ux[g.e["bot"]]/H(x, y)^3
-    r_asym = @. ε²*ωx_Ux[g.e["bot"]]/H(x, y)^3
-    r_sym = FEField(r_sym, g_sfc)
-    r_asym = FEField(r_asym, g_sfc)
 
     # plot
-    quick_plot(FEField(ωx_Ux[g.e["bot"]], g_sfc), L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
-    quick_plot(FEField(ωy_Ux[g.e["bot"]], g_sfc), L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
-    quick_plot(r_sym, L"r_\mathrm{sym}", "scratch/images/r_sym.png")
-    quick_plot(r_asym, L"r_\mathrm{asym}", "scratch/images/r_asym.png")
+    ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
+    ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
+    quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
+    quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
+    ωx_Uy_bot = FEField(ωx_Uy[g.e["bot"]], g_sfc)
+    ωy_Uy_bot = FEField(ωy_Uy[g.e["bot"]], g_sfc)
 
-    return r_sym, r_asym
+    return ωx_Ux_bot, ωy_Ux_bot, ωx_Uy_bot, ωy_Uy_bot
 end
 
 function get_ω_τ(g_sfc, g, node_cols, ε²)
@@ -287,10 +281,3 @@ function get_ω_b(b, H, ε², g_sfc; b_order)
     b0 = b.(g.p[:, 1], g.p[:, 2], g.p[:, 3])
     write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy, "b"=>b0))
 end
-
-# H(x, y) = 1 - x^2 - y^2
-# ε² = 1
-# g_sfc = FEGrid("meshes/circle/mesh2.h5", 1)
-# r_sym, r_asym = get_ω_U(H, ε², g_sfc)
-
-println("Done.")
