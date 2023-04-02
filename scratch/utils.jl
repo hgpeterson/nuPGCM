@@ -25,12 +25,11 @@ function get_sides(g::FEGrid; tol=1e-4)
     return bot, sfc
 end
 
-function quick_plot(u::FEField, clabel, fname)
-    fig, ax, im = tplot(u, contour=true)
+function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
+    fig, ax, im = tplot(u, contour=true; vmax=vmax, cb_label=cb_label)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
-    colorbar(im, ax=ax, label=clabel)
     savefig(fname)
     println(fname)
     plt.close()

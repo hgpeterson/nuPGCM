@@ -5,11 +5,11 @@
 pc = 1/6 # one pica is 1/6th of an inch
 
 """
-    ax = ridge_plot(m, s, field, title, cbar_label; ax, vext, cmap)
+    ax = ridge_plot(m, s, field, title, cb_label; ax, vext, cmap)
 
 Create 2D plot of `field` with isopycnals given by the buoyancy perturbation `b`
 from the model state `s`. Set the title to `title` and colorbar label to 
-`cbar_label`. Return the axis handle `ax`.
+`cb_label`. Return the axis handle `ax`.
 
 Optional: 
     - provide `ax`
@@ -21,7 +21,7 @@ Optional:
     - set colorbar pad with `pad`
 """
 function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
-                title::AbstractString, cbar_label::AbstractString; 
+                title::AbstractString, cb_label::AbstractString; 
                 ax=nothing, vext=nothing, cmap="RdBu_r", style="contour",
                 cb_orientation="vertical", xlabel=nothing, pad=nothing)
     # km
@@ -58,16 +58,16 @@ function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2
         levels = range(vmin, vmax, length=8)
         ax.contour(xx, zz, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
         if pad === nothing
-            cb = colorbar(img, ax=ax, label=cbar_label, orientation=cb_orientation, extend=extend)
+            cb = colorbar(img, ax=ax, label=cb_label, orientation=cb_orientation, extend=extend)
         else
-            cb = colorbar(img, ax=ax, label=cbar_label, orientation=cb_orientation, extend=extend, pad=pad)
+            cb = colorbar(img, ax=ax, label=cb_label, orientation=cb_orientation, extend=extend, pad=pad)
         end
     elseif style == "pcolormesh"
         img = ax.pcolormesh(xx, zz, field, cmap=cmap, vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
         if pad === nothing
-            cb = colorbar(img, ax=ax, label=cbar_label, extend=extend, orientation=cb_orientation)
+            cb = colorbar(img, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation)
         else
-            cb = colorbar(img, ax=ax, label=cbar_label, extend=extend, orientation=cb_orientation, pad=pad)
+            cb = colorbar(img, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation, pad=pad)
         end
         cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     else
@@ -199,7 +199,7 @@ end
 If `u` === nothing: Plot triangular mesh with nodes `p` and triangles `t`.
 If `u` === solution vector: Plot filled contour color plot of solution `u`.
 """
-function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=nothing, lw=0.2, edgecolors="k", contour=false)
+function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vmax=nothing, lw=0.2, edgecolors="k", contour=false, cb_label="", cb_orientation="vertical")
     if fig === nothing
         fig, ax = subplots(1)
     end
@@ -207,11 +207,23 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=not
     if u === nothing
         im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors=edgecolors, linewidth=lw, rasterized=true)
     else
-        if vext === nothing
+        # set vmax
+        if vmax === nothing
             vmax = maximum(abs.(u))
+            extend = "neither"
         else
-            vmax = vext
+            # set extend
+            if maximum(u) > vmax && minimum(u) < -vmax
+                extend = "both"
+            elseif maximum(u) > vmax && minimum(u) > -vmax
+                extend = "max"
+            elseif maximum(u) < vmax && minimum(u) < -vmax
+                extend = "min"
+            else
+                extend = "neither"
+            end
         end
+
 
         if size(u, 1) == size(t, 1)
             # `u` represents values on triangle faces
@@ -227,6 +239,8 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vext=not
             ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
         end
 
+        cb = colorbar(im, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation)
+        cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
     end
 
     # no spines
