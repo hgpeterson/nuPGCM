@@ -20,7 +20,7 @@ with bc
     z = 0:   ωˣ = -τʸ, ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
+function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     # create 1D grid
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
@@ -70,12 +70,12 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
                 # -ε²∂zz(ωx)
                 push!(A, (ωxi[i], ωxi[j], ε²*K[i, j]))
                 # -ωy
-                push!(A, (ωxi[i], ωyi[j], -M[i, j]))
+                push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
 
                 # -ε²∂zz(ωy)
                 push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
                 # +ωx
-                push!(A, (ωyi[i], ωxi[j], M[i, j]))
+                push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
             end
             if g.t[k, i] ≠ 1
                 # -∂zz(χx)
@@ -91,7 +91,7 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
         end
     end
 
-    # z = 0: ωˣ = 0, ωʸ = 0, χˣ = Uʸ, χʸ = -Uˣ,
+    # z = 0: ωˣ = -τʸ, ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
     push!(A, (ωxmap[1], ωxmap[1], 1))
     push!(A, (ωymap[1], ωymap[1], 1))
     push!(A, (χxmap[1], χxmap[1], 1))
@@ -115,71 +115,35 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε²)
     return sol
 end
 
-"""
-Solve
-    -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
-    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
-with bc
-    • ωˣ = 0, ωʸ = 0 at z = 0
-    • ∫ zωˣ dz = Uʸ, ∫ zωʸ dz = -Uˣ
-"""
-function solve_baroclinic_1dfd(z, bx, by, Ux, Uy, ε²)
-    # indices
-    nz = size(z, 1)
-    ωxmap = 1:nz
-    ωymap = (nz+1):2*nz
-
-    # matrix
-    A = Tuple{Int64,Int64,Float64}[]  
-    r = zeros(2*nz)
-
-    # interior nodes
-    for j=2:nz-1 
-        # ∂zz stencil
-        fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
-
-        # eqtn 1: -ε²∂zz(ωˣ) - ωʸ = ∂y(b)
-        # term 1
-        push!(A, (ωxmap[j], ωxmap[j-1], -ε²*fd_zz[1]))
-        push!(A, (ωxmap[j], ωxmap[j],   -ε²*fd_zz[2]))
-        push!(A, (ωxmap[j], ωxmap[j+1], -ε²*fd_zz[3]))
-        # term 2
-        push!(A, (ωxmap[j], ωymap[j], -1))
-        # rhs
-        r[ωxmap[j]] = by[j]
-
-        # eqtn 2: -ε²∂zz(ωʸ) + ωˣ = -∂x(b)
-        # term 1
-        push!(A, (ωymap[j], ωymap[j-1], -ε²*fd_zz[1]))
-        push!(A, (ωymap[j], ωymap[j],   -ε²*fd_zz[2]))
-        push!(A, (ωymap[j], ωymap[j+1], -ε²*fd_zz[3]))
-        # term 2
-        push!(A, (ωymap[j], ωxmap[j], 1))
-        # rhs
-        r[ωymap[j]] = -bx[j]
-    end
-
-    # ωˣ = ωʸ = 0 at z = 0
-    push!(A, (ωxmap[nz], ωxmap[nz], 1))
-    push!(A, (ωymap[nz], ωymap[nz], 1))
-
-    # ∫ zωˣ dz = Uy
-    for j=1:nz-1
-        push!(A, (ωxmap[1], ωxmap[j],     z[j]*(z[j+1] - z[j])/2))
-        push!(A, (ωxmap[1], ωxmap[j+1], z[j+1]*(z[j+1] - z[j])/2))
-    end
-    r[ωxmap[1]] = Uy
-
-    # ∫ zωʸ dz = -Ux
-    for j=1:nz-1
-        push!(A, (ωymap[1], ωymap[j],     z[j]*(z[j+1] - z[j])/2))
-        push!(A, (ωymap[1], ωymap[j+1], z[j+1]*(z[j+1] - z[j])/2))
-    end
-    r[ωymap[1]] = -Ux
-
-    # Create CSC sparse matrix from matrix elements
-    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), 2*nz, 2*nz)
-
-    sol = A\r
-    return sol[ωxmap], sol[ωymap]
+function test_1d()
+    nz = 2^8
+    z = 0:-1/(nz - 1):-1
+    bx = zeros(nz-1)
+    by = zeros(nz-1)
+    Ux = 0
+    Uy = 0
+    τx = 0
+    τy = 1
+    ε² = 0.01
+    f = 1
+    sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
+    ωx = sol[1:nz]
+    ωy = sol[nz+1:2nz]
+    χx = sol[2nz+1:3nz]
+    χy = sol[3nz+1:4nz]
+    fig, ax = subplots(1, 2, figsize=(2*2, 3.2), sharey=true)
+    ax[1].plot(ωx, z, label=L"\omega^x")
+    ax[1].plot(ωy, z, label=L"\omega^y")
+    ax[2].plot(χx, z, label=L"\chi^x")
+    ax[2].plot(χy, z, label=L"\chi^y")
+    ax[1].set_xlabel(L"\omega")
+    ax[1].set_ylabel(L"z")
+    ax[2].set_xlabel(L"\chi")
+    ax[1].legend()
+    ax[2].legend()
+    savefig("scratch/images/omega_chi.png")
+    println("scratch/images/omega_chi.png")
+    plt.close()
 end
+
+# test_1d()

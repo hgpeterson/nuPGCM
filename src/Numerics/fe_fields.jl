@@ -21,8 +21,11 @@ function FEField(gfile::String, order::Integer, values)
     g = FEGrid(gfile, order)
     return FEField(order, values, g)
 end
-function FEField(values, g::FEGrid)
+function FEField(values::AbstractArray, g::FEGrid)
     return FEField(g.order, values, g)
+end
+function FEField(value::Number, g::FEGrid)
+    return FEField(value*ones(g.np), g)
 end
 
 # define operations on FEField's
