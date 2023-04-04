@@ -208,77 +208,80 @@ function get_ω_τ(g_sfc, g, node_cols, ε², f)
     return ωx_τx_bot, ωy_τx_bot, ωx_τy_bot, ωy_τy_bot
 end
 
-# function get_ω_b(b, H, ε², g_sfc; b_order)
-#     # grid
-#     g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
-#     println("nel_cols = ", size(el_cols, 1))
-#     nzs = [size(col, 1) for col ∈ node_cols]
-#     if b_order == 1
-#         b_cols = el_cols
-#     elseif b_order == 2
-#         sf2 = ShapeFunctions(order=2, dim=3)
-#         sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-#         b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
-#     end
+function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; b_order)
+    # grid
+    nzs = [size(col, 1) for col ∈ node_cols]
+    if b_order == 1
+        b_cols = el_cols
+    elseif b_order == 2
+        sf2 = ShapeFunctions(order=2, dim=3)
+        sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+        b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
+    end
 
-#     # evaluate functions for each column
-#     b0 = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ b_cols]
-#     if b_order == 1
-#         bx0 = [zeros(nz-1) for nz ∈ nzs]
-#         by0 = [zeros(nz-1) for nz ∈ nzs]
-#     elseif b_order == 2
-#         bx0 = [zeros(2nz-2) for nz ∈ nzs]
-#         by0 = [zeros(2nz-2) for nz ∈ nzs]
-#     end
-#     @showprogress "Computing buoyancy gradients..." for k=1:g_sfc.nt
-#         b_col = FEField(b0[k], b_cols[k])
-#         n = 0
-#         for i=1:3
-#             ig = g_sfc.t[k, i]
-#             x = g_sfc.p[ig, 1]
-#             y = g_sfc.p[ig, 2]
-#             weight = 1/size(p_to_tri[ig], 1)
-#             # # compute weight based on angle
-#             # v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-#             # v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-#             # weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
-#             for j=1:nzs[ig]-1
-#                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
-#                 if b_order == 1
-#                     bx0[ig][j] += weight*∂x(b_col, [0, 0, 0], k_tet)
-#                     by0[ig][j] += weight*∂y(b_col, [0, 0, 0], k_tet)
-#                 elseif b_order == 2
-#                     bx0[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
-#                     bx0[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-#                     by0[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
-#                     by0[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-#                 end
-#             end
-#             n += nzs[ig]
-#         end
-#     end
+    # setup arrays
+    b0 = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ b_cols]
+    if b_order == 1
+        bx0 = [zeros(nz-1) for nz ∈ nzs]
+        by0 = [zeros(nz-1) for nz ∈ nzs]
+    elseif b_order == 2
+        bx0 = [zeros(2nz-2) for nz ∈ nzs]
+        by0 = [zeros(2nz-2) for nz ∈ nzs]
+    end
+    @showprogress "Computing buoyancy gradients..." for k=1:g_sfc.nt
+        b_col = FEField(b0[k], b_cols[k])
+        n = 0
+        for i=1:3
+            ig = g_sfc.t[k, i]
+            x = g_sfc.p[ig, 1]
+            y = g_sfc.p[ig, 2]
+            weight = 1/size(p_to_tri[ig], 1)
+            # # compute weight based on angle
+            # v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            # v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
+            # weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
+            for j=1:nzs[ig]-1
+                k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
+                if b_order == 1
+                    bx0[ig][j] += weight*∂x(b_col, [0, 0, 0], k_tet)
+                    by0[ig][j] += weight*∂y(b_col, [0, 0, 0], k_tet)
+                elseif b_order == 2
+                    bx0[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
+                    bx0[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                    by0[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
+                    by0[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                end
+            end
+            n += nzs[ig]
+        end
+    end
 
-#     # solve 
-#     ωx = zeros(g.np)
-#     ωy = zeros(g.np)
-#     χx = zeros(g.np)
-#     χy = zeros(g.np)
-#     j = 0
-#     @showprogress "Solving..." for i ∈ eachindex(node_cols)
-#         nz = nzs[i]
-#         if nz ≤ 2
-#             j += nz
-#             continue
-#         end
-#         sol = solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], 0, 0, 0, 0, ε²)
-#         ωx[j+1:j+nz] = sol[0*nz+1:1*nz]
-#         ωy[j+1:j+nz] = sol[1*nz+1:2*nz]
-#         χx[j+1:j+nz] = sol[2*nz+1:3*nz]
-#         χy[j+1:j+nz] = sol[3*nz+1:4*nz]
-#         j += nz
-#     end
+    # solve 
+    ωx_b = zeros(g.np)
+    ωy_b = zeros(g.np)
+    χx_b = zeros(g.np)
+    χy_b = zeros(g.np)
+    j = 0
+    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+        nz = nzs[i]
+        if nz ≤ 2
+            j += nz
+            continue
+        end
+        y = g_sfc.p[i, 2]
+        sol = solve_baroclinic_1dfe(node_cols[i], bx0[i], by0[i], 0, 0, 0, 0, ε², f(y))
+        ωx_b[j+1:j+nz] = sol[0*nz+1:1*nz]
+        ωy_b[j+1:j+nz] = sol[1*nz+1:2*nz]
+        χx_b[j+1:j+nz] = sol[2*nz+1:3*nz]
+        χy_b[j+1:j+nz] = sol[3*nz+1:4*nz]
+        j += nz
+    end
 
-#     # plot
-#     b0 = b.(g.p[:, 1], g.p[:, 2], g.p[:, 3])
-#     write_vtk(g, "output/baroclinic.vtu", Dict("ωx"=>ωx, "ωy"=>ωy, "χx"=>χx, "χy"=>χy, "b"=>b0))
-# end
+    # plot
+    ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
+    ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+    quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
+    quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
+
+    return ωx_b_bot, ωy_b_bot
+end
