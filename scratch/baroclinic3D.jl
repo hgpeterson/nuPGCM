@@ -1,4 +1,3 @@
-using nuPGCM
 using HDF5
 using PyPlot
 using Printf
@@ -129,14 +128,14 @@ function gen_3D_valign_mesh(g_sfc, H; order)
     return g, el_cols, node_cols, p_to_tri
 end
 
-function get_ω_U(g_sfc, g, node_cols, H, ε², f)
+function get_ω_U(g_sfc, g, node_cols, H, ε², f; showplots=false)
     # solve for ω_Uˣ
     ωx_Ux = zeros(g.np)
     ωy_Ux = zeros(g.np)
     χx_Ux = zeros(g.np)
     χy_Ux = zeros(g.np)
     j = 0
-    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+    for i ∈ eachindex(node_cols)
         nz = size(node_cols[i], 1)
         if nz == 1
             j += nz
@@ -152,31 +151,25 @@ function get_ω_U(g_sfc, g, node_cols, H, ε², f)
         j += nz
     end
 
-    # symmetry
-    ωx_Uy = -ωy_Ux
-    ωy_Uy = ωx_Ux
-    χx_Uy = -χy_Ux
-    χy_Uy = χx_Ux
+    if showplots
+        ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
+        ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
+        quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
+        quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
+        write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
+    end
 
-    # plot
-    ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
-    ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
-    quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
-    quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
-    ωx_Uy_bot = FEField(ωx_Uy[g.e["bot"]], g_sfc)
-    ωy_Uy_bot = FEField(ωy_Uy[g.e["bot"]], g_sfc)
-
-    return ωx_Ux_bot, ωy_Ux_bot, ωx_Uy_bot, ωy_Uy_bot
+    return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_ω_τ(g_sfc, g, node_cols, ε², f)
+function get_ω_τ(g_sfc, g, node_cols, ε², f; showplots=false)
     # solve for ω_τˣ
     ωx_τx = zeros(g.np)
     ωy_τx = zeros(g.np)
     χx_τx = zeros(g.np)
     χy_τx = zeros(g.np)
     j = 0
-    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+    for i ∈ eachindex(node_cols)
         nz = size(node_cols[i], 1)
         if nz == 1
             j += nz
@@ -190,44 +183,31 @@ function get_ω_τ(g_sfc, g, node_cols, ε², f)
         χy_τx[j+1:j+nz] = sol[3*nz+1:4*nz]
         j += nz
     end
-
-    # symmetry
-    ωx_τy = -ωy_τx
-    ωy_τy =  ωx_τx
-    χx_τy = -χy_τx
-    χy_τy =  χx_τx
     
-    # plot
-    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
-    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
-    quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "scratch/images/omegax_taux.png")
-    quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "scratch/images/omegay_taux.png")
-    ωx_τy_bot = FEField(ωx_τy[g.e["bot"]], g_sfc)
-    ωy_τy_bot = FEField(ωy_τy[g.e["bot"]], g_sfc)
+    if showplots
+        ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
+        ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+        quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "scratch/images/omegax_taux.png")
+        quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "scratch/images/omegay_taux.png")
+        write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
+    end
 
-    return ωx_τx_bot, ωy_τx_bot, ωx_τy_bot, ωy_τy_bot
+    return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; b_order)
+function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplots=false)
     # grid
     nzs = [size(col, 1) for col ∈ node_cols]
-    if b_order == 1
-        b_cols = el_cols
-    elseif b_order == 2
-        sf2 = ShapeFunctions(order=2, dim=3)
-        sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-        b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
-    end
+
+    # b must be second order
+    sf2 = ShapeFunctions(order=2, dim=3)
+    sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
 
     # setup arrays
     b0 = [b.(col.p[:, 1], col.p[:, 2], col.p[:, 3]) for col ∈ b_cols]
-    if b_order == 1
-        bx0 = [zeros(nz-1) for nz ∈ nzs]
-        by0 = [zeros(nz-1) for nz ∈ nzs]
-    elseif b_order == 2
-        bx0 = [zeros(2nz-2) for nz ∈ nzs]
-        by0 = [zeros(2nz-2) for nz ∈ nzs]
-    end
+    bx0 = [zeros(2nz-2) for nz ∈ nzs]
+    by0 = [zeros(2nz-2) for nz ∈ nzs]
     @showprogress "Computing buoyancy gradients..." for k=1:g_sfc.nt
         b_col = FEField(b0[k], b_cols[k])
         n = 0
@@ -236,21 +216,12 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; b_order
             x = g_sfc.p[ig, 1]
             y = g_sfc.p[ig, 2]
             weight = 1/size(p_to_tri[ig], 1)
-            # # compute weight based on angle
-            # v1 = g_sfc.p[g_sfc.t[k, mod1(i+1, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-            # v2 = g_sfc.p[g_sfc.t[k, mod1(i+2, 3)], :] - g_sfc.p[g_sfc.t[k, i], :]
-            # weight = acos(dot(v1, v2)/norm(v1)/norm(v2))/2π
             for j=1:nzs[ig]-1
                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
-                if b_order == 1
-                    bx0[ig][j] += weight*∂x(b_col, [0, 0, 0], k_tet)
-                    by0[ig][j] += weight*∂y(b_col, [0, 0, 0], k_tet)
-                elseif b_order == 2
-                    bx0[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
-                    bx0[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-                    by0[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
-                    by0[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-                end
+                bx0[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
+                bx0[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                by0[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
+                by0[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
             end
             n += nzs[ig]
         end
@@ -262,7 +233,7 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; b_order
     χx_b = zeros(g.np)
     χy_b = zeros(g.np)
     j = 0
-    @showprogress "Solving..." for i ∈ eachindex(node_cols)
+    for i ∈ eachindex(node_cols)
         nz = nzs[i]
         if nz ≤ 2
             j += nz
@@ -277,11 +248,13 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; b_order
         j += nz
     end
 
-    # plot
-    ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
-    ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
-    quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
-    quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
+    if showplots
+        ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
+        ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+        quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
+        quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
+        write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
+    end
 
-    return ωx_b_bot, ωy_b_bot
+    return ωx_b, ωy_b, χx_b, χy_b
 end

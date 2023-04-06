@@ -116,22 +116,22 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
 end
 
 function test_1d()
+    ε² = 0.01
     nz = 2^8
     z = 0:-1/(nz - 1):-1
     bx = zeros(nz-1)
     by = zeros(nz-1)
-    Ux = 0
+    Ux = 1
     Uy = 0
     τx = 0
-    τy = 1
-    ε² = 0.01
+    τy = 0
     f = 1
     sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     ωx = sol[1:nz]
     ωy = sol[nz+1:2nz]
     χx = sol[2nz+1:3nz]
     χy = sol[3nz+1:4nz]
-    fig, ax = subplots(1, 2, figsize=(2*2, 3.2), sharey=true)
+    fig, ax = subplots(1, 2, figsize=(3.2, 2.6), sharey=true)
     ax[1].plot(ωx, z, label=L"\omega^x")
     ax[1].plot(ωy, z, label=L"\omega^y")
     ax[2].plot(χx, z, label=L"\chi^x")
@@ -141,8 +141,8 @@ function test_1d()
     ax[2].set_xlabel(L"\chi")
     ax[1].legend()
     ax[2].legend()
-    savefig("scratch/images/omega_chi.png")
-    println("scratch/images/omega_chi.png")
+    savefig("scratch/images/omega_chi.pdf")
+    println("scratch/images/omega_chi.pdf")
     plt.close()
 end
 
