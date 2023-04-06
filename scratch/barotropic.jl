@@ -33,7 +33,8 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
     rhs = zeros(N)
-    @showprogress "Building matrices..." for k=1:g.nt
+    println("Building matrices...")
+    for k=1:g.nt
         # Jacobian terms
         ξx = J.Js[k, 1, 1]; ξy = J.Js[k, 1, 2]; ηx = J.Js[k, 2, 1]; ηy = J.Js[k, 2, 2]
         ∂x∂ξ = J.dets[k]
@@ -120,20 +121,16 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
     # solve
-    println("Solving...")
     return FEField(A\rhs, g)
 end
 
-function main(; order)
-    # surface mesh
-    g_sfc = FEGrid("meshes/circle/mesh2.h5", order)
-    x = g_sfc.p[:, 1]
-    y = g_sfc.p[:, 2]
-
+function invert(b, τx, τy; showplots=false)
+    # bathymetry
     quick_plot(FEField(H.(x, y), g_sfc), L"H", "scratch/images/H.png")
     quick_plot(FEField(Hx.(x, y), g_sfc), L"H_x", "scratch/images/Hx.png")
     quick_plot(FEField(Hy.(x, y), g_sfc), L"H_y", "scratch/images/Hy.png")
 
+    # f/H contours
     β = 1
     f(y) = β*y
     f_over_H = @. f(y)/(H(x, y) + 1e-5)
@@ -141,47 +138,48 @@ function main(; order)
 
     # wind stress
     τx = FEField(-cos.(π*y), g_sfc)
+    # τx = FEField(0, g_sfc)
     τy = FEField(0, g_sfc)
     f_curl(x, y) = (∂x(τy, [x, y]) - ∂y(τx, [x, y]))*H(x, y) - (τy([x, y])*Hx(x, y) - τx([x, y])*Hy(x, y))
-    # f_curl(x, y) = -π*sin(π*y)*H(x, y) - cos(π*y)*Hy(x, y)
     curl = f_curl.(x, y) 
     quick_plot(FEField(curl, g_sfc), L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "scratch/images/curl.png")
 
     # 3D mesh
-    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+    # g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
 
     # get ω_U's
-    ωx_Ux_bot, ωy_Ux_bot, ωx_Uy_bot, ωy_Uy_bot = get_ω_U(g_sfc, g, node_cols, H, ε², f)
-    quick_plot(FEField(ωy_Ux_bot.values./H.(x, y).^2, g_sfc), L"\omega^y_{U^x}(-H)/H^2", "scratch/images/omegax_Ux_H2.png")
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
+    ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
+    ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
     r_sym = ωy_Ux_bot/FEField(H.(x, y), g_sfc)^3
     r_asym = ωx_Ux_bot/FEField(H.(x, y), g_sfc)^3
     # r_sym = FEField(1e1./H.(x, y), g_sfc)
     # r_asym = FEField(0, g_sfc)
-    quick_plot(r_sym, L"r_\mathrm{sym}", "scratch/images/r_sym.png")
-    quick_plot(r_asym, L"r_\mathrm{asym}", "scratch/images/r_asym.png")
 
     # get ω_τ's
-    ωx_τx_bot, ωy_τx_bot, ωx_τy_bot, ωy_τy_bot = get_ω_τ(g_sfc, g, node_cols, ε², f)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
+    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
+    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+    ωx_τy_bot = -ωy_τx_bot
+    ωy_τy_bot = ωx_τx_bot
 
     # get ω_b's
     δ = 0.1
-    # b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
-    # ωx_b_bot, ωy_b_bot = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, b_order=2)
-    ωx_b_bot = FEField(0, g_sfc)
-    ωy_b_bot = FEField(0, g_sfc)
+    b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
+    ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, showplots=showplots)
+    ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
+    ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
 
     # combine
     ωx_bot = ωx_b_bot + (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H.(x, y), g_sfc)
     ωy_bot = ωy_b_bot + (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H.(x, y), g_sfc)
-    # ωx_bot = FEField(0, g_sfc)
-    # ωy_bot = FEField(0, g_sfc)
     quick_plot(ωx_bot, L"\omega^x_b + \tau^j \omega^x_{\tau^j} / H", "scratch/images/omegax_bot.png")
     quick_plot(ωy_bot, L"\omega^y_b + \tau^j \omega^y_{\tau^j} / H", "scratch/images/omegay_bot.png")
 
     # JEBAR 
-    γ_func(x, y) = -H(x, y)^3/3 - δ^2*(δ - H(x, y) - δ*exp(-H(x, y)/δ))
-    # γ_func(x, y) = 0
-    γ = FEField(γ_func.(x, y), g_sfc)
+    # γ_func(x, y) = -H(x, y)^3/3 - δ^2*(δ - H(x, y) - δ*exp(-H(x, y)/δ))
+    # γ = FEField(γ_func.(x, y), g_sfc)
+    γ = FEField(0, g_sfc)
     quick_plot(γ, L"\gamma", "scratch/images/gamma.png")
     JEBAR(x, y) = ∂y(γ, [x, y])*Hx(x, y) - ∂x(γ, [x, y])*Hy(x, y)
     quick_plot(FEField(JEBAR.(x, y), g_sfc), L"-H^2 J(1/H, \gamma)", "scratch/images/JEBAR.png")
@@ -196,4 +194,11 @@ H(x, y) = 1 - x^2 - y^2
 Hx(x, y) = -2x
 Hy(x, y) = -2y
 
-main(order=1)
+# # mesh stuff
+# g_sfc = FEGrid("meshes/circle/mesh2.h5", 1)
+# x = g_sfc.p[:, 1]
+# y = g_sfc.p[:, 2]
+# g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+
+# run
+main(showplots=true)
