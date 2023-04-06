@@ -12,20 +12,19 @@ using SparseArrays
 using LinearAlgebra
 
 include("utils.jl")
-include("baroclinic3D.jl")
+include("baroclinic.jl")
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
+function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     # indices
     N = g.np
 
     # unpack
     bdy = g.e["bdy"]
     J = g.J
-    s = g.sfi
 
     # integration
     quad_wts, quad_pts = quad_weights_points(deg=7, dim=2)
@@ -36,26 +35,24 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
     println("Building matrices...")
     for k=1:g.nt
         # Jacobian terms
-        ξx = J.Js[k, 1, 1]; ξy = J.Js[k, 1, 2]; ηx = J.Js[k, 2, 1]; ηy = J.Js[k, 2, 2]
+        ξx = J.Js[k, 1, 1]
+        ξy = J.Js[k, 1, 2]
+        ηx = J.Js[k, 2, 1]
+        ηy = J.Js[k, 2, 2]
         ∂x∂ξ = J.dets[k]
-
-        # matrices
-        # JJ = J.Js[k, :, :]*J.Js[k, :, :]'
-        # K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        # K′ = J.dets[k]*((ηx*ξy - ηy*ξx)*s.K[2, 1, :, :] - (ηx*ξy - ηy*ξx)*s.K[1, 2, :, :])
 
         # transformation from reference triangle
         T(ξ) = transform_from_ref_el(ξ, g.p[g.t[k, 1:3], :])
 
         # K
         function func_K(ξ, i, j)
-            x, y = T(ξ)
+            x = T(ξ)
             φi = φ(g.sf, i, ξ)
             ∂xφ_i = ∂φ(g.sf, i, 1, ξ)*ξx + ∂φ(g.sf, i, 2, ξ)*ηx
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
-            return -ε²*r_sym([x, y], k)*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*∂x∂ξ
+            return -ε²*r_sym(x, k)*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*∂x∂ξ
             # return -ε²*r_sym([x, y], k)*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*H(x, y)^2*∂x∂ξ - 
             #         ε²*r_sym([x, y], k)*(φi*∂xφ_j*Hx(x, y) + φi*∂yφ_j*Hy(x, y))*2*H(x, y)*∂x∂ξ 
         end
@@ -63,13 +60,13 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
 
         # K′
         function func_K′(ξ, i, j)
-            x, y = T(ξ)
+            x = T(ξ)
             φi = φ(g.sf, i, ξ)
             ∂xφ_i = ∂φ(g.sf, i, 1, ξ)*ξx + ∂φ(g.sf, i, 2, ξ)*ηx
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
-            return -ε²*r_asym([x, y], k)*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*∂x∂ξ
+            return -ε²*r_asym(x, k)*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*∂x∂ξ
             # return -ε²*r_asym([x, y], k)*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*H(x, y)^2*∂x∂ξ -
             #         ε²*r_asym([x, y], k)*(φi*∂xφ_j*Hx(x, y) - φi*∂yφ_j*Hy(x, y))*2*H(x, y)*∂x∂ξ 
         end
@@ -77,22 +74,21 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
 
         # J(f/H, Ψ) term
         function func_C(ξ, i, j)
-            x, y = T(ξ)
-            f = β*y
+            x = T(ξ)
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
             φi = φ(g.sf, i, ξ)
-            return ((H(x, y)*β - f*Hy(x, y))*∂xφ_j + f*Hx(x, y)*∂yφ_j)*φi/H(x, y)^2*∂x∂ξ
+            return ((H(x)*fy(x) - f(x)*Hy(x))*∂xφ_j + f(x)*Hx(x)*∂yφ_j)*φi/H(x)^2*∂x∂ξ
             # return ((H(x, y)*β - f*Hy(x, y))*∂xφ_j + f*Hx(x, y)*∂yφ_j)*φi*∂x∂ξ
         end
         C = [nuPGCM.ref_el_quad(ξ -> func_C(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
         # rhs
         function func_r(ξ, i)
-            x, y = T(ξ)
-            JEBAR = (-∂y(γ, [x, y], k)*Hx(x, y) + ∂x(γ, [x, y], k)*Hy(x, y))/H(x, y)^2
-            τ_curl = (∂x(τy, [x, y], k) - ∂y(τx, [x, y], k))/H(x, y) - (τy([x, y], k)*Hx(x, y) - τx([x, y], k)*Hy(x, y))/H(x, y)^2
-            ω_bot_div = ∂x(ωx_bot, [x, y], k) + ∂y(ωy_bot, [x, y], k)
+            x = T(ξ)
+            JEBAR = (-γy(x)*Hx(x) + γx(x)*Hy(x))/H(x)^2
+            τ_curl = (∂τ∂x(x)[2] - ∂τ∂y(x)[1])/H(x) - (τ(x)[2]*Hx(x) - τ(x)[1]*Hy(x))/H(x)^2
+            ω_bot_div = ∂x(ωx_bot, x, k) + ∂y(ωy_bot, x, k)
             # τ_curl = (∂x(τy, [x, y], k) - ∂y(τx, [x, y], k))*H(x, y) - (τy([x, y], k)*Hx(x, y) - τx([x, y], k)*Hy(x, y))
             # ω_bot_div = (∂x(ωx_bot, [x, y], k) + ∂y(ωy_bot, [x, y], k))*H(x, y)^2
             φi = φ(g.sf, i, ξ)
@@ -124,35 +120,26 @@ function solve_barotropic(g, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
     return FEField(A\rhs, g)
 end
 
-function invert(b, τx, τy; showplots=false)
-    # bathymetry
-    quick_plot(FEField(H.(x, y), g_sfc), L"H", "scratch/images/H.png")
-    quick_plot(FEField(Hx.(x, y), g_sfc), L"H_x", "scratch/images/Hx.png")
-    quick_plot(FEField(Hy.(x, y), g_sfc), L"H_y", "scratch/images/Hy.png")
-
-    # f/H contours
-    β = 1
-    f(y) = β*y
-    f_over_H = @. f(y)/(H(x, y) + 1e-5)
-    quick_plot(FEField(f_over_H, g_sfc), L"f/H", "scratch/images/f_over_H.png", vmax=6)
-
-    # wind stress
-    τx = FEField(-cos.(π*y), g_sfc)
-    # τx = FEField(0, g_sfc)
-    τy = FEField(0, g_sfc)
-    f_curl(x, y) = (∂x(τy, [x, y]) - ∂y(τx, [x, y]))*H(x, y) - (τy([x, y])*Hx(x, y) - τx([x, y])*Hy(x, y))
-    curl = f_curl.(x, y) 
-    quick_plot(FEField(curl, g_sfc), L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "scratch/images/curl.png")
-
-    # 3D mesh
-    # g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+function invert(; showplots=false)
+    if showplots
+        quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
+        quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
+        quick_plot(Hy, g_sfc, L"H_y", "scratch/images/Hy.png")
+        f_over_H(x) = f(x)/(H(x) + 1e-5)
+        quick_plot(f_over_H, g_sfc, L"f/H", "scratch/images/f_over_H.png", vmax=6)
+        curl(x) = (∂τ∂x(x)[2] - ∂τ∂y(x)[1])*H(x) - (τ(x)[2]*Hx(x) - τ(x)[1]*Hy(x))
+        quick_plot(curl, g_sfc, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "scratch/images/curl.png")
+        quick_plot(γ, g_sfc, L"\gamma", "scratch/images/gamma.png")
+        JEBAR(x) = γy(x)*Hx(x) - γx(x)*Hy(x)
+        quick_plot(JEBAR, g_sfc, L"-H^2 J(1/H, \gamma)", "scratch/images/JEBAR.png")
+    end
 
     # get ω_U's
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
     ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
     ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
-    r_sym = ωy_Ux_bot/FEField(H.(x, y), g_sfc)^3
-    r_asym = ωx_Ux_bot/FEField(H.(x, y), g_sfc)^3
+    r_sym = ωy_Ux_bot/FEField(H, g_sfc)^3
+    r_asym = ωx_Ux_bot/FEField(H, g_sfc)^3
     # r_sym = FEField(1e1./H.(x, y), g_sfc)
     # r_asym = FEField(0, g_sfc)
 
@@ -164,41 +151,50 @@ function invert(b, τx, τy; showplots=false)
     ωy_τy_bot = ωx_τx_bot
 
     # get ω_b's
-    δ = 0.1
-    b(x, y, z) = z + δ*exp(-(z + H(x, y))/δ)
     ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, showplots=showplots)
     ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
     ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
 
     # combine
-    ωx_bot = ωx_b_bot + (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H.(x, y), g_sfc)
-    ωy_bot = ωy_b_bot + (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H.(x, y), g_sfc)
-    quick_plot(ωx_bot, L"\omega^x_b + \tau^j \omega^x_{\tau^j} / H", "scratch/images/omegax_bot.png")
-    quick_plot(ωy_bot, L"\omega^y_b + \tau^j \omega^y_{\tau^j} / H", "scratch/images/omegay_bot.png")
-
-    # JEBAR 
-    # γ_func(x, y) = -H(x, y)^3/3 - δ^2*(δ - H(x, y) - δ*exp(-H(x, y)/δ))
-    # γ = FEField(γ_func.(x, y), g_sfc)
-    γ = FEField(0, g_sfc)
-    quick_plot(γ, L"\gamma", "scratch/images/gamma.png")
-    JEBAR(x, y) = ∂y(γ, [x, y])*Hx(x, y) - ∂x(γ, [x, y])*Hy(x, y)
-    quick_plot(FEField(JEBAR.(x, y), g_sfc), L"-H^2 J(1/H, \gamma)", "scratch/images/JEBAR.png")
+    τx = FEField(x -> τ(x)[1], g_sfc)
+    τy = FEField(x -> τ(x)[2], g_sfc)
+    ωx_bot = ωx_b_bot + (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H, g_sfc)
+    ωy_bot = ωy_b_bot + (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H, g_sfc)
+    if showplots
+        quick_plot(ωx_bot, L"\omega^x_b + \tau^j \omega^x_{\tau^j} / H", "scratch/images/omegax_bot.png")
+        quick_plot(ωy_bot, L"\omega^y_b + \tau^j \omega^y_{\tau^j} / H", "scratch/images/omegay_bot.png")
+    end
 
     # solve
-    Ψ = solve_barotropic(g_sfc, r_sym, r_asym, β, τx, τy, ωx_bot, ωy_bot, γ)
-    quick_plot(Ψ, L"\Psi", "scratch/images/psi.png")
+    Ψ = solve_barotropic(g_sfc, r_sym, r_asym, ωx_bot, ωy_bot)
+    if showplots
+        quick_plot(Ψ, L"\Psi", "scratch/images/psi.png")
+    end
+
+    return Ψ
 end
 
 ε² = 1e-2
-H(x, y) = 1 - x^2 - y^2
-Hx(x, y) = -2x
-Hy(x, y) = -2y
+β = 1
+δ = 0.1
+H(x) = 1 - x[1]^2 - x[2]^2
+Hx(x) = -2x[1]
+Hy(x) = -2x[2]
+f(x) = β*x[2]
+fy(x) = β
+b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
+γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
+γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
+γy(x) = -Hy(x)*H(x)^2 - δ^2*Hy(x)*(exp(-H(x)/δ) - 1)
+τ(x) = (-cos(π*x[2]), 0)
+∂τ∂x(x) = (0, 0)
+∂τ∂y(x) = (π*sin(π*x[2]), 0)
 
 # # mesh stuff
 # g_sfc = FEGrid("meshes/circle/mesh2.h5", 1)
-# x = g_sfc.p[:, 1]
-# y = g_sfc.p[:, 2]
 # g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
 
 # run
-main(showplots=true)
+invert(showplots=true)
+
+println("Done.")

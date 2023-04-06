@@ -27,6 +27,9 @@ end
 function FEField(value::Number, g::FEGrid)
     return FEField(value*ones(g.np), g)
 end
+function FEField(f::Function, g::FEGrid)
+    return FEField([f(g.p[i, :]) for i=1:g.np], g)
+end
 
 # define operations on FEField's
 function -(u::FEField, v::FEField)

@@ -34,6 +34,9 @@ function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
     println(fname)
     plt.close()
 end
+function quick_plot(f::Function, g::FEGrid, args...; kwargs...)
+    quick_plot(FEField(f, g), args...; kwargs...)
+end
 
 function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
     u_profile = zeros(size(z))
