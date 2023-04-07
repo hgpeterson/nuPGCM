@@ -120,7 +120,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     return FEField(A\rhs, g)
 end
 
-function invert(; showplots=false)
+function invert(g_sfc; showplots=false, nonzero_b=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -133,6 +133,9 @@ function invert(; showplots=false)
         JEBAR(x) = γy(x)*Hx(x) - γx(x)*Hy(x)
         quick_plot(JEBAR, g_sfc, L"-H^2 J(1/H, \gamma)", "scratch/images/JEBAR.png")
     end
+
+    # meshes
+    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
 
     # get ω_U's
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
@@ -151,9 +154,15 @@ function invert(; showplots=false)
     ωy_τy_bot = ωx_τx_bot
 
     # get ω_b's
-    ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, showplots=showplots)
-    ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
-    ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+    if nonzero_b
+        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, showplots=showplots)
+        ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
+        ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+    else
+        ωx_b_bot = FEField(0, g_sfc)
+        ωy_b_bot = FEField(0, g_sfc)
+    end
+
 
     # combine
     τx = FEField(x -> τ(x)[1], g_sfc)
@@ -174,6 +183,64 @@ function invert(; showplots=false)
     return Ψ
 end
 
+function convergence()
+    # base mesh
+    g0 = FEGrid(1, "meshes/circle/mesh0.h5")
+    tplot(g0)
+    axis("equal")
+    savefig("scratch/images/g.png")
+    println("scratch/images/g.png")
+    plt.close()
+
+    # highest res
+    nrefs = 4
+    g_hr = refine(g0, nrefs)
+    tplot(g_hr)
+    axis("equal")
+    savefig("scratch/images/g_hr.png")
+    println("scratch/images/g_hr.png")
+    plt.close()
+    # Ψ_hr = invert(g_hr, showplots=true, nonzero_b=false)
+    Ψ_hr = invert(g_hr, showplots=true)
+
+    # errors
+    err = zeros(nrefs)
+    for i=0:nrefs-1
+        println("Refinement $i")
+        g = refine(g0, i)
+        Ψ = invert(g)
+        err[i+1] = L2norm(abs(Ψ - Ψ_hr[1:g.np]))
+    end
+    return err
+end
+
+function refine(g, n)
+    p = g.p
+    t = g.t 
+    e = g.e
+    emap, edges, bndix = all_edges(t)
+    for i=1:n
+        pmid = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), :))
+        p = [p; pmid]
+        t = delaunay(p).simplices
+        t = remove_tiny_tris(p, t)
+
+        emap, edges, bndix = all_edges(t)
+        e["bdy"] = unique(edges[bndix, :])
+    end
+    return FEGrid(1, p, t, e)
+end
+
+function triarea(p, t)
+    d12 = @. p[t[:,2],:] - p[t[:,1],:]
+    d13 = @. p[t[:,3],:] - p[t[:,1],:]
+    return @. abs(d12[:,1] * d13[:,2] - d12[:,2] * d13[:,1]) / 2
+end
+
+function remove_tiny_tris(p, t)
+    return t[triarea(p,t) .> 1e-14,:]
+end
+
 ε² = 1e-2
 β = 1
 δ = 0.1
@@ -190,11 +257,14 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 ∂τ∂x(x) = (0, 0)
 ∂τ∂y(x) = (π*sin(π*x[2]), 0)
 
-# # mesh stuff
-# g_sfc = FEGrid("meshes/circle/mesh2.h5", 1)
-# g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+err = convergence()
 
-# run
-invert(showplots=true)
+# no b:
+# nref L2 error
+# 0    3.0e0
+# 1    1.4e0
+# 2    2.6e-1
+# 3    2.7e-2
+# -> O(h^3) convergence ??
 
 println("Done.")

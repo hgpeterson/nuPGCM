@@ -31,49 +31,33 @@ function FEField(f::Function, g::FEGrid)
     return FEField([f(g.p[i, :]) for i=1:g.np], g)
 end
 
-# define operations on FEField's
-function -(u::FEField, v::FEField)
-    return FEField(u.order, u.values - v.values, u.g)
-end
-function -(u::FEField)
-    return FEField(u.order, -u.values, u.g)
-end
-function +(u::FEField, v::FEField)
-    return FEField(u.order, u.values + v.values, u.g)
-end
-function *(u::FEField, v::FEField)
-    return FEField(u.order, u.values.*v.values, u.g)
-end
-function *(u::FEField, c)
-    return FEField(u.order, u.values*c, u.g)
-end
-function /(u::FEField, v::FEField)
-    return FEField(u.order, u.values./v.values, u.g)
-end
-function ^(u::FEField, n)
-    return FEField(u.order, u.values.^n, u.g)
-end
-function log(u::FEField)
-    return FEField(u.order, log.(u.values), u.g)
-end
-function abs(u::FEField)
-    return FEField(u.order, abs.(u.values), u.g)
-end
-function maximum(u::FEField)
-    return maximum(u.values)
-end
-function minimum(u::FEField)
-    return minimum(u.values)
-end
-function argmax(u::FEField)
-    return argmax(u.values)
-end
-function argmin(u::FEField)
-    return argmin(u.values)
-end
-function getindex(u::FEField, I)
-    return u.values[I]
-end
+# define operations on FEFields
+-(u::FEField, v::AbstractVector) = FEField(u.order, u.values - v, u.g)
+-(u::FEField) = FEField(u.order, -u.values, u.g)
+-(u::AbstractVector, v::FEField) = -(v - u)
+-(u::FEField, v::FEField) = u - v.values
+
++(u::FEField, v::AbstractVector) = FEField(u.order, u.values + v, u.g)
++(u::AbstractVector, v::FEField) = v + u
++(u::FEField, v::FEField) = u + v.values
+
+*(u::FEField, v::AbstractVector) = FEField(u.order, u.values .* v, u.g)
+*(u::AbstractVector, v::FEField) = v * u
+*(u::FEField, v::FEField) = u * v.values
+
+/(u::FEField, v::AbstractVector) = FEField(u.order, u.values ./ v, u.g)
+/(u::AbstractVector, v::FEField) = v / u
+/(u::FEField, v::FEField) = u / v.values
+
+^(u::FEField, n::Number) = FEField(u.order, u.values .^ n, u.g)
+
+log(u::FEField) = FEField(u.order, log.(u.values), u.g)
+abs(u::FEField) = FEField(u.order, abs.(u.values), u.g)
+maximum(u::FEField) = maximum(u.values)
+minimum(u::FEField) = minimum(u.values)
+argmax(u::FEField) = argmax(u.values)
+argmin(u::FEField) = argmin(u.values)
+getindex(u::FEField, I) = u.values[I]
 
 """
     l2 = L2norm(u)

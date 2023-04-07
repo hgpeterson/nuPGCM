@@ -106,7 +106,7 @@ function FEGrid(order, p, t, e)
     sfi = ShapeFunctionIntegrals(sf, sf)
     return FEGrid(order, p, t, e, sf, sfi)
 end
-function FEGrid(gfile::String, order)
+function FEGrid(order, gfile::String)
     # read grid data
     p, t, e = read_gfile_h5(gfile)
     e = Dict("bdy"=>e)
