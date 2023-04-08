@@ -120,7 +120,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     return FEField(A\rhs, g)
 end
 
-function invert(g_sfc; showplots=false, nonzero_b=true)
+function invert(g_sfc; showplots=false, nonzero_b=true, nonzero_τ=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -147,11 +147,18 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
     # r_asym = FEField(0, g_sfc)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
-    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
-    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
-    ωx_τy_bot = -ωy_τx_bot
-    ωy_τy_bot = ωx_τx_bot
+    if nonzero_τ
+        ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
+        ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
+        ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+        ωx_τy_bot = -ωy_τx_bot
+        ωy_τy_bot = ωx_τx_bot
+    else
+        ωx_τx_bot = FEField(0, g_sfc)
+        ωy_τx_bot = FEField(0, g_sfc)
+        ωx_τy_bot = FEField(0, g_sfc)
+        ωy_τy_bot = FEField(0, g_sfc)
+    end
 
     # get ω_b's
     if nonzero_b
@@ -162,7 +169,6 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
         ωx_b_bot = FEField(0, g_sfc)
         ωy_b_bot = FEField(0, g_sfc)
     end
-
 
     # combine
     τx = FEField(x -> τ(x)[1], g_sfc)
@@ -253,18 +259,29 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
 γy(x) = -Hy(x)*H(x)^2 - δ^2*Hy(x)*(exp(-H(x)/δ) - 1)
-τ(x) = (-cos(π*x[2]), 0)
+# τ(x) = (-cos(π*x[2]), 0)
+# ∂τ∂x(x) = (0, 0)
+# ∂τ∂y(x) = (π*sin(π*x[2]), 0)
+τ(x) = (0, 0)
 ∂τ∂x(x) = (0, 0)
-∂τ∂y(x) = (π*sin(π*x[2]), 0)
+∂τ∂y(x) = (0, 0)
 
 err = convergence()
 
 # no b:
-# nref L2 error
+# nref L2
 # 0    3.0e0
 # 1    1.4e0
 # 2    2.6e-1
 # 3    2.7e-2
 # -> O(h^3) convergence ??
+
+# only b:
+# nref L2
+# 0    1.1e-03
+# 1    6.9e-04
+# 2    2.1e-04
+# 3    3.7e-05
+# -> O(h^2.5) convergence ??
 
 println("Done.")
