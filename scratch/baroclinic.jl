@@ -244,7 +244,7 @@ function test_1d()
     Uy = 0
     τx = 0
     τy = 0
-    f = 1
+    f = 0
     sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     ωx = sol[1:nz]
     ωy = sol[nz+1:2nz]
@@ -260,8 +260,8 @@ function test_1d()
     ax[2].set_xlabel(L"\chi")
     ax[1].legend()
     ax[2].legend()
-    savefig("scratch/images/omega_chi.pdf")
-    println("scratch/images/omega_chi.pdf")
+    savefig("scratch/images/omega_chi.png")
+    println("scratch/images/omega_chi.png")
     plt.close()
 end
 
@@ -338,7 +338,7 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplo
     # b must be second order
     sf2 = ShapeFunctions(order=2, dim=3)
     sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols]
+    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols] # even this takes a while!
 
     # setup arrays
     bx = [zeros(2nz-2) for nz ∈ nzs]
@@ -352,6 +352,7 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplo
             y = g_sfc.p[ig, 2]
             weight = 1/size(p_to_tri[ig], 1)
             for j=1:nzs[ig]-1
+                # maybe store these k_tets! represent as a matrix?
                 k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
                 bx[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
                 bx[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)

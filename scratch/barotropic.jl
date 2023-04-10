@@ -147,7 +147,7 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
     end
 
     # meshes
-    g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+    # g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
 
     # get ω_U's
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
@@ -178,11 +178,11 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
     # combine
     τx = FEField(x -> τ(x)[1], g_sfc)
     τy = FEField(x -> τ(x)[2], g_sfc)
-    ωx_bot = ωx_b_bot + (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H, g_sfc)
-    ωy_bot = ωy_b_bot + (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H, g_sfc)
+    ωx_bot = (ωx_b_bot + τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H, g_sfc)
+    ωy_bot = (ωy_b_bot + τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H, g_sfc)
     if showplots
-        quick_plot(ωx_bot, L"\omega^x_b + \tau^j \omega^x_{\tau^j} / H", "scratch/images/omegax_bot.png")
-        quick_plot(ωy_bot, L"\omega^y_b + \tau^j \omega^y_{\tau^j} / H", "scratch/images/omegay_bot.png")
+        quick_plot(ωx_bot*FEField(H, g_sfc), L"\omega^x_b + \tau^j \omega^x_{\tau^j}", "scratch/images/omegax_bot.png")
+        quick_plot(ωy_bot*FEField(H, g_sfc), L"\omega^y_b + \tau^j \omega^y_{\tau^j}", "scratch/images/omegay_bot.png")
     end
 
     # solve
@@ -214,7 +214,7 @@ function convergence()
     return err
 end
 
-ε² = 1e-2
+ε² = 1e-4
 β = 1
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
@@ -232,6 +232,11 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 # τ(x) = (0, 0)
 # ∂τ∂x(x) = (0, 0)
 # ∂τ∂y(x) = (0, 0)
+
+# g_sfc = FEGrid(1, "meshes/circle/mesh4.h5")
+# g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
+Ψ = invert(g_sfc, showplots=true, nonzero_b=false)
+# Ψ = invert(g_sfc, showplots=true)
 
 # err = convergence()
 # display(log2.(err[1:end-1]./err[2:end]))
