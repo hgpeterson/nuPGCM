@@ -10,6 +10,7 @@ using nuPGCM
 using PyPlot
 using SparseArrays
 using LinearAlgebra
+using Printf
 
 include("utils.jl")
 include("baroclinic.jl")
@@ -25,6 +26,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     # unpack
     bdy = g.e["bdy"]
     J = g.J
+    # s = g.sfi
 
     # integration
     quad_wts, quad_pts = quad_weights_points(deg=7, dim=2)
@@ -105,6 +107,16 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
             end
         end
         rhs[g.t[k, :]] += r
+
+        # JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        # K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
+        # M = J.dets[k]*s.M
+        # for i=1:g.nn, j=1:g.nn
+        #     if g.t[k, i] ∉ bdy
+        #         push!(A, (g.t[k, i], g.t[k, j], K[i, j]))
+        #     end
+        # end
+        # rhs[g.t[k, :]] += M*ones(g.nn)
     end
 
     # boundary nodes 
@@ -120,7 +132,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     return FEField(A\rhs, g)
 end
 
-function invert(g_sfc; showplots=false, nonzero_b=true, nonzero_τ=true)
+function invert(g_sfc; showplots=false, nonzero_b=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -147,18 +159,11 @@ function invert(g_sfc; showplots=false, nonzero_b=true, nonzero_τ=true)
     # r_asym = FEField(0, g_sfc)
 
     # get ω_τ's
-    if nonzero_τ
-        ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
-        ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
-        ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
-        ωx_τy_bot = -ωy_τx_bot
-        ωy_τy_bot = ωx_τx_bot
-    else
-        ωx_τx_bot = FEField(0, g_sfc)
-        ωy_τx_bot = FEField(0, g_sfc)
-        ωx_τy_bot = FEField(0, g_sfc)
-        ωy_τy_bot = FEField(0, g_sfc)
-    end
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
+    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
+    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+    ωx_τy_bot = -ωy_τx_bot
+    ωy_τy_bot = ωx_τx_bot
 
     # get ω_b's
     if nonzero_b
@@ -190,61 +195,23 @@ function invert(g_sfc; showplots=false, nonzero_b=true, nonzero_τ=true)
 end
 
 function convergence()
-    # base mesh
-    g0 = FEGrid(1, "meshes/circle/mesh0.h5")
-    tplot(g0)
-    axis("equal")
-    savefig("scratch/images/g.png")
-    println("scratch/images/g.png")
-    plt.close()
-
-    # highest res
     nrefs = 4
-    g_hr = refine(g0, nrefs)
-    tplot(g_hr)
-    axis("equal")
-    savefig("scratch/images/g_hr.png")
-    println("scratch/images/g_hr.png")
-    plt.close()
-    # Ψ_hr = invert(g_hr, showplots=true, nonzero_b=false)
-    Ψ_hr = invert(g_hr, showplots=true)
-
-    # errors
+    g_hr = FEGrid(1, "meshes/circle/mesh$nrefs.h5")
+    Ψ_hr = invert(g_hr, nonzero_b=true, showplots=true)
     err = zeros(nrefs)
+    n = 1000
+    θs = 2π*rand(n)
+    rs = 0.9*sqrt.(rand(n))
+    samples = [rs.*cos.(θs) rs.*sin.(θs)]
     for i=0:nrefs-1
         println("Refinement $i")
-        g = refine(g0, i)
-        Ψ = invert(g)
-        err[i+1] = L2norm(abs(Ψ - Ψ_hr[1:g.np]))
+        g = FEGrid(1, "meshes/circle/mesh$i.h5")
+        Ψ = invert(g, nonzero_b=true)
+        err_vals = [abs(Ψ(samples[i, :]) - Ψ_hr(samples[i, :])) for i=1:n]
+        err[i+1] = maximum(err_vals)
+        println(@sprintf("%1.1e", err[i+1]))
     end
     return err
-end
-
-function refine(g, n)
-    p = g.p
-    t = g.t 
-    e = g.e
-    emap, edges, bndix = all_edges(t)
-    for i=1:n
-        pmid = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), :))
-        p = [p; pmid]
-        t = delaunay(p).simplices
-        t = remove_tiny_tris(p, t)
-
-        emap, edges, bndix = all_edges(t)
-        e["bdy"] = unique(edges[bndix, :])
-    end
-    return FEGrid(1, p, t, e)
-end
-
-function triarea(p, t)
-    d12 = @. p[t[:,2],:] - p[t[:,1],:]
-    d13 = @. p[t[:,3],:] - p[t[:,1],:]
-    return @. abs(d12[:,1] * d13[:,2] - d12[:,2] * d13[:,1]) / 2
-end
-
-function remove_tiny_tris(p, t)
-    return t[triarea(p,t) .> 1e-14,:]
 end
 
 ε² = 1e-2
@@ -259,17 +226,18 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
 γy(x) = -Hy(x)*H(x)^2 - δ^2*Hy(x)*(exp(-H(x)/δ) - 1)
-# τ(x) = (-cos(π*x[2]), 0)
-# ∂τ∂x(x) = (0, 0)
-# ∂τ∂y(x) = (π*sin(π*x[2]), 0)
-τ(x) = (0, 0)
+τ(x) = (-cos(π*x[2]), 0)
 ∂τ∂x(x) = (0, 0)
-∂τ∂y(x) = (0, 0)
+∂τ∂y(x) = (π*sin(π*x[2]), 0)
+# τ(x) = (0, 0)
+# ∂τ∂x(x) = (0, 0)
+# ∂τ∂y(x) = (0, 0)
 
-err = convergence()
+# err = convergence()
+# display(log2.(err[1:end-1]./err[2:end]))
 
 # no b:
-# nref L2
+# nref L2 error
 # 0    3.0e0
 # 1    1.4e0
 # 2    2.6e-1
@@ -283,5 +251,21 @@ err = convergence()
 # 2    2.1e-04
 # 3    3.7e-05
 # -> O(h^2.5) convergence ??
+
+# no b
+# nref  max error of samples
+# 0     6.0e00
+# 1     2.5e00
+# 2     4.3e-01
+# 3     5.3e-02
+# -> O(h^3.0)
+
+# only b:
+# nref  max error of samples
+# 0     2.6e-03
+# 1     1.1e-03
+# 2     2.3e-04
+# 3     4.4e-05
+# -> O(h^2.4)
 
 println("Done.")
