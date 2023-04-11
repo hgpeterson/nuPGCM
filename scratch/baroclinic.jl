@@ -11,7 +11,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_3D_valign_mesh(g_sfc, H; order)
+function gen_3D_valign_mesh(g_sfc, H; tessellate=true)
     # save x and y for convenience
     x = g_sfc.p[:, 1]
     y = g_sfc.p[:, 2]
@@ -51,14 +51,7 @@ function gen_3D_valign_mesh(g_sfc, H; order)
 
         # add to e
         e["sfc"] = [e["sfc"]; np + 1]
-        # if nz != 1
-        #     e["bot"] = [e["bot"]; np + nz]
-        # end
-        if nz == 1
-            e["bot"] = [e["bot"]; np + 1]
-        else
-            e["bot"] = [e["bot"]; np + nz]
-        end
+        e["bot"] = [e["bot"]; np + nz]
 
         # add to tri_to_p
         for I ∈ p_to_tri[i]
@@ -79,36 +72,10 @@ function gen_3D_valign_mesh(g_sfc, H; order)
     el_cols = Vector{FEGrid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
     @showprogress "Generating columns..." for k=1:g_sfc.nt
-        # number of points in vertical for each vertex of sfc tri
-        lens = length.(tri_to_p[k, :])
-
-        # local p and e for column
-        nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
-        p_col = p[nodes_col, :]  
-        e_sfc_col = [1, lens[1]+1, lens[1]+lens[2]+1]
-        e_bot_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
-
-        # start local t
-        t_col = Matrix{Int64}(undef, 0, 4) 
-
-        # first top tri is at sfc
-        top = [tri_to_p[k, i][1] for i=1:3]
-
-        # continue down to bottom
-        for j=2:maximum(lens)
-            # make bottom tri from next nodes down or top tri nodes
-            bot = [j ≤ lens[i] ? tri_to_p[k, i][j] : top[i] for i=1:3]
-
-            # use delaunay to tessellate
-            ig = unique(vcat(top, bot))
-            tl = delaunay(p[ig, :]).simplices
-
-            # add to t_col
-            i_col = Int64.(indexin(ig, nodes_col))
-            t_col = [t_col; i_col[tl]]
-
-            # continue
-            top = bot
+        if tessellate
+            t_col = generate_t_col(p, tri_to_p, k)
+        else
+            t_col = load_t_col(k)
         end
 
         # add to t
@@ -127,6 +94,44 @@ function gen_3D_valign_mesh(g_sfc, H; order)
     g = FEGrid(order, p, t, e)
 
     return g, el_cols, node_cols, p_to_tri
+end
+
+function generate_t_col(p, tri_to_p, k)
+    # number of points in vertical for each vertex of sfc tri
+    lens = length.(tri_to_p[k, :])
+
+    # local p and e for column
+    nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
+    p_col = p[nodes_col, :]  
+    e_sfc_col = [1, lens[1]+1, lens[1]+lens[2]+1]
+    e_bot_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
+
+    # start local t
+    t_col = Matrix{Int64}(undef, 0, 4) 
+
+    # first top tri is at sfc
+    top = [tri_to_p[k, i][1] for i=1:3]
+
+    # continue down to bottom
+    for j=2:maximum(lens)
+        # make bottom tri from next nodes down or top tri nodes
+        bot = [j ≤ lens[i] ? tri_to_p[k, i][j] : top[i] for i=1:3]
+
+        # use delaunay to tessellate
+        ig = unique(vcat(top, bot))
+        tl = delaunay(p[ig, :]).simplices
+
+        # add to t_col
+        i_col = Int64.(indexin(ig, nodes_col))
+        t_col = [t_col; i_col[tl]]
+
+        # continue
+        top = bot
+    end
+
+    save_t_col(t_col, k)
+
+    return t_col
 end
 
 """
