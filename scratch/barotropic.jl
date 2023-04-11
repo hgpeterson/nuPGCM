@@ -1,4 +1,4 @@
-## Solve
+3# Solve
 ##     -∂x(r_sym ∂x(Ψ)) - ∂y(r_sym ∂y(Ψ)) - 
 ##         ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) +
 ##             ∂y(f/H)∂x(Ψ) - ∂x(f/H)∂y(Ψ) 
@@ -34,8 +34,11 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
     rhs = zeros(N)
-    println("Building matrices...")
+    print("Building matrices")
     for k=1:g.nt
+        if mod(k, Int64(round(0.25*g.nt))) == 0
+            print(".")
+        end
         # Jacobian terms
         ξx = J.Js[k, 1, 1]
         ξy = J.Js[k, 1, 2]
@@ -129,10 +132,11 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
 
     # solve
+    println("\nSolving...")
     return FEField(A\rhs, g)
 end
 
-function invert(g_sfc; showplots=false, nonzero_b=true)
+function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero_b=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -146,9 +150,6 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
         quick_plot(JEBAR, g_sfc, L"-H^2 J(1/H, \gamma)", "scratch/images/JEBAR.png")
     end
 
-    # meshes
-    # g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
-
     # get ω_U's
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
     ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
@@ -159,15 +160,15 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
     # r_asym = FEField(0, g_sfc)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, ε², f, showplots=showplots)
-    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
-    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
+    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
+    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
     ωx_τy_bot = -ωy_τx_bot
     ωy_τy_bot = ωx_τx_bot
 
     # get ω_b's
     if nonzero_b
-        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b, showplots=showplots)
+        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b, showplots=showplots)
         ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
         ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
     else
@@ -194,34 +195,13 @@ function invert(g_sfc; showplots=false, nonzero_b=true)
     return Ψ
 end
 
-function convergence()
-    nrefs = 4
-    g_hr = FEGrid(1, "meshes/circle/mesh$nrefs.h5")
-    Ψ_hr = invert(g_hr, nonzero_b=true, showplots=true)
-    err = zeros(nrefs)
-    n = 1000
-    θs = 2π*rand(n)
-    rs = 0.9*sqrt.(rand(n))
-    samples = [rs.*cos.(θs) rs.*sin.(θs)]
-    for i=0:nrefs-1
-        println("Refinement $i")
-        g = FEGrid(1, "meshes/circle/mesh$i.h5")
-        Ψ = invert(g, nonzero_b=true)
-        err_vals = [abs(Ψ(samples[i, :]) - Ψ_hr(samples[i, :])) for i=1:n]
-        err[i+1] = maximum(err_vals)
-        println(@sprintf("%1.1e", err[i+1]))
-    end
-    return err
-end
-
-ε² = 1e-4
-β = 1
+ε² = 1e-3
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-f(x) = β*x[2]
-fy(x) = β
+f(x) = x[2]
+fy(x) = 1
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
@@ -233,44 +213,11 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 # ∂τ∂x(x) = (0, 0)
 # ∂τ∂y(x) = (0, 0)
 
-# g_sfc = FEGrid(1, "meshes/circle/mesh4.h5")
-# g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(g_sfc, H, order=1)
-Ψ = invert(g_sfc, showplots=true, nonzero_b=false)
-# Ψ = invert(g_sfc, showplots=true)
-
-# err = convergence()
-# display(log2.(err[1:end-1]./err[2:end]))
-
-# no b:
-# nref L2 error
-# 0    3.0e0
-# 1    1.4e0
-# 2    2.6e-1
-# 3    2.7e-2
-# -> O(h^3) convergence ??
-
-# only b:
-# nref L2
-# 0    1.1e-03
-# 1    6.9e-04
-# 2    2.1e-04
-# 3    3.7e-05
-# -> O(h^2.5) convergence ??
-
-# no b
-# nref  max error of samples
-# 0     6.0e00
-# 1     2.5e00
-# 2     4.3e-01
-# 3     5.3e-02
-# -> O(h^3.0)
-
-# only b:
-# nref  max error of samples
-# 0     2.6e-03
-# 1     1.1e-03
-# 2     2.3e-04
-# 3     4.4e-05
-# -> O(h^2.4)
+# geo = "circle"
+# nref = 3
+# g_sfc, g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
+# Ψ = invert(g_sfc, g, el_cols, node_cols, p_to_tri, showplots=true, nonzero_b=false)
+# Ψ = invert(g_sfc, g, el_cols, node_cols, p_to_tri, showplots=true, nonzero_b=true)
+get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b)
 
 println("Done.")

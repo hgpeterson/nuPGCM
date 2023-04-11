@@ -11,8 +11,15 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_3D_valign_mesh(g_sfc, H; tessellate=true)
-    # save x and y for convenience
+function gen_3D_valign_mesh(geo, nref, H)
+    # surface mesh
+    g_sfc = FEGrid(1, "meshes/$geo/mesh$nref.h5")
+
+    # will we need to tessellate?
+    tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
+    # tessellate = true
+
+    # x and y for convenience
     x = g_sfc.p[:, 1]
     y = g_sfc.p[:, 2]
 
@@ -42,7 +49,8 @@ function gen_3D_valign_mesh(g_sfc, H; tessellate=true)
         if nz == 1
             z = [0]
         else
-            z = -range(0, H(g_sfc.p[i, :]), length=nz)
+            # z = range(-H(g_sfc.p[i, :]), 0, length=nz)
+            z = -H(g_sfc.p[i, :])*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
         end
 
         # add to p
@@ -50,8 +58,8 @@ function gen_3D_valign_mesh(g_sfc, H; tessellate=true)
         node_cols[i] = z
 
         # add to e
-        e["sfc"] = [e["sfc"]; np + 1]
-        e["bot"] = [e["bot"]; np + nz]
+        e["bot"] = [e["bot"]; np + 1]
+        e["sfc"] = [e["sfc"]; np + nz]
 
         # add to tri_to_p
         for I ∈ p_to_tri[i]
@@ -65,47 +73,48 @@ function gen_3D_valign_mesh(g_sfc, H; tessellate=true)
     end
 
     # setup shape functions and their integrals now since they're the same for each grid
-    sf = ShapeFunctions(order=order, dim=3)
+    sf = ShapeFunctions(order=1, dim=3)
     sfi = ShapeFunctionIntegrals(sf, sf)
 
     # columnwise and global tessellation
     el_cols = Vector{FEGrid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
     @showprogress "Generating columns..." for k=1:g_sfc.nt
+        # number of points in vertical for each vertex of sfc tri
+        lens = length.(tri_to_p[k, :])
+
+        # local p and e for col
+        nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
+        p_col = p[nodes_col, :]  
+        e_sfc_col = [1, lens[1]+1, lens[1]+lens[2]+1]
+        e_bot_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
+
+        # either compute or load t for col
         if tessellate
-            t_col = generate_t_col(p, tri_to_p, k)
+            t_col = generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)
         else
-            t_col = load_t_col(k)
+            t_col = load_t_col(geo, nref, k)
         end
 
-        # add to t
+        # add to global t
         t = [t; nodes_col[t_col]]
 
         # create e_col dictionary
         e_col = Dict("sfc"=>e_sfc_col, "bot"=>e_bot_col)
 
         # save column data
-        el_cols[k] = FEGrid(order, p_col, t_col, e_col, sf, sfi)
+        el_cols[k] = FEGrid(1, p_col, t_col, e_col, sf, sfi)
 
         # remove from bot if in sfc
         el_cols[k].e["bot"] = el_cols[k].e["bot"][findall(i -> el_cols[k].e["bot"][i] ∉ el_cols[k].e["sfc"], 1:size(el_cols[k].e["bot"], 1))]
     end
 
-    g = FEGrid(order, p, t, e)
+    g = FEGrid(1, p, t, e)
 
-    return g, el_cols, node_cols, p_to_tri
+    return g_sfc, g, el_cols, node_cols, p_to_tri
 end
 
-function generate_t_col(p, tri_to_p, k)
-    # number of points in vertical for each vertex of sfc tri
-    lens = length.(tri_to_p[k, :])
-
-    # local p and e for column
-    nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
-    p_col = p[nodes_col, :]  
-    e_sfc_col = [1, lens[1]+1, lens[1]+lens[2]+1]
-    e_bot_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
-
+function generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)
     # start local t
     t_col = Matrix{Int64}(undef, 0, 4) 
 
@@ -129,8 +138,21 @@ function generate_t_col(p, tri_to_p, k)
         top = bot
     end
 
-    save_t_col(t_col, k)
+    save_t_col(geo, nref, k, t_col)
 
+    return t_col
+end
+
+function save_t_col(geo, nref, k, t_col)
+    h5open("meshes/$geo/t_col_$(nref)_$k.h5", "w") do file
+        write(file, "t_col", t_col)
+    end
+end
+
+function load_t_col(geo, nref, k)
+    file = h5open("meshes/$geo/t_col_$(nref)_$k.h5", "r")
+    t_col = read(file, "t_col")
+    close(file)
     return t_col
 end
 
@@ -149,7 +171,7 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
-    e = Dict("bot"=>[nz], "sfc"=>[1])
+    e = Dict("bot"=>[1], "sfc"=>[nz])
     g = FEGrid(1, p, t, e)
 
     # indices
@@ -201,7 +223,7 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
                 # +ωx
                 push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
             end
-            if g.t[k, i] ≠ 1
+            if g.t[k, i] ≠ nz
                 # -∂zz(χx)
                 push!(A, (χxi[i], χxi[j], K[i, j]))
                 # -ωx
@@ -215,21 +237,21 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
         end
     end
 
-    # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
-    push!(A, (ωxmap[1], ωxmap[1], 1))
-    push!(A, (ωymap[1], ωymap[1], 1))
-    push!(A, (χxmap[1], χxmap[1], 1))
-    push!(A, (χymap[1], χymap[1], 1))
-    r[ωxmap[1]] = -τy/ε²
-    r[ωymap[1]] = τx/ε²
-    r[χxmap[1]] = Uy
-    r[χymap[1]] = -Ux
-
     # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
-    push!(A, (ωxmap[nz], χxmap[nz], 1))
-    push!(A, (ωymap[nz], χymap[nz], 1))
-    r[ωxmap[nz]] = 0
-    r[ωymap[nz]] = 0
+    push!(A, (ωxmap[1], χxmap[1], 1))
+    push!(A, (ωymap[1], χymap[1], 1))
+    r[ωxmap[1]] = 0
+    r[ωymap[1]] = 0
+
+    # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
+    push!(A, (ωxmap[nz], ωxmap[nz], 1))
+    push!(A, (ωymap[nz], ωymap[nz], 1))
+    push!(A, (χxmap[nz], χxmap[nz], 1))
+    push!(A, (χymap[nz], χymap[nz], 1))
+    r[ωxmap[nz]] = -τy/ε²
+    r[ωymap[nz]] = τx/ε²
+    r[χxmap[nz]] = Uy
+    r[χymap[nz]] = -Ux
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
@@ -237,37 +259,6 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     # solve
     sol = A\r
     return sol
-end
-
-function test_1d()
-    ε² = 0.01
-    nz = 2^8
-    z = 0:-1/(nz - 1):-1
-    bx = zeros(nz-1)
-    by = zeros(nz-1)
-    Ux = 1
-    Uy = 0
-    τx = 0
-    τy = 0
-    f = 0
-    sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
-    ωx = sol[1:nz]
-    ωy = sol[nz+1:2nz]
-    χx = sol[2nz+1:3nz]
-    χy = sol[3nz+1:4nz]
-    fig, ax = subplots(1, 2, figsize=(3.2, 2.6), sharey=true)
-    ax[1].plot(ωx, z, label=L"\omega^x")
-    ax[1].plot(ωy, z, label=L"\omega^y")
-    ax[2].plot(χx, z, label=L"\chi^x")
-    ax[2].plot(χy, z, label=L"\chi^y")
-    ax[1].set_xlabel(L"\omega")
-    ax[1].set_ylabel(L"z")
-    ax[2].set_xlabel(L"\chi")
-    ax[1].legend()
-    ax[2].legend()
-    savefig("scratch/images/omega_chi.png")
-    println("scratch/images/omega_chi.png")
-    plt.close()
 end
 
 function get_ω_U(g_sfc, g, node_cols, H, ε², f; showplots=false)
@@ -303,7 +294,7 @@ function get_ω_U(g_sfc, g, node_cols, H, ε², f; showplots=false)
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_ω_τ(g_sfc, g, node_cols, ε², f; showplots=false)
+function get_ω_τ(g_sfc, g, node_cols, H, ε², f; showplots=false)
     # solve for ω_τˣ
     ωx_τx = zeros(g.np)
     ωy_τx = zeros(g.np)
@@ -317,7 +308,7 @@ function get_ω_τ(g_sfc, g, node_cols, ε², f; showplots=false)
             continue
         end
         x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, 1, 0, ε², f(x))
+        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H(x)^2, 0, ε², f(x))
         ωx_τx[j+1:j+nz] = sol[0*nz+1:1*nz]
         ωy_τx[j+1:j+nz] = sol[1*nz+1:2*nz]
         χx_τx[j+1:j+nz] = sol[2*nz+1:3*nz]
@@ -336,7 +327,7 @@ function get_ω_τ(g_sfc, g, node_cols, ε², f; showplots=false)
     return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplots=false)
+function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b; showplots=false)
     # grid
     nzs = [size(col, 1) for col ∈ node_cols]
 
@@ -345,6 +336,7 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplo
     sfi2 = ShapeFunctionIntegrals(sf2, sf2)
     b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols] # even this takes a while!
 
+    # for nref = 2, this takes 3:10 mins
     # setup arrays
     bx = [zeros(2nz-2) for nz ∈ nzs]
     by = [zeros(2nz-2) for nz ∈ nzs]
@@ -367,6 +359,10 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplo
             n += nzs[ig]
         end
     end
+    # for nref = 2, this takes 1:08 mins
+    # b_field = FEField(b, g)
+    # bx = [∂x(b_field, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:4]
+    # by = [∂y(b_field, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:4]
 
     # solve 
     ωx_b = zeros(g.np)
@@ -400,4 +396,40 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, H, b; showplo
     return ωx_b, ωy_b, χx_b, χy_b
 end
 
+### 
+
+function test_1d()
+    ε² = 1e-4
+    nz = 2^8
+    # z = -1:1/(nz - 1):0
+    z = @. -(cos(π*(0:nz-1)/(nz-1)) + 1)/2
+    bx = zeros(nz-1)
+    by = zeros(nz-1)
+    Ux = 1
+    Uy = 0
+    τx = 0
+    τy = 0
+    f = 1
+    sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
+    ωx = sol[1:nz]
+    ωy = sol[nz+1:2nz]
+    χx = sol[2nz+1:3nz]
+    χy = sol[3nz+1:4nz]
+    fig, ax = plt.subplots(1, 2, figsize=(3.2, 2.6), sharey=true)
+    ax[1].plot(ωx, z, label=L"\omega^x")
+    ax[1].plot(ωy, z, label=L"\omega^y")
+    ax[2].plot(χx, z, label=L"\chi^x")
+    ax[2].plot(χy, z, label=L"\chi^y")
+    ax[1].set_xlabel(L"\omega")
+    ax[1].set_ylabel(L"z")
+    ax[2].set_xlabel(L"\chi")
+    ax[1].legend()
+    ax[2].legend()
+    savefig("scratch/images/omega_chi.png")
+    println("scratch/images/omega_chi.png")
+    plt.close()
+end
+
 # test_1d()
+
+### 
