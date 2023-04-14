@@ -17,7 +17,7 @@ function gen_3D_valign_mesh(geo, nref, H)
 
     # will we need to tessellate?
     tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
-    # tessellate = true
+    tessellate = true
 
     # x and y for convenience
     x = g_sfc.p[:, 1]
@@ -35,8 +35,8 @@ function gen_3D_valign_mesh(geo, nref, H)
     #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
     tri_to_p = [Int64[] for k=1:g_sfc.nt, i=1:3] # allocate
 
-    # node_cols
-    node_cols = Vector{Vector{Float64}}(undef, g_sfc.np)
+    # z_cols
+    z_cols = Vector{Vector{Float64}}(undef, g_sfc.np)
 
     # add points to p, e, and tri_to_p
     nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : ceil(H(g_sfc.p[i, :])/h) for i=1:g_sfc.np]
@@ -55,7 +55,7 @@ function gen_3D_valign_mesh(geo, nref, H)
 
         # add to p
         p[np+1:np+nz, :] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
-        node_cols[i] = z
+        z_cols[i] = z
 
         # add to e
         e["bot"] = [e["bot"]; np + 1]
@@ -77,7 +77,7 @@ function gen_3D_valign_mesh(geo, nref, H)
     sfi = ShapeFunctionIntegrals(sf, sf)
 
     # columnwise and global tessellation
-    el_cols = Vector{FEGrid}(undef, g_sfc.nt)
+    g_cols = Vector{FEGrid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
     @showprogress "Generating columns..." for k=1:g_sfc.nt
         # number of points in vertical for each vertex of sfc tri
@@ -103,15 +103,15 @@ function gen_3D_valign_mesh(geo, nref, H)
         e_col = Dict("sfc"=>e_sfc_col, "bot"=>e_bot_col)
 
         # save column data
-        el_cols[k] = FEGrid(1, p_col, t_col, e_col, sf, sfi)
+        g_cols[k] = FEGrid(1, p_col, t_col, e_col, sf, sfi)
 
         # remove from bot if in sfc
-        el_cols[k].e["bot"] = el_cols[k].e["bot"][findall(i -> el_cols[k].e["bot"][i] ∉ el_cols[k].e["sfc"], 1:size(el_cols[k].e["bot"], 1))]
+        g_cols[k].e["bot"] = g_cols[k].e["bot"][findall(i -> g_cols[k].e["bot"][i] ∉ g_cols[k].e["sfc"], 1:size(g_cols[k].e["bot"], 1))]
     end
 
     g = FEGrid(1, p, t, e)
 
-    return g_sfc, g, el_cols, node_cols, p_to_tri
+    return g_sfc, g, g_cols, z_cols, p_to_tri
 end
 
 function generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)
@@ -261,21 +261,21 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     return sol
 end
 
-function get_ω_U(g_sfc, g, node_cols, H, ε², f; showplots=false)
+function get_ω_U(g_sfc, g, z_cols, H, ε², f; showplots=false)
     # solve for ω_Uˣ
     ωx_Ux = zeros(g.np)
     ωy_Ux = zeros(g.np)
     χx_Ux = zeros(g.np)
     χy_Ux = zeros(g.np)
     j = 0
-    for i ∈ eachindex(node_cols)
-        nz = size(node_cols[i], 1)
+    for i ∈ eachindex(z_cols)
+        nz = size(z_cols[i], 1)
         if nz == 1
             j += nz
             continue
         end
         x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), H(x)^2, 0, 0, 0, ε², f(x))
+        sol = solve_baroclinic_1dfe(z_cols[i], zeros(nz-1), zeros(nz-1), H(x)^2, 0, 0, 0, ε², f(x))
         ωx_Ux[j+1:j+nz] = sol[0*nz+1:1*nz]
         ωy_Ux[j+1:j+nz] = sol[1*nz+1:2*nz]
         χx_Ux[j+1:j+nz] = sol[2*nz+1:3*nz]
@@ -294,21 +294,21 @@ function get_ω_U(g_sfc, g, node_cols, H, ε², f; showplots=false)
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_ω_τ(g_sfc, g, node_cols, H, ε², f; showplots=false)
+function get_ω_τ(g_sfc, g, z_cols, H, ε², f; showplots=false)
     # solve for ω_τˣ
     ωx_τx = zeros(g.np)
     ωy_τx = zeros(g.np)
     χx_τx = zeros(g.np)
     χy_τx = zeros(g.np)
     j = 0
-    for i ∈ eachindex(node_cols)
-        nz = size(node_cols[i], 1)
+    for i ∈ eachindex(z_cols)
+        nz = size(z_cols[i], 1)
         if nz == 1
             j += nz
             continue
         end
         x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(node_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H(x)^2, 0, ε², f(x))
+        sol = solve_baroclinic_1dfe(z_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H(x)^2, 0, ε², f(x))
         ωx_τx[j+1:j+nz] = sol[0*nz+1:1*nz]
         ωy_τx[j+1:j+nz] = sol[1*nz+1:2*nz]
         χx_τx[j+1:j+nz] = sol[2*nz+1:3*nz]
@@ -327,16 +327,15 @@ function get_ω_τ(g_sfc, g, node_cols, H, ε², f; showplots=false)
     return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b; showplots=false)
+function get_ω_b(g_sfc, g, g_cols, z_cols, p_to_tri, ε², f, b; showplots=false)
     # grid
-    nzs = [size(col, 1) for col ∈ node_cols]
+    nzs = [size(col, 1) for col ∈ z_cols]
 
     # b must be second order
     sf2 = ShapeFunctions(order=2, dim=3)
     sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ el_cols] # even this takes a while!
+    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols] # even this takes a while!
 
-    # for nref = 2, this takes 3:10 mins
     # setup arrays
     bx = [zeros(2nz-2) for nz ∈ nzs]
     by = [zeros(2nz-2) for nz ∈ nzs]
@@ -350,19 +349,48 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b; showplots=
             weight = 1/size(p_to_tri[ig], 1)
             for j=1:nzs[ig]-1
                 # maybe store these k_tets! represent as a matrix?
-                k_tet = findfirst(k_tet -> n+j ∈ el_cols[k].t[k_tet, :] && n+j+1 ∈ el_cols[k].t[k_tet, :], 1:el_cols[k].nt)
-                bx[ig][2j-1] += weight*∂x(b_col, [x, y, node_cols[ig][j]], k_tet)
-                bx[ig][2j]   += weight*∂x(b_col, [x, y, node_cols[ig][j+1]], k_tet)
-                by[ig][2j-1] += weight*∂y(b_col, [x, y, node_cols[ig][j]], k_tet)
-                by[ig][2j]   += weight*∂y(b_col, [x, y, node_cols[ig][j+1]], k_tet)
+                k_tet = findfirst(k_tet -> n+j ∈ g_cols[k].t[k_tet, :] && n+j+1 ∈ g_cols[k].t[k_tet, :], 1:g_cols[k].nt)
+                bx[ig][2j-1] += weight*∂x(b_col, [x, y, z_cols[ig][j]], k_tet)
+                bx[ig][2j]   += weight*∂x(b_col, [x, y, z_cols[ig][j+1]], k_tet)
+                by[ig][2j-1] += weight*∂y(b_col, [x, y, z_cols[ig][j]], k_tet)
+                by[ig][2j]   += weight*∂y(b_col, [x, y, z_cols[ig][j+1]], k_tet)
             end
             n += nzs[ig]
         end
     end
-    # for nref = 2, this takes 1:08 mins
-    # b_field = FEField(b, g)
-    # bx = [∂x(b_field, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:4]
-    # by = [∂y(b_field, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:4]
+    # println("finding edges")
+    # emap, edges, bndix = all_edges(g.t)
+    # midpts = 1/2*reshape(g.p[edges[:, 1], :] + g.p[edges[:, 2], :], (size(edges, 1), :))
+    # p2 = [g.p; midpts]
+    # t2 = hcat(g.t, g.np .+ emap)
+    # sf2 = ShapeFunctions(order=2, dim=3)
+    # println("forming derivative matrices")
+    # p1_ref = reference_element_nodes(1, 3)
+    # Dξ = [∂φ(sf2, j, 1, p1_ref[i, :]) for i=1:4, j=1:10]
+    # Dη = [∂φ(sf2, j, 2, p1_ref[i, :]) for i=1:4, j=1:10]
+    # Dζ = [∂φ(sf2, j, 3, p1_ref[i, :]) for i=1:4, j=1:10]
+    # b2 = [b(p2[t2[k, i], :]) for i=1:10, k=1:g.nt]
+    # bξ = Dξ*b2
+    # bη = Dη*b2
+    # bζ = Dζ*b2
+    # bx = bξ.*g.J.Js[:, 1, 1]' + bη.*g.J.Js[:, 2, 1]' + bζ.*g.J.Js[:, 3, 1]'
+    # by = bξ.*g.J.Js[:, 1, 2]' + bη.*g.J.Js[:, 2, 2]' + bζ.*g.J.Js[:, 3, 2]'
+    # nzs = [size(col, 1) for col ∈ z_cols]
+    # col_indices = [sum(nzs[1:i-1])+1:sum(nzs[1:i-1])+nzs[i] for i ∈ eachindex(nzs)]
+    # bx_cols = [zeros(2nz-2) for nz ∈ nzs]
+    # by_cols = [zeros(2nz-2) for nz ∈ nzs]
+    # @showprogress "Computing buoyancy gradients" for i_col ∈ eachindex(col_indices)
+    #     weight = 1/size(p_to_tri[i_col], 1)
+    #     for j=1:nzs[i_col]-1
+    #         k_tet = findfirst(k -> col_indices[i_col][j] ∈ g.t[k, :] && col_indices[i_col][j+1] ∈ g.t[k, :], 1:g.nt)
+    #         i1_tet = findfirst(i -> g.t[k_tet, i] == col_indices[i_col][j], 1:g.nn)
+    #         i2_tet = findfirst(i -> g.t[k_tet, i] == col_indices[i_col][j+1], 1:g.nn)
+    #         bx_cols[i_col][2j-1] += weight*bx[i1_tet, k_tet]
+    #         bx_cols[i_col][2j]   += weight*bx[i2_tet, k_tet]
+    #         by_cols[i_col][2j-1] += weight*by[i1_tet, k_tet]
+    #         by_cols[i_col][2j]   += weight*by[i2_tet, k_tet]
+    #     end
+    # end
 
     # solve 
     ωx_b = zeros(g.np)
@@ -370,14 +398,14 @@ function get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b; showplots=
     χx_b = zeros(g.np)
     χy_b = zeros(g.np)
     j = 0
-    for i ∈ eachindex(node_cols)
+    for i ∈ eachindex(z_cols)
         nz = nzs[i]
         if nz ≤ 2
             j += nz
             continue
         end
         x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(node_cols[i], bx[i], by[i], 0, 0, 0, 0, ε², f(x))
+        sol = solve_baroclinic_1dfe(z_cols[i], bx[i], by[i], 0, 0, 0, 0, ε², f(x))
         ωx_b[j+1:j+nz] = sol[0*nz+1:1*nz]
         ωy_b[j+1:j+nz] = sol[1*nz+1:2*nz]
         χx_b[j+1:j+nz] = sol[2*nz+1:3*nz]

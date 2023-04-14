@@ -136,7 +136,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     return FEField(A\rhs, g)
 end
 
-function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero_b=true)
+function invert(g_sfc, g, g_cols, z_cols, p_to_tri; showplots=false, nonzero_b=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -151,7 +151,7 @@ function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero
     end
 
     # get ω_U's
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=showplots)
     ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
     ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
     r_sym = ωy_Ux_bot/FEField(H, g_sfc)^3
@@ -160,7 +160,7 @@ function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero
     # r_asym = FEField(0, g_sfc)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, node_cols, H, ε², f, showplots=showplots)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, z_cols, H, ε², f, showplots=showplots)
     ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
     ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
     ωx_τy_bot = -ωy_τx_bot
@@ -168,7 +168,7 @@ function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero
 
     # get ω_b's
     if nonzero_b
-        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b, showplots=showplots)
+        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, g_cols, z_cols, p_to_tri, ε², f, b, showplots=showplots)
         ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
         ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
     else
@@ -195,7 +195,7 @@ function invert(g_sfc, g, el_cols, node_cols, p_to_tri; showplots=false, nonzero
     return Ψ
 end
 
-ε² = 1e-3
+ε² = 1e-2
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
@@ -206,18 +206,17 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
 γy(x) = -Hy(x)*H(x)^2 - δ^2*Hy(x)*(exp(-H(x)/δ) - 1)
-τ(x) = (-cos(π*x[2]), 0)
-∂τ∂x(x) = (0, 0)
-∂τ∂y(x) = (π*sin(π*x[2]), 0)
-# τ(x) = (0, 0)
+# τ(x) = (-cos(π*x[2]), 0)
 # ∂τ∂x(x) = (0, 0)
-# ∂τ∂y(x) = (0, 0)
+# ∂τ∂y(x) = (π*sin(π*x[2]), 0)
+τ(x) = (0, 0)
+∂τ∂x(x) = (0, 0)
+∂τ∂y(x) = (0, 0)
 
-# geo = "circle"
-# nref = 3
-# g_sfc, g, el_cols, node_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
-# Ψ = invert(g_sfc, g, el_cols, node_cols, p_to_tri, showplots=true, nonzero_b=false)
-# Ψ = invert(g_sfc, g, el_cols, node_cols, p_to_tri, showplots=true, nonzero_b=true)
-get_ω_b(g_sfc, g, el_cols, node_cols, p_to_tri, ε², f, b)
+geo = "circle"
+nref = 2
+g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
+# Ψ = invert(g_sfc, g, g_cols, z_cols, p_to_tri, showplots=true, nonzero_b=false)
+Ψ = invert(g_sfc, g, g_cols, z_cols, p_to_tri, showplots=true, nonzero_b=true)
 
 println("Done.")
