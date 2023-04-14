@@ -1,11 +1,3 @@
-3# Solve
-##     -∂x(r_sym ∂x(Ψ)) - ∂y(r_sym ∂y(Ψ)) - 
-##         ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) +
-##             ∂y(f/H)∂x(Ψ) - ∂x(f/H)∂y(Ψ) 
-##     =
-##     -J(1/H, γ) + ε² z⋅(∇×τ/H) - ε² ∇⋅(ν*(ωb + τʲω_τⱼ)/H)
-## with Ψ = 0 on boundary.
-
 using nuPGCM
 using PyPlot
 using SparseArrays
@@ -19,6 +11,14 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+"""
+Solve
+    -∂x(r_sym ∂x(Ψ)) - ∂y(r_sym ∂y(Ψ)) - 
+        ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) +
+            ∂y(f/H)∂x(Ψ) - ∂x(f/H)∂y(Ψ) 
+    = -J(1/H, γ) + z⋅(∇×τ/H) - ε² ∇⋅(ν*ω_bot/H)
+with Ψ = 0 on boundary.
+"""
 function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     # indices
     N = g.np

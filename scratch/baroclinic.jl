@@ -17,7 +17,7 @@ function gen_3D_valign_mesh(geo, nref, H)
 
     # will we need to tessellate?
     tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
-    tessellate = true
+    # tessellate = true
 
     # x and y for convenience
     x = g_sfc.p[:, 1]
