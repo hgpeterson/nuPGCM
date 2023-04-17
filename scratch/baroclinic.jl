@@ -449,38 +449,38 @@ function test_1d()
 
     # BL sol
 
-    # q = sqrt(f)
-    # z_B = @. (z + H)/ε
-    # c = 1/(q*H)
-    # χx_I = 0
-    # χy_I = @. -(z + H)/H
-    # χx_B = zeros(nz)
-    # χy_B = @. c*exp(-q*z_B)*sin(q*z_B)
-    # χx_BL = χx_I .+ ε*χx_B
-    # χy_BL = χy_I .+ ε*χy_B
-    # ωx_I = 0
-    # ωy_I = 0
-    # ωx_B = zeros(nz)
-    # ωy_B = @. 2*c*q^2*exp(-q*z_B)*cos(q*z)
-    # ωx_BL = ωx_I .+ 1/ε*ωx_B
-    # ωy_BL = ωy_I .+ 1/ε*ωy_B
-
     q = sqrt(f)
-    z_B = (z .+ H)/ε
-    c1 = -q^2*(H*q - ε)/(ε^3 - 2*H*q*ε^2 + 2*H^2*q^2*ε)
-    c2 = H*q^3/(ε^3 - 2*H*q*ε^2 + 2*H^2*q^2*ε)
+    z_B = @. (z + H)/ε
+    c = 1/(q*H)
+    χx_I = 0
+    χy_I = @. -(z + H)/H
+    χx_B = zeros(nz)
+    χy_B = @. c*exp(-q*z_B)*sin(q*z_B)
+    χx_BL = χx_I .+ ε*χx_B
+    χy_BL = χy_I .+ ε*χy_B
     ωx_I = 0
     ωy_I = 0
-    ωx_B = @. exp(-q*z_B)*(c1*cos(q*z_B) + c2*sin(q*z_B))
-    ωy_B = @. 2*exp(-q*z_B)*(c2*cos(q*z_B) - c1*sin(q*z_B))
-    ωx_BL = ωx_I .+ ωx_B
-    ωy_BL = ωy_I .+ ωy_B
-    χx_I = -ε²*c2/(2*H*q^2)*z
-    χy_I = -1 .+ (ε²*c1/q^2 - 1)/H*z
-    χx_B = @. ε²/(2*q^2)*exp(-q*z_B)*(-c2*cos(q*z_B) + c1*sin(q*z_B))
-    χy_B = @. ε²/q^2*exp(-q*z_B)*(c1*cos(q*z_B) + c2*sin(q*z_B))
-    χx_BL = χx_I .+ χx_B
-    χy_BL = χy_I .+ χy_B
+    ωx_B = zeros(nz)
+    ωy_B = @. 2*c*q^2*exp(-q*z_B)*cos(q*z)
+    ωx_BL = ωx_I .+ 1/ε*ωx_B
+    ωy_BL = ωy_I .+ 1/ε*ωy_B
+
+    # q = sqrt(f)
+    # z_B = (z .+ H)/ε
+    # c1 = -q^2*(H*q - ε)/(ε^3 - 2*H*q*ε^2 + 2*H^2*q^2*ε)
+    # c2 = H*q^3/(ε^3 - 2*H*q*ε^2 + 2*H^2*q^2*ε)
+    # ωx_I = 0
+    # ωy_I = 0
+    # ωx_B = @. exp(-q*z_B)*(c1*cos(q*z_B) + c2*sin(q*z_B))
+    # ωy_B = @. 2*exp(-q*z_B)*(c2*cos(q*z_B) - c1*sin(q*z_B))
+    # ωx_BL = ωx_I .+ ωx_B
+    # ωy_BL = ωy_I .+ ωy_B
+    # χx_I = -ε²*c2/(2*H*q^2)*z
+    # χy_I = -1 .+ (ε²*c1/q^2 - 1)/H*z
+    # χx_B = @. ε²/(2*q^2)*exp(-q*z_B)*(-c2*cos(q*z_B) + c1*sin(q*z_B))
+    # χy_B = @. ε²/q^2*exp(-q*z_B)*(c1*cos(q*z_B) + c2*sin(q*z_B))
+    # χx_BL = χx_I .+ χx_B
+    # χy_BL = χy_I .+ χy_B
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(3.2, 5.2))
@@ -506,9 +506,12 @@ function test_1d()
     ax[2, 2].set_xlabel(L"\chi")
     ax[1, 1].legend()
     ax[1, 2].legend()
-    ax[2, 1].set_ylim(-1, -1 + 10*ε/sqrt(f))
+    # ax[2, 1].set_ylim(-1, -1 + 10*ε/sqrt(f))
+    # ax[2, 1].set_ylim(-10*ε/sqrt(f), 0)
     ax[2, 2].set_xlim(-0.1, 0.01)
-    ax[2, 2].set_ylim(-1, -1 + 10*ε/sqrt(f))
+    # ax[2, 2].set_xlim(-1.01, -0.99)
+    # ax[2, 2].set_ylim(-1, -1 + 10*ε/sqrt(f))
+    ax[2, 2].set_ylim(-10*ε/sqrt(f), 0)
     ax[1, 2].set_yticklabels([])
     ax[2, 2].set_yticklabels([])
     savefig("scratch/images/omega_chi.png")
@@ -516,6 +519,6 @@ function test_1d()
     plt.close()
 end
 
-test_1d()
+# test_1d()
 
 ### 

@@ -10,7 +10,7 @@ function get_evolution_LHS(g, μ, ϱ, ε², Δt)
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M 
         for i=1:g.nn, j=1:g.nn
-            push!(LHS, (g.t[k, i], g.t[k, j], μ*ϱ*(M[i, j] + ε²*Δt/2*K[i, j])))
+            push!(LHS, (g.t[k, i], g.t[k, j], μ*ϱ*M[i, j] + ε²*Δt/2*K[i, j]))
         end
     end
     LHS = sparse((x->x[1]).(LHS), (x->x[2]).(LHS), (x->x[3]).(LHS), g.np, g.np)
@@ -35,9 +35,9 @@ end
 
 function evolve()
     # params
-    ε² = 1e-2
+    ε² = 1e-4
     μ = 1
-    ϱ = 1e-1
+    ϱ = 1e-4
     Δt = 1e-4
 
     # topo
