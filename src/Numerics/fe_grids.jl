@@ -163,7 +163,7 @@ function add_nodes(p, t, e, order)
             # map to triangle data structure
             tnew = hcat(t, np0 .+ emap)
 
-            # add points that were on each boundary of `e`
+            # add points that were on each boundary of `e` (TODO: improve performance here)
             for bdy ∈ e
                 bdy_name = bdy.first
                 bdy_nodes = bdy.second
@@ -280,7 +280,7 @@ function all_edges(t)
         dup = dup[keep]
         bndix = findall(.!dup)
     elseif dim == 3
-        # in 3D, on boundary face
+        # in 3D, on boundary face (TODO: improve performance here)
         bfaces = boundary_faces(t)
         _, bedges, _ = all_edges(bfaces)
         bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]

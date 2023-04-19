@@ -47,30 +47,50 @@ function evolve()
 
     # mesh
     geo = "circle"
-    nref = 2
+    nref = 1
     g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
+    g2 = FEGrid(2, g)
+
+    # # # first order b_cols
+    # # b_cols = g_cols
+    # # second order b_cols
+    # sf2 = ShapeFunctions(order=2, dim=3)
+    # sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+    # # g_cols2 = [FEGrid(2, g.p, g.t, g.e, sf2, sfi2) for g ∈ g_cols]
+    # b_cols = Vector{FEGrid}(undef, size(g_cols, 1))
+    # @showprogress "Creating second-order columns..." for i ∈ eachindex(g_cols)
+    #     b_cols[i] = FEGrid(2, g.p, g.t, g.e, sf2, sfi2)
+    # end
 
     # matrices
-    LHS = get_evolution_LHS(g, μ, ϱ, ε², Δt)
-    RHS = get_evolution_RHS(g, μ, ϱ, ε², Δt)
+    # LHS = get_evolution_LHS(g, μ, ϱ, ε², Δt)
+    # RHS = get_evolution_RHS(g, μ, ϱ, ε², Δt)
+    LHS = get_evolution_LHS(g2, μ, ϱ, ε², Δt)
+    RHS = get_evolution_RHS(g2, μ, ϱ, ε², Δt)
+    # LHSs = [get_evolution_LHS(g, μ, ϱ, ε², Δt) for g ∈ b_cols]
+    # RHSs = [get_evolution_RHS(g, μ, ϱ, ε², Δt) for g ∈ b_cols]
 
     # IC: b = z
-    b = g.p[:, 3]
+    # b = g.p[:, 3]
+    b = g2.p[:, 3]
+    # b = [g.p[:, 3] for g ∈ b_cols]
 
     # pvd file
     pvd = paraview_collection("output/b", append=true)
 
     # solve
-    for i=0:3*360
+    @showprogress "Evolving..." for i=0:3*360
         if mod(i, 30) == 0
-            cell_type = VTKCellTypes.VTK_TETRA
-            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-            vtk_grid("output/t$i", g.p', cells) do vtk
+            # cell_type = VTKCellTypes.VTK_TETRA
+            cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+            cells = [MeshCell(cell_type, g2.t[i, :]) for i ∈ axes(g2.t, 1)]
+            vtk_grid("output/t$i", g2.p', cells) do vtk
                 vtk["b"] = b
                 pvd[i*Δt] = vtk
             end
         end
         b = LHS\(RHS*b)
+        # b = [LHSs[i]\(RHSs[i]*b[i]) for i ∈ eachindex(b)]
     end
 
     vtk_save(pvd)
