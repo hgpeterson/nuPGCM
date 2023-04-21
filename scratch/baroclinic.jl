@@ -434,9 +434,9 @@ function test_1d()
     z = @. -H*(cos(π*(0:nz-1)/(nz-1)) + 1)/2
     bx = zeros(nz-1)
     by = zeros(nz-1)
-    Ux = 1
+    Ux = 0
     Uy = 0
-    τx = 0
+    τx = 1
     τy = 0
     y = 1
 
@@ -449,19 +449,43 @@ function test_1d()
 
     # BL sol
     q = sqrt(y/2)
-    z_B = @. (z + H)/ε
-    χx_I = 0
-    χy_I = @. -(z + H)/H
-    χx_B = @. -1/(2*H*q)*exp(-q*z_B)*(cos(q*z_B) + sin(q*z_B))
-    χy_B = @. -1/(2*H*q)*exp(-q*z_B)*(cos(q*z_B) - sin(q*z_B))
-    χx_BL = χx_I .+ ε*χx_B
-    χy_BL = χy_I .+ ε*χy_B
-    ωx_I = 0
-    ωy_I = 0
-    ωx_B = @. q/H*exp(-q*z_B)*(sin(q*z_B) - cos(q*z_B))
-    ωy_B = @. q/H*exp(-q*z_B)*(cos(q*z_B) + sin(q*z_B))
-    ωx_BL = ωx_I .+ 1/ε*ωx_B
-    ωy_BL = ωy_I .+ 1/ε*ωy_B
+    z_b = (z .+ H)/ε
+    z_s = z/ε
+
+    # # transport
+    # c1 = -q/H
+    # c2 = +q/H
+    # χx_I0 = 0
+    # χy_I0 = @. -(z + H)/H
+    # χx_I1 = @. -c2*z/(2*H*q^2)
+    # χy_I1 = @. +c1*z/(2*H*q^2)
+    # ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    # ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
+    # χx_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))
+    # χy_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    # ωx_BL = 1/ε*ωx_B1
+    # ωy_BL = 1/ε*ωy_B1
+    # χx_BL = χx_I0 .+ ε*(χx_I1 .+ χx_B1)
+    # χy_BL = χy_I0 .+ ε*(χy_I1 .+ χy_B1)
+
+    # wind
+    c1 = c2 = -1/(2*H*q)
+    χx_I0 = @. (z + H)/(2*H*q^2)
+    χy_I0 = 0
+    ωx0_B0 = @. -exp(q*z_s)*sin(q*z_s)
+    ωy0_B0 = @. exp(q*z_s)*cos(q*z_s)
+    χx0_B0 = @. -1/(2*q^2)*exp(q*z_s)*cos(q*z_s)
+    χy0_B0 = @. -1/(2*q^2)*exp(q*z_s)*sin(q*z_s)
+    χx_I1 = @. -c2*z/(2*H*q^2)
+    χy_I1 = @. +c1*z/(2*H*q^2)
+    ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
+    χx_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))
+    χy_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    ωx_BL = 1/ε²*ωx0_B0 .+ 1/ε*ωx_B1
+    ωy_BL = 1/ε²*ωy0_B0 .+ 1/ε*ωy_B1
+    χx_BL = χx_I0 .+ χx0_B0 .+ ε*(χx_I1 .+ χx_B1)
+    χy_BL = χy_I0 .+ χy0_B0 .+ ε*(χy_I1 .+ χy_B1)
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(3.2, 5.2))
@@ -487,8 +511,9 @@ function test_1d()
     ax[2, 2].set_xlabel(L"\chi")
     ax[1, 1].legend()
     ax[1, 2].legend()
+    ax[2, 1].set_xlim(-2/ε, 2/ε)
     ax[2, 1].set_ylim(-1, -1 + 10*ε/q)
-    ax[2, 2].set_xlim(-10*ε, ε)
+    ax[2, 2].set_xlim(-2*ε, 2*ε)
     ax[2, 2].set_ylim(-1, -1 + 10*ε/q)
     ax[1, 2].set_yticklabels([])
     ax[2, 2].set_yticklabels([])
