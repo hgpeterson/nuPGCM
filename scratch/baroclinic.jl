@@ -203,6 +203,10 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
             # b is quadratic
             r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
             r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
+        elseif size(bx, 1) == g.np
+            # bx, by are continuous
+            r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
+            r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
         end
 
         # indices
@@ -427,16 +431,17 @@ end
 ### 
 
 function test_1d()
+    # inputs
     ε² = 1e-4
     ε = sqrt(ε²)
     nz = 2^8
     H = 1
     z = @. -H*(cos(π*(0:nz-1)/(nz-1)) + 1)/2
-    bx = zeros(nz-1)
-    by = zeros(nz-1)
+    bx = z
+    by = ones(nz)
     Ux = 0
     Uy = 0
-    τx = 1
+    τx = 0
     τy = 0
     y = 1
 
@@ -468,24 +473,48 @@ function test_1d()
     # χx_BL = χx_I0 .+ ε*(χx_I1 .+ χx_B1)
     # χy_BL = χy_I0 .+ ε*(χy_I1 .+ χy_B1)
 
-    # wind
-    c1 = c2 = -1/(2*H*q)
-    χx_I0 = @. (z + H)/(2*H*q^2)
-    χy_I0 = 0
-    ωx0_B0 = @. -exp(q*z_s)*sin(q*z_s)
-    ωy0_B0 = @. exp(q*z_s)*cos(q*z_s)
-    χx0_B0 = @. -1/(2*q^2)*exp(q*z_s)*cos(q*z_s)
-    χy0_B0 = @. -1/(2*q^2)*exp(q*z_s)*sin(q*z_s)
+    # # wind
+    # c1 = c2 = -1/(2*H*q)
+    # χx_I0 = @. (z + H)/(2*H*q^2)
+    # χy_I0 = 0
+    # ωx0_B0 = @. -exp(q*z_s)*sin(q*z_s)
+    # ωy0_B0 = @. exp(q*z_s)*cos(q*z_s)
+    # χx0_B0 = @. -1/(2*q^2)*exp(q*z_s)*cos(q*z_s)
+    # χy0_B0 = @. -1/(2*q^2)*exp(q*z_s)*sin(q*z_s)
+    # χx_I1 = @. -c2*z/(2*H*q^2)
+    # χy_I1 = @. +c1*z/(2*H*q^2)
+    # ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    # ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
+    # χx_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))
+    # χy_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    # ωx_BL = 1/ε²*ωx0_B0 .+ 1/ε*ωx_B1
+    # ωy_BL = 1/ε²*ωy0_B0 .+ 1/ε*ωy_B1
+    # χx_BL = χx_I0 .+ χx0_B0 .+ ε*(χx_I1 .+ χx_B1)
+    # χy_BL = χy_I0 .+ χy0_B0 .+ ε*(χy_I1 .+ χy_B1)
+
+    # buoyancy
+    ωx_I0 = -bx/y
+    ωy_I0 = -by/y
+    χx_I0 = @. (z^3 - z)/6 # bx = z
+    χy_I0 = @. (z^2 + z)/2 # by = 1
+    c1 = -ωx_I0[nz]
+    c2 = ωy_I0[nz]
+    ωx0_B0 = @. exp(q*z_s)*(c1*cos(q*z_s) + c2*sin(q*z_s))
+    ωy0_B0 = @. exp(q*z_s)*(c1*sin(q*z_s) - c2*cos(q*z_s))
+    χx0_B2 = @. exp(q*z_s)*(c2*cos(q*z_s) - c1*sin(q*z_s))/(2q^2)
+    χy0_B2 = @. exp(q*z_s)*(c1*sin(q*z_s) - c2*cos(q*z_s))/(2q^2)
+    c1 = -5q/6 # bx = z
+    c2 = q/6 # by = 1
     χx_I1 = @. -c2*z/(2*H*q^2)
     χy_I1 = @. +c1*z/(2*H*q^2)
     ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
     ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
-    χx_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))
-    χy_B1 = @. 1/(2*q^2)*exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
-    ωx_BL = 1/ε²*ωx0_B0 .+ 1/ε*ωx_B1
-    ωy_BL = 1/ε²*ωy0_B0 .+ 1/ε*ωy_B1
-    χx_BL = χx_I0 .+ χx0_B0 .+ ε*(χx_I1 .+ χx_B1)
-    χy_BL = χy_I0 .+ χy0_B0 .+ ε*(χy_I1 .+ χy_B1)
+    χx_B1 = @. exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))/(2q^2)
+    χy_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))/(2q^2)
+    ωx_BL = ωx_I0 .+ ωx0_B0 .+ 1/ε*ωx_B1
+    ωy_BL = ωy_I0 .+ ωy0_B0 .+ 1/ε*ωy_B1
+    χx_BL = χx_I0 .+ ε*(χx_I1 .+ χx_B1) .+ ε²*χx0_B2
+    χy_BL = χy_I0 .+ ε*(χy_I1 .+ χy_B1) .+ ε²*χy0_B2
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(3.2, 5.2))
