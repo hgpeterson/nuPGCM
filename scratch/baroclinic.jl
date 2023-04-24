@@ -428,6 +428,43 @@ function get_ω_b(g_sfc, g, g_cols, z_cols, p_to_tri, ε², f, b; showplots=fals
     return ωx_b, ωy_b, χx_b, χy_b
 end
 
+function get_b_gradient_matrices(b_col, g_sfc, z_cols, k) 
+    p1_ref = reference_element_nodes(1, 3)
+    Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
+    Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
+    Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
+    # b2 = [b(p2[t2[k, i], :]) for i=1:10, k=1:g.nt]
+    # bξ = Dξ*b2
+    # bη = Dη*b2
+    # bζ = Dζ*b2
+    # bx = bξ.*g.J.Js[:, 1, 1]' + bη.*g.J.Js[:, 2, 1]' + bζ.*g.J.Js[:, 3, 1]'
+    # by = bξ.*g.J.Js[:, 1, 2]' + bη.*g.J.Js[:, 2, 2]' + bζ.*g.J.Js[:, 3, 2]'
+    Dxs = Vector{SparseMatrixCSC}(undef, 3)
+    Dys = Vector{SparseMatrixCSC}(undef, 3)
+    for i=1:3
+        ig = g_sfc.t[k, i]
+        nz = size(z_cols[ig], 1)
+        weight = 1/size(p_to_tri[ig], 1)
+        Dx = Tuple{Int64,Int64,Float64}()
+        Dy = Tuple{Int64,Int64,Float64}()
+        n = 0
+        for j=1:nz-1
+            k_tet = findfirst(k -> n+j ∈ b_col.t[k, :] && n+j+1 ∈ b_col.t[k, :], 1:g.nt)
+            i1_tet = findfirst(i -> b_col.t[k_tet, i] == n+j, 1:b_col.nn)
+            i2_tet = findfirst(i -> b_col.t[k_tet, i] == n+j+1, 1:b_col.nn)
+            push!(Dx, (2j-1, b_col.t[k_tet, i1_tet], weight*bx[i1_tet, k_tet]))
+            push!(Dx, (2j,   b_col.t[k_tet, i1_tet], weight*bx[i2_tet, k_tet]))
+            push!(Dy, (2j-1, b_col.t[k_tet, i1_tet], weight*by[i1_tet, k_tet]))
+            push!(Dy, (2j,   b_col.t[k_tet, i1_tet], weight*by[i2_tet, k_tet]))
+            n += 1
+        end
+        Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
+        Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nz-2, b_col.np)
+    end
+
+    return Dxs, Dys
+end
+
 ### 
 
 function test_1d()
@@ -551,6 +588,6 @@ function test_1d()
     plt.close()
 end
 
-test_1d()
+# test_1d()
 
 ### 
