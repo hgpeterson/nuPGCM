@@ -331,70 +331,21 @@ function get_ω_τ(g_sfc, g, z_cols, H, ε², f; showplots=false)
     return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_ω_b(g_sfc, g, g_cols, z_cols, p_to_tri, ε², f, b; showplots=false)
+function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=false)
     # grid
     nzs = [size(col, 1) for col ∈ z_cols]
-
-    # b must be second order
-    sf2 = ShapeFunctions(order=2, dim=3)
-    sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-    b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols] # even this takes a while!
 
     # setup arrays
     bx = [zeros(2nz-2) for nz ∈ nzs]
     by = [zeros(2nz-2) for nz ∈ nzs]
-    @showprogress "Computing buoyancy gradients..." for k=1:g_sfc.nt
+    for k=1:g_sfc.nt
         b_col = FEField(b, b_cols[k])
-        n = 0
         for i=1:3
             ig = g_sfc.t[k, i]
-            x = g_sfc.p[ig, 1]
-            y = g_sfc.p[ig, 2]
-            weight = 1/size(p_to_tri[ig], 1)
-            for j=1:nzs[ig]-1
-                # maybe store these k_tets! represent as a matrix?
-                k_tet = findfirst(k_tet -> n+j ∈ g_cols[k].t[k_tet, :] && n+j+1 ∈ g_cols[k].t[k_tet, :], 1:g_cols[k].nt)
-                bx[ig][2j-1] += weight*∂x(b_col, [x, y, z_cols[ig][j]], k_tet)
-                bx[ig][2j]   += weight*∂x(b_col, [x, y, z_cols[ig][j+1]], k_tet)
-                by[ig][2j-1] += weight*∂y(b_col, [x, y, z_cols[ig][j]], k_tet)
-                by[ig][2j]   += weight*∂y(b_col, [x, y, z_cols[ig][j+1]], k_tet)
-            end
-            n += nzs[ig]
+            bx[ig] += Dxs[k][i]*b_col.values
+            by[ig] += Dys[k][i]*b_col.values
         end
     end
-    # println("finding edges")
-    # emap, edges, bndix = all_edges(g.t)
-    # midpts = 1/2*reshape(g.p[edges[:, 1], :] + g.p[edges[:, 2], :], (size(edges, 1), :))
-    # p2 = [g.p; midpts]
-    # t2 = hcat(g.t, g.np .+ emap)
-    # sf2 = ShapeFunctions(order=2, dim=3)
-    # println("forming derivative matrices")
-    # p1_ref = reference_element_nodes(1, 3)
-    # Dξ = [∂φ(sf2, j, 1, p1_ref[i, :]) for i=1:4, j=1:10]
-    # Dη = [∂φ(sf2, j, 2, p1_ref[i, :]) for i=1:4, j=1:10]
-    # Dζ = [∂φ(sf2, j, 3, p1_ref[i, :]) for i=1:4, j=1:10]
-    # b2 = [b(p2[t2[k, i], :]) for i=1:10, k=1:g.nt]
-    # bξ = Dξ*b2
-    # bη = Dη*b2
-    # bζ = Dζ*b2
-    # bx = bξ.*g.J.Js[:, 1, 1]' + bη.*g.J.Js[:, 2, 1]' + bζ.*g.J.Js[:, 3, 1]'
-    # by = bξ.*g.J.Js[:, 1, 2]' + bη.*g.J.Js[:, 2, 2]' + bζ.*g.J.Js[:, 3, 2]'
-    # nzs = [size(col, 1) for col ∈ z_cols]
-    # col_indices = [sum(nzs[1:i-1])+1:sum(nzs[1:i-1])+nzs[i] for i ∈ eachindex(nzs)]
-    # bx_cols = [zeros(2nz-2) for nz ∈ nzs]
-    # by_cols = [zeros(2nz-2) for nz ∈ nzs]
-    # @showprogress "Computing buoyancy gradients" for i_col ∈ eachindex(col_indices)
-    #     weight = 1/size(p_to_tri[i_col], 1)
-    #     for j=1:nzs[i_col]-1
-    #         k_tet = findfirst(k -> col_indices[i_col][j] ∈ g.t[k, :] && col_indices[i_col][j+1] ∈ g.t[k, :], 1:g.nt)
-    #         i1_tet = findfirst(i -> g.t[k_tet, i] == col_indices[i_col][j], 1:g.nn)
-    #         i2_tet = findfirst(i -> g.t[k_tet, i] == col_indices[i_col][j+1], 1:g.nn)
-    #         bx_cols[i_col][2j-1] += weight*bx[i1_tet, k_tet]
-    #         bx_cols[i_col][2j]   += weight*bx[i2_tet, k_tet]
-    #         by_cols[i_col][2j-1] += weight*by[i1_tet, k_tet]
-    #         by_cols[i_col][2j]   += weight*by[i2_tet, k_tet]
-    #     end
-    # end
 
     # solve 
     ωx_b = zeros(g.np)
@@ -428,41 +379,67 @@ function get_ω_b(g_sfc, g, g_cols, z_cols, p_to_tri, ε², f, b; showplots=fals
     return ωx_b, ωy_b, χx_b, χy_b
 end
 
-function get_b_gradient_matrices(b_col, g_sfc, z_cols, k) 
+function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k) 
     p1_ref = reference_element_nodes(1, 3)
-    Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
-    Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
-    Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:4, j=1:b_col.nn]
-    # b2 = [b(p2[t2[k, i], :]) for i=1:10, k=1:g.nt]
-    # bξ = Dξ*b2
-    # bη = Dη*b2
-    # bζ = Dζ*b2
-    # bx = bξ.*g.J.Js[:, 1, 1]' + bη.*g.J.Js[:, 2, 1]' + bζ.*g.J.Js[:, 3, 1]'
-    # by = bξ.*g.J.Js[:, 1, 2]' + bη.*g.J.Js[:, 2, 2]' + bζ.*g.J.Js[:, 3, 2]'
+    Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
     Dxs = Vector{SparseMatrixCSC}(undef, 3)
     Dys = Vector{SparseMatrixCSC}(undef, 3)
+    n = 0
     for i=1:3
         ig = g_sfc.t[k, i]
         nz = size(z_cols[ig], 1)
         weight = 1/size(p_to_tri[ig], 1)
-        Dx = Tuple{Int64,Int64,Float64}()
-        Dy = Tuple{Int64,Int64,Float64}()
-        n = 0
+        Dx = Tuple{Int64,Int64,Float64}[]
+        Dy = Tuple{Int64,Int64,Float64}[]
         for j=1:nz-1
-            k_tet = findfirst(k -> n+j ∈ b_col.t[k, :] && n+j+1 ∈ b_col.t[k, :], 1:g.nt)
-            i1_tet = findfirst(i -> b_col.t[k_tet, i] == n+j, 1:b_col.nn)
-            i2_tet = findfirst(i -> b_col.t[k_tet, i] == n+j+1, 1:b_col.nn)
-            push!(Dx, (2j-1, b_col.t[k_tet, i1_tet], weight*bx[i1_tet, k_tet]))
-            push!(Dx, (2j,   b_col.t[k_tet, i1_tet], weight*bx[i2_tet, k_tet]))
-            push!(Dy, (2j-1, b_col.t[k_tet, i1_tet], weight*by[i1_tet, k_tet]))
-            push!(Dy, (2j,   b_col.t[k_tet, i1_tet], weight*by[i2_tet, k_tet]))
-            n += 1
+            k_tet = findfirst(k -> n+j ∈ g_col.t[k, :] && n+j+1 ∈ g_col.t[k, :], 1:g.nt)
+            ξx = g_col.J.Js[k_tet, 1, 1]
+            ξy = g_col.J.Js[k_tet, 1, 2]
+            ηx = g_col.J.Js[k_tet, 2, 1]
+            ηy = g_col.J.Js[k_tet, 2, 2]
+            ζx = g_col.J.Js[k_tet, 3, 1]
+            ζy = g_col.J.Js[k_tet, 3, 2]
+            i1_tet = findfirst(i -> g_col.t[k_tet, i] == n+j, 1:g_col.nn) 
+            i2_tet = findfirst(i -> g_col.t[k_tet, i] == n+j+1, 1:g_col.nn)
+            for l=1:b_col.nn
+                push!(Dx, (2j-1, b_col.t[k_tet, l], weight*(Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx)))
+                push!(Dx, (2j,   b_col.t[k_tet, l], weight*(Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx)))
+                push!(Dy, (2j-1, b_col.t[k_tet, l], weight*(Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy)))
+                push!(Dy, (2j,   b_col.t[k_tet, l], weight*(Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy)))
+            end
         end
         Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
         Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nz-2, b_col.np)
+        n += nz
     end
 
     return Dxs, Dys
+end
+
+function b_gradient_test(b_col, g_col, g_sfc, z_cols, k) 
+    b0 = FEField(b, b_col)
+    nzs = [size(col, 1) for col ∈ z_cols[g_sfc.t[k, :]]]
+    bx = [zeros(2nz-2) for nz ∈ nzs]
+    by = [zeros(2nz-2) for nz ∈ nzs]
+    n = 0
+    for i=1:3
+        ig = g_sfc.t[k, i]
+        nz = size(z_cols[ig], 1)
+        x = g_sfc.p[ig, 1]
+        y = g_sfc.p[ig, 2]
+        weight = 1/size(p_to_tri[ig], 1)
+        for j=1:nz-1
+            k_tet = findfirst(k_tet -> n+j ∈ g_col.t[k_tet, :] && n+j+1 ∈ g_col.t[k_tet, :], 1:g_col.nt)
+            bx[i][2j-1] += weight*∂x(b0, [x, y, z_cols[ig][j]], k_tet)
+            bx[i][2j]   += weight*∂x(b0, [x, y, z_cols[ig][j+1]], k_tet)
+            by[i][2j-1] += weight*∂y(b0, [x, y, z_cols[ig][j]], k_tet)
+            by[i][2j]   += weight*∂y(b0, [x, y, z_cols[ig][j+1]], k_tet)
+        end
+        n += nz
+    end
+    return bx, by
 end
 
 ### 

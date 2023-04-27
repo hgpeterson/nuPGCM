@@ -239,7 +239,7 @@ end
 3) Map local edges to global edges with `emap` (nt x dim+1 array): `emap[k,i]` is the 
 global edge number for local edge `i` in element `k`.
 """
-function all_edges(t)
+function all_edges(t; handle_bdy=true)
     # dimension of space
     dim = size(t, 2) - 1
 
@@ -273,17 +273,21 @@ function all_edges(t)
     edges = etag[keep, 1:2]
 
     # boundary edges
-    if dim == 1 || dim == 2
-        # in 1D and 2D, no duplicates
-        dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
-        dup = [dup; false]
-        dup = dup[keep]
-        bndix = findall(.!dup)
-    elseif dim == 3
-        # in 3D, on boundary face (TODO: improve performance here)
-        bfaces = boundary_faces(t)
-        _, bedges, _ = all_edges(bfaces)
-        bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
+    if handle_bdy
+        if dim == 1 || dim == 2
+            # in 1D and 2D, no duplicates
+            dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
+            dup = [dup; false]
+            dup = dup[keep]
+            bndix = findall(.!dup)
+        elseif dim == 3
+            # in 3D, on boundary face (TODO: improve performance here)
+            bfaces = boundary_faces(t)
+            _, bedges, _ = all_edges(bfaces)
+            bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
+        end
+    else
+        bndix = []
     end
 
     # compute mapping to global indices
