@@ -35,6 +35,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     A = Tuple{Int64,Int64,Float64}[]
     rhs = zeros(N)
     print("Building matrices")
+    t₀ = time()
     for k=1:g.nt
         if mod(k, Int64(round(0.25*g.nt))) == 0
             print(".")
@@ -130,9 +131,9 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
 
     # sparse matrix
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
+    println(@sprintf(" (%.1f s)", time() - t₀))
 
     # solve
-    println("\nSolving...")
     return FEField(A\rhs, g)
 end
 
@@ -195,12 +196,12 @@ function invert(g_sfc, g, b_cols, z_cols, Dxs, Dys; showplots=false, nonzero_b=t
     return Ψ
 end
 
-ε² = 1e-2
+ε² = 1e-4
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-f(x) = x[2]
+f(x) = 1 + x[2]
 fy(x) = 1
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 bx(x) = -Hx(x)*exp(-(x[3] + H(x))/δ)

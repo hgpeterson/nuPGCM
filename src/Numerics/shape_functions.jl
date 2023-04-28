@@ -1,4 +1,4 @@
-struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
+struct ShapeFunctions{IN<:Integer, V<:AbstractVector, M<:AbstractMatrix, A<:AbstractArray}
     # order of polynomials defining shape functions
     order::IN
 
@@ -7,6 +7,9 @@ struct ShapeFunctions{IN<:Integer, M<:AbstractMatrix, A<:AbstractArray}
 
     # number of nodes on reference element
     n::IN
+
+    # permutations for ξˡηᵐζⁿ terms
+    perms::V
 
     # coefficients matrix defining shape function polynomials
     C::M
@@ -70,7 +73,7 @@ function ShapeFunctions(; order, dim)
         end
     end
 
-    return ShapeFunctions(order, dim, n, C, ∂C)
+    return ShapeFunctions(order, dim, n, perms, C, ∂C)
 end
 
 """
@@ -163,7 +166,7 @@ end
 Evaluate shape function `i` at the point `ξ`.
 """
 function φ(sf::ShapeFunctions, i, ξ)
-    return eval_poly(sf.C[:, i], ξ, sf.order, sf.dim)
+    return eval_poly(sf.C[:, i], ξ, sf.perms)
 end
 
 """
@@ -172,7 +175,7 @@ end
 Evaluate `j`-derivative of shape function `i` at the point `ξ`.
 """
 function ∂φ(sf::ShapeFunctions, i, j, ξ)
-    return eval_poly(sf.∂C[j, :, i], ξ, sf.order, sf.dim)
+    return eval_poly(sf.∂C[j, :, i], ξ, sf.perms)
 end
 
 # shortcuts
@@ -181,32 +184,33 @@ end
 ∂φ∂ζ(sf::ShapeFunctions, i, ξ) = ∂φ(sf, i, 3, ξ)
 
 """
-    f = eval_poly(c, ξ, n, d)
+    eval_poly(c, ξ, perms)
 
-Evaluate `n` degree polynomial in `d` dimensions defined by coefficients `c` at point `ξ`.
+Evaluate polynomial Σ cᵢξʲηᵏζˡ defined by coefficients `c` and permutations `perms` at 
+the point `ξ` = [ξ, η, ζ].
 """
-function eval_poly(c, ξ, n, d)
-    if n == 0
+function eval_poly(c, ξ, perms)
+    # hard-code these common ones for speed...
+    d = length(ξ)
+    n = length(perms)
+    if n == 1
         return c[1]
-    elseif n == 1 && d == 2
-        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] 
-    elseif n == 1 && d == 3
-        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[3]
-    elseif n == 2 && d == 2
-        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[1]^2 + c[5]*ξ[1]*ξ[2] + c[6]*ξ[2]^2
+    elseif n == 3 && d == 2
+        return c[1] + 
+               c[2]*ξ[1] + c[3]*ξ[2] 
+    elseif n == 4 && d == 3
+        return c[1] + 
+               c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[3]
+    elseif n == 6 && d == 2
+        return c[1] + 
+               c[2]*ξ[1] + c[3]*ξ[2] + 
+               c[4]*ξ[1]^2 + c[5]*ξ[1]*ξ[2] + c[6]*ξ[2]^2
+    elseif n == 10 && d == 3
+        return c[1] + 
+               c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[3] +
+               c[5]*ξ[1]^2 + c[6]*ξ[1]*ξ[2] + c[7]*ξ[2]^2 + c[8]*ξ[1]*ξ[3] + c[9]*ξ[2]*ξ[3] + c[10]*ξ[3]^2
     end
-    f = 0 
-    i = 1
-    # loop over each degree ≤ n
-    for k=0:n
-        # get all permutations of exponents
-        perms = iter_permutations(k, d)
 
-        # add each term of the form ξᵃηᵇζᶜ...
-        for perm ∈ perms
-            f += c[i]*prod(ξ.^perm) # (btw: julia says 0^0 is 1)
-            i += 1
-        end
-    end
-    return f
+    # otherwise, defer to the general form
+    return sum(c[i]*prod(ξ.^perms[i]) for i ∈ eachindex(perms))
 end
