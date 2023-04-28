@@ -215,25 +215,22 @@ by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
 ∂τ∂x(x) = (0, 0)
 ∂τ∂y(x) = (0, 0)
 
-# mesh
-geo = "circle"
-nref = 3
-g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
+# # mesh
+# geo = "circle"
+# nref = 3
+# g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
 
-# second order b
-sf2 = ShapeFunctions(order=2, dim=3)
-sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
+# # second order b
+# sf2 = ShapeFunctions(order=2, dim=3)
+# sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+# b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
 
-# derivative matrices
-Dxs = Vector{Any}(undef, g_sfc.nt)
-Dys = Vector{Any}(undef, g_sfc.nt)
-@showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-    Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
-end
-
-# # test
-# ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, ε², Dxs, Dys, f, b; showplots=true)
+# # derivative matrices
+# Dxs = Vector{Any}(undef, g_sfc.nt)
+# Dys = Vector{Any}(undef, g_sfc.nt)
+# @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
+#     Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
+# end
 
 # Ψ = invert(g_sfc, g, g_cols, z_cols, p_to_tri, showplots=true, nonzero_b=false)
 Ψ = invert(g_sfc, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)

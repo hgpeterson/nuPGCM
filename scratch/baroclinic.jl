@@ -418,30 +418,6 @@ function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k)
     return Dxs, Dys
 end
 
-function b_gradient_test(b_col, g_col, g_sfc, z_cols, k) 
-    b0 = FEField(b, b_col)
-    nzs = [size(col, 1) for col ∈ z_cols[g_sfc.t[k, :]]]
-    bx = [zeros(2nz-2) for nz ∈ nzs]
-    by = [zeros(2nz-2) for nz ∈ nzs]
-    n = 0
-    for i=1:3
-        ig = g_sfc.t[k, i]
-        nz = size(z_cols[ig], 1)
-        x = g_sfc.p[ig, 1]
-        y = g_sfc.p[ig, 2]
-        weight = 1/size(p_to_tri[ig], 1)
-        for j=1:nz-1
-            k_tet = findfirst(k_tet -> n+j ∈ g_col.t[k_tet, :] && n+j+1 ∈ g_col.t[k_tet, :], 1:g_col.nt)
-            bx[i][2j-1] += weight*∂x(b0, [x, y, z_cols[ig][j]], k_tet)
-            bx[i][2j]   += weight*∂x(b0, [x, y, z_cols[ig][j+1]], k_tet)
-            by[i][2j-1] += weight*∂y(b0, [x, y, z_cols[ig][j]], k_tet)
-            by[i][2j]   += weight*∂y(b0, [x, y, z_cols[ig][j+1]], k_tet)
-        end
-        n += nz
-    end
-    return bx, by
-end
-
 ### 
 
 function test_1d()

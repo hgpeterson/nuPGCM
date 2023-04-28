@@ -186,6 +186,15 @@ end
 Evaluate `n` degree polynomial in `d` dimensions defined by coefficients `c` at point `ξ`.
 """
 function eval_poly(c, ξ, n, d)
+    if n == 0
+        return c[1]
+    elseif n == 1 && d == 2
+        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] 
+    elseif n == 1 && d == 3
+        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[3]
+    elseif n == 2 && d == 2
+        return c[1] + c[2]*ξ[1] + c[3]*ξ[2] + c[4]*ξ[1]^2 + c[5]*ξ[1]*ξ[2] + c[6]*ξ[2]^2
+    end
     f = 0 
     i = 1
     # loop over each degree ≤ n
