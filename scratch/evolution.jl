@@ -38,14 +38,12 @@ function get_K(g)
 end
 
 function compute_A(sf_χ, sf_b)
-    w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=3)
+    w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=sf_b.dim)
     f(ξ, i, j, k, d1, d2) = ∂φ(sf_χ, k, d1, ξ)*∂φ(sf_b, j, d2, ξ)*φ(sf_b, i, ξ)
     return [nuPGCM.ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
 end
 
-function compute_As(A, χ, b)
-    gb = b.g
-    gχ = χ.g
+function compute_As(A, gχ, gb)
     J = gb.J
     Ax  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
     Ay  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
@@ -63,18 +61,13 @@ function compute_As(A, χ, b)
     return AdvectionArrays(Ax, Ay, Az1, Az2)
 end
 
-function advection(A::AdvectionArrays, χx, χy, b)
-    gb = b.g
-    gχ = χx.g
-    tb = gb.t
-    tχ = gχ.t
-    adv = zeros(gb.np)
-    for k=1:gb.nt
-        # -∂z(χʸ)*∂x(b)
-        adv[tb[k, :]] += sum(A.Ax[k, :, i, j]*b[tb[k, i]]*χy[tχ[k, j]] for i=1:gb.nn, j=1:gχ.nn) +
-                         sum(A.Ay[k, :, i, j]*b[tb[k, i]]*χx[tχ[k, j]] for i=1:gb.nn, j=1:gχ.nn) +
-                         sum(A.Az1[k, :, i, j]*b[tb[k, i]]*χy[tχ[k, j]] for i=1:gb.nn, j=1:gχ.nn) +
-                         sum(A.Az2[k, :, i, j]*b[tb[k, i]]*χx[tχ[k, j]] for i=1:gb.nn, j=1:gχ.nn)
+function advection(As::AdvectionArrays, χx, χy, b, g)
+    adv = zeros(g.np)
+    for k=1:g.nt, i=g.nn
+        adv[g.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
+                          sum(As.Ay[k, i, ib, iχ]*b[g.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
+                          sum(As.Az1[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
+                          sum(As.Az2[k, i, ib, iχ]*b[g.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn)
     end
     return adv
 end
@@ -123,18 +116,12 @@ function evolve(; b_order)
     println(@sprintf("CFL Δt: %1.1e", h/1))
     println(@sprintf("    Δt: %1.1e", Δt))
 
-    # FEFields
-    b = FEField(b, gb)
-    χx = FEField(χx, gχ)
-    χy = FEField(χy, gχ)
-
     # matrices
     M = get_M(g)
     K = get_K(g)
     LHS = lu(μ*ϱ*M + ε²*Δt/2*K)
     A = compute_A(gχ.sf, gb.sf)
-    As = compute_As(A, χx, b)
-    display(typeof(As))
+    As = compute_As(A, gχ, gb)
 
     # pvd file
     rm("output/b.pvd", force=true)
@@ -151,26 +138,26 @@ function evolve(; b_order)
             end
             cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
             vtk_grid("output/b_at_t$i", gb.p', cells) do vtk
-                vtk["b"] = b.values
+                vtk["b"] = b
                 pvd[i*Δt] = vtk
             end
         end
 
-        b_prev = FEField(b.values, gb)
-        χx_prev = FEField(χx.values, gχ)
-        χy_prev = FEField(χy.values, gχ)
+        b_prev = copy(b)
+        χx_prev = copy(χx)
+        χy_prev = copy(χy)
 
         if i == 1
             # first step: CNAB1
-            RHS = μ*ϱ*M*b.values - Δt*(advection(As, χx, χy, b) + ε²/2*K*b.values)
+            RHS = μ*ϱ*M*b - Δt*(advection(As, χx, χy, b, gb) + ε²/2*K*b)
         else
             # other steps: CNAB2
-            RHS = μ*ϱ*M*b.values - Δt*(3/2*advection(As, χx, χy, b) - 1/2*advection(As, χx_prev, χy_prev, b_prev) + ε²/2*K*b.values)
+            RHS = μ*ϱ*M*b - Δt*(3/2*advection(As, χx, χy, b, gb) - 1/2*advection(As, χx_prev, χy_prev, b_prev, gb) + ε²/2*K*b)
         end
 
-        b.values[:] = LHS\RHS
+        b = LHS\RHS
 
-        if any(isnan.(b.values))
+        if any(isnan.(b))
             error("Solution blew up 😢")
         end
     end
