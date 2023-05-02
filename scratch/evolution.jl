@@ -38,7 +38,7 @@ function get_K(g)
 end
 
 function compute_A(sf_χ, sf_b)
-    w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=sf_b.dim)
+    w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=3)
     f(ξ, i, j, k, d1, d2) = ∂φ(sf_χ, k, d1, ξ)*∂φ(sf_b, j, d2, ξ)*φ(sf_b, i, ξ)
     return [nuPGCM.ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
 end
@@ -63,7 +63,7 @@ end
 
 function advection(As::AdvectionArrays, χx, χy, b, g)
     adv = zeros(g.np)
-    for k=1:g.nt, i=g.nn
+    for k=1:g.nt, i=1:g.nn
         adv[g.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
                           sum(As.Ay[k, i, ib, iχ]*b[g.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
                           sum(As.Az1[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
@@ -72,20 +72,16 @@ function advection(As::AdvectionArrays, χx, χy, b, g)
     return adv
 end
 
-function RK4(f, u, Δt)
-    k1 = Δt*f(u)
-    k2 = Δt*f(u + k1/2)
-    k3 = Δt*f(u + k2/2)
-    k4 = Δt*f(u + k3)
-    return u + (k1 + 2k2 + 2k3 + k4)/6
+function RK2(f, u, Δt)
+    return Δt*f(u + Δt/2*f(u))
 end
 
 function evolve(; b_order)
     # params
-    ε² = 0
+    ε² = 1e-6
     μ = 1
     ϱ = 1e-4
-    Δt = 1e-7
+    Δt = 1e-3
 
     # topo
     H(x) = 1 - x[1]^2 - x[2]^2
@@ -103,23 +99,22 @@ function evolve(; b_order)
     end
     gχ = g
 
-    # rough mesh size
-    h = 1/cbrt(gb.np)
-
     # IC
     σ = 0.1
     b = @. exp((-gb.p[:, 1]^2 - gb.p[:, 2]^2 - (gb.p[:, 3] + 0.5)^2)/(2σ^2))
     χx = zeros(gχ.np) # uy = 0
-    χy = -gχ.p[:, 3] # ux = 1
+    ux = 1
+    χy = -ux*gχ.p[:, 3] # ux = ux
 
     # CFL
-    println(@sprintf("CFL Δt: %1.1e", h/1))
+    println(@sprintf("CFL Δt: %1.1e", 1/sqrt(g_sfc.np/ux)))
     println(@sprintf("    Δt: %1.1e", Δt))
 
     # matrices
     M = get_M(g)
     K = get_K(g)
-    LHS = lu(μ*ϱ*M + ε²*Δt/2*K)
+    LHS_diff = lu(μ*ϱ*M + ε²*Δt/2*K)
+    LHS_adv = cholesky(μ*ϱ*M)
     A = compute_A(gχ.sf, gb.sf)
     As = compute_As(A, gχ, gb)
 
@@ -143,19 +138,13 @@ function evolve(; b_order)
             end
         end
 
-        b_prev = copy(b)
-        χx_prev = copy(χx)
-        χy_prev = copy(χy)
-
-        if i == 1
-            # first step: CNAB1
-            RHS = μ*ϱ*M*b - Δt*(advection(As, χx, χy, b, gb) + ε²/2*K*b)
-        else
-            # other steps: CNAB2
-            RHS = μ*ϱ*M*b - Δt*(3/2*advection(As, χx, χy, b, gb) - 1/2*advection(As, χx_prev, χy_prev, b_prev, gb) + ε²/2*K*b)
-        end
-
-        b = LHS\RHS
+        # operator split rhs
+        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gb), b, Δt/2)
+        b1 = LHS_adv\RHS_adv1
+        RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
+        b2 = LHS_diff\RHS_diff
+        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gb), b2, Δt/2)
+        b = LHS_adv\RHS_adv2
 
         if any(isnan.(b))
             error("Solution blew up 😢")
