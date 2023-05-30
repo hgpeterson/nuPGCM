@@ -4,7 +4,7 @@ lines.markersize:      4.0
 
 hatch.linewidth:       0.5
 
-font.size:             7.0
+font.size:             8.0
 font.family:           serif
 font.serif:            STIXGeneral
 mathtext.fontset:      stix
