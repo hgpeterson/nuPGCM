@@ -201,8 +201,10 @@ end
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-f(x) = 1 + x[2]
-fy(x) = 1
+# f(x) = 1 + x[2]
+f(x) = 1
+# fy(x) = 1
+fy(x) = 0
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 bx(x) = -Hx(x)*exp(-(x[3] + H(x))/δ)
 by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
@@ -233,7 +235,17 @@ by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
 #     Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
 # end
 
-# Ψ = invert(g_sfc, g, g_cols, z_cols, p_to_tri, showplots=true, nonzero_b=false)
-Ψ = invert(g_sfc, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
+# # Ψ = invert(g_sfc, g, g_cols, z_cols, p_to_tri, showplots=true, nonzero_b=false)
+# Ψ = invert(g_sfc, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
+
+fig, ax, im = tplot(Ψ, contour=true, cb_label=L"\Psi")
+ax.set_xlabel(L"x")
+ax.set_ylabel(L"y")
+ax.axis("equal")
+ax.set_yticks(-1:0.5:1)
+ax.set_yticklabels(0:0.5:2)
+savefig("scratch/images/psi_f-plane.pdf")
+println("scratch/images/psi_f-plane.pdf")
+plt.close()
 
 println("Done.")

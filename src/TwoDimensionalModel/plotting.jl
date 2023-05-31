@@ -187,7 +187,7 @@ function plot_state(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
     savefig(@sprintf("%sb%03d.png", out_folder, i_img))
     plt.close()
 
-    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Along-ridge flow $u^\eta$ (m s$^{-1}$)"; style="pcolormesh")
+    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Along-slope flow $u^y$ (m s$^{-1}$)"; style="pcolormesh")
     savefig(@sprintf("%sv%03d.png", out_folder, i_img))
     plt.close()
 end

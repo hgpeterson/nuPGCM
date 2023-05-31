@@ -37,13 +37,13 @@ function get_K(g)
     return sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np)
 end
 
-function compute_A(sf_χ, sf_b)
+function get_A(sf_χ, sf_b)
     w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=3)
     f(ξ, i, j, k, d1, d2) = ∂φ(sf_χ, k, d1, ξ)*∂φ(sf_b, j, d2, ξ)*φ(sf_b, i, ξ)
     return [nuPGCM.ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
 end
 
-function compute_As(A, gχ, gb)
+function get_As(A, gχ, gb)
     J = gb.J
     Ax  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
     Ay  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
@@ -61,13 +61,13 @@ function compute_As(A, gχ, gb)
     return AdvectionArrays(Ax, Ay, Az1, Az2)
 end
 
-function advection(As::AdvectionArrays, χx, χy, b, g)
-    adv = zeros(g.np)
-    for k=1:g.nt, i=1:g.nn
-        adv[g.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
-                          sum(As.Ay[k, i, ib, iχ]*b[g.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
-                          sum(As.Az1[k, i, ib, iχ]*b[g.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn) +
-                          sum(As.Az2[k, i, ib, iχ]*b[g.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:g.nn, iχ=1:g.nn)
+function advection(As::AdvectionArrays, χx, χy, b, gχ, gb)
+    adv = zeros(gb.np)
+    for k=1:gb.nt, i=1:gb.nn
+        adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[gχ.t[k, iχ]]  for ib=1:gb.nn, iχ=1:gχ.nn) +
+                           sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[gχ.t[k, iχ]]  for ib=1:gb.nn, iχ=1:gχ.nn) +
+                           sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[gχ.t[k, iχ]] for ib=1:gb.nn, iχ=1:gχ.nn) +
+                           sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[gχ.t[k, iχ]] for ib=1:gb.nn, iχ=1:gχ.nn)
     end
     return adv
 end
@@ -78,7 +78,7 @@ end
 
 function evolve(; b_order)
     # params
-    ε² = 1e-6
+    ε² = 5e-7
     μ = 1
     ϱ = 1e-4
     Δt = 1e-3
@@ -90,7 +90,7 @@ function evolve(; b_order)
 
     # mesh
     geo = "circle"
-    nref = 2
+    nref = 1
     g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
     if b_order == 1
         gb = g
@@ -104,19 +104,23 @@ function evolve(; b_order)
     b = @. exp((-gb.p[:, 1]^2 - gb.p[:, 2]^2 - (gb.p[:, 3] + 0.5)^2)/(2σ^2))
     χx = zeros(gχ.np) # uy = 0
     ux = 1
-    χy = -ux*gχ.p[:, 3] # ux = ux
+    χy = -ux*gχ.p[:, 3]
+    # z = gχ.p[:, 3]
+    # HH = [H(gχ.p[i, :]) for i=1:gχ.np]
+    # ux = 1
+    # χy = @. -1/3*z*(-3 + 3*ux - 6*z/HH - 4*z^2/HH^2) # ux = ux at H/2, zero at top and bot
 
     # CFL
-    println(@sprintf("CFL Δt: %1.1e", 1/sqrt(g_sfc.np/ux)))
+    println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
     println(@sprintf("    Δt: %1.1e", Δt))
 
     # matrices
-    M = get_M(g)
-    K = get_K(g)
+    M = get_M(gb)
+    K = get_K(gb)
     LHS_diff = lu(μ*ϱ*M + ε²*Δt/2*K)
     LHS_adv = cholesky(μ*ϱ*M)
-    A = compute_A(gχ.sf, gb.sf)
-    As = compute_As(A, gχ, gb)
+    A = get_A(gχ.sf, gb.sf)
+    As = get_As(A, gχ, gb)
 
     # pvd file
     rm("output/b.pvd", force=true)
@@ -134,16 +138,17 @@ function evolve(; b_order)
             cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
             vtk_grid("output/b_at_t$i", gb.p', cells) do vtk
                 vtk["b"] = b
+                vtk["ba"] = @. exp((-(gb.p[:, 1] - ux*i*Δt)^2 - gb.p[:, 2]^2 - (gb.p[:, 3] + 0.5)^2)/(2σ^2))
                 pvd[i*Δt] = vtk
             end
         end
 
         # operator split rhs
-        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gb), b, Δt/2)
+        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gχ, gb), b, Δt/2)
         b1 = LHS_adv\RHS_adv1
         RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
         b2 = LHS_diff\RHS_diff
-        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gb), b2, Δt/2)
+        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gχ, gb), b2, Δt/2)
         b = LHS_adv\RHS_adv2
 
         if any(isnan.(b))
@@ -157,6 +162,6 @@ function evolve(; b_order)
     return b
 end
 
-bf = evolve(b_order=1)
+bf = evolve(b_order=2)
 
 println("Done.")

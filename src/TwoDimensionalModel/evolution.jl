@@ -35,7 +35,8 @@ function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2})
         RHS[:, m.nσ] = s.χ[:, m.nσ].*∂ξ(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
     else
         RHS[:, 1] .= 0
-        RHS[:, m.nσ] .= m.N2[:, m.nσ]
+        # RHS[:, m.nσ] .= m.N2[:, m.nσ]
+        RHS[:, m.nσ] .= 0
     end
 end
 
