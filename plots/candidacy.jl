@@ -10,18 +10,22 @@ function beta_sim_setup()
     H(x) = 1 - x[1]^2 - x[2]^2
     u = [H(g.p[i, :]) for i=1:g.np]
     fig, ax = plt.subplots(1)
-    im = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, cmap="Blues", vmin=0, vmax=1, rasterized=true, edgecolors="k", linewidth=0.1)
-    levels = [1/4, 1/2, 3/4]
-    ax.tricontour(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
-    cb = colorbar(im, ax=ax, label=L"Depth $H$")
+    H0 = 4
+    L0 = 5e3
+    im = ax.tripcolor(L0*g.p[:, 1], L0*g.p[:, 2], g.t[:, 1:3] .- 1, H0*u, cmap="Blues", vmin=0, vmax=H0, rasterized=true, edgecolors="k", linewidth=0.1)
+    # im = ax.tripcolor(L0*g.p[:, 1], L0*g.p[:, 2], g.t[:, 1:3] .- 1, H0*u, cmap="Blues", vmin=0, vmax=H0, rasterized=true, shading="gouraud")
+    levels = H0*[1/4, 1/2, 3/4]
+    ax.tricontour(L0*g.p[:, 1], L0*g.p[:, 2], g.t[:, 1:3] .- 1, H0*u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
+    cb = colorbar(im, ax=ax, label=L"Depth $H$ (km)")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     plt.axis("equal")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Meridional Coordinate $y$")
-    ax.set_yticks(-1:0.5:1)
-    savefig("beta_sim_setup.pdf")
-    println("beta_sim_setup.pdf")
+    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+    ax.set_ylabel(L"Meridional Coordinate $y$ (km)")
+    ax.set_yticks(-L0:L0/2:L0)
+    ax.set_yticklabels(Int64.(0:L0/2:2L0))
+    savefig("plots/beta_sim_setup.pdf")
+    println("plots/beta_sim_setup.pdf")
     plt.close()
 end
 
@@ -79,8 +83,8 @@ end
 
 function uy_bowl2D()
     # parameters
-    f = 1e0
-    L = 1e0
+    f = 1e-4
+    L = 5e6
     nξ = 2^8 
     nσ = 2^8
     coords = "axisymmetric"
@@ -98,12 +102,12 @@ function uy_bowl2D()
     
     # topography: bowl
     no_net_transport = true
-    H0 = 1e0
+    H0 = 4e3
     H_func(x) = H0*(1 - (x/L)^2) + 0.005*H0
     Hx_func(x) = -2*H0*x/L^2
 
     # diffusivity
-    κ0 = 1e-4
+    κ0 = 1e-5
     κ1 = 0
     h = 200
     κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
@@ -113,7 +117,7 @@ function uy_bowl2D()
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1
+    N2 = 1e-6
     N2_func(ξ, σ) = N2
     
     # timestepping
@@ -143,18 +147,21 @@ function uy_bowl2D()
 
     fig, ax = plt.subplots(1)
     field = s.uη
-    img = ax.pcolormesh(m.x, m.z, field, cmap="RdBu_r", vmin=-0.15, vmax=0.15, rasterized=true, shading="auto")
-    cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
+    vmax = 6
+    # vmax = maximum(field)
+    vmin = -vmax
+    img = ax.pcolormesh(m.x/1e3, m.z/1e3, 1e3*field, cmap="RdBu_r", vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
+    cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$ ($\times 10^{-3}$ m s$^{-1}$)")
     n_levels = 20
     iξ = argmax(m.H)
     lower_level = -trapz(m.N2[iξ, :], m.z[iξ, :])
     upper_level = lower_level/100
     levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
-    ax.contour(m.x, m.z, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
-    ax.fill_between(m.x[:, 1], m.z[:, 1], minimum(m.z), color="k", alpha=0.3, lw=0.0)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    # ax.set_xlim([m.ξ[1]/1e3, (m.ξ[end] + m.ξ[2] - m.ξ[1])/1e3])
+    ax.contour(m.x/1e3, m.z/1e3, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.fill_between(m.x[:, 1]/1e3, m.z[:, 1]/1e3, minimum(m.z/1e3), color="k", alpha=0.3, lw=0.0)
+    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
+    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
+    ax.set_xlim([0, m.ξ[end]/1e3])
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     # ridge_plot(m, s, s.uη, L"t = 30", L"Along-slope flow $u^y$"; style="pcolormesh")
@@ -170,7 +177,7 @@ function uy_bowl2D()
     # plt.close()
 end
 
-# beta_sim_setup()
+beta_sim_setup()
 # overturn_sim_setup()
 # llc4320res()
-uy_bowl2D()
+# uy_bowl2D()
