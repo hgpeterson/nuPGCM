@@ -143,8 +143,6 @@ function uy_bowl2D()
 
     fig, ax = plt.subplots(1)
     field = s.uη
-    vmax = maximum(abs.(field))
-    vmin = -vmax
     img = ax.pcolormesh(m.x, m.z, field, cmap="RdBu_r", vmin=-0.15, vmax=0.15, rasterized=true, shading="auto")
     cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
     n_levels = 20
