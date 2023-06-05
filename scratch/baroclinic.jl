@@ -11,13 +11,15 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-function gen_3D_valign_mesh(geo, nref, H)
+function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     # surface mesh
     g_sfc = FEGrid(1, "meshes/$geo/mesh$nref.h5")
 
     # will we need to tessellate?
-    tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
-    # tessellate = true
+    if tessellate === nothing
+        tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
+        # tessellate = true
+    end
 
     # x and y for convenience
     x = g_sfc.p[:, 1]
@@ -49,8 +51,11 @@ function gen_3D_valign_mesh(geo, nref, H)
         if nz == 1
             z = [0]
         else
-            # z = range(-H(g_sfc.p[i, :]), 0, length=nz)
-            z = -H(g_sfc.p[i, :])*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
+            if chebyshev
+                z = -H(g_sfc.p[i, :])*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
+            else
+                z = range(-H(g_sfc.p[i, :]), 0, length=nz)
+            end
         end
 
         # add to p
@@ -196,15 +201,15 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
 
         # RHS
         if size(bx, 1) == g.nt
-            # b is linear
+            # bx, by are constant discontinuous
             r[ωxmap[g.t[k, :]]] += by[k]*M*[1, 1]
             r[ωymap[g.t[k, :]]] -= bx[k]*M*[1, 1]
         elseif size(bx, 1) == 2g.nt
-            # b is quadratic
+            # bx, by are linear discontinuous
             r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
             r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
         elseif size(bx, 1) == g.np
-            # bx, by are continuous
+            # bx, by are linear continuous
             r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
             r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
         end
@@ -336,6 +341,9 @@ function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=fals
     nzs = [size(col, 1) for col ∈ z_cols]
 
     # setup arrays
+    # bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
+    # bx = [[Dxs[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
+    # by = [[Dys[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
     bx = [zeros(2nz-2) for nz ∈ nzs]
     by = [zeros(2nz-2) for nz ∈ nzs]
     for k=1:g_sfc.nt
@@ -348,6 +356,25 @@ function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=fals
     end
 
     # solve 
+    # ωx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    # ωy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    # χx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    # χy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    # for k=1:g_sfc.nt
+    #     for i=1:3
+    #         ig = g_sfc.t[k, i]
+    #         nz = nzs[ig]
+    #         if nz ≤ 2
+    #             continue
+    #         end
+    #         x = g_sfc.p[ig, :]
+    #         sol = solve_baroclinic_1dfe(z_cols[ig], bx[k][i], by[k][i], 0, 0, 0, 0, ε², f(x))
+    #         ωx_b[k][i] = sol[0*nz+1:1*nz]
+    #         ωy_b[k][i] = sol[1*nz+1:2*nz]
+    #         χx_b[k][i] = sol[2*nz+1:3*nz]
+    #         χy_b[k][i] = sol[3*nz+1:4*nz]
+    #     end
+    # end
     ωx_b = zeros(g.np)
     ωy_b = zeros(g.np)
     χx_b = zeros(g.np)

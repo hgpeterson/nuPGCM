@@ -196,6 +196,33 @@ function invert(g_sfc, g, b_cols, z_cols, Dxs, Dys; showplots=false, nonzero_b=t
     return Ψ
 end
 
+function get_Ux_Uy(Ψ; showplots=false)
+    g = Ψ.g
+    Ux = zeros(g.nt) 
+    Uy = zeros(g.nt) 
+    for k=1:g.nt
+        Ux[k] = -∂y(Ψ, [0, 0], k)
+        Uy[k] = +∂x(Ψ, [0, 0], k)
+    end
+    if showplots
+        fig, ax, im = tplot(g.p, g.t, Ux; vmax=nothing, cb_label=L"U^x")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        ax.axis("equal")
+        savefig("scratch/images/Ux.png")
+        println("scratch/images/Ux.png")
+        plt.close()
+        fig, ax, im = tplot(g.p, g.t, Uy; vmax=nothing, cb_label=L"U^y")
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        ax.axis("equal")
+        savefig("scratch/images/Uy.png")
+        println("scratch/images/Uy.png")
+        plt.close()
+    end
+    return Ux, Uy
+end
+
 ε² = 1e-4
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
@@ -218,78 +245,67 @@ by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
 ∂τ∂x(x) = (0, 0)
 ∂τ∂y(x) = (0, 0)
 
-# # mesh
-# geo = "circle"
-# nref = 2
-# g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
+# mesh
+geo = "circle"
+nref = 3
+g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=true)
 
-# # second order b
-# sf2 = ShapeFunctions(order=2, dim=3)
-# sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-# b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
+# second order b
+sf2 = ShapeFunctions(order=2, dim=3)
+sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
 
-# # derivative matrices
-# Dxs = Vector{Any}(undef, g_sfc.nt)
-# Dys = Vector{Any}(undef, g_sfc.nt)
-# @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-#     Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
-# end
+# derivative matrices
+Dxs = Vector{Any}(undef, g_sfc.nt)
+Dys = Vector{Any}(undef, g_sfc.nt)
+@showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
+    Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
+end
 
 Ψ = invert(g_sfc, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
+Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
 
-# fig, ax, im = tplot(Ψ, contour=true, cb_label=L"Barotropic streamfunction $\Psi$")
+# ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=false)
+# ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=false)
+
+# dx = 0.04
+# x = -1+dx:dx:1-dx
+# nx = size(x, 1)
+# nz = nx
+# z = -(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
+# HH = [H([x[i], 0]) for i=1:nx]
+# xx = repeat(x, 1, nz)
+# zz = repeat(z', nx, 1).*repeat(HH, 1, nz)
+# bb = [b([xx[i, j], 0, zz[i, j]]) for i=1:nx, j=1:nz]
+
+# ωx_b = FEField(ωx_b, g)
+# ωx_Ux = FEField(ωx_Ux, g)
+# ωy_Ux = FEField(ωy_Ux, g)
+# uy = zeros(nx, nz)
+# @showprogress for i=1:nx, j=1:nz
+#     uy[i, j] = ωx_b([xx[i, j], 0, zz[i, j]]) - ∂y(Ψ, [x[i], 0])*ωx_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2 - ∂x(Ψ, [x[i], 0])*ωy_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2
+# end
+# uy[isnan.(uy)] .= 0
+# for i=1:nx
+#     uy[i, :] = -cumtrapz(uy[i, :], zz[i, :])
+# end
+
+# fig, ax = plt.subplots(1)
+# img = ax.pcolormesh(xx, zz, uy, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-0.15, vmax=0.15)
+# cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
+# levels = -1:0.05:0
+# ax.contour(xx, zz, bb, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+# ax.fill_between(xx[:, 1], zz[:, 1], minimum(zz), color="k", alpha=0.3, lw=0.0)
 # ax.set_xlabel(L"Zonal coordinate $x$")
-# ax.set_ylabel(L"Meridional coordinate $y$")
-# ax.axis("equal")
-# ax.set_yticks(-1:0.5:1)
-# ax.set_yticklabels(0:0.5:2)
-# savefig("scratch/images/psi_f-plane.pdf")
-# println("scratch/images/psi_f-plane.pdf")
-# # savefig("scratch/images/psi_beta-plane.pdf")
-# # println("scratch/images/psi_beta-plane.pdf")
+# ax.set_ylabel(L"Vertical coordinate $z$")
+# ax.spines["left"].set_visible(false)
+# ax.spines["bottom"].set_visible(false)
+# ax.set_xlim(-1, 1)
+# ax.set_ylim(-1, 0)
+# # savefig("scratch/images/uy_f-plane.pdf")
+# # println("scratch/images/uy_f-plane.pdf")
+# savefig("scratch/images/uy_beta-plane.pdf")
+# println("scratch/images/uy_beta-plane.pdf")
 # plt.close()
-
-ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=false)
-ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=false)
-
-dx = 0.04
-x = -1+dx:dx:1-dx
-nx = size(x, 1)
-nz = nx
-z = -(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
-HH = [H([x[i], 0]) for i=1:nx]
-xx = repeat(x, 1, nz)
-zz = repeat(z', nx, 1).*repeat(HH, 1, nz)
-bb = [b([xx[i, j], 0, zz[i, j]]) for i=1:nx, j=1:nz]
-
-ωx_b = FEField(ωx_b, g)
-ωx_Ux = FEField(ωx_Ux, g)
-ωy_Ux = FEField(ωy_Ux, g)
-uy = zeros(nx, nz)
-@showprogress for i=1:nx, j=1:nz
-    uy[i, j] = ωx_b([xx[i, j], 0, zz[i, j]]) - ∂y(Ψ, [x[i], 0])*ωx_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2 - ∂x(Ψ, [x[i], 0])*ωy_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2
-end
-uy[isnan.(uy)] .= 0
-for i=1:nx
-    uy[i, :] = -cumtrapz(uy[i, :], zz[i, :])
-end
-
-fig, ax = plt.subplots(1)
-img = ax.pcolormesh(xx, zz, uy, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-0.15, vmax=0.15)
-cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
-levels = -1:0.05:0
-ax.contour(xx, zz, bb, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
-ax.fill_between(xx[:, 1], zz[:, 1], minimum(zz), color="k", alpha=0.3, lw=0.0)
-ax.set_xlabel(L"Zonal coordinate $x$")
-ax.set_ylabel(L"Vertical coordinate $z$")
-ax.spines["left"].set_visible(false)
-ax.spines["bottom"].set_visible(false)
-ax.set_xlim(-1, 1)
-ax.set_ylim(-1, 0)
-# savefig("scratch/images/uy_f-plane.pdf")
-# println("scratch/images/uy_f-plane.pdf")
-savefig("scratch/images/uy_beta-plane.pdf")
-println("scratch/images/uy_beta-plane.pdf")
-plt.close()
 
 println("Done.")
