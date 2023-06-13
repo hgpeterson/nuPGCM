@@ -19,7 +19,7 @@ Solve
     = -J(1/H, γ) + z⋅(∇×τ/H) - ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
+function solve_barotropic(g, r_sym, r_asym, ωx_τ_bot, ωy_τ_bot, ωx_b_bot, ωy_b_bot)
     # indices
     N = g.np
 
@@ -53,28 +53,22 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
         # K
         function func_K(ξ, i, j)
             x = T(ξ)
-            φi = φ(g.sf, i, ξ)
             ∂xφ_i = ∂φ(g.sf, i, 1, ξ)*ξx + ∂φ(g.sf, i, 2, ξ)*ηx
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
             return -ε²*r_sym(x, k)*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*∂x∂ξ
-            # return -ε²*r_sym([x, y], k)*(∂xφ_i*∂xφ_j + ∂yφ_i*∂yφ_j)*H(x, y)^2*∂x∂ξ - 
-            #         ε²*r_sym([x, y], k)*(φi*∂xφ_j*Hx(x, y) + φi*∂yφ_j*Hy(x, y))*2*H(x, y)*∂x∂ξ 
         end
         K = [nuPGCM.ref_el_quad(ξ -> func_K(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
         # K′
         function func_K′(ξ, i, j)
             x = T(ξ)
-            φi = φ(g.sf, i, ξ)
             ∂xφ_i = ∂φ(g.sf, i, 1, ξ)*ξx + ∂φ(g.sf, i, 2, ξ)*ηx
             ∂yφ_i = ∂φ(g.sf, i, 1, ξ)*ξy + ∂φ(g.sf, i, 2, ξ)*ηy
             ∂xφ_j = ∂φ(g.sf, j, 1, ξ)*ξx + ∂φ(g.sf, j, 2, ξ)*ηx
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
             return -ε²*r_asym(x, k)*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*∂x∂ξ
-            # return -ε²*r_asym([x, y], k)*(∂xφ_i*∂yφ_j - ∂yφ_i*∂xφ_j)*H(x, y)^2*∂x∂ξ -
-            #         ε²*r_asym([x, y], k)*(φi*∂xφ_j*Hx(x, y) - φi*∂yφ_j*Hy(x, y))*2*H(x, y)*∂x∂ξ 
         end
         K′ = [nuPGCM.ref_el_quad(ξ -> func_K′(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
@@ -85,7 +79,6 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
             ∂yφ_j = ∂φ(g.sf, j, 1, ξ)*ξy + ∂φ(g.sf, j, 2, ξ)*ηy
             φi = φ(g.sf, i, ξ)
             return ((H(x)*fy(x) - f(x)*Hy(x))*∂xφ_j + f(x)*Hx(x)*∂yφ_j)*φi/H(x)^2*∂x∂ξ
-            # return ((H(x, y)*β - f*Hy(x, y))*∂xφ_j + f*Hx(x, y)*∂yφ_j)*φi*∂x∂ξ
         end
         C = [nuPGCM.ref_el_quad(ξ -> func_C(ξ, i, j), quad_wts, quad_pts) for i=1:g.nn, j=1:g.nn]
 
@@ -94,9 +87,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
             x = T(ξ)
             JEBAR = (-γy(x)*Hx(x) + γx(x)*Hy(x))/H(x)^2
             τ_curl = (∂τ∂x(x)[2] - ∂τ∂y(x)[1])/H(x) - (τ(x)[2]*Hx(x) - τ(x)[1]*Hy(x))/H(x)^2
-            ω_bot_div = ∂x(ωx_bot, x, k) + ∂y(ωy_bot, x, k)
-            # τ_curl = (∂x(τy, [x, y], k) - ∂y(τx, [x, y], k))*H(x, y) - (τy([x, y], k)*Hx(x, y) - τx([x, y], k)*Hy(x, y))
-            # ω_bot_div = (∂x(ωx_bot, [x, y], k) + ∂y(ωy_bot, [x, y], k))*H(x, y)^2
+            ω_bot_div = ∂x(ωx_τ_bot, x, k) + ∂x(ωx_b_bot, x, k) + ∂y(ωy_τ_bot, x, k) + ∂y(ωy_b_bot, x, k)
             φi = φ(g.sf, i, ξ)
             return (-JEBAR + τ_curl + ε²*ω_bot_div)*φi*∂x∂ξ
         end
@@ -111,16 +102,6 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
             end
         end
         rhs[g.t[k, :]] += r
-
-        # JJ = J.Js[k, :, end]*J.Js[k, :, end]'
-        # K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        # M = J.dets[k]*s.M
-        # for i=1:g.nn, j=1:g.nn
-        #     if g.t[k, i] ∉ bdy
-        #         push!(A, (g.t[k, i], g.t[k, j], K[i, j]))
-        #     end
-        # end
-        # rhs[g.t[k, :]] += M*ones(g.nn)
     end
 
     # boundary nodes 
@@ -137,7 +118,7 @@ function solve_barotropic(g, r_sym, r_asym, ωx_bot, ωy_bot)
     return FEField(A\rhs, g)
 end
 
-function invert(g_sfc, g, b_cols, z_cols, Dxs, Dys; showplots=false, nonzero_b=true)
+function barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys; showplots=false, nonzero_b=true)
     if showplots
         quick_plot(H, g_sfc, L"H", "scratch/images/H.png")
         quick_plot(Hx, g_sfc, L"H_x", "scratch/images/Hx.png")
@@ -166,29 +147,33 @@ function invert(g_sfc, g, b_cols, z_cols, Dxs, Dys; showplots=false, nonzero_b=t
     ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
     ωx_τy_bot = -ωy_τx_bot
     ωy_τy_bot = ωx_τx_bot
+    τx = FEField(x -> τ(x)[1], g_sfc)
+    τy = FEField(x -> τ(x)[2], g_sfc)
+    ωx_τ_bot = (τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H, g_sfc)
+    ωy_τ_bot = (τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H, g_sfc)
+    if showplots
+        quick_plot(ωx_τ_bot*FEField(H, g_sfc), L"\omega^x_\tau(-H)", "scratch/images/omegax_tau_bot.png")
+        quick_plot(ωy_τ_bot*FEField(H, g_sfc), L"\omega^y_\tau(-H)", "scratch/images/omegay_tau_bot.png")
+    end
 
     # get ω_b's
     if nonzero_b
         ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=showplots)
-        ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
-        ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+        ωx_b_bot = [ωx_b[k][i][1] for k=1:g_sfc.nt, i=1:3]
+        ωy_b_bot = [ωy_b[k][i][1] for k=1:g_sfc.nt, i=1:3]
+        ωx_b_bot = DGField(ωx_b_bot, g_sfc)/DGField(H, g_sfc)
+        ωy_b_bot = DGField(ωy_b_bot, g_sfc)/DGField(H, g_sfc)
     else
-        ωx_b_bot = FEField(0, g_sfc)
-        ωy_b_bot = FEField(0, g_sfc)
+        ωx_b_bot = DGField(0, g_sfc)
+        ωy_b_bot = DGField(0, g_sfc)
     end
-
-    # combine
-    τx = FEField(x -> τ(x)[1], g_sfc)
-    τy = FEField(x -> τ(x)[2], g_sfc)
-    ωx_bot = (ωx_b_bot + τx*ωx_τx_bot + τy*ωx_τy_bot)/FEField(H, g_sfc)
-    ωy_bot = (ωy_b_bot + τx*ωy_τx_bot + τy*ωy_τy_bot)/FEField(H, g_sfc)
     if showplots
-        quick_plot(ωx_bot*FEField(H, g_sfc), L"\omega^x_b + \tau^j \omega^x_{\tau^j}", "scratch/images/omegax_bot.png")
-        quick_plot(ωy_bot*FEField(H, g_sfc), L"\omega^y_b + \tau^j \omega^y_{\tau^j}", "scratch/images/omegay_bot.png")
+        quick_plot(ωx_b_bot*DGField(H, g_sfc), L"\omega^x_b(-H)", "scratch/images/omegax_b_bot.png")
+        quick_plot(ωy_b_bot*DGField(H, g_sfc), L"\omega^y_b(-H)", "scratch/images/omegay_b_bot.png")
     end
 
     # solve
-    Ψ = solve_barotropic(g_sfc, r_sym, r_asym, ωx_bot, ωy_bot)
+    Ψ = solve_barotropic(g_sfc, r_sym, r_asym, ωx_τ_bot, ωy_τ_bot, ωx_b_bot, ωy_b_bot)
     if showplots
         quick_plot(Ψ, L"\Psi", "scratch/images/psi.png")
     end
@@ -228,13 +213,11 @@ end
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-f(x) = 1 + x[2]
-# f(x) = 1
-fy(x) = 1
-# fy(x) = 0
+# f(x) = 1 + x[2]
+f(x) = 1
+# fy(x) = 1
+fy(x) = 0
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
-bx(x) = -Hx(x)*exp(-(x[3] + H(x))/δ)
-by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
 γy(x) = -Hy(x)*H(x)^2 - δ^2*Hy(x)*(exp(-H(x)/δ) - 1)
@@ -245,28 +228,32 @@ by(x) = -Hy(x)*exp(-(x[3] + H(x))/δ)
 ∂τ∂x(x) = (0, 0)
 ∂τ∂y(x) = (0, 0)
 
-# mesh
-geo = "circle"
-nref = 3
-g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=true)
+# # mesh
+# geo = "circle"
+# nref = 3
+# g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=false)
 
-# second order b
-sf2 = ShapeFunctions(order=2, dim=3)
-sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-b_cols = [FEGrid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
+# # second order b
+# sf2 = ShapeFunctions(order=2, dim=3)
+# sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+# b_cols = [Grid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
 
-# derivative matrices
-Dxs = Vector{Any}(undef, g_sfc.nt)
-Dys = Vector{Any}(undef, g_sfc.nt)
-@showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-    Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
-end
+# # derivative matrices
+# Dxs = Vector{Any}(undef, g_sfc.nt)
+# Dys = Vector{Any}(undef, g_sfc.nt)
+# @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
+#     Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
+# end
 
-Ψ = invert(g_sfc, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
-Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
+Ψ = barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
+# Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
 
 # ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=false)
 # ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=false)
+# ωx_b = FEField(ωx_b, g)
+# ωy_b = FEField(ωy_b, g)
+# ωx_Ux = FEField(ωx_Ux, g)
+# ωy_Ux = FEField(ωy_Ux, g)
 
 # dx = 0.04
 # x = -1+dx:dx:1-dx
@@ -278,17 +265,39 @@ Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
 # zz = repeat(z', nx, 1).*repeat(HH, 1, nz)
 # bb = [b([xx[i, j], 0, zz[i, j]]) for i=1:nx, j=1:nz]
 
-# ωx_b = FEField(ωx_b, g)
-# ωx_Ux = FEField(ωx_Ux, g)
-# ωy_Ux = FEField(ωy_Ux, g)
+# ux = zeros(nx, nz)
 # uy = zeros(nx, nz)
 # @showprogress for i=1:nx, j=1:nz
-#     uy[i, j] = ωx_b([xx[i, j], 0, zz[i, j]]) - ∂y(Ψ, [x[i], 0])*ωx_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2 - ∂x(Ψ, [x[i], 0])*ωy_Ux([xx[i, j], 0, zz[i, j]])/HH[i]^2
+#     pt = [xx[i, j], 0, zz[i, j]]
+#     try
+#         k_sfc = nuPGCM.get_k(pt[1:2], g_sfc)
+#         k = nuPGCM.get_k(pt, g)
+#         ux[i, j] = ωy_b(pt, k) - Ux[k_sfc]*ωy_Ux(pt, k)/HH[i]^2 + Uy[k_sfc]*ωx_Ux(pt, k)/HH[i]^2
+#         uy[i, j] = ωx_b(pt, k) + Ux[k_sfc]*ωx_Ux(pt, k)/HH[i]^2 - Uy[k_sfc]*ωy_Ux(pt, k)/HH[i]^2
+#     catch
+#         continue
+#     end
 # end
-# uy[isnan.(uy)] .= 0
 # for i=1:nx
+#     ux[i, :] = +cumtrapz(ux[i, :], zz[i, :])
 #     uy[i, :] = -cumtrapz(uy[i, :], zz[i, :])
 # end
+
+# fig, ax = plt.subplots(1)
+# img = ax.pcolormesh(xx, zz, ux, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-0.03, vmax=0.03)
+# cb = colorbar(img, ax=ax, label=L"Cross-slope flow $u^x$")
+# levels = -1:0.05:0
+# ax.contour(xx, zz, bb, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+# ax.fill_between(xx[:, 1], zz[:, 1], minimum(zz), color="k", alpha=0.3, lw=0.0)
+# ax.set_xlabel(L"Zonal coordinate $x$")
+# ax.set_ylabel(L"Vertical coordinate $z$")
+# ax.spines["left"].set_visible(false)
+# ax.spines["bottom"].set_visible(false)
+# ax.set_xlim(-1, 1)
+# ax.set_ylim(-1, 0)
+# savefig("scratch/images/ux.png")
+# println("scratch/images/ux.png")
+# plt.close()
 
 # fig, ax = plt.subplots(1)
 # img = ax.pcolormesh(xx, zz, uy, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-0.15, vmax=0.15)
@@ -302,10 +311,8 @@ Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
 # ax.spines["bottom"].set_visible(false)
 # ax.set_xlim(-1, 1)
 # ax.set_ylim(-1, 0)
-# # savefig("scratch/images/uy_f-plane.pdf")
-# # println("scratch/images/uy_f-plane.pdf")
-# savefig("scratch/images/uy_beta-plane.pdf")
-# println("scratch/images/uy_beta-plane.pdf")
+# savefig("scratch/images/uy.png")
+# println("scratch/images/uy.png")
 # plt.close()
 
 println("Done.")

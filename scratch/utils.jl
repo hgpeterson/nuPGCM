@@ -2,7 +2,7 @@
 
 using WriteVTK
 
-function get_sides(g::FEGrid; tol=1e-4)
+function get_sides(g::Grid; tol=1e-4)
     # bottom
     bot = g.e[abs.(g.p[g.e, end]) .≥ tol]
 
@@ -34,7 +34,20 @@ function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
     println(fname)
     plt.close()
 end
-function quick_plot(f::Function, g::FEGrid, args...; kwargs...)
+function quick_plot(u::DGField, args...; kwargs...)
+    u_plot = zeros(u.g.np)
+    count = zeros(u.g.np)
+    for k=1:u.g.nt
+        for i=1:u.g.nn
+            u_plot[u.g.t[k, i]] += u[k, i]
+            count[u.g.t[k, i]] += 1
+        end
+    end
+    u_plot ./= count
+    u_plot = FEField(u_plot, u.g)
+    quick_plot(u_plot, args...; kwargs...)
+end
+function quick_plot(f::Function, g::Grid, args...; kwargs...)
     quick_plot(FEField(f, g), args...; kwargs...)
 end
 

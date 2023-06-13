@@ -31,12 +31,14 @@ export
     ∂φ∂ξ,
     ∂φ∂η,
     ∂φ∂ζ,
-    FEGrid,
+    Grid,
     all_edges,
     all_faces,
     boundary_nodes,
     Jacobians,
+    Field,
     FEField,
+    DGField,
     L2norm,
     transform_from_ref_el,
     transform_to_ref_el,
@@ -130,8 +132,8 @@ include("Numerics/derivatives.jl")
 include("Numerics/integrals.jl")
 include("Numerics/shape_functions.jl")
 include("Numerics/reference_elements.jl")
-include("Numerics/fe_grids.jl")
-include("Numerics/fe_fields.jl")
+include("Numerics/grids.jl")
+include("Numerics/fields.jl")
 
 include("OneDimensionalModel/setup.jl")
 include("OneDimensionalModel/logging.jl")
