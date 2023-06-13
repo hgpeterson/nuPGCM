@@ -81,10 +81,10 @@ function llc4320res()
     println("plots/llc4320res.svg")
 end
 
-function uy_bowl2D()
+function u_bowl2D()
     # parameters
-    f = 1e-4
-    L = 5e6
+    f = 1.
+    L = 1.
     nξ = 2^8 
     nσ = 2^8
     coords = "axisymmetric"
@@ -102,22 +102,20 @@ function uy_bowl2D()
     
     # topography: bowl
     no_net_transport = true
-    H0 = 4e3
+    H0 = 1
     H_func(x) = H0*(1 - (x/L)^2) + 0.005*H0
     Hx_func(x) = -2*H0*x/L^2
 
     # diffusivity
-    κ0 = 1e-5
-    κ1 = 0
-    h = 200
-    κ_func(ξ, σ) = κ0 + κ1*exp(-H_func(ξ)*(σ + 1)/h)
+    κ0 = 1e-4
+    κ_func(ξ, σ) = κ0
 
     # viscosity
     μ = 1.
     ν_func(ξ, σ) = μ*κ_func(ξ, σ)
 
     # stratification
-    N2 = 1e-6
+    N2 = 1
     N2_func(ξ, σ) = N2
     
     # timestepping
@@ -146,27 +144,47 @@ function uy_bowl2D()
     # evolve!(m, s, 100*Δt, t_plot, t_save) 
 
     fig, ax = plt.subplots(1)
-    field = s.uη
-    vmax = 6
-    # vmax = maximum(field)
+    field = s.uξ
+    vmax = maximum(abs.(field))
     vmin = -vmax
-    img = ax.pcolormesh(m.x/1e3, m.z/1e3, 1e3*field, cmap="RdBu_r", vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
-    cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$ ($\times 10^{-3}$ m s$^{-1}$)")
+    img = ax.pcolormesh(m.x, m.z, field, cmap="RdBu_r", vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
+    cb = colorbar(img, ax=ax, label=L"Cross-slope flow $u^x$")
     n_levels = 20
     iξ = argmax(m.H)
     lower_level = -trapz(m.N2[iξ, :], m.z[iξ, :])
     upper_level = lower_level/100
     levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
-    ax.contour(m.x/1e3, m.z/1e3, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
-    ax.fill_between(m.x[:, 1]/1e3, m.z[:, 1]/1e3, minimum(m.z/1e3), color="k", alpha=0.3, lw=0.0)
-    ax.set_xlabel(L"Zonal coordinate $x$ (km)")
-    ax.set_ylabel(L"Vertical coordinate $z$ (km)")
-    ax.set_xlim([0, m.ξ[end]/1e3])
+    ax.contour(m.x, m.z, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.fill_between(m.x[:, 1], m.z[:, 1], minimum(m.z), color="k", alpha=0.3, lw=0.0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_xlim([0, m.ξ[end]])
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    # ridge_plot(m, s, s.uη, L"t = 30", L"Along-slope flow $u^y$"; style="pcolormesh")
-    savefig("plots/uy_bowl2D.pdf")
-    println("plots/uy_bowl2D.pdf")
+    savefig("plots/ux_bowl2D.png")
+    println("plots/ux_bowl2D.png")
+    plt.close()
+
+    fig, ax = plt.subplots(1)
+    field = s.uη
+    vmax = maximum(abs.(field))
+    vmin = -vmax
+    img = ax.pcolormesh(m.x, m.z, field, cmap="RdBu_r", vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
+    cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
+    n_levels = 20
+    iξ = argmax(m.H)
+    lower_level = -trapz(m.N2[iξ, :], m.z[iξ, :])
+    upper_level = lower_level/100
+    levels = lower_level:(upper_level - lower_level)/(n_levels - 1):upper_level
+    ax.contour(m.x, m.z, s.b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.fill_between(m.x[:, 1], m.z[:, 1], minimum(m.z), color="k", alpha=0.3, lw=0.0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_xlim([0, m.ξ[end]])
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    savefig("plots/uy_bowl2D.png")
+    println("plots/uy_bowl2D.png")
     plt.close()
 
     # Uy = [trapz(s.uη[i, :], m.z[i, :]) for i=1:m.nξ]
@@ -177,7 +195,7 @@ function uy_bowl2D()
     # plt.close()
 end
 
-beta_sim_setup()
+# beta_sim_setup()
 # overturn_sim_setup()
 # llc4320res()
-# uy_bowl2D()
+u_bowl2D()
