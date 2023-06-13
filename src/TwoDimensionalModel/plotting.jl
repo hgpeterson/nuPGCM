@@ -248,7 +248,7 @@ function tplot(p, t, u=nothing; fig=nothing, ax=nothing, cmap="RdBu_r", vmax=not
     ax.spines["bottom"].set_visible(false)
     return fig, ax, im
 end
-function tplot(g::FEGrid; kwargs...)
+function tplot(g::Grid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 function tplot(u::FEField; kwargs...)

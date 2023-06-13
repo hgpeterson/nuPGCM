@@ -13,7 +13,7 @@ pygui(false)
 
 function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     # surface mesh
-    g_sfc = FEGrid(1, "meshes/$geo/mesh$nref.h5")
+    g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # will we need to tessellate?
     if tessellate === nothing
@@ -82,7 +82,7 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     sfi = ShapeFunctionIntegrals(sf, sf)
 
     # columnwise and global tessellation
-    g_cols = Vector{FEGrid}(undef, g_sfc.nt)
+    g_cols = Vector{Grid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
     @showprogress "Generating columns..." for k=1:g_sfc.nt
         # number of points in vertical for each vertex of sfc tri
@@ -108,13 +108,13 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
         e_col = Dict("sfc"=>e_sfc_col, "bot"=>e_bot_col)
 
         # save column data
-        g_cols[k] = FEGrid(1, p_col, t_col, e_col, sf, sfi)
+        g_cols[k] = Grid(1, p_col, t_col, e_col, sf, sfi)
 
         # remove from bot if in sfc
         g_cols[k].e["bot"] = g_cols[k].e["bot"][findall(i -> g_cols[k].e["bot"][i] ∉ g_cols[k].e["sfc"], 1:size(g_cols[k].e["bot"], 1))]
     end
 
-    g = FEGrid(1, p, t, e)
+    g = Grid(1, p, t, e)
 
     return g_sfc, g, g_cols, z_cols, p_to_tri
 end
@@ -177,7 +177,7 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
     e = Dict("bot"=>[1], "sfc"=>[nz])
-    g = FEGrid(1, p, t, e)
+    g = Grid(1, p, t, e)
 
     # indices
     ωxmap = 0*g.np+1:1*g.np
@@ -341,71 +341,79 @@ function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=fals
     nzs = [size(col, 1) for col ∈ z_cols]
 
     # setup arrays
-    # bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
-    # bx = [[Dxs[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
-    # by = [[Dys[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
-    bx = [zeros(2nz-2) for nz ∈ nzs]
-    by = [zeros(2nz-2) for nz ∈ nzs]
-    for k=1:g_sfc.nt
-        b_col = FEField(b, b_cols[k])
-        for i=1:3
-            ig = g_sfc.t[k, i]
-            bx[ig] += Dxs[k][i]*b_col.values
-            by[ig] += Dys[k][i]*b_col.values
-        end
-    end
+    bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
+    bx = [[Dxs[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
+    by = [[Dys[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
 
     # solve 
-    # ωx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    # ωy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    # χx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    # χy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    ωx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    ωy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    χx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    χy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    for k=1:g_sfc.nt
+        for i=1:3
+            ig = g_sfc.t[k, i]
+            nz = nzs[ig]
+            if nz ≤ 2
+                continue
+            end
+            x = g_sfc.p[ig, :]
+            sol = solve_baroclinic_1dfe(z_cols[ig], bx[k][i], by[k][i], 0, 0, 0, 0, ε², f(x))
+            ωx_b[k][i] = sol[0*nz+1:1*nz]
+            ωy_b[k][i] = sol[1*nz+1:2*nz]
+            χx_b[k][i] = sol[2*nz+1:3*nz]
+            χy_b[k][i] = sol[3*nz+1:4*nz]
+        end
+    end 
+
+    # bx = [zeros(2nz-2) for nz ∈ nzs]
+    # by = [zeros(2nz-2) for nz ∈ nzs]
     # for k=1:g_sfc.nt
+    #     b_col = FEField(b, b_cols[k])
     #     for i=1:3
     #         ig = g_sfc.t[k, i]
-    #         nz = nzs[ig]
-    #         if nz ≤ 2
-    #             continue
-    #         end
-    #         x = g_sfc.p[ig, :]
-    #         sol = solve_baroclinic_1dfe(z_cols[ig], bx[k][i], by[k][i], 0, 0, 0, 0, ε², f(x))
-    #         ωx_b[k][i] = sol[0*nz+1:1*nz]
-    #         ωy_b[k][i] = sol[1*nz+1:2*nz]
-    #         χx_b[k][i] = sol[2*nz+1:3*nz]
-    #         χy_b[k][i] = sol[3*nz+1:4*nz]
+    #         bx[ig] += Dxs[k][i]*b_col.values
+    #         by[ig] += Dys[k][i]*b_col.values
     #     end
     # end
-    ωx_b = zeros(g.np)
-    ωy_b = zeros(g.np)
-    χx_b = zeros(g.np)
-    χy_b = zeros(g.np)
-    j = 0
-    for i ∈ eachindex(z_cols)
-        nz = nzs[i]
-        if nz ≤ 2
-            j += nz
-            continue
-        end
-        x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(z_cols[i], bx[i], by[i], 0, 0, 0, 0, ε², f(x))
-        ωx_b[j+1:j+nz] = sol[0*nz+1:1*nz]
-        ωy_b[j+1:j+nz] = sol[1*nz+1:2*nz]
-        χx_b[j+1:j+nz] = sol[2*nz+1:3*nz]
-        χy_b[j+1:j+nz] = sol[3*nz+1:4*nz]
-        j += nz
-    end
+    # ωx_b = zeros(g.np)
+    # ωy_b = zeros(g.np)
+    # χx_b = zeros(g.np)
+    # χy_b = zeros(g.np)
+    # j = 0
+    # for i ∈ eachindex(z_cols)
+    #     nz = nzs[i]
+    #     if nz ≤ 2
+    #         j += nz
+    #         continue
+    #     end
+    #     x = g_sfc.p[i, :]
+    #     sol = solve_baroclinic_1dfe(z_cols[i], bx[i], by[i], 0, 0, 0, 0, ε², f(x))
+    #     ωx_b[j+1:j+nz] = sol[0*nz+1:1*nz]
+    #     ωy_b[j+1:j+nz] = sol[1*nz+1:2*nz]
+    #     χx_b[j+1:j+nz] = sol[2*nz+1:3*nz]
+    #     χy_b[j+1:j+nz] = sol[3*nz+1:4*nz]
+    #     j += nz
+    # end
 
-    if showplots
-        ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
-        ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
-        quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
-        quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
-        write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
-    end
+    # if showplots
+    #     ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
+    #     ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
+    #     quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
+    #     quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
+    #     write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
+    # end
 
     return ωx_b, ωy_b, χx_b, χy_b
 end
 
+"""
+    Dxs, Dys = get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k)    
+
+Compute gradient matrices for element column corresponding to surface triangle `k`.
+Stored in arrays such that `Dxs[i]` is and (2*nz[i]-2) × (b_col.np) matrix that gives bx
+for node column i when multiplied by b in `b_col`.  
+"""
 function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k) 
     p1_ref = reference_element_nodes(1, 3)
     Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]

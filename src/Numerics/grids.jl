@@ -6,7 +6,7 @@ struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     Js::A
 end
 
-struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
     # order of shape functions on this grid
     order::IN
 
@@ -42,11 +42,11 @@ struct FEGrid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:In
 end
 
 """
-    g = FEGrid(p, t, e, order)
+    g = Grid(p, t, e, order)
 
 Construct a FE grid of order `order` with points `p`, elements `t`, and boundary nodes `e`.
 """
-function FEGrid(order::IN, p, t, e, sf, sfi) where IN <: Integer
+function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
     # dimension of space
     dim = size(p, 2)
 
@@ -98,23 +98,23 @@ function FEGrid(order::IN, p, t, e, sf, sfi) where IN <: Integer
     # compute Jacobians
     J = Jacobians(p, t)
 
-    return FEGrid(order, dim, sf, sfi, J, p, np, t, nt, nn, e)
+    return Grid(order, dim, sf, sfi, J, p, np, t, nt, nn, e)
 end
-function FEGrid(order, p, t, e)
+function Grid(order, p, t, e)
     # setup shape functions and their integrals
     sf = ShapeFunctions(order=order, dim=size(p, 2))
     sfi = ShapeFunctionIntegrals(sf, sf)
-    return FEGrid(order, p, t, e, sf, sfi)
+    return Grid(order, p, t, e, sf, sfi)
 end
-function FEGrid(order, gfile::String)
+function Grid(order, gfile::String)
     # read grid data
     p, t, e = read_gfile_h5(gfile)
     e = Dict("bdy"=>e)
 
-    return FEGrid(order, p, t, e) 
+    return Grid(order, p, t, e) 
 end
-function FEGrid(order, g::FEGrid)
-    return FEGrid(order, g.p, g.t, g.e) 
+function Grid(order, g::Grid)
+    return Grid(order, g.p, g.t, g.e) 
 end
 
 """
@@ -357,11 +357,11 @@ function Jacobians(p, t)
     end
     return Jacobians(dets, Js)
 end
-function Jacobians(g::FEGrid)
+function Jacobians(g::Grid)
     return Jacobians(g.p, g.t)
 end
 function Jacobians(gfile::String)
     # get order 1 FE grid
-    g = FEGrid(gfile, 1)
+    g = Grid(gfile, 1)
     return Jacobians(g)
 end

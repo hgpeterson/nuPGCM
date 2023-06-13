@@ -1,7 +1,18 @@
 # for defining operations on FEField's
 import Base: -, +, *, /, ^, log, abs, maximum, minimum, argmax, argmin, getindex
 
-struct FEField{IN<:Integer,V<:AbstractVector}
+abstract type Field end
+
+# operations on Fields
+^(u::Field, n::Number) = FEField(u.order, u.values .^ n, u.g)
+log(u::Field) = FEField(u.order, log.(u.values), u.g)
+abs(u::Field) = FEField(u.order, abs.(u.values), u.g)
+maximum(u::Field) = maximum(u.values)
+minimum(u::Field) = minimum(u.values)
+argmax(u::Field) = argmax(u.values)
+argmin(u::Field) = argmin(u.values)
+
+struct FEField{IN<:Integer,V<:AbstractVector} <: Field
     # order of polynomials defining shape functions
     order::IN
 
@@ -9,7 +20,7 @@ struct FEField{IN<:Integer,V<:AbstractVector}
     values::V
 
     # grid FE field exists on
-    g::FEGrid
+    g::Grid
 end
 
 """
@@ -17,21 +28,23 @@ end
 
 Construct FE field from grid saved at `gfile` of order `order` with node values `values`.
 """
-function FEField(gfile::String, order::Integer, values)
-    g = FEGrid(gfile, order)
+function FEField(order::Integer, values::AbstractVector, gfile::String)
+    g = Grid(gfile, order)
     return FEField(order, values, g)
 end
-function FEField(values::AbstractArray, g::FEGrid)
+function FEField(values::AbstractVector, g::Grid)
     return FEField(g.order, values, g)
 end
-function FEField(value::Number, g::FEGrid)
+function FEField(value::Number, g::Grid)
     return FEField(value*ones(g.np), g)
 end
-function FEField(f::Function, g::FEGrid)
+function FEField(f::Function, g::Grid)
     return FEField([f(g.p[i, :]) for i=1:g.np], g)
 end
 
-# define operations on FEFields
+# operations on FEFields
+getindex(u::FEField, i) = u.values[i]
+
 -(u::FEField, v::AbstractVector) = FEField(u.order, u.values - v, u.g)
 -(u::FEField) = FEField(u.order, -u.values, u.g)
 -(u::AbstractVector, v::FEField) = -(v - u)
@@ -49,15 +62,55 @@ end
 /(u::AbstractVector, v::FEField) = v / u
 /(u::FEField, v::FEField) = u / v.values
 
-^(u::FEField, n::Number) = FEField(u.order, u.values .^ n, u.g)
+struct DGField{IN<:Integer,M<:AbstractMatrix} <: Field
+    # order of polynomials defining shape functions
+    order::IN
 
-log(u::FEField) = FEField(u.order, log.(u.values), u.g)
-abs(u::FEField) = FEField(u.order, abs.(u.values), u.g)
-maximum(u::FEField) = maximum(u.values)
-minimum(u::FEField) = minimum(u.values)
-argmax(u::FEField) = argmax(u.values)
-argmin(u::FEField) = argmin(u.values)
-getindex(u::FEField, I) = u.values[I]
+    # values of DG field on the nodes of the grid
+    values::M
+
+    # grid FE field exists on
+    g::Grid
+end
+
+"""
+    u = DGField(gfile, order, values)
+
+Construct DG field from grid saved at `gfile` of order `order` with node values `values`.
+"""
+function DGField(order::Integer, values::AbstractMatrix, gfile::String)
+    g = Grid(gfile, order)
+    return DGField(order, values, g)
+end
+function DGField(values::AbstractMatrix, g::Grid)
+    return DGField(g.order, values, g)
+end
+function DGField(value::Number, g::Grid)
+    return DGField(value*ones(g.nt, g.nn), g)
+end
+function DGField(f::Function, g::Grid)
+    return DGField([f(g.p[g.t[k, i], :]) for k=1:g.nt, i=1:g.nn], g)
+end
+
+# operations on DGFields
+getindex(u::DGField, i, j) = u.values[i, j]
+
+-(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values - v, u.g)
+-(u::DGField) = DGField(u.order, -u.values, u.g)
+-(u::AbstractMatrix, v::DGField) = -(v - u)
+-(u::DGField, v::DGField) = u - v.values
+
++(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values + v, u.g)
++(u::AbstractMatrix, v::DGField) = v + u
++(u::DGField, v::DGField) = u + v.values
+
+*(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values .* v, u.g)
+*(u::AbstractMatrix, v::DGField) = v * u
+*(u::DGField, v::DGField) = u * v.values
+
+/(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values ./ v, u.g)
+/(u::AbstractMatrix, v::DGField) = v / u
+/(u::DGField, v::DGField) = u / v.values
 
 """
     l2 = L2norm(u)
@@ -65,7 +118,10 @@ getindex(u::FEField, I) = u.values[I]
 Compute L2 norm, ‖u‖ ≡ √(∫ u² dx), of finite element function `u`.
 """
 function L2norm(u::FEField)
-    return sqrt(sum(u.values[u.g.t[k, j]]*u.values[u.g.t[k, i]]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
+    return sqrt(sum(u[u.g.t[k, j]]*u[u.g.t[k, i]]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
+end
+function L2norm(u::DGField)
+    return sqrt(sum(u[k, j]*u[k, i]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
 end
 
 """
@@ -149,7 +205,7 @@ end
 
 Evaluate FEField `u` at point `x` on the grid.
 """
-function (u::FEField)(x)
+function (u::Field)(x)
     try
         # find element x is in
         k = get_k(x, u.g)
@@ -165,7 +221,14 @@ function (u::FEField)(x, k)
     ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u.values[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
+    return sum(u[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
+end
+function (u::DGField)(x, k)
+    # transform to reference element
+    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+
+    # sum weighted combinations of element k's basis functions at x
+    return sum(u[k, i]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
 end
 
 """
@@ -173,29 +236,36 @@ end
 
 Evaluate the `j`th partial derivative of `u` at `x`.
 """
-function ∂(u::FEField, x, j)
-    # try
+function ∂(u::Field, x, j)
+    try
         # find element x is in
         k = get_k(x, u.g)
 
         # evaluate there
         return ∂(u, x, k, j)
-    # catch
-    #     return NaN
-    # end
+    catch
+        return NaN
+    end
 end
 function ∂(u::FEField, x, k, j)
     # transform to reference element
     ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u.values[u.g.t[k, i]]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+    return sum(u[u.g.t[k, i]]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+end
+function ∂(u::DGField, x, k, j)
+    # transform to reference element
+    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+
+    # sum weighted combinations of element k's basis functions at x
+    return sum(u[k, i]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
 end
 
 # shortcuts
-∂x(u::FEField, x) = ∂(u, x, 1)
-∂y(u::FEField, x) = ∂(u, x, 2)
-∂z(u::FEField, x) = ∂(u, x, 3)
-∂x(u::FEField, x, k) = ∂(u, x, k, 1)
-∂y(u::FEField, x, k) = ∂(u, x, k, 2)
-∂z(u::FEField, x, k) = ∂(u, x, k, 3)
+∂x(u::Field, x) = ∂(u, x, 1)
+∂y(u::Field, x) = ∂(u, x, 2)
+∂z(u::Field, x) = ∂(u, x, 3)
+∂x(u::Field, x, k) = ∂(u, x, k, 1)
+∂y(u::Field, x, k) = ∂(u, x, k, 2)
+∂z(u::Field, x, k) = ∂(u, x, k, 3)
