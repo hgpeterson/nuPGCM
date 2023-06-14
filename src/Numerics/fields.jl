@@ -112,6 +112,50 @@ getindex(u::DGField, i, j) = u.values[i, j]
 /(u::AbstractMatrix, v::DGField) = v / u
 /(u::DGField, v::DGField) = u / v.values
 
+struct FVField{V<:AbstractVector} <: Field
+    # values of FV field on the elements of the grid
+    values::V
+
+    # grid FE field exists on
+    g::Grid
+end
+
+"""
+    u = FVField(gfile, values)
+
+Construct FV field from grid saved at `gfile` with element values `values`.
+"""
+function FVField(values::AbstractVector, gfile::String)
+    g = Grid(gfile, 1)
+    return FVField(values, g)
+end
+function FVField(value::Number, g::Grid)
+    return FVField(value*ones(g.nt), g)
+end
+function FVField(f::Function, g::Grid)
+    return FVField([f(sum(g.p[g.t[k, i], :] for i=1:g.nn)/g.nn) for k=1:g.nt], g)
+end
+
+# operations on FVFields
+getindex(u::FVField, k) = u.values[k]
+
+-(u::FVField, v::AbstractVector) = FVField(u.values - v, u.g)
+-(u::FVField) = FVField(-u.values, u.g)
+-(u::AbstractVector, v::FVField) = -(v - u)
+-(u::FVField, v::FVField) = u - v.values
+
++(u::FVField, v::AbstractVector) = FVField(u.order, u.values + v, u.g)
++(u::AbstractVector, v::FVField) = v + u
++(u::FVField, v::FVField) = u + v.values
+
+*(u::FVField, v::AbstractVector) = FVField(u.values .* v, u.g)
+*(u::AbstractVector, v::FVField) = v * u
+*(u::FVField, v::FVField) = u * v.values
+
+/(u::FVField, v::AbstractVector) = FVField(u.values ./ v, u.g)
+/(u::AbstractVector, v::FVField) = v / u
+/(u::FVField, v::FVField) = u / v.values
+
 """
     l2 = L2norm(u)
 
@@ -122,6 +166,9 @@ function L2norm(u::FEField)
 end
 function L2norm(u::DGField)
     return sqrt(sum(u[k, j]*u[k, i]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
+end
+function L2norm(u::FVField)
+    return sqrt(sum(u[k]^2*u.g.J.dets[k] for k=1:u.g.nt))
 end
 
 """
@@ -230,6 +277,9 @@ function (u::DGField)(x, k)
     # sum weighted combinations of element k's basis functions at x
     return sum(u[k, i]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
 end
+function (u::FVField)(x, k)
+    return u[k]
+end
 
 """
     ∂(u, x, j)
@@ -260,6 +310,9 @@ function ∂(u::DGField, x, k, j)
 
     # sum weighted combinations of element k's basis functions at x
     return sum(u[k, i]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+end
+function ∂(u::FVField, x, k, j)
+    return 0
 end
 
 # shortcuts

@@ -39,6 +39,7 @@ export
     Field,
     FEField,
     DGField,
+    FVField,
     L2norm,
     transform_from_ref_el,
     transform_to_ref_el,

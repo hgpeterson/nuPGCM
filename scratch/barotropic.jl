@@ -133,18 +133,36 @@ function barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys; showpl
     end
 
     # get ω_U's
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=showplots)
-    ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
-    ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g_cols, z_cols, H, ε², f, showplots=showplots)
+    ωx_Ux_bot = zeros(g_sfc.np)
+    ωy_Ux_bot = zeros(g_sfc.np)
+    for i=1:g_sfc.np
+        I = p_to_tri[i][1] # since ω_U's are actually continuous, just pick from one triangle
+        k = I[1]
+        j = I[2]
+        ωx_Ux_bot[i] = ωx_Ux[k][g_cols[k].e["bot"][j]]
+        ωy_Ux_bot[i] = ωy_Ux[k][g_cols[k].e["bot"][j]]
+    end
+    ωx_Ux_bot = FEField(ωx_Ux_bot, g_sfc)
+    ωy_Ux_bot = FEField(ωy_Ux_bot, g_sfc)
     r_sym = ωy_Ux_bot/FEField(H, g_sfc)^3
     r_asym = ωx_Ux_bot/FEField(H, g_sfc)^3
     # r_sym = FEField(1e1./H.(x, y), g_sfc)
     # r_asym = FEField(0, g_sfc)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g, z_cols, H, ε², f, showplots=showplots)
-    ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
-    ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)/FEField(H, g_sfc)^2
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_ω_τ(g_sfc, g_cols, z_cols, H, ε², f, showplots=showplots)
+    ωx_τx_bot = zeros(g_sfc.np)
+    ωy_τx_bot = zeros(g_sfc.np)
+    for i=1:g_sfc.np
+        I = p_to_tri[i][1] # since ω_τ's are actually continuous, just pick from one triangle
+        k = I[1]
+        j = I[2]
+        ωx_τx_bot[i] = ωx_τx[k][g_cols[k].e["bot"][j]]
+        ωy_τx_bot[i] = ωy_τx[k][g_cols[k].e["bot"][j]]
+    end
+    ωx_τx_bot = FEField(ωx_τx_bot, g_sfc)/FEField(H, g_sfc)^2
+    ωy_τx_bot = FEField(ωy_τx_bot, g_sfc)/FEField(H, g_sfc)^2
     ωx_τy_bot = -ωy_τx_bot
     ωy_τy_bot = ωx_τx_bot
     τx = FEField(x -> τ(x)[1], g_sfc)
@@ -158,9 +176,9 @@ function barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys; showpl
 
     # get ω_b's
     if nonzero_b
-        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=showplots)
-        ωx_b_bot = [ωx_b[k][i][1] for k=1:g_sfc.nt, i=1:3]
-        ωy_b_bot = [ωy_b[k][i][1] for k=1:g_sfc.nt, i=1:3]
+        ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g_cols, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=showplots)
+        ωx_b_bot = [ωx_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3]
+        ωy_b_bot = [ωy_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3]
         ωx_b_bot = DGField(ωx_b_bot, g_sfc)/DGField(H, g_sfc)
         ωy_b_bot = DGField(ωy_b_bot, g_sfc)/DGField(H, g_sfc)
     else
@@ -179,40 +197,24 @@ end
 
 function get_Ux_Uy(Ψ; showplots=false)
     g = Ψ.g
-    Ux = zeros(g.nt) 
-    Uy = zeros(g.nt) 
-    for k=1:g.nt
-        Ux[k] = -∂y(Ψ, [0, 0], k)
-        Uy[k] = +∂x(Ψ, [0, 0], k)
-    end
+    Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
+    Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)
     if showplots
-        fig, ax, im = tplot(g.p, g.t, Ux; vmax=nothing, cb_label=L"U^x")
-        ax.set_xlabel(L"x")
-        ax.set_ylabel(L"y")
-        ax.axis("equal")
-        savefig("scratch/images/Ux.png")
-        println("scratch/images/Ux.png")
-        plt.close()
-        fig, ax, im = tplot(g.p, g.t, Uy; vmax=nothing, cb_label=L"U^y")
-        ax.set_xlabel(L"x")
-        ax.set_ylabel(L"y")
-        ax.axis("equal")
-        savefig("scratch/images/Uy.png")
-        println("scratch/images/Uy.png")
-        plt.close()
+        quick_plot(Ux, L"U^x", "scratch/images/Ux.png")
+        quick_plot(Uy, L"U^y", "scratch/images/Uy.png")
     end
     return Ux, Uy
 end
 
-ε² = 1e-4
+ε² = 1e-2
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-f(x) = 1 + x[2]
-# f(x) = 1
-fy(x) = 1
-# fy(x) = 0
+# f(x) = 1 + x[2]
+f(x) = 1
+# fy(x) = 1
+fy(x) = 0
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)
@@ -242,14 +244,29 @@ b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 # end
 
 Ψ = barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys, showplots=true, nonzero_b=true)
-# Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
+Ux, Uy = get_Ux_Uy(Ψ, showplots=true)
 
-# ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g, z_cols, H, ε², f, showplots=false)
-# ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=false)
-# ωx_b = FEField(ωx_b, g)
-# ωy_b = FEField(ωy_b, g)
-# ωx_Ux = FEField(ωx_Ux, g)
-# ωy_Ux = FEField(ωy_Ux, g)
+Hfield = FEField(H, g_sfc)
+ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_ω_U(g_sfc, g_cols, z_cols, H, ε², f, showplots=false)
+ωx_b, ωy_b, χx_b, χy_b = get_ω_b(g_sfc, g_cols, b_cols, z_cols, Dxs, Dys, ε², f, b, showplots=false)
+ωx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+ωy = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+χx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+χy = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+for k=1:g_sfc.nt
+    n = 0
+    for i=1:3
+        ig = g_sfc.t[k, i]
+        nz = size(z_cols[ig], 1)
+        i_col = n+1:n+nz 
+        ωx[k][i_col] = ωx_b[k][i_col] + Ux[k]*ωx_Ux[k][i_col]/Hfield[ig]^2 - Uy[k]*ωy_Ux[k][i_col]/Hfield[ig]^2
+        ωy[k][i_col] = ωy_b[k][i_col] + Ux[k]*ωy_Ux[k][i_col]/Hfield[ig]^2 + Uy[k]*ωx_Ux[k][i_col]/Hfield[ig]^2
+        χx[k][i_col] = χx_b[k][i_col] + Ux[k]*χx_Ux[k][i_col]/Hfield[ig]^2 - Uy[k]*χy_Ux[k][i_col]/Hfield[ig]^2
+        χy[k][i_col] = χy_b[k][i_col] + Ux[k]*χy_Ux[k][i_col]/Hfield[ig]^2 + Uy[k]*χx_Ux[k][i_col]/Hfield[ig]^2
+        n += nz
+    end
+end
+plot_ω_χ(ωx, ωy, χx, χy, g_cols)
 
 # dx = 0.04
 # x = -1+dx:dx:1-dx

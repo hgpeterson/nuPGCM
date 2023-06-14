@@ -254,3 +254,6 @@ end
 function tplot(u::FEField; kwargs...)
     return tplot(u.g.p, u.g.t, u.values; kwargs...)
 end
+function tplot(u::FVField; kwargs...)
+    return tplot(u.g.p, u.g.t, u.values; kwargs...)
+end

@@ -25,8 +25,9 @@ function get_sides(g::Grid; tol=1e-4)
     return bot, sfc
 end
 
-function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
-    fig, ax, im = tplot(u, contour=true; vmax=vmax, cb_label=cb_label)
+function quick_plot(u::Union{FEField,FVField}, cb_label, fname; vmax=nothing)
+    contour = !(typeof(u) <: FVField)
+    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
@@ -128,4 +129,52 @@ function write_vtk(g, fname, data)
         end
     end
     println(fname)
+end
+
+function plot_ω_χ(ωx, ωy, χx, χy, g_cols)
+    # global p, t, e
+    np = sum(g.np for g ∈ g_cols)
+    nt = sum(g.nt for g ∈ g_cols)
+    p = zeros(Float64, (np, 3))
+    t = zeros(Int64, (nt, 4))
+
+    # global solutions
+    ωx_plot = zeros(np)
+    ωy_plot = zeros(np)
+    χx_plot = zeros(np)
+    χy_plot = zeros(np)
+
+    # current indices
+    i_p = 0
+    i_t = 0
+
+    # all the nodes within each column will have a unique tag
+    for k ∈ eachindex(g_cols)
+        # column
+        g = g_cols[k]
+
+        # add nodes, triangles, and edge nodes
+        p[i_p+1:i_p+g.np, :] = g.p
+        t[i_t+1:i_t+g.nt, :] = i_p .+ g.t
+
+        # unpack solutions
+        ωx_plot[i_p+1:i_p+g.np] = ωx[k]
+        ωy_plot[i_p+1:i_p+g.np] = ωy[k]
+        χx_plot[i_p+1:i_p+g.np] = χx[k]
+        χy_plot[i_p+1:i_p+g.np] = χy[k]
+
+        # increment
+        i_p += g.np
+        i_t += g.nt
+    end
+
+    # save as .vtu
+    cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
+    vtk_grid("output/omega_chi.vtu", p', cells) do vtk
+        vtk["omegaˣ"] = ωx_plot
+        vtk["omegaʸ"] = ωy_plot
+        vtk["chiˣ"] = χx_plot
+        vtk["chiʸ"] = χy_plot
+    end
+    println("output/omega_chi.vtu")
 end

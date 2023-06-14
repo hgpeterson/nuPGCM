@@ -91,8 +91,8 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
         # local p and e for col
         nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
         p_col = p[nodes_col, :]  
-        e_sfc_col = [1, lens[1]+1, lens[1]+lens[2]+1]
-        e_bot_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
+        e_bot_col = [1, lens[1]+1, lens[1]+lens[2]+1]
+        e_sfc_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
 
         # either compute or load t for col
         if tessellate
@@ -111,7 +111,7 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
         g_cols[k] = Grid(1, p_col, t_col, e_col, sf, sfi)
 
         # remove from bot if in sfc
-        g_cols[k].e["bot"] = g_cols[k].e["bot"][findall(i -> g_cols[k].e["bot"][i] ∉ g_cols[k].e["sfc"], 1:size(g_cols[k].e["bot"], 1))]
+        # g_cols[k].e["bot"] = g_cols[k].e["bot"][findall(i -> g_cols[k].e["bot"][i] ∉ g_cols[k].e["sfc"], 1:size(g_cols[k].e["bot"], 1))]
     end
 
     g = Grid(1, p, t, e)
@@ -270,104 +270,116 @@ function solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², f)
     return sol
 end
 
-function get_ω_U(g_sfc, g, z_cols, H, ε², f; showplots=false)
-    # solve for ω_Uˣ
-    ωx_Ux = zeros(g.np)
-    ωy_Ux = zeros(g.np)
-    χx_Ux = zeros(g.np)
-    χy_Ux = zeros(g.np)
-    j = 0
-    for i ∈ eachindex(z_cols)
-        nz = size(z_cols[i], 1)
-        if nz == 1
-            j += nz
-            continue
+function get_ω_U(g_sfc, g_cols, z_cols, H, ε², f; showplots=false)
+    # pre-allocate 
+    ωx_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    ωy_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χx_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χy_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    
+    # this loop is a bit redundant since each node may be shared by a few triangles, 
+    # but we only have to do this once per simulation
+    for k=1:g_sfc.nt
+        n = 0
+        for i=1:3
+            ig = g_sfc.t[k, i]
+            nz = size(z_cols[ig], 1)
+            if nz == 1
+                n += nz
+                continue
+            end
+            x = g_sfc.p[ig, :]
+            sol = solve_baroclinic_1dfe(z_cols[ig], zeros(nz-1), zeros(nz-1), H(x)^2, 0, 0, 0, ε², f(x))
+            ωx_Ux[k][n+1:n+nz] = sol[0*nz+1:1*nz]
+            ωy_Ux[k][n+1:n+nz] = sol[1*nz+1:2*nz]
+            χx_Ux[k][n+1:n+nz] = sol[2*nz+1:3*nz]
+            χy_Ux[k][n+1:n+nz] = sol[3*nz+1:4*nz]
+            n += nz
         end
-        x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(z_cols[i], zeros(nz-1), zeros(nz-1), H(x)^2, 0, 0, 0, ε², f(x))
-        ωx_Ux[j+1:j+nz] = sol[0*nz+1:1*nz]
-        ωy_Ux[j+1:j+nz] = sol[1*nz+1:2*nz]
-        χx_Ux[j+1:j+nz] = sol[2*nz+1:3*nz]
-        χy_Ux[j+1:j+nz] = sol[3*nz+1:4*nz]
-        j += nz
     end
 
     if showplots
-        ωx_Ux_bot = FEField(ωx_Ux[g.e["bot"]], g_sfc)
-        ωy_Ux_bot = FEField(ωy_Ux[g.e["bot"]], g_sfc)
+        ωx_Ux_bot = DGField([ωx_Ux[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωy_Ux_bot = DGField([ωy_Ux[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
         quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "scratch/images/omegax_Ux.png")
         quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "scratch/images/omegay_Ux.png")
-        write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
+        # write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
     end
 
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
 function get_ω_τ(g_sfc, g, z_cols, H, ε², f; showplots=false)
-    # solve for ω_τˣ
-    ωx_τx = zeros(g.np)
-    ωy_τx = zeros(g.np)
-    χx_τx = zeros(g.np)
-    χy_τx = zeros(g.np)
-    j = 0
-    for i ∈ eachindex(z_cols)
-        nz = size(z_cols[i], 1)
-        if nz == 1
-            j += nz
-            continue
-        end
-        x = g_sfc.p[i, :]
-        sol = solve_baroclinic_1dfe(z_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H(x)^2, 0, ε², f(x))
-        ωx_τx[j+1:j+nz] = sol[0*nz+1:1*nz]
-        ωy_τx[j+1:j+nz] = sol[1*nz+1:2*nz]
-        χx_τx[j+1:j+nz] = sol[2*nz+1:3*nz]
-        χy_τx[j+1:j+nz] = sol[3*nz+1:4*nz]
-        j += nz
-    end
+    # pre-allocate 
+    ωx_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    ωy_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χx_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χy_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
     
+    # this loop is a bit redundant since each node may be shared by a few triangles, 
+    # but we only have to do this once per simulation
+    for k=1:g_sfc.nt
+        n = 0
+        for i=1:3
+            ig = g_sfc.t[k, i]
+            nz = size(z_cols[ig], 1)
+            if nz == 1
+                n += nz
+                continue
+            end
+            x = g_sfc.p[ig, :]
+            sol = solve_baroclinic_1dfe(z_cols[ig], zeros(nz-1), zeros(nz-1), 0, 0, H(x)^2, 0, ε², f(x))
+            ωx_τx[k][n+1:n+nz] = sol[0*nz+1:1*nz]
+            ωy_τx[k][n+1:n+nz] = sol[1*nz+1:2*nz]
+            χx_τx[k][n+1:n+nz] = sol[2*nz+1:3*nz]
+            χy_τx[k][n+1:n+nz] = sol[3*nz+1:4*nz]
+            n += nz
+        end
+    end
+
     if showplots
-        ωx_τx_bot = FEField(ωx_τx[g.e["bot"]], g_sfc)
-        ωy_τx_bot = FEField(ωy_τx[g.e["bot"]], g_sfc)
+        ωx_τx_bot = DGField([ωx_τx[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωy_τx_bot = DGField([ωy_τx[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
         quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "scratch/images/omegax_taux.png")
         quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "scratch/images/omegay_taux.png")
-        write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
+        # write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
     end
 
     return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=false)
-    # grid
-    nzs = [size(col, 1) for col ∈ z_cols]
-
+function get_ω_b(g_sfc, g_cols, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=false)
     # setup arrays
     bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
     bx = [[Dxs[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
     by = [[Dys[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
 
     # solve 
-    ωx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    ωy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    χx_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
-    χy_b = [[zeros(nzs[g_sfc.t[k, i]]) for i=1:3] for k=1:g_sfc.nt]
+    ωx_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    ωy_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χx_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    χy_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
     for k=1:g_sfc.nt
+        n = 0
         for i=1:3
             ig = g_sfc.t[k, i]
-            nz = nzs[ig]
+            nz = size(z_cols[ig], 1)
             if nz ≤ 2
+                n += nz
                 continue
             end
             x = g_sfc.p[ig, :]
             sol = solve_baroclinic_1dfe(z_cols[ig], bx[k][i], by[k][i], 0, 0, 0, 0, ε², f(x))
-            ωx_b[k][i] = sol[0*nz+1:1*nz]
-            ωy_b[k][i] = sol[1*nz+1:2*nz]
-            χx_b[k][i] = sol[2*nz+1:3*nz]
-            χy_b[k][i] = sol[3*nz+1:4*nz]
+            ωx_b[k][n+1:n+nz] = sol[0*nz+1:1*nz]
+            ωy_b[k][n+1:n+nz] = sol[1*nz+1:2*nz]
+            χx_b[k][n+1:n+nz] = sol[2*nz+1:3*nz]
+            χy_b[k][n+1:n+nz] = sol[3*nz+1:4*nz]
+            n += nz
         end
     end 
     if showplots
-        ωx_b_bot = DGField([ωx_b[k][i][1] for k=1:g_sfc.nt, i=1:3], g_sfc)
-        ωy_b_bot = DGField([ωy_b[k][i][1] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωx_b_bot = DGField([ωx_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωy_b_bot = DGField([ωy_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
         quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b_bot.png")
         quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "scratch/images/omegay_b_bot.png")
         # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
