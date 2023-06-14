@@ -167,10 +167,6 @@ function barotropic_inversion(g_sfc, g_cols, g, b_cols, z_cols, Dxs, Dys; showpl
         ωx_b_bot = DGField(0, g_sfc)
         ωy_b_bot = DGField(0, g_sfc)
     end
-    if showplots
-        quick_plot(ωx_b_bot*DGField(H, g_sfc), L"\omega^x_b(-H)", "scratch/images/omegax_b_bot.png")
-        quick_plot(ωy_b_bot*DGField(H, g_sfc), L"\omega^y_b(-H)", "scratch/images/omegay_b_bot.png")
-    end
 
     # solve
     Ψ = solve_barotropic(g_sfc, r_sym, r_asym, ωx_τ_bot, ωy_τ_bot, ωx_b_bot, ωy_b_bot)
@@ -213,10 +209,10 @@ end
 H(x) = 1 - x[1]^2 - x[2]^2
 Hx(x) = -2x[1]
 Hy(x) = -2x[2]
-# f(x) = 1 + x[2]
-f(x) = 1
-# fy(x) = 1
-fy(x) = 0
+f(x) = 1 + x[2]
+# f(x) = 1
+fy(x) = 1
+# fy(x) = 0
 b(x) = x[3] + δ*exp(-(x[3] + H(x))/δ)
 γ(x) = -H(x)^3/3 - δ^2*(δ - H(x) - δ*exp(-H(x)/δ))
 γx(x) = -Hx(x)*H(x)^2 - δ^2*Hx(x)*(exp(-H(x)/δ) - 1)

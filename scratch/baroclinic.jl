@@ -365,44 +365,13 @@ function get_ω_b(g_sfc, g, b_cols, z_cols, Dxs, Dys, ε², f, b; showplots=fals
             χy_b[k][i] = sol[3*nz+1:4*nz]
         end
     end 
-
-    # bx = [zeros(2nz-2) for nz ∈ nzs]
-    # by = [zeros(2nz-2) for nz ∈ nzs]
-    # for k=1:g_sfc.nt
-    #     b_col = FEField(b, b_cols[k])
-    #     for i=1:3
-    #         ig = g_sfc.t[k, i]
-    #         bx[ig] += Dxs[k][i]*b_col.values
-    #         by[ig] += Dys[k][i]*b_col.values
-    #     end
-    # end
-    # ωx_b = zeros(g.np)
-    # ωy_b = zeros(g.np)
-    # χx_b = zeros(g.np)
-    # χy_b = zeros(g.np)
-    # j = 0
-    # for i ∈ eachindex(z_cols)
-    #     nz = nzs[i]
-    #     if nz ≤ 2
-    #         j += nz
-    #         continue
-    #     end
-    #     x = g_sfc.p[i, :]
-    #     sol = solve_baroclinic_1dfe(z_cols[i], bx[i], by[i], 0, 0, 0, 0, ε², f(x))
-    #     ωx_b[j+1:j+nz] = sol[0*nz+1:1*nz]
-    #     ωy_b[j+1:j+nz] = sol[1*nz+1:2*nz]
-    #     χx_b[j+1:j+nz] = sol[2*nz+1:3*nz]
-    #     χy_b[j+1:j+nz] = sol[3*nz+1:4*nz]
-    #     j += nz
-    # end
-
-    # if showplots
-    #     ωx_b_bot = FEField(ωx_b[g.e["bot"]], g_sfc)
-    #     ωy_b_bot = FEField(ωy_b[g.e["bot"]], g_sfc)
-    #     quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b.png")
-    #     quick_plot(ωy_b_bot, L"\omega^y_b(-H)}", "scratch/images/omegay_b.png")
-    #     write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
-    # end
+    if showplots
+        ωx_b_bot = DGField([ωx_b[k][i][1] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωy_b_bot = DGField([ωy_b[k][i][1] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "scratch/images/omegax_b_bot.png")
+        quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "scratch/images/omegay_b_bot.png")
+        # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
+    end
 
     return ωx_b, ωy_b, χx_b, χy_b
 end
@@ -425,7 +394,6 @@ function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k)
     for i=1:3
         ig = g_sfc.t[k, i]
         nz = size(z_cols[ig], 1)
-        weight = 1/size(p_to_tri[ig], 1)
         Dx = Tuple{Int64,Int64,Float64}[]
         Dy = Tuple{Int64,Int64,Float64}[]
         for j=1:nz-1
@@ -439,10 +407,10 @@ function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k)
             i1_tet = findfirst(i -> g_col.t[k_tet, i] == n+j, 1:g_col.nn) 
             i2_tet = findfirst(i -> g_col.t[k_tet, i] == n+j+1, 1:g_col.nn)
             for l=1:b_col.nn
-                push!(Dx, (2j-1, b_col.t[k_tet, l], weight*(Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx)))
-                push!(Dx, (2j,   b_col.t[k_tet, l], weight*(Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx)))
-                push!(Dy, (2j-1, b_col.t[k_tet, l], weight*(Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy)))
-                push!(Dy, (2j,   b_col.t[k_tet, l], weight*(Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy)))
+                push!(Dx, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx))
+                push!(Dx, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx))
+                push!(Dy, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy))
+                push!(Dy, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy))
             end
         end
         Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
