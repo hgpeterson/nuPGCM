@@ -44,23 +44,11 @@ end
 
 # operations on FEFields
 getindex(u::FEField, i) = u.values[i]
-
--(u::FEField, v::AbstractVector) = FEField(u.order, u.values - v, u.g)
+-(u::FEField, v::FEField) = FEField(u.order, u.values - v.values, u.g)
 -(u::FEField) = FEField(u.order, -u.values, u.g)
--(u::AbstractVector, v::FEField) = -(v - u)
--(u::FEField, v::FEField) = u - v.values
-
-+(u::FEField, v::AbstractVector) = FEField(u.order, u.values + v, u.g)
-+(u::AbstractVector, v::FEField) = v + u
-+(u::FEField, v::FEField) = u + v.values
-
-*(u::FEField, v::AbstractVector) = FEField(u.order, u.values .* v, u.g)
-*(u::AbstractVector, v::FEField) = v * u
-*(u::FEField, v::FEField) = u * v.values
-
-/(u::FEField, v::AbstractVector) = FEField(u.order, u.values ./ v, u.g)
-/(u::AbstractVector, v::FEField) = v / u
-/(u::FEField, v::FEField) = u / v.values
++(u::FEField, v::FEField) = FEField(u.order, u.values + v.values, u.g)
+*(u::FEField, v::FEField) = FEField(u.order, u.values .* v.values, u.g)
+/(u::FEField, v::FEField) = FEField(u.order, u.values ./ v.values, u.g)
 
 struct DGField{IN<:Integer,M<:AbstractMatrix} <: Field
     # order of polynomials defining shape functions
@@ -94,23 +82,15 @@ end
 
 # operations on DGFields
 getindex(u::DGField, i, j) = u.values[i, j]
-
--(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values - v, u.g)
+-(u::DGField, v::DGField) = DGField(u.order, u.values - v.values, u.g)
 -(u::DGField) = DGField(u.order, -u.values, u.g)
--(u::AbstractMatrix, v::DGField) = -(v - u)
--(u::DGField, v::DGField) = u - v.values
++(u::DGField, v::DGField) = DGField(u.order, u.values + v.values, u.g)
+*(u::DGField, v::DGField) = DGField(u.order, u.values .* v.values, u.g)
+/(u::DGField, v::DGField) = DGField(u.order, u.values ./ v.values, u.g)
 
-+(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values + v, u.g)
-+(u::AbstractMatrix, v::DGField) = v + u
-+(u::DGField, v::DGField) = u + v.values
-
-*(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values .* v, u.g)
-*(u::AbstractMatrix, v::DGField) = v * u
-*(u::DGField, v::DGField) = u * v.values
-
-/(u::DGField, v::AbstractMatrix) = DGField(u.order, u.values ./ v, u.g)
-/(u::AbstractMatrix, v::DGField) = v / u
-/(u::DGField, v::DGField) = u / v.values
+# operations between FE and DG fields
+/(u::DGField, v::FEField) = DGField(u.order, [u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
+/(u::FEField, v::DGField) = (v / u)^-1
 
 struct FVField{V<:AbstractVector} <: Field
     # values of FV field on the elements of the grid
@@ -138,23 +118,11 @@ end
 
 # operations on FVFields
 getindex(u::FVField, k) = u.values[k]
-
--(u::FVField, v::AbstractVector) = FVField(u.values - v, u.g)
+-(u::FVField, v::FVField) = FVField(u.values - v.values, u.g)
 -(u::FVField) = FVField(-u.values, u.g)
--(u::AbstractVector, v::FVField) = -(v - u)
--(u::FVField, v::FVField) = u - v.values
-
-+(u::FVField, v::AbstractVector) = FVField(u.order, u.values + v, u.g)
-+(u::AbstractVector, v::FVField) = v + u
-+(u::FVField, v::FVField) = u + v.values
-
-*(u::FVField, v::AbstractVector) = FVField(u.values .* v, u.g)
-*(u::AbstractVector, v::FVField) = v * u
-*(u::FVField, v::FVField) = u * v.values
-
-/(u::FVField, v::AbstractVector) = FVField(u.values ./ v, u.g)
-/(u::AbstractVector, v::FVField) = v / u
-/(u::FVField, v::FVField) = u / v.values
++(u::FVField, v::FVField) = FVField(u.values + v.values, u.g)
+*(u::FVField, v::FVField) = FVField(u.values .* v.values, u.g)
+/(u::FVField, v::FVField) = FVField(u.values ./ v.values, u.g)
 
 """
     l2 = L2norm(u)

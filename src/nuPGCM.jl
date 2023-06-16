@@ -103,7 +103,13 @@ export
     tplot,
 
     # BL theory
-    get_full_soln
+    get_full_soln,
+
+    ### 3D Model ###
+
+    # model structs
+    ModelSetup3D,
+    ModelState3D
 
 # packages
 using PyPlot
@@ -116,6 +122,8 @@ using LinearAlgebra
 using Dierckx
 using HDF5
 using ProgressMeter
+using WriteVTK
+using Delaunay
 
 # global constants
 const secs_in_day = 86400
@@ -152,5 +160,13 @@ include("TwoDimensionalModel/inversion.jl")
 include("TwoDimensionalModel/evolution.jl")
 include("TwoDimensionalModel/plotting.jl")
 include("TwoDimensionalModel/boundary_layer.jl")
+
+include("ThreeDimensionalModel/setup.jl")
+include("ThreeDimensionalModel/mesh_utils.jl")
+include("ThreeDimensionalModel/baroclinic.jl")
+include("ThreeDimensionalModel/barotropic.jl")
+include("ThreeDimensionalModel/inversion.jl")
+# include("ThreeDimensionalModel/evolution.jl")
+include("ThreeDimensionalModel/plotting.jl")
 
 end # module

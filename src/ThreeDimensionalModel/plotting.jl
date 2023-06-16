@@ -1,30 +1,3 @@
-### utility function for some of the stokes/laplace/pg tests
-
-using WriteVTK
-
-function get_sides(g::Grid; tol=1e-4)
-    # bottom
-    bot = g.e[abs.(g.p[g.e, end]) .≥ tol]
-
-    # top
-    sfc = g.e[abs.(g.p[g.e, end]) .< tol]
-
-    if g.dim == 2
-        # for 2D, add corners to bot and remove them from sfc
-        left = g.e[abs.(g.p[g.e, 1] .+ 1) .≤ tol]
-        right = g.e[abs.(g.p[g.e, 1] .- 1) .≤ tol]
-        bot = [left[1]; bot; right[1]]
-    elseif g.dim == 3
-        # for 3D, add coastline to bot
-        coast = g.e[abs.(1 .- sqrt.(g.p[g.e, 1].^2 + g.p[g.e, 2].^2)) .≤ 1e2*tol]
-        bot = [bot; coast]
-    end
-
-    # println(findall(i->i∈bot && i∈sfc, 1:g.np) == sort(coast))
-
-    return bot, sfc
-end
-
 function quick_plot(u::Union{FEField,FVField}, cb_label, fname; vmax=nothing)
     contour = !(typeof(u) <: FVField)
     fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
@@ -64,44 +37,6 @@ function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
     savefig(ofile)
     println(ofile)
     plt.close()
-end
-
-function add_dirichlet(A, b, row::Integer, col::Integer, u₀::Real)
-    # delete row
-    A[row, :] .= 0
-    # replace Aᵢⱼ = 1
-    A[row, col] = 1
-    # replace bᵢ = 1
-    b[row] = u₀
-    # row reduce
-    for k in eachindex(b)
-        if k == row
-            continue
-        end
-        b[k] -= A[k, col]*u₀
-        A[k, col] = 0
-    end
-    return A, b
-end
-function add_dirichlet(A, b, row::Integer, u₀::Real)
-    return add_dirichlet(A, b, row, row, u₀)
-end
-
-function add_dirichlet(A, b, rows::AbstractVector, cols::AbstractVector, u₀::AbstractVector)
-    for i in eachindex(rows)
-        A, b = add_dirichlet(A, b, rows[i], cols[i], u₀[i])
-    end
-    return A, b
-end
-function add_dirichlet(A, b, rows::AbstractVector, cols::AbstractVector, u₀::Real)
-    return add_dirichlet(A, b, rows, cols, u₀*ones(size(rows)))
-end
-
-function add_dirichlet(A, b, rows::AbstractVector, u₀::AbstractVector)
-    return add_dirichlet(A, b, rows, rows, u₀)
-end
-function add_dirichlet(A, b, rows::AbstractVector, u₀::Real)
-    return add_dirichlet(A, b, rows, u₀*ones(size(rows)))
 end
 
 function write_vtk(g, fname, data)
