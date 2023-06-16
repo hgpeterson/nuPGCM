@@ -150,9 +150,8 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε²; showplots=false)
     # pre-allocate 
-    nzs = [size(z, 1) for z ∈ z_cols]
     ωx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     ωy_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     χx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
@@ -192,9 +191,8 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε²; showplots=false)
     # pre-allocate 
-    nzs = [size(z, 1) for z ∈ z_cols]
     ωx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     ωy_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     χx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
@@ -238,24 +236,23 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc = m.g_sfc
     p_to_tri = m.p_to_tri
-    b_cols = m.b_cols
     z_cols = m.z_cols
+    nzs = m.nzs
     Dxs = m.Dxs
     Dys = m.Dys
     ε² = m.ε²
     baroclinic_LHSs = m.baroclinic_LHSs
 
     # setup arrays
-    bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
-    bx = [Dxs[k][i]*bvals[k] for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    by = [Dys[k][i]*bvals[k] for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    bx = [Dxs[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    by = [Dys[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
 
     # pre-allocate 
-    nzs = [size(z, 1) for z ∈ z_cols]
     ωx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     ωy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     χx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     χy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+
     # compute and store
     for i=1:g_sfc.np
         # keep coastline set to zero
@@ -298,7 +295,7 @@ Compute gradient matrices for element column corresponding to surface triangle `
 Stored in arrays such that `Dxs[i]` is and (2*nz[i]-2) × (b_col.np) matrix that gives bx
 for node column i when multiplied by b in `b_col`.  
 """
-function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k) 
+function get_b_gradient_matrices(b_col, g_col, g_sfc, nzs, k) 
     p1_ref = reference_element_nodes(1, 3)
     Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
     Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
@@ -307,8 +304,7 @@ function get_b_gradient_matrices(b_col, g_col, g_sfc, z_cols, k)
     Dys = Vector{SparseMatrixCSC}(undef, 3)
     n = 0
     for i=1:3
-        ig = g_sfc.t[k, i]
-        nz = size(z_cols[ig], 1)
+        nz = nzs[g_sfc.t[k, i]]
         Dx = Tuple{Int64,Int64,Float64}[]
         Dy = Tuple{Int64,Int64,Float64}[]
         for j=1:nz-1

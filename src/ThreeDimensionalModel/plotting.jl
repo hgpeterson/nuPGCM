@@ -106,10 +106,10 @@ function plot_ω_χ(ωx, ωy, χx, χy, g_cols)
     # save as .vtu
     cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
     vtk_grid("output/omega_chi.vtu", p', cells) do vtk
-        vtk["omegaˣ"] = ωx_plot
-        vtk["omegaʸ"] = ωy_plot
-        vtk["chiˣ"] = χx_plot
-        vtk["chiʸ"] = χy_plot
+        vtk["omega^x"] = ωx_plot
+        vtk["omega^y"] = ωy_plot
+        vtk["chi^x"] = χx_plot
+        vtk["chi^y"] = χy_plot
     end
     println("output/omega_chi.vtu")
 end

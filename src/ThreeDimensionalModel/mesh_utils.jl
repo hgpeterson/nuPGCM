@@ -64,6 +64,9 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
         np += nz
     end
 
+    # size of each column
+    nzs = [size(z, 1) for z ∈ z_cols]
+
     # setup shape functions and their integrals now since they're the same for each grid
     sf = ShapeFunctions(order=1, dim=3)
     sfi = ShapeFunctionIntegrals(sf, sf)
@@ -100,7 +103,7 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
 
     g = Grid(1, p, t, e)
 
-    return g, g_cols, z_cols, p_to_tri
+    return g, g_cols, z_cols, nzs, p_to_tri
 end
 
 function generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)

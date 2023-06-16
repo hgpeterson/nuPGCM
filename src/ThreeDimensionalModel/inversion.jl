@@ -1,4 +1,4 @@
-function invert(m::ModelSetup3D, b, γ; showplots=false, nonzero_b=true)
+function invert(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc = m.g_sfc
     g_cols = m.g_cols
@@ -6,17 +6,12 @@ function invert(m::ModelSetup3D, b, γ; showplots=false, nonzero_b=true)
     H = m.H
 
     # get buoyancy ω and χ
-    if nonzero_b
-        ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, b, showplots=showplots)
-        ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
-        ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
-    else
-        ωx_b_bot = DGField(0, g_sfc)
-        ωy_b_bot = DGField(0, g_sfc)
-    end
+    ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, b, showplots=showplots)
+    ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
+    ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
 
     # solve barotropic
-    barotropic_RHS_b = get_barotropic_RHS_b(m, γ, ωx_b_bot, ωy_b_bot)
+    barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot)
     Ψ = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
     Ψ = FEField(Ψ, g_sfc)
     if showplots
@@ -25,13 +20,6 @@ function invert(m::ModelSetup3D, b, γ; showplots=false, nonzero_b=true)
 
     # take gradients to get Uˣ and Uʸ
     Ux, Uy = get_Ux_Uy(Ψ, showplots=showplots)
-    # for now: convert to CG
-    Ux_cg = zeros(g_sfc.np)
-    Uy_cg = zeros(g_sfc.np)
-    for i=1:g_sfc.np
-        Ux_cg[i] = sum(Ux[I[1]] for I ∈ p_to_tri[i])/size(p_to_tri[i], 1)
-        Uy_cg[i] = sum(Uy[I[1]] for I ∈ p_to_tri[i])/size(p_to_tri[i], 1)
-    end
 
     # put them all together to get full ω's and χ's
     nzs = [size(z, 1) for z ∈ m.z_cols]
@@ -41,14 +29,40 @@ function invert(m::ModelSetup3D, b, γ; showplots=false, nonzero_b=true)
     χy = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     for i=1:g_sfc.np
         for I ∈ p_to_tri[i]
-            ωx[I] = ωx_b[I] + Ux_cg[i]*m.ωx_Ux[I]/m.H[i]^2 - Uy_cg[i]*m.ωy_Ux[I]/m.H[i]^2
-            ωy[I] = ωy_b[I] + Ux_cg[i]*m.ωy_Ux[I]/m.H[i]^2 + Uy_cg[i]*m.ωx_Ux[I]/m.H[i]^2
-            χx[I] = χx_b[I] + Ux_cg[i]*m.χx_Ux[I]/m.H[i]^2 - Uy_cg[i]*m.χy_Ux[I]/m.H[i]^2
-            χy[I] = χy_b[I] + Ux_cg[i]*m.χy_Ux[I]/m.H[i]^2 + Uy_cg[i]*m.χx_Ux[I]/m.H[i]^2
+            ωx[I] = ωx_b[I] + Ux[I[1]]*m.ωx_Ux[I]/m.H[i]^2 - Uy[I[1]]*m.ωy_Ux[I]/m.H[i]^2
+            ωy[I] = ωy_b[I] + Ux[I[1]]*m.ωy_Ux[I]/m.H[i]^2 + Uy[I[1]]*m.ωx_Ux[I]/m.H[i]^2
+            χx[I] = χx_b[I] + Ux[I[1]]*m.χx_Ux[I]/m.H[i]^2 - Uy[I[1]]*m.χy_Ux[I]/m.H[i]^2
+            χy[I] = χy_b[I] + Ux[I[1]]*m.χy_Ux[I]/m.H[i]^2 + Uy[I[1]]*m.χx_Ux[I]/m.H[i]^2
         end
     end
     if showplots
         plot_ω_χ(ωx, ωy, χx, χy, g_cols)
+    end
+
+    # cg for now
+    g = m.g
+    ωx_cg = zeros(g.np)
+    ωy_cg = zeros(g.np)
+    χx_cg = zeros(g.np)
+    χy_cg = zeros(g.np)
+    n = 0
+    for i=1:g_sfc.np
+        nz = nzs[i]
+        weight = size(p_to_tri[i], 1)
+        for I ∈ p_to_tri[i]
+            ωx_cg[n+1:n+nz] += ωx[I]/weight
+            ωy_cg[n+1:n+nz] += ωy[I]/weight
+            χx_cg[n+1:n+nz] += χx[I]/weight
+            χy_cg[n+1:n+nz] += χy[I]/weight
+        end
+        n += nz
+    end
+    ωx = FEField(ωx_cg, g)
+    ωy = FEField(ωy_cg, g)
+    χx = FEField(χx_cg, g)
+    χy = FEField(χy_cg, g)
+    if showplots
+        write_vtk(g, "$out_folder/omega_chi_cg.vtu", Dict("omega^x"=>ωx, "omega^y"=>ωy, "chi^x"=>χx, "chi^y"=>χy))
     end
 
     return ωx, ωy, χx, χy, Ψ

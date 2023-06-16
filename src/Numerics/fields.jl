@@ -89,6 +89,8 @@ getindex(u::DGField, i, j) = u.values[i, j]
 /(u::DGField, v::DGField) = DGField(u.order, u.values ./ v.values, u.g)
 
 # operations between FE and DG fields
+*(u::DGField, v::FEField) = DGField(u.order, [u[k, i]*v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
+*(u::FEField, v::DGField) = v * u
 /(u::DGField, v::FEField) = DGField(u.order, [u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 /(u::FEField, v::DGField) = (v / u)^-1
 

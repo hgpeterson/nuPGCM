@@ -139,14 +139,17 @@ function get_barotropic_RHS_τ(g, H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot,
 end
 
 """
-    r = get_barotropic_RHS_b(m, γ, ωx_b_bot, ωy_b_bot)
+    r = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot)
 
 Generate wind component of RHS vector for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function get_barotropic_RHS_b(m::ModelSetup3D, γ, ωx_b_bot, ωy_b_bot)
+function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot)
+    # compute JEBAR
+    JEBAR = get_JEBAR(m, b)
+
     # unpack
     g = m.g_sfc
     H = m.H 
@@ -176,10 +179,9 @@ function get_barotropic_RHS_b(m::ModelSetup3D, γ, ωx_b_bot, ωy_b_bot)
         # rhs
         function func_r(ξ, i)
             x = T(ξ)
-            JEBAR = (-∂y(γ, x, k)*Hx(x, k) + ∂x(γ, x, k)*Hy(x, k))/H(x, k)^2
             ω_b_bot_div = ∂x(ωx_b_bot, x, k) + ∂y(ωy_b_bot, x, k)
             φi = φ(g.sf, i, ξ)
-            return (-JEBAR + ε²*ω_b_bot_div)*φi*∂x∂ξ
+            return (-JEBAR(x, k) + ε²*ω_b_bot_div)*φi*∂x∂ξ
         end
         r = [ref_el_quad(ξ -> func_r(ξ, i), quad_wts, quad_pts) for i=1:g.nn]
 
@@ -192,4 +194,68 @@ function get_barotropic_RHS_b(m::ModelSetup3D, γ, ωx_b_bot, ωy_b_bot)
     end
 
     return rhs
+end
+
+function get_JEBAR(m::ModelSetup3D, b; showplots=false)
+    # unpack
+    g_sfc = m.g_sfc
+    p_to_tri = m.p_to_tri
+    z_cols = m.z_cols
+    nzs = m.nzs
+    Dxs = m.Dxs
+    Dys = m.Dys
+    H = m.H
+    Hx = m.Hx
+    Hy = m.Hy
+
+    # compute b gradients
+    bx = [Dxs[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    by = [Dys[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
+
+    # compute and store
+    JEBAR = zeros(g_sfc.nt, g_sfc.nn)
+    for i=1:g_sfc.np
+        # keep coastline set to zero
+        nz = nzs[i]
+        if nz == 1
+            continue
+        end
+
+        # create 1D grid
+        p = reshape(z_cols[i], (nz, 1))
+        t = [i + j - 1 for i=1:nz-1, j=1:2]
+        e = Dict("bot"=>[1], "sfc"=>[nz])
+        g = Grid(1, p, t, e)
+
+        # compute JEBAR with bx and by from each different element column
+        for I ∈ p_to_tri[i]
+            γx = integrate_γ(g, bx[I]) 
+            γy = integrate_γ(g, by[I]) 
+            JEBAR[I] = (Hx[i]*γy - Hy[i]*γx)/H[i]^2
+        end
+    end
+    JEBAR = DGField(JEBAR, g_sfc)
+
+    if showplots
+        quick_plot(JEBAR*H^2, L"-H^2 J(1/H, \gamma)", "$out_folder/JEBAR.png")
+    end
+    return JEBAR
+end
+
+"""
+    ∫ z f dz
+"""
+function integrate_γ(g, f)
+    quad_wts, quad_pts = quad_weights_points(deg=7, dim=1)
+    γ = 0
+    for k=1:g.nt
+        function zf(ξ)
+            z = transform_from_ref_el(ξ, g.p[g.t[k, 1:2], :])
+            φ1 = φ(g.sf, 1, ξ)
+            φ2 = φ(g.sf, 1, ξ)
+            return z*(f[2k-1]*φ1 + f[2k]*φ2)*g.J.dets[k]
+        end
+        γ += ref_el_quad(zf, quad_wts, quad_pts)
+    end
+    return γ
 end

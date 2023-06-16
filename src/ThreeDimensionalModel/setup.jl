@@ -37,6 +37,7 @@ struct ModelSetup3D{FT<:AbstractFloat,F<:Field,M<:AbstractMatrix}
     g::Grid
     g_cols::AbstractVector
     z_cols::AbstractVector
+    nzs::AbstractVector
     p_to_tri::AbstractVector
     b_cols::AbstractVector
     Dxs::AbstractVector
@@ -103,7 +104,7 @@ function ModelSetup3D()
     end
 
     # mesh
-    g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=false)
+    g, g_cols, z_cols, nzs, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=false)
 
     # second order b
     sf2 = ShapeFunctions(order=2, dim=3)
@@ -114,14 +115,14 @@ function ModelSetup3D()
     Dxs = Vector{Any}(undef, g_sfc.nt)
     Dys = Vector{Any}(undef, g_sfc.nt)
     @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-        Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, z_cols, k) 
+        Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, nzs, k) 
     end
 
     # baroclinc LHSs
     baroclinic_LHSs = [size(z_cols[i], 1) > 1 ? get_baroclinic_LHS(z_cols[i], ε², f(g_sfc.p[i, :])) : nothing for i ∈ eachindex(z_cols)]
 
     # get transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε², showplots=showplots)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε², showplots=showplots)
     ωx_Ux_bot = FEField([ωx_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
     ωy_Ux_bot = FEField([ωy_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
 
@@ -133,7 +134,7 @@ function ModelSetup3D()
     barotropic_LHS = get_barotropic_LHS(g_sfc, r_sym, r_asym, f, fy, H, Hx, Hy, ε²)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε², showplots=showplots)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε², showplots=showplots)
     ωx_τx_bot = FEField([ωx_τx[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
     ωy_τx_bot = FEField([ωy_τx[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
     ωx_τy_bot = -ωy_τx_bot
@@ -148,6 +149,6 @@ function ModelSetup3D()
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc, H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
 
-    return ModelSetup3D(ε², H, Hx, Hy, f, fy, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc, g, g_cols, z_cols, p_to_tri, b_cols, Dxs, Dys, 
+    return ModelSetup3D(ε², H, Hx, Hy, f, fy, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc, g, g_cols, z_cols, nzs, p_to_tri, b_cols, Dxs, Dys, 
                         baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 end
