@@ -7,7 +7,7 @@ pygui(false)
 
 set_out_folder("output")
 
-m = ModelSetup3D()
+# m = ModelSetup3D()
 
 δ = 0.1
 H(x) = 1 - x[1]^2 - x[2]^2

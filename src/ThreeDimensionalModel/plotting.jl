@@ -93,10 +93,10 @@ function plot_ω_χ(ωx, ωy, χx, χy, g_cols)
         t[i_t+1:i_t+g.nt, :] = i_p .+ g.t
 
         # unpack solutions
-        ωx_plot[i_p+1:i_p+g.np] = ωx[k]
-        ωy_plot[i_p+1:i_p+g.np] = ωy[k]
-        χx_plot[i_p+1:i_p+g.np] = χx[k]
-        χy_plot[i_p+1:i_p+g.np] = χy[k]
+        ωx_plot[i_p+1:i_p+g.np] = vcat(ωx[k, 1], ωx[k, 2], ωx[k, 3])
+        ωy_plot[i_p+1:i_p+g.np] = vcat(ωy[k, 1], ωy[k, 2], ωy[k, 3])
+        χx_plot[i_p+1:i_p+g.np] = vcat(χx[k, 1], χx[k, 2], χx[k, 3])
+        χy_plot[i_p+1:i_p+g.np] = vcat(χy[k, 1], χy[k, 2], χy[k, 3])
 
         # increment
         i_p += g.np

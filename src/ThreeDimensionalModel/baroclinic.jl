@@ -86,7 +86,7 @@ function get_baroclinic_LHS(z, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(z, bx, by, τx, τy, Ux, Uy, ε²)
+    r = get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
@@ -97,7 +97,7 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(z, bx, by, τx, τy, Ux, Uy, ε²)
+function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     # create 1D grid
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
@@ -150,37 +150,40 @@ function get_baroclinic_RHS(z, bx, by, τx, τy, Ux, Uy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, g_cols, z_cols, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε²; showplots=false)
     # pre-allocate 
-    ωx_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    ωy_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χx_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χy_Ux = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    nzs = [size(z, 1) for z ∈ z_cols]
+    ωx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    ωy_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χy_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     
-    # this loop is a bit redundant since each node may be shared by a few triangles, 
-    # but we only have to do this once per simulation
-    for k=1:g_sfc.nt
-        n = 0
-        for i=1:3
-            ig = g_sfc.t[k, i]
-            nz = size(z_cols[ig], 1)
-            if nz == 1
-                n += nz
-                continue
-            end
-            r = get_baroclinic_RHS(z_cols[ig], zeros(nz-1), zeros(nz-1), H[ig]^2, 0, 0, 0, ε²)
-            sol = baroclinic_LHSs[ig]\r
-            ωx_Ux[k][n+1:n+nz] = sol[0*nz+1:1*nz]
-            ωy_Ux[k][n+1:n+nz] = sol[1*nz+1:2*nz]
-            χx_Ux[k][n+1:n+nz] = sol[2*nz+1:3*nz]
-            χy_Ux[k][n+1:n+nz] = sol[3*nz+1:4*nz]
-            n += nz
+    # compute and store
+    for i=1:g_sfc.np
+        # keep coastline set to zero
+        nz = nzs[i]
+        if nz == 1
+            continue
+        end
+
+        # get rhs with Uˣ = H^2 and all else zeros
+        r = get_baroclinic_RHS(z_cols[i], zeros(nz-1), zeros(nz-1), H[i]^2, 0, 0, 0, ε²)
+
+        # solve baroclinc problem
+        sol = baroclinic_LHSs[i]\r
+
+        # store in each element column
+        for I ∈ p_to_tri[i]
+            ωx_Ux[I] = sol[0*nz+1:1*nz]
+            ωy_Ux[I] = sol[1*nz+1:2*nz]
+            χx_Ux[I] = sol[2*nz+1:3*nz]
+            χy_Ux[I] = sol[3*nz+1:4*nz]
         end
     end
 
     if showplots
-        ωx_Ux_bot = DGField([ωx_Ux[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
-        ωy_Ux_bot = DGField([ωy_Ux[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωx_Ux_bot = DGField([ωx_Ux[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωy_Ux_bot = DGField([ωy_Ux[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
         quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "$out_folder/omegax_Ux_bot.png")
         quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "$out_folder/omegay_Ux_bot.png")
         # write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
@@ -189,37 +192,40 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, g_cols, z_cols, H, ε²
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, z_cols, H, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε²; showplots=false)
     # pre-allocate 
-    ωx_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    ωy_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χx_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χy_τx = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
+    nzs = [size(z, 1) for z ∈ z_cols]
+    ωx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    ωy_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χy_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
     
-    # this loop is a bit redundant since each node may be shared by a few triangles, 
-    # but we only have to do this once per simulation
-    for k=1:g_sfc.nt
-        n = 0
-        for i=1:3
-            ig = g_sfc.t[k, i]
-            nz = size(z_cols[ig], 1)
-            if nz == 1
-                n += nz
-                continue
-            end
-            r = get_baroclinic_RHS(z_cols[ig], zeros(nz-1), zeros(nz-1), 0, 0, H[ig]^2, 0, ε²)
-            sol = baroclinic_LHSs[ig]\r
-            ωx_τx[k][n+1:n+nz] = sol[0*nz+1:1*nz]
-            ωy_τx[k][n+1:n+nz] = sol[1*nz+1:2*nz]
-            χx_τx[k][n+1:n+nz] = sol[2*nz+1:3*nz]
-            χy_τx[k][n+1:n+nz] = sol[3*nz+1:4*nz]
-            n += nz
+    # compute and store
+    for i=1:g_sfc.np
+        # keep coastline set to zero
+        nz = nzs[i]
+        if nz == 1
+            continue
+        end
+
+        # get rhs with τˣ = H^2 and all else zeros
+        r = get_baroclinic_RHS(z_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H[i]^2, 0, ε²)
+
+        # solve baroclinc problem
+        sol = baroclinic_LHSs[i]\r
+
+        # store in each element column
+        for I ∈ p_to_tri[i]
+            ωx_τx[I] = sol[0*nz+1:1*nz]
+            ωy_τx[I] = sol[1*nz+1:2*nz]
+            χx_τx[I] = sol[2*nz+1:3*nz]
+            χy_τx[I] = sol[3*nz+1:4*nz]
         end
     end
 
     if showplots
-        ωx_τx_bot = DGField([ωx_τx[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
-        ωy_τx_bot = DGField([ωy_τx[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωx_τx_bot = DGField([ωx_τx[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωy_τx_bot = DGField([ωy_τx[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
         quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "$out_folder/omegax_taux_bot.png")
         quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "$out_folder/omegay_taux_bot.png")
         # write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
@@ -231,7 +237,7 @@ end
 function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc = m.g_sfc
-    g_cols = m.g_cols
+    p_to_tri = m.p_to_tri
     b_cols = m.b_cols
     z_cols = m.z_cols
     Dxs = m.Dxs
@@ -241,36 +247,42 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 
     # setup arrays
     bvals = [[b(b_cols[k].p[i, :]) for i=1:b_cols[k].np] for k=1:g_sfc.nt]
-    bx = [[Dxs[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
-    by = [[Dys[k][i]*bvals[k] for i=1:3] for k=1:g_sfc.nt]
+    bx = [Dxs[k][i]*bvals[k] for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    by = [Dys[k][i]*bvals[k] for k=1:g_sfc.nt, i=1:g_sfc.nn]
 
-    # solve 
-    ωx_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    ωy_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χx_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    χy_b = [zeros(g_cols[k].np) for k=1:g_sfc.nt]
-    for k=1:g_sfc.nt
-        n = 0
-        for i=1:3
-            ig = g_sfc.t[k, i]
-            nz = size(z_cols[ig], 1)
-            if nz ≤ 2
-                n += nz
-                continue
-            end
-            r = get_baroclinic_RHS(z_cols[ig], bx[k][i], by[k][i], 0, 0, 0, 0, ε²)
-            sol = baroclinic_LHSs[ig]\r
-            ωx_b[k][n+1:n+nz] = sol[0*nz+1:1*nz]
-            ωy_b[k][n+1:n+nz] = sol[1*nz+1:2*nz]
-            χx_b[k][n+1:n+nz] = sol[2*nz+1:3*nz]
-            χy_b[k][n+1:n+nz] = sol[3*nz+1:4*nz]
-            n += nz
+    # pre-allocate 
+    nzs = [size(z, 1) for z ∈ z_cols]
+    ωx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    ωy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    χy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    # compute and store
+    for i=1:g_sfc.np
+        # keep coastline set to zero
+        nz = nzs[i]
+        if nz == 1
+            continue
         end
-    end 
+
+        # solve baroclinic problem with bx and by from each different element column
+        for I ∈ p_to_tri[i]
+            # get rhs with bx and by and all else zeros
+            r = get_baroclinic_RHS(z_cols[i], bx[I], by[I], 0, 0, 0, 0, ε²)
+
+            # solve baroclinc problem
+            sol = baroclinic_LHSs[i]\r
+
+            # store
+            ωx_b[I] = sol[0*nz+1:1*nz]
+            ωy_b[I] = sol[1*nz+1:2*nz]
+            χx_b[I] = sol[2*nz+1:3*nz]
+            χy_b[I] = sol[3*nz+1:4*nz]
+        end
+    end
 
     if showplots
-        ωx_b_bot = DGField([ωx_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
-        ωy_b_bot = DGField([ωy_b[k][g_cols[k].e["bot"][i]] for k=1:g_sfc.nt, i=1:3], g_sfc)
+        ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
         quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "$out_folder/omegax_b_bot.png")
         quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "$out_folder/omegay_b_bot.png")
         # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))

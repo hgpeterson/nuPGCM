@@ -20,7 +20,7 @@ struct ModelState3D{IN<:Integer,F<:Field}
     i::IN
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F<:Field}
+struct ModelSetup3D{FT<:AbstractFloat,F<:Field,M<:AbstractMatrix}
     ε²::FT
     H::F
     Hx::F
@@ -42,15 +42,15 @@ struct ModelSetup3D{FT<:AbstractFloat,F<:Field}
     Dxs::AbstractVector
     Dys::AbstractVector
     baroclinic_LHSs::AbstractVector
-    ωx_Ux::AbstractVector
-    ωy_Ux::AbstractVector
-    χx_Ux::AbstractVector
-    χy_Ux::AbstractVector
+    ωx_Ux::M
+    ωy_Ux::M
+    χx_Ux::M
+    χy_Ux::M
     barotropic_LHS::LinearAlgebra.Factorization
-    ωx_τx::AbstractVector
-    ωy_τx::AbstractVector
-    χx_τx::AbstractVector
-    χy_τx::AbstractVector
+    ωx_τx::M
+    ωy_τx::M
+    χx_τx::M
+    χy_τx::M
     barotropic_RHS_τ::AbstractVector
 end
 
@@ -121,39 +121,21 @@ function ModelSetup3D()
     baroclinic_LHSs = [size(z_cols[i], 1) > 1 ? get_baroclinic_LHS(z_cols[i], ε², f(g_sfc.p[i, :])) : nothing for i ∈ eachindex(z_cols)]
 
     # get transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, g_cols, z_cols, H, ε², showplots=showplots)
-    ωx_Ux_bot = zeros(g_sfc.np)
-    ωy_Ux_bot = zeros(g_sfc.np)
-    for i=1:g_sfc.np
-        I = p_to_tri[i][1] # since ω_U's are actually continuous, just pick from one triangle
-        k = I[1]
-        j = I[2]
-        ωx_Ux_bot[i] = ωx_Ux[k][g_cols[k].e["bot"][j]]
-        ωy_Ux_bot[i] = ωy_Ux[k][g_cols[k].e["bot"][j]]
-    end
-    ωx_Ux_bot = FEField(ωx_Ux_bot, g_sfc)
-    ωy_Ux_bot = FEField(ωy_Ux_bot, g_sfc)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε², showplots=showplots)
+    ωx_Ux_bot = FEField([ωx_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
+    ωy_Ux_bot = FEField([ωy_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
 
     # bottom drag coefficients
-    r_sym = ωy_Ux_bot/H^3
-    r_asym = ωx_Ux_bot/H^3
+    r_sym = ωy_Ux_bot/H
+    r_asym = ωx_Ux_bot/H
 
     # barotropic LHS
     barotropic_LHS = get_barotropic_LHS(g_sfc, r_sym, r_asym, f, fy, H, Hx, Hy, ε²)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, g_cols, z_cols, H, ε², showplots=showplots)
-    ωx_τx_bot = zeros(g_sfc.np)
-    ωy_τx_bot = zeros(g_sfc.np)
-    for i=1:g_sfc.np
-        I = p_to_tri[i][1] # since ω_τ's are actually continuous, just pick from one triangle
-        k = I[1]
-        j = I[2]
-        ωx_τx_bot[i] = ωx_τx[k][g_cols[k].e["bot"][j]]
-        ωy_τx_bot[i] = ωy_τx[k][g_cols[k].e["bot"][j]]
-    end
-    ωx_τx_bot = FEField(ωx_τx_bot, g_sfc)/H^2
-    ωy_τx_bot = FEField(ωy_τx_bot, g_sfc)/H^2
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, H, ε², showplots=showplots)
+    ωx_τx_bot = FEField([ωx_τx[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
+    ωy_τx_bot = FEField([ωy_τx[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
     ωx_τy_bot = -ωy_τx_bot
     ωy_τy_bot = ωx_τx_bot
     ωx_τ_bot = (τx*ωx_τx_bot + τy*ωx_τy_bot)/H
