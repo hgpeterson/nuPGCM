@@ -4,9 +4,6 @@ import Base: -, +, *, /, ^, log, abs, maximum, minimum, argmax, argmin, getindex
 abstract type Field end
 
 # operations on Fields
-^(u::Field, n::Number) = FEField(u.order, u.values .^ n, u.g)
-log(u::Field) = FEField(u.order, log.(u.values), u.g)
-abs(u::Field) = FEField(u.order, abs.(u.values), u.g)
 maximum(u::Field) = maximum(u.values)
 minimum(u::Field) = minimum(u.values)
 argmax(u::Field) = argmax(u.values)
@@ -44,11 +41,15 @@ end
 
 # operations on FEFields
 getindex(u::FEField, i) = u.values[i]
+^(u::FEField, n::Number) = FEField(u.order, u.values .^ n, u.g)
+log(u::FEField) = FEField(u.order, log.(u.values), u.g)
+abs(u::FEField) = FEField(u.order, abs.(u.values), u.g)
 -(u::FEField, v::FEField) = FEField(u.order, u.values - v.values, u.g)
 -(u::FEField) = FEField(u.order, -u.values, u.g)
 +(u::FEField, v::FEField) = FEField(u.order, u.values + v.values, u.g)
 *(u::FEField, v::FEField) = FEField(u.order, u.values .* v.values, u.g)
 /(u::FEField, v::FEField) = FEField(u.order, u.values ./ v.values, u.g)
+/(u::FEField, n::Number) = FEField(u.order, u.values / n, u.g)
 
 struct DGField{IN<:Integer,M<:AbstractMatrix} <: Field
     # order of polynomials defining shape functions

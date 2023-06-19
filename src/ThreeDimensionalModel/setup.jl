@@ -22,6 +22,9 @@ end
 
 struct ModelSetup3D{FT<:AbstractFloat,F<:Field,M<:AbstractMatrix}
     ε²::FT
+    μ::FT
+    ϱ::FT
+    Δt::FT
     H::F
     Hx::F
     Hy::F
@@ -62,6 +65,9 @@ end
 function ModelSetup3D()
     # hardcode for now
     ε² = 1e-2
+    μ = 1e0
+    ϱ = 1e-4
+    Δt = 1e-3
     H(x) = 1 - x[1]^2 - x[2]^2
     Hx(x) = -2x[1]
     Hy(x) = -2x[2]
@@ -77,7 +83,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 3
+    nref = 2
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields
@@ -149,6 +155,6 @@ function ModelSetup3D()
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc, H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
 
-    return ModelSetup3D(ε², H, Hx, Hy, f, fy, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc, g, g_cols, z_cols, nzs, p_to_tri, b_cols, Dxs, Dys, 
+    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, fy, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc, g, g_cols, z_cols, nzs, p_to_tri, b_cols, Dxs, Dys, 
                         baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 end

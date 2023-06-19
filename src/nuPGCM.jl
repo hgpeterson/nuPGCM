@@ -166,7 +166,7 @@ include("ThreeDimensionalModel/mesh_utils.jl")
 include("ThreeDimensionalModel/baroclinic.jl")
 include("ThreeDimensionalModel/barotropic.jl")
 include("ThreeDimensionalModel/inversion.jl")
-# include("ThreeDimensionalModel/evolution.jl")
+include("ThreeDimensionalModel/evolution.jl")
 include("ThreeDimensionalModel/plotting.jl")
 
 end # module

@@ -1,16 +1,11 @@
-using Printf
-
-include("baroclinic.jl")
-include("utils.jl")
-
-struct AdvectionArrays{A <: AbstractArray}
+struct AdvectionArrays{A<:AbstractArray}
     Ax::A
     Ay::A
     Az1::A
     Az2::A
 end
 
-function get_M(g)
+function get_M(g::Grid)
     J = g.J
     s = g.sfi
     M = Tuple{Int64, Int64, Float64}[]
@@ -23,7 +18,7 @@ function get_M(g)
     return sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, g.np)
 end
 
-function get_K(g)
+function get_K(g::Grid)
     J = g.J
     s = g.sfi
     K = Tuple{Int64, Int64, Float64}[]
@@ -37,13 +32,13 @@ function get_K(g)
     return sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np)
 end
 
-function get_A(sf_χ, sf_b)
+function get_A(sf_χ::ShapeFunctions, sf_b::ShapeFunctions)
     w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=3)
     f(ξ, i, j, k, d1, d2) = ∂φ(sf_χ, k, d1, ξ)*∂φ(sf_b, j, d2, ξ)*φ(sf_b, i, ξ)
-    return [nuPGCM.ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
+    return [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
 end
 
-function get_As(A, gχ, gb)
+function AdvectionArrays(A, gχ::Grid, gb::Grid)
     J = gb.J
     Ax  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
     Ay  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
@@ -61,7 +56,7 @@ function get_As(A, gχ, gb)
     return AdvectionArrays(Ax, Ay, Az1, Az2)
 end
 
-function advection(As::AdvectionArrays, χx, χy, b, gχ, gb)
+function advection(As::AdvectionArrays, χx::FEField, χy::FEField, b::FEField, gχ::Grid, gb::Grid)
     adv = zeros(gb.np)
     for k=1:gb.nt, i=1:gb.nn
         adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[gχ.t[k, iχ]]  for ib=1:gb.nn, iχ=1:gχ.nn) +
@@ -72,96 +67,62 @@ function advection(As::AdvectionArrays, χx, χy, b, gχ, gb)
     return adv
 end
 
-function RK2(f, u, Δt)
-    return Δt*f(u + Δt/2*f(u))
-end
+function evolve(m::ModelSetup3D, s::ModelState3D)
+    # unpack
+    μ = m.μ
+    ϱ = m.ϱ
+    ε² = m.ε²
+    Δt = m.Δt
+    g = m.g 
 
-function evolve(; b_order)
-    # params
-    ε² = 5e-7
-    μ = 1
-    ϱ = 1e-4
-    Δt = 1e-3
-
-    # topo
-    H(x) = 1 - x[1]^2 - x[2]^2
-    Hx(x) = -2x[1]
-    Hy(x) = -2x[2]
-
-    # mesh
-    geo = "circle"
-    nref = 1
-    g_sfc, g, g_cols, z_cols, p_to_tri = gen_3D_valign_mesh(geo, nref, H)
-    if b_order == 1
-        gb = g
-    elseif b_order == 2
-        gb = FEGrid(2, g)
-    end
-    gχ = g
-
-    # IC
-    σ = 0.1
-    b = @. exp((-gb.p[:, 1]^2 - gb.p[:, 2]^2 - (gb.p[:, 3] + 0.5)^2)/(2σ^2))
-    χx = zeros(gχ.np) # uy = 0
-    ux = 1
-    χy = -ux*gχ.p[:, 3]
-    # z = gχ.p[:, 3]
-    # HH = [H(gχ.p[i, :]) for i=1:gχ.np]
-    # ux = 1
-    # χy = @. -1/3*z*(-3 + 3*ux - 6*z/HH - 4*z^2/HH^2) # ux = ux at H/2, zero at top and bot
-
-    # CFL
-    println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
-    println(@sprintf("    Δt: %1.1e", Δt))
+    # second order grid for b
+    gb = Grid(2, g)
 
     # matrices
     M = get_M(gb)
     K = get_K(gb)
-    LHS_diff = lu(μ*ϱ*M + ε²*Δt/2*K)
+    LHS_diff = lu(μ*ϱ*M + ε²*Δt*K)
     LHS_adv = cholesky(μ*ϱ*M)
-    A = get_A(gχ.sf, gb.sf)
-    As = get_As(A, gχ, gb)
+    A = get_A(g.sf, gb.sf)
+    As = AdvectionArrays(A, g, gb)
 
     # pvd file
-    rm("output/b.pvd", force=true)
-    rm("output/b_at_t*.vtu", force=true)
-    pvd = paraview_collection("output/b", append=true)
+    rm("$out_folder/b.pvd", force=true)
+    rm("$out_folder/b_at_t*.vtu", force=true)
+    pvd = paraview_collection("$out_folder/b", append=true)
 
     # solve
     @showprogress "Evolving..." for i=0:300
         if mod(i, 10) == 0
-            if b_order == 1
-                cell_type = VTKCellTypes.VTK_TETRA
-            elseif b_order == 2
-                cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-            end
+            cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
             cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
-            vtk_grid("output/b_at_t$i", gb.p', cells) do vtk
+            vtk_grid("$out_folder/b_at_t$i", gb.p', cells) do vtk
                 vtk["b"] = b
-                vtk["ba"] = @. exp((-(gb.p[:, 1] - ux*i*Δt)^2 - gb.p[:, 2]^2 - (gb.p[:, 3] + 0.5)^2)/(2σ^2))
                 pvd[i*Δt] = vtk
             end
+
+            # CFL
+            # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
+            # println(@sprintf("    Δt: %1.1e", Δt))
         end
 
         # operator split rhs
-        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gχ, gb), b, Δt/2)
+        ωx, ωy, χx, χy, Ψ = invert(m, s.b)
+        RHS_adv1 = μ*ϱ*M*s.b - μ*ϱ*Δt/2*advection(As, χx, χy, s.b, g, gb)
         b1 = LHS_adv\RHS_adv1
         RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
         b2 = LHS_diff\RHS_diff
-        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*RK2(u -> advection(As, χx, χy, u, gχ, gb), b2, Δt/2)
-        b = LHS_adv\RHS_adv2
+        ωx, ωy, χx, χy, Ψ = invert(m, b2)
+        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*Δt/2*advection(As, χx, χy, b2, g, gb)
+        s.b.values[:] = LHS_adv\RHS_adv2
 
-        if any(isnan.(b))
+        if any(isnan.(s.b.values))
             error("Solution blew up 😢")
         end
     end
 
     vtk_save(pvd)
-    println("output/b.pvd")
+    println("$out_folder/b.pvd")
 
-    return b
+    return s
 end
-
-bf = evolve(b_order=2)
-
-println("Done.")

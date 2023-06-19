@@ -243,19 +243,10 @@ function get_JEBAR(m::ModelSetup3D, b; showplots=false)
 end
 
 """
-    ∫ z f dz
+    ∫ zf dz = integrate_γ(g, f)
+
+Integrat z*f over [-H, 0] for DG array `f` over grid `g` using trapezoidal rule.
 """
 function integrate_γ(g, f)
-    quad_wts, quad_pts = quad_weights_points(deg=7, dim=1)
-    γ = 0
-    for k=1:g.nt
-        function zf(ξ)
-            z = transform_from_ref_el(ξ, g.p[g.t[k, 1:2], :])
-            φ1 = φ(g.sf, 1, ξ)
-            φ2 = φ(g.sf, 1, ξ)
-            return z*(f[2k-1]*φ1 + f[2k]*φ2)*g.J.dets[k]
-        end
-        γ += ref_el_quad(zf, quad_wts, quad_pts)
-    end
-    return γ
+    return sum((f[2k-1]*g.p[g.t[k, 2]] + f[2k]*g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
 end
