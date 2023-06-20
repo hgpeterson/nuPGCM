@@ -5,8 +5,8 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     # will we need to tessellate?
     if tessellate === nothing
         tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
-        # tessellate = true
     end
+    progress_string = tessellate ? "Generating columns..." : "Loading columns..."
 
     # x and y for convenience
     x = g_sfc.p[:, 1]
@@ -74,7 +74,7 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     # columnwise and global tessellation
     g_cols = Vector{Grid}(undef, g_sfc.nt)
     t = Matrix{Int64}(undef, 0, 4) 
-    @showprogress "Generating columns..." for k=1:g_sfc.nt
+    @showprogress progress_string for k=1:g_sfc.nt
         # number of points in vertical for each vertex of sfc tri
         lens = length.(tri_to_p[k, :])
 

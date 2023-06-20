@@ -296,10 +296,9 @@ Stored in arrays such that `Dxs[i]` is and (2*nz[i]-2) × (b_col.np) matrix that
 for node column i when multiplied by b in `b_col`.  
 """
 function get_b_gradient_matrices(b_col, g_col, g_sfc, nzs, k) 
-    p1_ref = reference_element_nodes(1, 3)
-    Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
-    Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
-    Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    Dξ = [∂φ(g_col.sf, i, 1, 0) for i=1:g_col.nn]
+    Dη = [∂φ(g_col.sf, i, 2, 0) for i=1:g_col.nn]
+    Dζ = [∂φ(g_col.sf, i, 3, 0) for i=1:g_col.nn]
     Dxs = Vector{SparseMatrixCSC}(undef, 3)
     Dys = Vector{SparseMatrixCSC}(undef, 3)
     n = 0
@@ -315,19 +314,48 @@ function get_b_gradient_matrices(b_col, g_col, g_sfc, nzs, k)
             ηy = g_col.J.Js[k_tet, 2, 2]
             ζx = g_col.J.Js[k_tet, 3, 1]
             ζy = g_col.J.Js[k_tet, 3, 2]
-            i1_tet = findfirst(i -> g_col.t[k_tet, i] == n+j, 1:g_col.nn) 
-            i2_tet = findfirst(i -> g_col.t[k_tet, i] == n+j+1, 1:g_col.nn)
-            for l=1:b_col.nn
-                push!(Dx, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx))
-                push!(Dx, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx))
-                push!(Dy, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy))
-                push!(Dy, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy))
+            for l=1:g_col.nn
+                push!(Dx, (j, g_col.t[k_tet, l], Dξ[l]*ξx + Dη[l]*ηx + Dζ[l]*ζx))
+                push!(Dy, (j, g_col.t[k_tet, l], Dξ[l]*ξy + Dη[l]*ηy + Dζ[l]*ζy))
             end
         end
-        Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
-        Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nz-2, b_col.np)
+        Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), nz-1, g_col.np)
+        Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), nz-1, g_col.np)
         n += nz
     end
+
+    # p1_ref = reference_element_nodes(1, 3)
+    # Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    # Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    # Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
+    # Dxs = Vector{SparseMatrixCSC}(undef, 3)
+    # Dys = Vector{SparseMatrixCSC}(undef, 3)
+    # n = 0
+    # for i=1:3
+    #     nz = nzs[g_sfc.t[k, i]]
+    #     Dx = Tuple{Int64,Int64,Float64}[]
+    #     Dy = Tuple{Int64,Int64,Float64}[]
+    #     for j=1:nz-1
+    #         k_tet = findfirst(k -> n+j ∈ g_col.t[k, :] && n+j+1 ∈ g_col.t[k, :], 1:g_col.nt)
+    #         ξx = g_col.J.Js[k_tet, 1, 1]
+    #         ξy = g_col.J.Js[k_tet, 1, 2]
+    #         ηx = g_col.J.Js[k_tet, 2, 1]
+    #         ηy = g_col.J.Js[k_tet, 2, 2]
+    #         ζx = g_col.J.Js[k_tet, 3, 1]
+    #         ζy = g_col.J.Js[k_tet, 3, 2]
+    #         i1_tet = findfirst(i -> g_col.t[k_tet, i] == n+j, 1:g_col.nn) 
+    #         i2_tet = findfirst(i -> g_col.t[k_tet, i] == n+j+1, 1:g_col.nn)
+    #         for l=1:b_col.nn
+    #             push!(Dx, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx))
+    #             push!(Dx, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx))
+    #             push!(Dy, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy))
+    #             push!(Dy, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy))
+    #         end
+    #     end
+    #     Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
+    #     Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nz-2, b_col.np)
+    #     n += nz
+    # end
 
     return Dxs, Dys
 end
