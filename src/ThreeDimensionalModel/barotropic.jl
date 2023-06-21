@@ -245,6 +245,6 @@ end
 Integrat z*f over [-H, 0] for DG array `f` over grid `g` using trapezoidal rule.
 """
 function integrate_γ(g, f)
-    # return sum((f[2k-1]*g.p[g.t[k, 2]] + f[2k]*g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
-    return sum(f[k]*(g.p[g.t[k, 2]] + g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
+    return sum((f[2k-1]*g.p[g.t[k, 2]] + f[2k]*g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
+    # return sum(f[k]*(g.p[g.t[k, 2]] + g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
 end

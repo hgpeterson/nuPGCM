@@ -9,7 +9,7 @@ set_out_folder("output")
 
 function bowl()
 
-    # m = ModelSetup3D()
+    m = ModelSetup3D()
 
     # b = [FEField(x -> x[3], g) for g ∈ m.b_cols]
     δ = 0.1

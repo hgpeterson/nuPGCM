@@ -83,9 +83,11 @@ function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
             bdy_nodes = bdy.second
             e[bdy_name] = bdy_nodes[bdy_nodes .≤ np]
         end
-    elseif order > 1
-        # add nodes for higher orders
-        p, t, e = add_nodes(p, t, e, order)
+    elseif order == 2
+        if size(t, 2) != (dim + 2)*(dim + 1)/2
+            # add nodes for higher orders
+            p, t, e = add_nodes(p, t, e, order)
+        end
     else
         error("Unsupported grid order `$order`.")
     end

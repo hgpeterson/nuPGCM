@@ -83,7 +83,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 4
+    nref = 3
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields
@@ -112,11 +112,11 @@ function ModelSetup3D()
     # mesh
     g, g_cols, z_cols, nzs, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=false)
 
-    # # second order b
-    # sf2 = ShapeFunctions(order=2, dim=3)
-    # sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-    # b_cols = [Grid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
-    b_cols = g_cols
+    # second order b
+    sf2 = ShapeFunctions(order=2, dim=3)
+    sfi2 = ShapeFunctionIntegrals(sf2, sf2)
+    b_cols = [Grid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
+    # b_cols = g_cols
 
     # derivative matrices
     Dxs = Vector{Any}(undef, g_sfc.nt)

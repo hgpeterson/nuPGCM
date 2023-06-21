@@ -126,3 +126,61 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
 
     return s
 end
+
+function get_gb(m::ModelSetup3D)
+    # unpack
+    b_cols = m.b_cols
+    g_sfc = m.g_sfc
+
+    # allocate
+    np = sum(g.np for g ∈ b_cols)
+    nt = sum(g.nt for g ∈ b_cols)
+    p = zeros(Float64, np, 3)
+    t = zeros(Int64, nt, 10)
+    ebot = zeros(Int64, 6*g_sfc.nt)
+    esfc = zeros(Int64, 6*g_sfc.nt)
+
+    # add each column
+    i_p = 0
+    i_t = 0
+    for k=1:g_sfc.nt
+        g = b_cols[k]
+        np_k = g.np
+        nt_k = g.nt
+        p[i_p+1:i_p+np_k, :] = g.p
+        t[i_t+1:i_t+nt_k, :] = g.t
+        ebot[6k-5:6k] = g.e["bot"]
+        esfc[6k-5:6k] = g.e["sfc"]
+        i_p += np_k
+        i_t += nt_k
+    end
+
+    # remove duplicate points
+    keep = zeros(Bool, np)
+    keep[unique(i -> p[i, :], 1:np)] .= 1
+    p = p[keep, :]
+
+    # position of ith point is p[pmap[i], :] 
+    pmap = cumsum(keep) # FIXME: I think this only works if they are in order
+    invpermute!(pmap, 1:np)
+
+    # apply map to and e
+    t = pmap[t]
+    ebot = pmap[ebot]
+    esfc = pmap[ebot]
+    e = Dict("bot" => ebot, "sfc" => esfc)
+
+    # plot
+    points = p'
+    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
+    vtk_grid("$out_folder/gb.vtu", points, cells) do vtk
+    end
+
+    # # make grid
+    # gb = Grid(2, p, t, e)
+
+    # return gb, pmap
+
+    return p, t
+end
