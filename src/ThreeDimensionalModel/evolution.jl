@@ -38,13 +38,13 @@ function get_A(sf_χ::ShapeFunctions, sf_b::ShapeFunctions)
     return [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
 end
 
-function AdvectionArrays(A, gχ::Grid, gb::Grid)
-    J = gb.J
-    Ax  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
-    Ay  = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
-    Az1 = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
-    Az2 = zeros(gb.nt, gb.nn, gb.nn, gχ.nn)
-    for k=1:gb.nt
+function AdvectionArrays(A, g::Grid, gb::Grid)
+    J = g.J
+    Ax  = zeros(g.nt, gb.nn, gb.nn, g.nn)
+    Ay  = zeros(g.nt, gb.nn, gb.nn, g.nn)
+    Az1 = zeros(g.nt, gb.nn, gb.nn, g.nn)
+    Az2 = zeros(g.nt, gb.nn, gb.nn, g.nn)
+    for k=1:g.nt
         # -∂z(χʸ)*∂x(b)
         Ax[k, :, :, :] = -sum(A[:, :, :, d1, d2]*J.Js[k, d1, 3]*J.Js[k, d2, 1]*J.dets[k] for d1=1:3, d2=1:3)
         # ∂z(χˣ)*∂y(b)
@@ -56,13 +56,13 @@ function AdvectionArrays(A, gχ::Grid, gb::Grid)
     return AdvectionArrays(Ax, Ay, Az1, Az2)
 end
 
-function advection(As::AdvectionArrays, χx::FEField, χy::FEField, b::FEField, gχ::Grid, gb::Grid)
+function advection(As::AdvectionArrays, χx, χy, b, g::Grid, gb::Grid)
     adv = zeros(gb.np)
     for k=1:gb.nt, i=1:gb.nn
-        adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[gχ.t[k, iχ]]  for ib=1:gb.nn, iχ=1:gχ.nn) +
-                           sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[gχ.t[k, iχ]]  for ib=1:gb.nn, iχ=1:gχ.nn) +
-                           sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[gχ.t[k, iχ]] for ib=1:gb.nn, iχ=1:gχ.nn) +
-                           sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[gχ.t[k, iχ]] for ib=1:gb.nn, iχ=1:gχ.nn)
+        adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
+                           sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
+                           sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn) +
+                           sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn)
     end
     return adv
 end
@@ -74,9 +74,11 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
     ε² = m.ε²
     Δt = m.Δt
     g = m.g 
+    b_cols = m.b_cols
 
     # second order grid for b
-    gb = Grid(2, g)
+    gb, pmap = get_gb(m)
+    b = merge_cols(s.b, gb, b_cols, pmap)
 
     # matrices
     M = get_M(gb)
@@ -92,7 +94,7 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
     pvd = paraview_collection("$out_folder/b", append=true)
 
     # solve
-    @showprogress "Evolving..." for i=0:300
+    @showprogress "Evolving..." for i=0:10
         if mod(i, 10) == 0
             cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
             cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
@@ -100,6 +102,7 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
                 vtk["b"] = b
                 pvd[i*Δt] = vtk
             end
+            println("$out_folder/b_at_t$i")
 
             # CFL
             # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
@@ -108,15 +111,18 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
 
         # operator split rhs
         ωx, ωy, χx, χy, Ψ = invert(m, s.b)
-        RHS_adv1 = μ*ϱ*M*s.b - μ*ϱ*Δt/2*advection(As, χx, χy, s.b, g, gb)
+        b = merge_cols(s.b, gb, b_cols, pmap)
+        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
         b1 = LHS_adv\RHS_adv1
         RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
         b2 = LHS_diff\RHS_diff
-        ωx, ωy, χx, χy, Ψ = invert(m, b2)
+        b2_split = split_cols(b2, b_cols, pmap)
+        ωx, ωy, χx, χy, Ψ = invert(m, b2_split)
         RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*Δt/2*advection(As, χx, χy, b2, g, gb)
-        s.b.values[:] = LHS_adv\RHS_adv2
+        b = LHS_adv\RHS_adv2
+        s.b[:] = split_cols(b, b_cols, pmap)
 
-        if any(isnan.(s.b.values))
+        if any(isnan.(b))
             error("Solution blew up 😢")
         end
     end
@@ -124,7 +130,7 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
     vtk_save(pvd)
     println("$out_folder/b.pvd")
 
-    return s
+    return b
 end
 
 function get_gb(m::ModelSetup3D)
@@ -148,21 +154,27 @@ function get_gb(m::ModelSetup3D)
         np_k = g.np
         nt_k = g.nt
         p[i_p+1:i_p+np_k, :] = g.p
-        t[i_t+1:i_t+nt_k, :] = g.t
+        t[i_t+1:i_t+nt_k, :] = i_p .+ g.t
         ebot[6k-5:6k] = g.e["bot"]
         esfc[6k-5:6k] = g.e["sfc"]
         i_p += np_k
         i_t += nt_k
     end
 
+    # add tag indices to p
+    ptag = hcat(p, 1:np)
+
+    # sort rows
+    ptag = sortslices(ptag, dims=1)
+
     # remove duplicate points
     keep = zeros(Bool, np)
-    keep[unique(i -> p[i, :], 1:np)] .= 1
-    p = p[keep, :]
+    keep[unique(i -> ptag[i, 1:3], 1:np)] .= 1
+    p = ptag[keep, 1:3]
 
     # position of ith point is p[pmap[i], :] 
-    pmap = cumsum(keep) # FIXME: I think this only works if they are in order
-    invpermute!(pmap, 1:np)
+    pmap = cumsum(keep)
+    invpermute!(pmap, Int64.(ptag[:, 4]))
 
     # apply map to and e
     t = pmap[t]
@@ -170,17 +182,37 @@ function get_gb(m::ModelSetup3D)
     esfc = pmap[ebot]
     e = Dict("bot" => ebot, "sfc" => esfc)
 
-    # plot
-    points = p'
-    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-    cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
-    vtk_grid("$out_folder/gb.vtu", points, cells) do vtk
+    # # plot
+    # points = p'
+    # cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    # cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
+    # vtk_grid("$out_folder/gb.vtu", points, cells) do vtk
+    # end
+
+    # make grid
+    gb = Grid(2, p, t, e)
+
+    return gb, pmap
+end
+
+function merge_cols(b, gb, b_cols, pmap)
+    b_merged = zeros(gb.np)
+    i_p = 0
+    for k ∈ eachindex(b_cols)
+        g = b_cols[k]
+        b_merged[pmap[i_p+1:i_p+g.np]] = b[k].values
+        i_p += g.np
     end
+    return b_merged
+end
 
-    # # make grid
-    # gb = Grid(2, p, t, e)
-
-    # return gb, pmap
-
-    return p, t
+function split_cols(b, b_cols, pmap)
+    b_split = [FEField(zeros(g.np), g) for g ∈ b_cols]
+    i_p = 0
+    for k ∈ eachindex(b_cols)
+        g = b_cols[k]
+        b_split[k].values[:] = b[pmap[i_p+1:i_p+g.np]]
+        i_p += g.np
+    end
+    return b_split
 end

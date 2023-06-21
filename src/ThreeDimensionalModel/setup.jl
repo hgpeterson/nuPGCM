@@ -20,7 +20,8 @@ struct ModelState3D{IN<:Integer,F<:Field}
     i::IN
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F<:Field,M<:AbstractMatrix}
+struct ModelSetup3D{FT<:AbstractFloat,F<:Field,G<:Grid,M<:AbstractMatrix,GV1<:AbstractVector,ZV<:AbstractVector,IV<:AbstractVector,CV<:AbstractVector,
+                    GV2<:AbstractVector,DV<:AbstractVector,FV<:AbstractVector,FA<:Factorization,FTV<:AbstractVector}
     ε²::FT
     μ::FT
     ϱ::FT
@@ -36,26 +37,26 @@ struct ModelSetup3D{FT<:AbstractFloat,F<:Field,M<:AbstractMatrix}
     τx_y::F
     τy_x::F
     τy_y::F
-    g_sfc::Grid
-    g::Grid
-    g_cols::AbstractVector
-    z_cols::AbstractVector
-    nzs::AbstractVector
-    p_to_tri::AbstractVector
-    b_cols::AbstractVector
-    Dxs::AbstractVector
-    Dys::AbstractVector
-    baroclinic_LHSs::AbstractVector
+    g_sfc::G
+    g::G
+    g_cols::GV1
+    z_cols::ZV
+    nzs::IV
+    p_to_tri::CV
+    b_cols::GV2
+    Dxs::DV
+    Dys::DV
+    baroclinic_LHSs::FV
     ωx_Ux::M
     ωy_Ux::M
     χx_Ux::M
     χy_Ux::M
-    barotropic_LHS::LinearAlgebra.Factorization
+    barotropic_LHS::FA
     ωx_τx::M
     ωy_τx::M
     χx_τx::M
     χy_τx::M
-    barotropic_RHS_τ::AbstractVector
+    barotropic_RHS_τ::FTV
 end
 
 ################################################################################
@@ -67,7 +68,7 @@ function ModelSetup3D()
     ε² = 1e-2
     μ = 1e0
     ϱ = 1e-4
-    Δt = 1e-3
+    Δt = 1e-3*μ*ϱ/ε²
     H(x) = 1 - x[1]^2 - x[2]^2
     Hx(x) = -2x[1]
     Hy(x) = -2x[2]
@@ -83,7 +84,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 3
+    nref = 2
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields
@@ -119,14 +120,14 @@ function ModelSetup3D()
     # b_cols = g_cols
 
     # derivative matrices
-    Dxs = Vector{Any}(undef, g_sfc.nt)
-    Dys = Vector{Any}(undef, g_sfc.nt)
+    Dxs = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
+    Dys = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
     @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
         Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, nzs, k) 
     end
 
     # baroclinc LHSs
-    baroclinic_LHSs = [size(z_cols[i], 1) > 1 ? get_baroclinic_LHS(z_cols[i], ε², f(g_sfc.p[i, :])) : nothing for i ∈ eachindex(z_cols)]
+    baroclinic_LHSs = [nzs[i] > 1 ? get_baroclinic_LHS(z_cols[i], ε², f(g_sfc.p[i, :])) : lu(sparse([1;;])) for i ∈ eachindex(z_cols)]
 
     # get transport ω and χ
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε², showplots=showplots)
