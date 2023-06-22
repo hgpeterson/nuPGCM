@@ -146,9 +146,9 @@ Generate wind component of RHS vector for the problem
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot)
+function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplots=false)
     # compute JEBAR
-    JEBAR = get_JEBAR(m, b)
+    JEBAR = get_JEBAR(m, b, showplots=showplots)
 
     # unpack
     g = m.g_sfc

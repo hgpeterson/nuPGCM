@@ -58,12 +58,12 @@ end
 
 function advection(As::AdvectionArrays, χx, χy, b, g::Grid, gb::Grid)
     adv = zeros(gb.np)
-    for k=1:gb.nt, i=1:gb.nn
-        adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn)
-    end
+    # for k=1:gb.nt, i=1:gb.nn
+    #     adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
+    #                        sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
+    #                        sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn) +
+    #                        sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn)
+    # end
     return adv
 end
 
@@ -99,20 +99,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # if mod(i, 10) == 0
         if mod(i, 1) == 0
             # update state
-            invert!(m, s)
+            invert!(m, s, showplots=true)
 
             # save state
             cell_type = VTKCellTypes.VTK_TETRA
             cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
             vtk_grid("$out_folder/state$i", g.p', cells) do vtk
-                vtk["b"] = b[1:g.np]
                 vtk["omega^x"] = s.ωx.values
                 vtk["omega^y"] = s.ωy.values
                 vtk["chi^x"] = s.χx.values
                 vtk["chi^y"] = s.χy.values
                 pvd[i*Δt] = vtk
             end
-            println("$out_folder/state$i")
+            println("$out_folder/state$i.vtu")
 
             # CFL
             # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
@@ -139,6 +138,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
 
     vtk_save(pvd)
     println("$out_folder/state.pvd")
+
+    # save b
+    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
+    vtk_grid("$out_folder/b", gb.p', cells) do vtk
+        vtk["b"] = b
+    end
+    println("$out_folder/b.vtu")
 
     return s
 end

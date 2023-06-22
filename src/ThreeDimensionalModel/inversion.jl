@@ -11,7 +11,7 @@ function invert(m::ModelSetup3D, b; showplots=false)
     ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
 
     # solve barotropic
-    barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot)
+    barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot, showplots=showplots)
     Ψ = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
     Ψ = FEField(Ψ, g_sfc)
     if showplots
@@ -67,8 +67,8 @@ function invert(m::ModelSetup3D, b; showplots=false)
 
     return ωx, ωy, χx, χy, Ψ
 end
-function invert!(m::ModelSetup3D, s::ModelState3D)
-    ωx, ωy, χx, χy, Ψ = invert(m, s.b)
+function invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
+    ωx, ωy, χx, χy, Ψ = invert(m, s.b; kwargs...)
     s.ωx.values[:] = ωx.values
     s.ωy.values[:] = ωy.values
     s.χx.values[:] = χx.values
