@@ -72,8 +72,10 @@ function ModelSetup3D()
     H(x) = 1 - x[1]^2 - x[2]^2
     Hx(x) = -2x[1]
     Hy(x) = -2x[2]
-    f(x) = 1.
-    fy(x) = 0.
+    # f(x) = 0.
+    # fy(x) = 0.
+    f(x) = x[2]
+    fy(x) = 1.
     τx(x) = 0.
     τy(x) = 0.
     τx_x(x) = 0.

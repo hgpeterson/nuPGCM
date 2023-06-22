@@ -67,6 +67,14 @@ function invert(m::ModelSetup3D, b; showplots=false)
 
     return ωx, ωy, χx, χy, Ψ
 end
+function invert!(m::ModelSetup3D, s::ModelState3D)
+    ωx, ωy, χx, χy, Ψ = invert(m, s.b)
+    s.ωx.values[:] = ωx.values
+    s.ωy.values[:] = ωy.values
+    s.χx.values[:] = χx.values
+    s.χy.values[:] = χy.values
+    return s
+end
 
 function get_Ux_Uy(Ψ; showplots=false)
     g = Ψ.g

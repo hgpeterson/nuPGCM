@@ -67,7 +67,7 @@ function advection(As::AdvectionArrays, χx, χy, b, g::Grid, gb::Grid)
     return adv
 end
 
-function evolve(m::ModelSetup3D, s::ModelState3D)
+function evolve!(m::ModelSetup3D, s::ModelState3D)
     # unpack
     μ = m.μ
     ϱ = m.ϱ
@@ -89,20 +89,30 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
     As = AdvectionArrays(A, g, gb)
 
     # pvd file
-    rm("$out_folder/b.pvd", force=true)
-    rm("$out_folder/b_at_t*.vtu", force=true)
-    pvd = paraview_collection("$out_folder/b", append=true)
+    rm("$out_folder/state.pvd", force=true)
+    rm("$out_folder/state*.vtu", force=true)
+    pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    @showprogress "Evolving..." for i=0:10
-        if mod(i, 10) == 0
-            cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-            cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
-            vtk_grid("$out_folder/b_at_t$i", gb.p', cells) do vtk
-                vtk["b"] = b
+    # @showprogress "Evolving..." for i=0:10
+    for i=0:10
+        # if mod(i, 10) == 0
+        if mod(i, 1) == 0
+            # update state
+            invert!(m, s)
+
+            # save state
+            cell_type = VTKCellTypes.VTK_TETRA
+            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+            vtk_grid("$out_folder/state$i", g.p', cells) do vtk
+                vtk["b"] = b[1:g.np]
+                vtk["omega^x"] = s.ωx.values
+                vtk["omega^y"] = s.ωy.values
+                vtk["chi^x"] = s.χx.values
+                vtk["chi^y"] = s.χy.values
                 pvd[i*Δt] = vtk
             end
-            println("$out_folder/b_at_t$i")
+            println("$out_folder/state$i")
 
             # CFL
             # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
@@ -128,9 +138,9 @@ function evolve(m::ModelSetup3D, s::ModelState3D)
     end
 
     vtk_save(pvd)
-    println("$out_folder/b.pvd")
+    println("$out_folder/state.pvd")
 
-    return b
+    return s
 end
 
 function get_gb(m::ModelSetup3D)

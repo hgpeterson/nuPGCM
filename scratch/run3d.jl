@@ -21,12 +21,12 @@ function bowl()
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, 0)
 
-    nuPGCM.evolve(m, s)
+    evolve!(m, s)
 
     return m, s
 end
 
-m = ModelSetup3D()
+# m = ModelSetup3D()
 m, s = bowl()
 
 println("Done.")
