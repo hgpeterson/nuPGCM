@@ -83,7 +83,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # matrices
     M = get_M(gb)
     K = get_K(gb)
-    LHS_diff = lu(μ*ϱ*M + ε²*Δt*K)
+    LHS_diff = lu(μ*ϱ*M + ε²*Δt/2*K)
     LHS_adv = cholesky(μ*ϱ*M)
     A = get_A(g.sf, gb.sf)
     As = AdvectionArrays(A, g, gb)
@@ -94,9 +94,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    # @showprogress "Evolving..." for i=0:10
-    for i=0:10
-        # if mod(i, 10) == 0
+    for i=1:10
         if mod(i, 1) == 0
             # update state
             invert!(m, s, showplots=true)
@@ -118,18 +116,29 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
             # println(@sprintf("    Δt: %1.1e", Δt))
         end
 
-        # operator split rhs
-        ωx, ωy, χx, χy, Ψ = invert(m, s.b)
-        b = merge_cols(s.b, gb, b_cols, pmap)
-        RHS_adv1 = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
-        b1 = LHS_adv\RHS_adv1
-        RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
-        b2 = LHS_diff\RHS_diff
-        b2_split = split_cols(b2, b_cols, pmap)
-        ωx, ωy, χx, χy, Ψ = invert(m, b2_split)
-        RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*Δt/2*advection(As, χx, χy, b2, g, gb)
-        b = LHS_adv\RHS_adv2
+        # # operator split rhs
+        # ωx, ωy, χx, χy, Ψ = invert(m, s.b)
+        # b = merge_cols(s.b, gb, b_cols, pmap)
+        # RHS_adv1 = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
+        # b1 = LHS_adv\RHS_adv1
+        # RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
+        # b2 = LHS_diff\RHS_diff
+        # b2_split = split_cols(b2, b_cols, pmap)
+        # ωx, ωy, χx, χy, Ψ = invert(m, b2_split)
+        # RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*Δt/2*advection(As, χx, χy, b2, g, gb)
+        # b = LHS_adv\RHS_adv2
+        # s.b[:] = split_cols(b, b_cols, pmap)
+
+        # just diffusion
+        RHS_diff = μ*ϱ*M*b - Δt*ε²/2*K*b
+        b = LHS_diff\RHS_diff
         s.b[:] = split_cols(b, b_cols, pmap)
+
+        # analytical solution
+        ba = [b_a(gb.p[i, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+        # b = ba
+        # s.b[:] = split_cols(ba, b_cols, pmap)
+        println(@sprintf("L2 Error: %1.1e", L2norm(FEField(abs.(b - ba), gb))))
 
         if any(isnan.(b))
             error("Solution blew up 😢")
@@ -144,10 +153,22 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
     vtk_grid("$out_folder/b", gb.p', cells) do vtk
         vtk["b"] = b
+        ba = [b_a(gb.p[i, 3], 10*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+        vtk["ba"] = ba
+        vtk["error"] = abs.(b - ba)
     end
     println("$out_folder/b.vtu")
 
     return s
+end
+
+"""
+Analytical solution to ∂t(b) = α ∂zz(b) with ∂z(b) = 0 at z = -H, 0
+(truncated to Nth term in Fourier series).
+"""
+function b_a(z, t, α, H; N=10)
+    A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
+    return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
 end
 
 function get_gb(m::ModelSetup3D)
