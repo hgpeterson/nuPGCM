@@ -26,7 +26,7 @@ function get_K(g::Grid)
         JJ = J.Js[k, :, end]*J.Js[k, :, end]'
         Kᵏ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         for i=1:g.nn, j=1:g.nn
-            push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
+            push!(K, (g.t[k, i], g.t[k, j], -Kᵏ[i, j]))
         end
     end
     return sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np)
@@ -78,50 +78,52 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
 
     # second order grid for b
     gb, pmap = get_gb(m)
-    b = merge_cols(s.b, gb, b_cols, pmap)
+    # b = merge_cols(s.b, gb, b_cols, pmap)
+    b = gb.p[:, 3]
 
     # matrices
     M = get_M(gb)
     K = get_K(gb)
-    LHS_diff = lu(μ*ϱ*M + ε²*Δt/2*K)
-    LHS_adv = cholesky(μ*ϱ*M)
-    A = get_A(g.sf, gb.sf)
-    As = AdvectionArrays(A, g, gb)
+    LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
+    # LHS_adv = cholesky(μ*ϱ*M)
+    # A = get_A(g.sf, gb.sf)
+    # As = AdvectionArrays(A, g, gb)
 
-    # pvd file
-    rm("$out_folder/state.pvd", force=true)
-    rm("$out_folder/state*.vtu", force=true)
-    pvd = paraview_collection("$out_folder/state", append=true)
+    # # pvd file
+    # rm("$out_folder/state.pvd", force=true)
+    # rm("$out_folder/state*.vtu", force=true)
+    # pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    for i=1:10
-        if mod(i, 1) == 0
-            # update state
-            invert!(m, s, showplots=true)
+    n_steps = 50
+    for i=1:n_steps
+        # if mod(i, 1) == 0
+        #     # update state
+        #     invert!(m, s, showplots=true)
 
-            # save state
-            cell_type = VTKCellTypes.VTK_TETRA
-            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-            vtk_grid("$out_folder/state$i", g.p', cells) do vtk
-                vtk["omega^x"] = s.ωx.values
-                vtk["omega^y"] = s.ωy.values
-                vtk["chi^x"] = s.χx.values
-                vtk["chi^y"] = s.χy.values
-                pvd[i*Δt] = vtk
-            end
-            println("$out_folder/state$i.vtu")
+        #     # save state
+        #     cell_type = VTKCellTypes.VTK_TETRA
+        #     cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+        #     vtk_grid("$out_folder/state$i", g.p', cells) do vtk
+        #         vtk["omega^x"] = s.ωx.values
+        #         vtk["omega^y"] = s.ωy.values
+        #         vtk["chi^x"] = s.χx.values
+        #         vtk["chi^y"] = s.χy.values
+        #         pvd[i*Δt] = vtk
+        #     end
+        #     println("$out_folder/state$i.vtu")
 
-            # CFL
-            # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
-            # println(@sprintf("    Δt: %1.1e", Δt))
-        end
+        #     # CFL
+        #     # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
+        #     # println(@sprintf("    Δt: %1.1e", Δt))
+        # end
 
         # # operator split rhs
         # ωx, ωy, χx, χy, Ψ = invert(m, s.b)
         # b = merge_cols(s.b, gb, b_cols, pmap)
         # RHS_adv1 = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
         # b1 = LHS_adv\RHS_adv1
-        # RHS_diff = μ*ϱ*M*b1 - Δt*ε²/2*K*b1
+        # RHS_diff = μ*ϱ*M*b1 + Δt*ε²/2*K*b1
         # b2 = LHS_diff\RHS_diff
         # b2_split = split_cols(b2, b_cols, pmap)
         # ωx, ωy, χx, χy, Ψ = invert(m, b2_split)
@@ -130,30 +132,62 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # s.b[:] = split_cols(b, b_cols, pmap)
 
         # just diffusion
-        RHS_diff = μ*ϱ*M*b - Δt*ε²/2*K*b
+        RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
         b = LHS_diff\RHS_diff
         s.b[:] = split_cols(b, b_cols, pmap)
 
         # analytical solution
-        ba = [b_a(gb.p[i, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+        ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
         # b = ba
         # s.b[:] = split_cols(ba, b_cols, pmap)
-        println(@sprintf("L2 Error: %1.1e", L2norm(FEField(abs.(b - ba), gb))))
+        println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
 
         if any(isnan.(b))
             error("Solution blew up 😢")
         end
     end
 
-    vtk_save(pvd)
-    println("$out_folder/state.pvd")
+    # vtk_save(pvd)
+    # println("$out_folder/state.pvd")
+
+    # save state
+    invert!(m, s, showplots=true)
+    ba = [b_a(gb.p[j, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
+    ba = split_cols(ba, b_cols, pmap)
+    ωx_a, ωy_a, χx_a, χy_a, Ψ_a = invert(m, ba)
+    cell_type = VTKCellTypes.VTK_TETRA
+    cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+    vtk_grid("$out_folder/state", g.p', cells) do vtk
+        vtk["omega^x"] = s.ωx.values
+        vtk["omega^y"] = s.ωy.values
+        vtk["chi^x"] = s.χx.values
+        vtk["chi^y"] = s.χy.values
+        vtk["omega^x error"] = abs.(s.ωx.values - ωx_a.values)
+        vtk["omega^y error"] = abs.(s.ωy.values - ωy_a.values)
+        vtk["chi^x error"] = abs.(s.χx.values - χx_a.values)
+        vtk["chi^y error"] = abs.(s.χy.values - χy_a.values)
+    end
+    println("$out_folder/state.vtu")
+
+    ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, ba, showplots=true)
+    ωx_b_bot_a = DGField([ωx_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
+    ωy_b_bot_a = DGField([ωy_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
+    quick_plot(ωx_b_bot_a, "analytical", "$out_folder/omegax_b_bot_a.png")
+    quick_plot(ωy_b_bot_a, "analytical", "$out_folder/omegay_b_bot_a.png")
+    ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, s.b, showplots=true)
+    ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
+    ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
+    quick_plot(ωx_b_bot, "numerical", "$out_folder/omegax_b_bot_n.png")
+    quick_plot(ωy_b_bot, "numerical", "$out_folder/omegay_b_bot_n.png")
+    quick_plot(abs(ωx_b_bot - ωx_b_bot_a), "Error", "$out_folder/omegax_b_bot_err.png")
+    quick_plot(abs(ωy_b_bot - ωy_b_bot_a), "Error", "$out_folder/omegay_b_bot_err.png")
 
     # save b
     cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
     cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
     vtk_grid("$out_folder/b", gb.p', cells) do vtk
         vtk["b"] = b
-        ba = [b_a(gb.p[i, 3], 10*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+        ba = [b_a(gb.p[i, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
         vtk["ba"] = ba
         vtk["error"] = abs.(b - ba)
     end
@@ -162,11 +196,32 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     return s
 end
 
+function get_pmap1(m::ModelSetup3D)
+    b_cols = m.b_cols
+    g_sfc = m.g_sfc
+    nzs = m.nzs 
+    np = sum(g.np for g ∈ b_cols)
+    pmap = zeros(Int64, np)
+    i_p = 0
+    for k=1:g_sfc.nt
+        for i=1:g_sfc.nn
+            ig = g_sfc.t[k, i]
+            n = ig == 1 ? 0 : sum(nzs[1:ig-1])
+            pmap[i_p+1:i_p+nzs[ig]] = n+1:n+nzs[ig]
+            i_p += nzs[ig]
+        end
+    end
+    return pmap
+end
+
 """
 Analytical solution to ∂t(b) = α ∂zz(b) with ∂z(b) = 0 at z = -H, 0
 (truncated to Nth term in Fourier series).
 """
 function b_a(z, t, α, H; N=10)
+    if H == 0
+        return 0
+    end
     A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
     return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
 end

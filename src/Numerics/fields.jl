@@ -83,6 +83,9 @@ end
 
 # operations on DGFields
 getindex(u::DGField, i, j) = u.values[i, j]
+^(u::DGField, n::Number) = DGField(u.order, u.values .^ n, u.g)
+log(u::DGField) = DGField(u.order, log.(u.values), u.g)
+abs(u::DGField) = DGField(u.order, abs.(u.values), u.g)
 -(u::DGField, v::DGField) = DGField(u.order, u.values - v.values, u.g)
 -(u::DGField) = DGField(u.order, -u.values, u.g)
 +(u::DGField, v::DGField) = DGField(u.order, u.values + v.values, u.g)
@@ -121,6 +124,9 @@ end
 
 # operations on FVFields
 getindex(u::FVField, k) = u.values[k]
+^(u::FVField, n::Number) = FVField(u.values .^ n, u.g)
+log(u::FVField) = FVField(log.(u.values), u.g)
+abs(u::FVField) = FVField(abs.(u.values), u.g)
 -(u::FVField, v::FVField) = FVField(u.values - v.values, u.g)
 -(u::FVField) = FVField(-u.values, u.g)
 +(u::FVField, v::FVField) = FVField(u.values + v.values, u.g)
