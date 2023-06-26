@@ -65,7 +65,7 @@ end
 
 function ModelSetup3D()
     # hardcode for now
-    ε² = 1e-4
+    ε² = 1e-2
     μ = 1e0
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
@@ -86,7 +86,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 3
+    nref = 2
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields

@@ -83,10 +83,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # matrices
     M = get_M(gb)
     K = get_K(gb)
-    # LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
-    # LHS_adv = cholesky(μ*ϱ*M)
-    LHS_diff = μ*ϱ*M - ε²*Δt/2*K
-    LHS_adv = μ*ϱ*M
+    LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
+    LHS_adv = cholesky(μ*ϱ*M)
+    # LHS_diff = μ*ϱ*M - ε²*Δt/2*K
+    # LHS_adv = μ*ϱ*M
     A = get_A(g.sf, gb.sf)
     As = AdvectionArrays(A, g, gb)
 
@@ -98,64 +98,64 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # solve
     n_steps = 50
     for i=1:n_steps
-        if mod(i, 10) == 0
-            # update state
-            invert!(m, s, showplots=true)
-            get_u(m, s, showplots=true)
+        # if mod(i, 10) == 0
+        #     # update state
+        #     invert!(m, s, showplots=true)
+        #     get_u(m, s, showplots=true)
 
-            # save state
-            cell_type = VTKCellTypes.VTK_TETRA
-            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-            vtk_grid("$out_folder/state$i", g.p', cells) do vtk
-                vtk["omega^x"] = s.ωx.values
-                vtk["omega^y"] = s.ωy.values
-                vtk["chi^x"] = s.χx.values
-                vtk["chi^y"] = s.χy.values
-                pvd[i*Δt] = vtk
-            end
-            println("$out_folder/state$i.vtu")
+        #     # save state
+        #     cell_type = VTKCellTypes.VTK_TETRA
+        #     cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+        #     vtk_grid("$out_folder/state$i", g.p', cells) do vtk
+        #         vtk["omega^x"] = s.ωx.values
+        #         vtk["omega^y"] = s.ωy.values
+        #         vtk["chi^x"] = s.χx.values
+        #         vtk["chi^y"] = s.χy.values
+        #         pvd[i*Δt] = vtk
+        #     end
+        #     println("$out_folder/state$i.vtu")
 
-            # CFL
-            # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
-            # println(@sprintf("    Δt: %1.1e", Δt))
-        end
-
-        # operator split rhs
-        ωx, ωy, χx, χy, Ψ = invert(m, s.b)
-        b = merge_cols(s.b, gb, b_cols, pmap)
-        RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
-        cg!(b, LHS_adv, RHS_adv)
-        RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
-        minres!(b, LHS_diff, RHS_diff)
-        b_split = split_cols(b, b_cols, pmap)
-        ωx, ωy, χx, χy, Ψ = invert(m, b_split)
-        RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
-        cg!(b, LHS_adv, RHS_adv)
-        s.b[:] = split_cols(b, b_cols, pmap)
+        #     # CFL
+        #     # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
+        #     # println(@sprintf("    Δt: %1.1e", Δt))
+        # end
 
         # # operator split rhs
         # ωx, ωy, χx, χy, Ψ = invert(m, s.b)
         # b = merge_cols(s.b, gb, b_cols, pmap)
-        # RHS_adv1 = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
-        # b1 = LHS_adv\RHS_adv1
-        # RHS_diff = μ*ϱ*M*b1 + Δt*ε²/2*K*b1
-        # b2 = LHS_diff\RHS_diff
-        # b2_split = split_cols(b2, b_cols, pmap)
-        # ωx, ωy, χx, χy, Ψ = invert(m, b2_split)
-        # RHS_adv2 = μ*ϱ*M*b2 - μ*ϱ*Δt/2*advection(As, χx, χy, b2, g, gb)
-        # b = LHS_adv\RHS_adv2
+        # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
+        # cg!(b, LHS_adv, RHS_adv)
+        # RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
+        # minres!(b, LHS_diff, RHS_diff)
+        # b_split = split_cols(b, b_cols, pmap)
+        # ωx, ωy, χx, χy, Ψ = invert(m, b_split)
+        # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
+        # cg!(b, LHS_adv, RHS_adv)
         # s.b[:] = split_cols(b, b_cols, pmap)
 
-        # # just diffusion
+        # # operator split rhs
+        # ωx, ωy, χx, χy, Ψ = invert(m, s.b)
+        # b = merge_cols(s.b, gb, b_cols, pmap)
+        # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
+        # b = LHS_adv\RHS_adv
         # RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
         # b = LHS_diff\RHS_diff
+        # b_split = split_cols(b, b_cols, pmap)
+        # ωx, ωy, χx, χy, Ψ = invert(m, b_split)
+        # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
+        # b = LHS_adv\RHS_adv
         # s.b[:] = split_cols(b, b_cols, pmap)
 
-        # # analytical solution
-        # ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
-        # # b = ba
-        # # s.b[:] = split_cols(ba, b_cols, pmap)
-        # println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
+        # just diffusion
+        RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
+        b = LHS_diff\RHS_diff
+        s.b[:] = split_cols(b, b_cols, pmap)
+
+        # analytical solution
+        ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
+        # b = ba
+        # s.b[:] = split_cols(ba, b_cols, pmap)
+        println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
 
         if any(isnan.(b))
             error("Solution blew up 😢")
@@ -165,25 +165,20 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     vtk_save(pvd)
     println("$out_folder/state.pvd")
 
-    # # save state
-    # invert!(m, s, showplots=true)
+    # save b
+    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
+    vtk_grid("$out_folder/b", gb.p', cells) do vtk
+        vtk["b"] = b
+        ba = [b_a(gb.p[i, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+        vtk["ba"] = ba
+        vtk["error"] = abs.(b - ba)
+    end
+    println("$out_folder/b.vtu")
+
+    # # omega_b's
     # ba = [b_a(gb.p[j, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
     # ba = split_cols(ba, b_cols, pmap)
-    # ωx_a, ωy_a, χx_a, χy_a, Ψ_a = invert(m, ba)
-    # cell_type = VTKCellTypes.VTK_TETRA
-    # cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-    # vtk_grid("$out_folder/state", g.p', cells) do vtk
-    #     vtk["omega^x"] = s.ωx.values
-    #     vtk["omega^y"] = s.ωy.values
-    #     vtk["chi^x"] = s.χx.values
-    #     vtk["chi^y"] = s.χy.values
-    #     vtk["omega^x error"] = abs.(s.ωx.values - ωx_a.values)
-    #     vtk["omega^y error"] = abs.(s.ωy.values - ωy_a.values)
-    #     vtk["chi^x error"] = abs.(s.χx.values - χx_a.values)
-    #     vtk["chi^y error"] = abs.(s.χy.values - χy_a.values)
-    # end
-    # println("$out_folder/state.vtu")
-
     # ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, ba, showplots=true)
     # ωx_b_bot_a = DGField([ωx_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
     # ωy_b_bot_a = DGField([ωy_b[k, i][1] for k=1:m.g_sfc.nt, i=1:m.g_sfc.nn], m.g_sfc)
@@ -197,17 +192,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # quick_plot(abs(ωx_b_bot - ωx_b_bot_a), "Error", "$out_folder/omegax_b_bot_err.png")
     # quick_plot(abs(ωy_b_bot - ωy_b_bot_a), "Error", "$out_folder/omegay_b_bot_err.png")
 
-    # save b
-    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-    cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
-    vtk_grid("$out_folder/b", gb.p', cells) do vtk
-        vtk["b"] = b
-        ba = [b_a(gb.p[i, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
-        vtk["ba"] = ba
-        vtk["error"] = abs.(b - ba)
-    end
-    println("$out_folder/b.vtu")
-
     return s
 end
 
@@ -215,7 +199,7 @@ end
 Analytical solution to ∂t(b) = α ∂zz(b) with ∂z(b) = 0 at z = -H, 0
 (truncated to Nth term in Fourier series).
 """
-function b_a(z, t, α, H; N=10)
+function b_a(z, t, α, H; N=50)
     if H == 0
         return 0
     end
