@@ -124,10 +124,17 @@ using HDF5
 using ProgressMeter
 using WriteVTK
 using Delaunay
+using IterativeSolvers
 
 # global constants
 const secs_in_day = 86400
 const secs_in_year = 360*86400
+
+# python imports (https://github.com/JuliaPy/PyCall.jl#using-pycall-from-julia-modules)
+const mpl = PyNULL()
+function __init__()
+    copy!(mpl, pyimport("matplotlib"))
+end
 
 # default output folder, can be changed
 out_folder = ""

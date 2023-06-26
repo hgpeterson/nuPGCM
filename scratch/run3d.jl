@@ -8,7 +8,7 @@ pygui(false)
 set_out_folder("output")
 
 function bowl()
-    # m = ModelSetup3D()
+    m = ModelSetup3D()
     b = [FEField(x -> x[3], g) for g ∈ m.b_cols]
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, 0)

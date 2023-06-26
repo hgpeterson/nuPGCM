@@ -1,8 +1,4 @@
-mpl = pyimport("matplotlib")
-
-function quick_plot(u::Union{FEField,FVField}, cb_label, fname; vmax=nothing)
-    contour = !(typeof(u) <: FVField)
-    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
+function quick_plot_save(fname, ax)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
@@ -11,26 +7,16 @@ function quick_plot(u::Union{FEField,FVField}, cb_label, fname; vmax=nothing)
     println(fname)
     plt.close()
 end
-function quick_plot(u::DGField, cb_label, fname)
-    fig, ax = plt.subplots(1, 2, gridspec_kw=Dict("width_ratios"=>[20, 1]))
-    vmax = maximum(abs(u))
-    g = u.g
-    for k=1:g.nt
-        ax[1].tripcolor(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2], [0 1 2], u[k, 1:3], cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="gouraud", rasterized=true)
-    end
-    norm = mpl.colors.Normalize(vmin=-vmax, vmax=vmax)
-    cmap = mpl.cm.RdBu_r
-    cb = mpl.colorbar.ColorbarBase(ax[2], norm=norm, cmap=cmap, label=cb_label)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-    ax[1].spines["left"].set_visible(false)
-    ax[1].spines["bottom"].set_visible(false)
-    ax[1].set_xlabel(L"x")
-    ax[1].set_ylabel(L"y")
-    ax[1].axis("equal")
-    ax[1].set_yticks(-1:0.5:1)
-    savefig(fname)
-    println(fname)
-    plt.close()
+function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
+    fig, ax, im = tplot(u, contour=true, vmax=vmax, cb_label=cb_label)
+    quick_plot_save(fname, ax)
+end
+function quick_plot(u::FVField, cb_label, fname; vmax=nothing)
+    fig, ax, im = tplot(u, contour=false, vmax=vmax, cb_label=cb_label)
+    quick_plot_save(fname, ax)
+end
+function quick_plot(u::DGField, args...; kwargs...)
+    quick_plot(FVField(u), args..., kwargs...)
 end
 function quick_plot(f::Function, g::Grid, args...; kwargs...)
     quick_plot(FEField(f, g), args...; kwargs...)

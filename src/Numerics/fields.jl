@@ -98,6 +98,21 @@ abs(u::DGField) = DGField(u.order, abs.(u.values), u.g)
 /(u::DGField, v::FEField) = DGField(u.order, [u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 /(u::FEField, v::DGField) = (v / u)^-1
 
+# convert DGField to FEField by averaging
+function FEField(u::DGField) 
+    g = u.g
+    u_cg = zeros(g.np)
+    count = zeros(Int64, g.np) # number of triangles per node
+    for k=1:g.nt
+        for i=1:g.nn
+            u_cg[g.t[k, i]] += u[k, i]
+            count[g.t[k, i]] += 1
+        end
+    end
+    u_cg ./= count
+    return FEField(u.order, u_cg, g)
+end
+
 struct FVField{V<:AbstractVector} <: Field
     # values of FV field on the elements of the grid
     values::V
@@ -132,6 +147,9 @@ abs(u::FVField) = FVField(abs.(u.values), u.g)
 +(u::FVField, v::FVField) = FVField(u.values + v.values, u.g)
 *(u::FVField, v::FVField) = FVField(u.values .* v.values, u.g)
 /(u::FVField, v::FVField) = FVField(u.values ./ v.values, u.g)
+
+# convert DGField to FVField by averaging
+FVField(u::DGField) = FVField([sum(u[k, i] for i=1:u.g.nn)/u.g.nn for k=1:u.g.nt], u.g)
 
 """
     l2 = L2norm(u)

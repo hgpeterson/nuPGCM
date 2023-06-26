@@ -5,7 +5,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-set_out_folder("output/")
+set_out_folder("output/bowl2D/")
 
 function run()
     # parameters

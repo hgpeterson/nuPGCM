@@ -9,6 +9,9 @@ function invert(m::ModelSetup3D, b; showplots=false)
     ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, b, showplots=showplots)
     ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
     ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
+    # convert to cg
+    ωx_b_bot = FEField(ωx_b_bot)
+    ωy_b_bot = FEField(ωy_b_bot)
 
     # solve barotropic
     barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot, showplots=showplots)
@@ -85,4 +88,21 @@ function get_Ux_Uy(Ψ; showplots=false)
         quick_plot(Uy, L"U^y", "$out_folder/Uy.png")
     end
     return Ux, Uy
+end
+
+function get_u(m::ModelSetup3D, s::ModelState3D; showplots=false)
+    ux = FVField([-∂z(s.χy, [0, 0, 0], k) for k=1:m.g.nt], m.g)
+    uy = FVField([+∂z(s.χx, [0, 0, 0], k) for k=1:m.g.nt], m.g)
+    uz = FVField([∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k) for k=1:m.g.nt], m.g)
+    if showplots
+        cell_type = VTKCellTypes.VTK_TETRA
+        cells = [MeshCell(cell_type, m.g.t[i, :]) for i ∈ axes(m.g.t, 1)]
+        vtk_grid("$out_folder/u.vtu", m.g.p', cells) do vtk
+            vtk["ux"] = ux.values
+            vtk["uy"] = uy.values
+            vtk["uz"] = uz.values
+        end
+        println("$out_folder/u.vtu")
+    end
+    return ux, uy, uz
 end
