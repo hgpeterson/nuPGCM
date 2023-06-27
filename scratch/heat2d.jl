@@ -36,37 +36,40 @@ function get_K(g::Grid)
 end
 
 function evolve()
+    g = Grid(2, "meshes/valign2D/mesh4.h5")
+
     ε² = 1e-2
     μ = 1
     ϱ = 1e-4
-    Δt = 1e-3*μ*ϱ/ε²
-    g = Grid(1, "meshes/valign2D/mesh2.h5")
+    T = 1e-2*μ*ϱ/ε²
+    n_steps = 20
+    Δt = T/n_steps
 
-    b = g.p[:, 2]
+    z = g.p[:, 2]
+    b = @. (1 - g.p[:, 1]^2)*z^2 + 2/3*z^3
 
-    # matrices
     M = get_M(g)
     K = get_K(g)
     LHS = lu(μ*ϱ*M - ε²*Δt/2*K)
+    RHS = μ*ϱ*M + ε²*Δt/2*K
 
-    # solve
-    n_steps = 10
     for i=1:n_steps
-        RHS = μ*ϱ*M*b + Δt*ε²/2*K*b
-        b = LHS\RHS
+        b = LHS\(RHS*b)
     end
 
-    ba = [b_a(g.p[i, 2], n_steps*Δt, ε²/μ/ϱ, 1 - g.p[i, 1]^2) for i=1:g.np]
-    println(@sprintf("Max Error: %1.1e", maximum(abs.(ba - b))))
+    ba = [b_a(g.p[i, 2], T, ε²/μ/ϱ, 1 - g.p[i, 1]^2) for i=1:g.np]
+    err = FEField(abs.(b - ba), g)
+    println(@sprintf("Max Error: %1.1e at i=%d", maximum(err), argmax(err)))
+    println(@sprintf("L2 Error: %1.1e", L2norm(err)))
 
-    fig, ax, im = tplot(g.p, g.t, b, contour=true, vmax=1, cb_label=L"b")
+    fig, ax, im = tplot(g.p, g.t, b, contour=true, cb_label=L"b")
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
     savefig("scratch/images/b2D.png")
     println("scratch/images/b2D.png")
     plt.close()
-    fig, ax, im = tplot(g.p, g.t, ba, contour=true, vmax=1, cb_label=L"b_a")
+    fig, ax, im = tplot(g.p, g.t, ba, contour=true, cb_label=L"b_a")
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
@@ -92,8 +95,10 @@ function b_a(z, t, α, H; N=10)
     if H == 0
         return 0
     end
-    A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
-    return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
+    # A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
+    # return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
+    A(n) = 8*H^3*(-1 + (-1)^n)/(n^4*π^4)
+    return H^3/6 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
 end
 
 b, ba = evolve()

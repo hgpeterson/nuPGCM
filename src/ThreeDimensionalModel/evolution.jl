@@ -76,6 +76,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     g = m.g 
     b_cols = m.b_cols
 
+    T = 1e-2*μ*ϱ/ε²
+    n_steps = 10
+    Δt = T/n_steps
+
     # second order grid for b
     gb, pmap = get_gb(m)
     b = merge_cols(s.b, gb, b_cols, pmap)
@@ -83,12 +87,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # matrices
     M = get_M(gb)
     K = get_K(gb)
-    LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
-    LHS_adv = cholesky(μ*ϱ*M)
-    # LHS_diff = μ*ϱ*M - ε²*Δt/2*K
+    # LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
+    LHS_diff = μ*ϱ*M - ε²*Δt/2*K
+    RHS_diff = μ*ϱ*M + ε²*Δt/2*K
+    # LHS_adv = cholesky(μ*ϱ*M)
     # LHS_adv = μ*ϱ*M
-    A = get_A(g.sf, gb.sf)
-    As = AdvectionArrays(A, g, gb)
+    # A = get_A(g.sf, gb.sf)
+    # As = AdvectionArrays(A, g, gb)
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
@@ -96,7 +101,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    n_steps = 50
+    # n_steps = 50
     for i=1:n_steps
         # if mod(i, 10) == 0
         #     # update state
@@ -147,8 +152,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # s.b[:] = split_cols(b, b_cols, pmap)
 
         # just diffusion
-        RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
-        b = LHS_diff\RHS_diff
+        # b = LHS_diff\(RHS_diff*b)
+        b = cg!(b, LHS_diff, RHS_diff*b)
         s.b[:] = split_cols(b, b_cols, pmap)
 
         # analytical solution
@@ -203,8 +208,10 @@ function b_a(z, t, α, H; N=50)
     if H == 0
         return 0
     end
-    A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
-    return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
+    # A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
+    # return -H/2 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
+    A(n) = 8*H^3*(-1 + (-1)^n)/(n^4*π^4)
+    return H^3/6 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
 end
 
 function get_gb(m::ModelSetup3D)

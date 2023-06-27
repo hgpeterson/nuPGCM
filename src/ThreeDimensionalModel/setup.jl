@@ -86,7 +86,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 2
+    nref = 4
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields
