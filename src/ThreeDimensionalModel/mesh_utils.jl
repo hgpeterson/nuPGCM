@@ -28,7 +28,8 @@ function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
     z_cols = Vector{Vector{Float64}}(undef, g_sfc.np)
 
     # add points to p, e, and tri_to_p
-    nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : ceil(H[i]/h) for i=1:g_sfc.np]
+    # nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : ceil(H[i]/h) for i=1:g_sfc.np]
+    nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : max(ceil(H[i]/h), 6) for i=1:g_sfc.np]
     p = zeros(sum(nzs), 3)
     e = Dict("sfc"=>Int64[], "bot"=>Int64[])
     np = 0

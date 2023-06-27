@@ -6,7 +6,7 @@ struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     Js::A
 end
 
-struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+struct Grid{IN<:Integer,SF<:ShapeFunctions,SFI<:ShapeFunctionIntegrals,J<:Jacobians,FM<:AbstractMatrix,IM<:AbstractMatrix,IV<:AbstractVector}
     # order of shape functions on this grid
     order::IN
 
@@ -14,13 +14,13 @@ struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Inte
     dim::IN
 
     # shape functions on this grid
-    sf::ShapeFunctions
+    sf::SF
 
     # shape function integrals
-    sfi::ShapeFunctionIntegrals
+    sfi::SFI
 
     # Jacobians
-    J::Jacobians
+    J::J
 
     # node positions
     p::FM # float matrix
