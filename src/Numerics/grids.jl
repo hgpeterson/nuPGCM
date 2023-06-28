@@ -102,11 +102,16 @@ function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
 
     return Grid(order, dim, sf, sfi, J, p, np, t, nt, nn, e)
 end
-function Grid(order, p, t, e)
+function Grid(order, p, t, e::Dict)
     # setup shape functions and their integrals
     sf = ShapeFunctions(order=order, dim=size(p, 2))
     sfi = ShapeFunctionIntegrals(sf, sf)
     return Grid(order, p, t, e, sf, sfi)
+end
+function Grid(order, p, t, e::AbstractVector)
+    # make e a dict
+    e = Dict("bdy"=>e)
+    return Grid(order, p, t, e)
 end
 function Grid(order, gfile::String)
     # read grid data
