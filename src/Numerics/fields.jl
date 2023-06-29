@@ -9,15 +9,15 @@ minimum(u::Field) = minimum(u.values)
 argmax(u::Field) = argmax(u.values)
 argmin(u::Field) = argmin(u.values)
 
-struct FEField{IN<:Integer,V<:AbstractVector} <: Field
+struct FEField{IN<:Integer,V<:AbstractVector,G<:Grid} <: Field
     # order of polynomials defining shape functions
     order::IN
 
     # values of FE field on the nodes of the grid
     values::V
 
-    # grid FE field exists on
-    g::Grid
+    # grid field exists on
+    g::G
 end
 
 """
@@ -51,15 +51,15 @@ abs(u::FEField) = FEField(u.order, abs.(u.values), u.g)
 /(u::FEField, v::FEField) = FEField(u.order, u.values ./ v.values, u.g)
 /(u::FEField, n::Number) = FEField(u.order, u.values / n, u.g)
 
-struct DGField{IN<:Integer,M<:AbstractMatrix} <: Field
+struct DGField{IN<:Integer,M<:AbstractMatrix,G<:Grid} <: Field
     # order of polynomials defining shape functions
     order::IN
 
     # values of DG field on the nodes of the grid
     values::M
 
-    # grid FE field exists on
-    g::Grid
+    # grid field exists on
+    g::G
 end
 
 """
@@ -113,12 +113,12 @@ function FEField(u::DGField)
     return FEField(u.order, u_cg, g)
 end
 
-struct FVField{V<:AbstractVector} <: Field
+struct FVField{V<:AbstractVector,G<:Grid} <: Field
     # values of FV field on the elements of the grid
     values::V
 
-    # grid FE field exists on
-    g::Grid
+    # grid field exists on
+    g::G
 end
 
 """

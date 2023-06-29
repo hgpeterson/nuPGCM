@@ -1,4 +1,4 @@
-struct ShapeFunctions{IN<:Integer, V<:AbstractVector, M<:AbstractMatrix, A<:AbstractArray}
+struct ShapeFunctions{IN<:Integer,V<:AbstractVector,M<:AbstractMatrix,A<:AbstractArray}
     # order of polynomials defining shape functions
     order::IN
 

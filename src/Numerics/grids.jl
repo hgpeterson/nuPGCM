@@ -6,7 +6,7 @@ struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     Js::A
 end
 
-struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Integer}
+struct Grid{IN<:Integer,SF<:ShapeFunctions,SFI<:ShapeFunctionIntegrals,J<:Jacobians,FM<:AbstractMatrix,IM<:AbstractMatrix,IV<:AbstractVector}
     # order of shape functions on this grid
     order::IN
 
@@ -14,13 +14,13 @@ struct Grid{FM<:AbstractMatrix, IM<:AbstractMatrix, IV<:AbstractVector, IN<:Inte
     dim::IN
 
     # shape functions on this grid
-    sf::ShapeFunctions
+    sf::SF
 
     # shape function integrals
-    sfi::ShapeFunctionIntegrals
+    sfi::SFI
 
     # Jacobians
-    J::Jacobians
+    J::J
 
     # node positions
     p::FM # float matrix
@@ -102,11 +102,16 @@ function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
 
     return Grid(order, dim, sf, sfi, J, p, np, t, nt, nn, e)
 end
-function Grid(order, p, t, e)
+function Grid(order, p, t, e::Dict)
     # setup shape functions and their integrals
     sf = ShapeFunctions(order=order, dim=size(p, 2))
     sfi = ShapeFunctionIntegrals(sf, sf)
     return Grid(order, p, t, e, sf, sfi)
+end
+function Grid(order, p, t, e::AbstractVector)
+    # make e a dict
+    e = Dict("bdy"=>e)
+    return Grid(order, p, t, e)
 end
 function Grid(order, gfile::String)
     # read grid data

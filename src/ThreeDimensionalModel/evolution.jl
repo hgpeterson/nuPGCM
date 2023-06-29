@@ -106,29 +106,29 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    # n_steps = 50
+    n_steps = 10
     for i=1:n_steps
-        # if mod(i, 10) == 0
-        #     # update state
-        #     invert!(m, s, showplots=true)
-        #     get_u(m, s, showplots=true)
+        if mod(i, 10) == 0
+            # update state
+            invert!(m, s, showplots=true)
+            get_u(m, s, showplots=true)
 
-        #     # save state
-        #     cell_type = VTKCellTypes.VTK_TETRA
-        #     cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-        #     vtk_grid("$out_folder/state$i", g.p', cells) do vtk
-        #         vtk["omega^x"] = s.ωx.values
-        #         vtk["omega^y"] = s.ωy.values
-        #         vtk["chi^x"] = s.χx.values
-        #         vtk["chi^y"] = s.χy.values
-        #         pvd[i*Δt] = vtk
-        #     end
-        #     println("$out_folder/state$i.vtu")
+            # save state
+            cell_type = VTKCellTypes.VTK_TETRA
+            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
+            vtk_grid("$out_folder/state$i", g.p', cells) do vtk
+                vtk["omega^x"] = s.ωx.values
+                vtk["omega^y"] = s.ωy.values
+                vtk["chi^x"] = s.χx.values
+                vtk["chi^y"] = s.χy.values
+                pvd[i*Δt] = vtk
+            end
+            println("$out_folder/state$i.vtu")
 
-        #     # CFL
-        #     # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
-        #     # println(@sprintf("    Δt: %1.1e", Δt))
-        # end
+            # CFL
+            # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc.np)/ux, 1/cbrt(gb.np)/ux)))
+            # println(@sprintf("    Δt: %1.1e", Δt))
+        end
 
         # # operator split rhs
         # ωx, ωy, χx, χy, Ψ = invert(m, s.b)
@@ -148,8 +148,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # b = merge_cols(s.b, gb, b_cols, pmap)
         # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
         # b = LHS_adv\RHS_adv
-        # RHS_diff = μ*ϱ*M*b + Δt*ε²/2*K*b
-        # b = LHS_diff\RHS_diff
+        # b = LHS_diff\(RHS_diff*b)
         # b_split = split_cols(b, b_cols, pmap)
         # ωx, ωy, χx, χy, Ψ = invert(m, b_split)
         # RHS_adv = μ*ϱ*M*b - μ*ϱ*Δt/2*advection(As, χx, χy, b, g, gb)
