@@ -77,28 +77,33 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     b_cols = m.b_cols
 
     T = 1e-2*μ*ϱ/ε²
-    n_steps = 10
+    n_steps = 20
     Δt = T/n_steps
 
     # second order grid for b
-    gb, pmap = get_gb(m)
-    b = merge_cols(s.b, gb, b_cols, pmap)
+    # gb, pmap = get_gb(m)
+    # b = merge_cols(s.b, gb, b_cols, pmap)
 
     # matrices
-    M = get_M(gb)
-    K = get_K(gb)
+    # M = get_M(gb)
+    # K = get_K(gb)
     # LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
-    LHS_diff = μ*ϱ*M - ε²*Δt/2*K
-    RHS_diff = μ*ϱ*M + ε²*Δt/2*K
+    # LHS_diff = μ*ϱ*M - ε²*Δt/2*K
+    # RHS_diff = μ*ϱ*M + ε²*Δt/2*K
     # LHS_adv = cholesky(μ*ϱ*M)
     # LHS_adv = μ*ϱ*M
     # A = get_A(g.sf, gb.sf)
     # As = AdvectionArrays(A, g, gb)
+    Ms = [get_M(g) for g ∈ b_cols]
+    Ks = [get_K(g) for g ∈ b_cols]
+    # LHS_diffs = [lu(μ*ϱ*Ms[i] - ε²*Δt/2*Ks[i]) for i ∈ eachindex(b_cols)]
+    LHS_diffs = [μ*ϱ*Ms[i] - ε²*Δt/2*Ks[i] for i ∈ eachindex(b_cols)]
+    RHS_diffs = [μ*ϱ*Ms[i] + ε²*Δt/2*Ks[i] for i ∈ eachindex(b_cols)]
 
-    # pvd file
-    rm("$out_folder/state.pvd", force=true)
-    rm("$out_folder/state*.vtu", force=true)
-    pvd = paraview_collection("$out_folder/state", append=true)
+    # # pvd file
+    # rm("$out_folder/state.pvd", force=true)
+    # rm("$out_folder/state*.vtu", force=true)
+    # pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
     # n_steps = 50
@@ -153,33 +158,39 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
 
         # just diffusion
         # b = LHS_diff\(RHS_diff*b)
-        b = cg!(b, LHS_diff, RHS_diff*b)
-        s.b[:] = split_cols(b, b_cols, pmap)
+        # b = cg!(b, LHS_diff, RHS_diff*b)
+        # s.b[:] = split_cols(b, b_cols, pmap)
+        # s.b[:] = [FEField(LHS_diffs[j]\(RHS_diffs[j]*s.b[j].values), b_cols[j]) for j ∈ eachindex(b_cols)]
+        s.b[:] = [FEField(cg!(s.b[j].values, LHS_diffs[j], RHS_diffs[j]*s.b[j].values), b_cols[j]) for j ∈ eachindex(b_cols)]
 
         # analytical solution
-        ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
+        # ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
+        ba = [FEField([b_a(g.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - g.p[j, 1]^2 - g.p[j, 2]^2) for j=1:g.np], g) for g ∈ b_cols]
+        errs = FVField([maximum(abs(s.b[j] - ba[j])) for j ∈ eachindex(b_cols)], m.g_sfc)
         # b = ba
         # s.b[:] = split_cols(ba, b_cols, pmap)
-        println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
+        # println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
+        println(@sprintf("Max Error: %1.1e", maximum(errs)))
+        quick_plot(errs, "Error", "$out_folder/error.png")
 
-        if any(isnan.(b))
-            error("Solution blew up 😢")
-        end
+        # if any(isnan.(b))
+        #     error("Solution blew up 😢")
+        # end
     end
 
-    vtk_save(pvd)
-    println("$out_folder/state.pvd")
+    # vtk_save(pvd)
+    # println("$out_folder/state.pvd")
 
-    # save b
-    cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-    cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
-    vtk_grid("$out_folder/b", gb.p', cells) do vtk
-        vtk["b"] = b
-        ba = [b_a(gb.p[i, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
-        vtk["ba"] = ba
-        vtk["error"] = abs.(b - ba)
-    end
-    println("$out_folder/b.vtu")
+    # # save b
+    # cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    # cells = [MeshCell(cell_type, gb.t[i, :]) for i ∈ axes(gb.t, 1)]
+    # vtk_grid("$out_folder/b", gb.p', cells) do vtk
+    #     vtk["b"] = b
+    #     ba = [b_a(gb.p[i, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[i, 1]^2 - gb.p[i, 2]^2) for i=1:gb.np]
+    #     vtk["ba"] = ba
+    #     vtk["error"] = abs.(b - ba)
+    # end
+    # println("$out_folder/b.vtu")
 
     # # omega_b's
     # ba = [b_a(gb.p[j, 3], n_steps*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
