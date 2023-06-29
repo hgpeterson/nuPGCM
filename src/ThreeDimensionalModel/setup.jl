@@ -72,10 +72,10 @@ function ModelSetup3D()
     H(x) = 1 - x[1]^2 - x[2]^2
     Hx(x) = -2x[1]
     Hy(x) = -2x[2]
-    # f(x) = 1.
-    # fy(x) = 0.
-    f(x) = 1 + x[2]
-    fy(x) = 1.
+    f(x) = 1.
+    fy(x) = 0.
+    # f(x) = 1 + x[2]
+    # fy(x) = 1.
     τx(x) = 0.
     τy(x) = 0.
     τx_x(x) = 0.
@@ -86,7 +86,7 @@ function ModelSetup3D()
 
     # surface mesh
     geo = "circle"
-    nref = 3
+    nref = 2
     g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
 
     # convert functions to fields
@@ -126,7 +126,7 @@ function ModelSetup3D()
     Dxs = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
     Dys = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
     @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-        Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], g_sfc, nzs, k) 
+        Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], nzs[g_sfc.t[k, :]]) 
     end
 
     # baroclinc LHSs

@@ -148,3 +148,109 @@ function load_t_col(geo, nref, k)
     close(file)
     return t_col
 end
+
+function get_gb(m::ModelSetup3D)
+    # unpack
+    b_cols = m.b_cols
+    g_sfc = m.g_sfc
+
+    # allocate
+    np = sum(g.np for g ∈ b_cols)
+    nt = sum(g.nt for g ∈ b_cols)
+    p = zeros(Float64, np, 3)
+    t = zeros(Int64, nt, 10)
+    ebot = zeros(Int64, 6*g_sfc.nt)
+    esfc = zeros(Int64, 6*g_sfc.nt)
+
+    # add each column
+    i_p = 0
+    i_t = 0
+    for k=1:g_sfc.nt
+        g = b_cols[k]
+        np_k = g.np
+        nt_k = g.nt
+        p[i_p+1:i_p+np_k, :] = g.p
+        t[i_t+1:i_t+nt_k, :] = i_p .+ g.t
+        ebot[6k-5:6k] = g.e["bot"]
+        esfc[6k-5:6k] = g.e["sfc"]
+        i_p += np_k
+        i_t += nt_k
+    end
+
+    # add tag indices to p
+    ptag = hcat(p, 1:np)
+
+    # sort rows
+    ptag = sortslices(ptag, dims=1)
+
+    # remove duplicate points
+    keep = zeros(Bool, np)
+    keep[unique(i -> ptag[i, 1:3], 1:np)] .= 1
+    p = ptag[keep, 1:3]
+
+    # position of ith point is p[pmap[i], :] 
+    pmap = cumsum(keep)
+    invpermute!(pmap, Int64.(ptag[:, 4]))
+
+    # apply map to and e
+    t = pmap[t]
+    ebot = pmap[ebot]
+    esfc = pmap[ebot]
+    e = Dict("bot" => ebot, "sfc" => esfc)
+
+    # # plot
+    # points = p'
+    # cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    # cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
+    # vtk_grid("$out_folder/gb.vtu", points, cells) do vtk
+    # end
+
+    # make grid
+    gb = Grid(2, p, t, e)
+
+    return gb, pmap
+end
+
+function merge_cols(b, gb, b_cols, pmap)
+    b_merged = zeros(gb.np)
+    i_p = 0
+    for k ∈ eachindex(b_cols)
+        g = b_cols[k]
+        b_merged[pmap[i_p+1:i_p+g.np]] = b[k].values
+        i_p += g.np
+    end
+    return b_merged
+end
+
+function split_cols(b, b_cols, pmap)
+    b_split = [FEField(zeros(g.np), g) for g ∈ b_cols]
+    i_p = 0
+    for k ∈ eachindex(b_cols)
+        g = b_cols[k]
+        b_split[k].values[:] = b[pmap[i_p+1:i_p+g.np]]
+        i_p += g.np
+    end
+    return b_split
+end
+
+function get_b_z_cols(gb, g_sfc)
+    tol = 1e-1/sqrt(g_sfc.np)
+    g_sfc2 = Grid(2, g_sfc)
+    b_z_cols_indices = zeros(Bool, g_sfc2.np, gb.np)
+    @showprogress "hell yeah brother" for i=1:g_sfc2.np
+        for j=1:gb.np
+            b_z_cols_indices[i, j] = (norm(gb.p[j, 1:2] - g_sfc2.p[i, :]) < tol)
+        end
+    end
+    b_z_cols_indices = [findall(j->b_z_cols_indices[i, j], 1:gb.np) for i=1:g_sfc2.np]
+    perms = [sortperm(gb.p[b_z_cols_indices[i], 3]) for i=1:g_sfc2.np]
+    b_z_cols_indices = [b_z_cols_indices[i][perms[i]] for i=1:g_sfc2.np]
+    b_z_cols = [gb.p[b_z_cols_indices[i], 3] for i=1:g_sfc2.np]
+
+    # checks
+    # nps = [g.np for g ∈ m.b_cols]
+    # nps_b = [sum(size(b_z_cols[g_sfc2.t[k, i]], 1) for i=1:g_sfc2.nn) for k=1:g_sfc2.nt]
+    # display(all(nps_b .== nps))
+    # display(findall(k -> nps_b[k] != nps[k], 1:g_sfc2.nt))
+    return b_z_cols_indices, b_z_cols
+end
