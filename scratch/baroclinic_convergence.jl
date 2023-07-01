@@ -1,7 +1,7 @@
 using nuPGCM
 using PyPlot
 using Printf
-using Delaunay
+using WriteVTK
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
@@ -96,17 +96,17 @@ function convergence_element_col(h)
     f = 1
 
     # surface triangle 
-    p_sfc = [0      h
-             2h/√3  h
-             h/√3   2h]
+    p_sfc = [0      0
+             2h/√3  0
+             h/√3   h]
 
     # node grid
     z = -1:h:0 
     nz = size(z, 1) 
 
     # 3d points
-    p = zeros(3nz ,3)
-    t = zeros(Int64, nz-1, 6)
+    p = zeros(3nz+1, 3)
+    t = Vector{Vector{Int64}}(undef, nz)
     for k=1:nz-1
         i = 3k-2
         p[i:i+2, 3] .= z[k]
@@ -115,9 +115,16 @@ function convergence_element_col(h)
         p[i+3:i+5, 3] .= z[k+1]
         p[i+3:i+5, 1] = p_sfc[:, 1]
         p[i+3:i+5, 2] = p_sfc[:, 2]
-        t[k, :] = i:i+5
+        t[k] = collect(i:i+5)
     end
-    e = [1, 2, 3, 3nz-2, 3nz-1, 3nz]
+    # last element is a tetrahedron!
+    p[3nz+1, 1:2] = p_sfc[1, :]
+    p[3nz+1, 3] = -1 - h
+    t[nz] = [1, 2, 3, 3nz+1]
+    e = [3nz+1, 2, 3, 3nz-2, 3nz-1, 3nz]
+
+    vtk_grid("output/col.vtu", p', [MeshCell(size(t[k], 1) == 4 ? VTKCellTypes.VTK_TETRA : VTKCellTypes.VTK_WEDGE, t[k]) for k ∈ eachindex(t)]) do vtk end
+    error()
 
     # buoyancy
     x = p[:, 1]
@@ -232,10 +239,10 @@ function convergence_node_col()
         χx_e = maximum(abs.(χx - χx_a.(z)))
         χy_e = maximum(abs.(χy - χy_a.(z)))
         println(@sprintf("%1.1e %1.1e %1.1e %1.1e", ωx_e, ωy_e, χx_e, χy_e))
-        println(@sprintf("%1.1e %1.1e %1.1e %1.1e", ωx_e, ωy_e/4, χx_e/4, χy_e/4))
+        println(@sprintf("%1.1e %1.1e %1.1e %1.1e", ωx_e/4, ωy_e/4, χx_e/4, χy_e/4))
     end
 end
 
-convergence_element_col(0.04)
+convergence_element_col(0.1)
 
 println("Done.")
