@@ -100,44 +100,53 @@ function convergence_element_col(h)
              2h/√3  0
              h/√3   h]
 
-    # node grid
-    z = -1:h:0 
-    nz = size(z, 1) 
+    # depths
+    # H = [1, 1+h, 1]
+    H = [1, 1, 1]
+
+    # node grids
+    z_cols = [0:-h:-H[i] for i=1:3]
+    nzs = [size(z_cols[i], 1) for i=1:3]
 
     # 3d points
-    p = zeros(3nz+1, 3)
-    t = Vector{Vector{Int64}}(undef, nz)
-    for k=1:nz-1
-        i = 3k-2
-        p[i:i+2, 3] .= z[k]
-        p[i:i+2, 1] = p_sfc[:, 1]
-        p[i:i+2, 2] = p_sfc[:, 2]
-        p[i+3:i+5, 3] .= z[k+1]
-        p[i+3:i+5, 1] = p_sfc[:, 1]
-        p[i+3:i+5, 2] = p_sfc[:, 2]
-        t[k] = collect(i:i+5)
+    np = sum(nzs)
+    # nt = minimum(nzs)
+    nt = minimum(nzs) - 1
+    p = zeros(np, 3)
+    t = Vector{Vector{Int64}}(undef, nt)
+    for k=1:nt-1
+        i = 3k-3
+        for j=1:3
+            p[i+j, 3] = z_cols[j][k]
+            p[i+j, 1] = p_sfc[j, 1]
+            p[i+j, 2] = p_sfc[j, 2]
+            p[i+j+3, 3] = z_cols[j][k+1]
+            p[i+j+3, 1] = p_sfc[j, 1]
+            p[i+j+3, 2] = p_sfc[j, 2]
+        end
+        t[k] = collect(i+1:i+6)
+        display(t)
     end
-    # last element is a tetrahedron!
-    p[3nz+1, 1:2] = p_sfc[1, :]
-    p[3nz+1, 3] = -1 - h
-    t[nz] = [1, 2, 3, 3nz+1]
-    e = [3nz+1, 2, 3, 3nz-2, 3nz-1, 3nz]
+    # # last element is a tetrahedron!
+    # p[np, 1:2] = p_sfc[1, :]
+    # p[np, 3] = -1 - h
+    # t[nt] = collect(np-3:np)
 
     vtk_grid("output/col.vtu", p', [MeshCell(size(t[k], 1) == 4 ? VTKCellTypes.VTK_TETRA : VTKCellTypes.VTK_WEDGE, t[k]) for k ∈ eachindex(t)]) do vtk end
-    error()
 
     # buoyancy
     x = p[:, 1]
     y = p[:, 2]
     z = p[:, 3]
     b = @. exp(z)*sin(x)*cos(y)
-    bx = @.  exp(z)*cos(x)*cos(y)
-    by = @. -exp(z)*sin(x)*sin(y)
+    bx = [@.  exp(z_cols[i])*cos(p_sfc[i, 1])*cos(p_sfc[i, 2]) for i=1:3]
+    by = [@. -exp(z_cols[i])*sin(p_sfc[i, 1])*sin(p_sfc[i, 2]) for i=1:3] 
 
     # numerical gradients
-    bxₕ = zeros(3, 2nz-2)
-    byₕ = zeros(3, 2nz-2)
-    jacobian = J(p[1, :], p[t[1, :], :]) # same for all elements in this case
+    bxₕ = [zeros(2nz-2) for nz ∈ nzs]
+    byₕ = [zeros(2nz-2) for nz ∈ nzs]
+    # prisms first
+    jacobian = J(p[1, :], p[t[1], :]) # same for all elements in this case
     ξx = jacobian[1, 1]
     ηx = jacobian[2, 1]
     ζx = jacobian[3, 1]
@@ -147,59 +156,93 @@ function convergence_element_col(h)
     Dξ = [φξ(p_ref[i, :], j) for i=1:6, j=1:6]
     Dη = [φη(p_ref[i, :], j) for i=1:6, j=1:6]
     Dζ = [φζ(p_ref[i, :], j) for i=1:6, j=1:6]
-    for k=1:nz-1
-        for i=1:3
-            i1 = i 
-            i2 = i + 3
-            bxₕ[i, 2k-1] = sum(b[t[k, j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j=1:6)
-            bxₕ[i, 2k]   = sum(b[t[k, j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j=1:6)
-            byₕ[i, 2k-1] = sum(b[t[k, j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j=1:6)
-            byₕ[i, 2k]   = sum(b[t[k, j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j=1:6)
+    for i=1:3
+        i1 = i 
+        i2 = i + 3
+        for k=1:nt-1
+            bxₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j=1:6)
+            bxₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j=1:6)
+            byₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j=1:6)
+            byₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j=1:6)
         end
     end
+    # # tetrahedron
+    # jacobian = Jacobians(p[t[end], :], [1 2 3 4]).Js[1, :, :]
+    # ξx = jacobian[1, 1]
+    # ηx = jacobian[2, 1]
+    # ζx = jacobian[3, 1]
+    # ξy = jacobian[1, 2]
+    # ηy = jacobian[2, 2]
+    # ζy = jacobian[3, 2]
+    # sf = ShapeFunctions(order=1, dim=3)
+    # p_ref_tet = nuPGCM.reference_element_nodes(1, 3)
+    # Dξ = [∂φ∂ξ(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
+    # Dη = [∂φ∂η(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
+    # Dζ = [∂φ∂ζ(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
+    # i = argmax(nzs) # column with extra node
+    # k = nt 
+    # i1 = i
+    # i2 = 4
+    # bxₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j=1:4)
+    # bxₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j=1:4)
+    # byₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j=1:4)
+    # byₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j=1:4)
 
-    z = -1:h:0
-    # z_dg = zeros(2nz-2)
-    # for i=1:nz-1
-    #     z_dg[2i-1] = z[i]
-    #     z_dg[2i] = z[i+1]
-    # end
-    # fig, ax = plt.subplots(1, figsize=(2, 3.2))
-    # # ax.plot(bx[1:3:end], z, "C0")
-    # ax.plot(bxₕ[1, :], z_dg, "C1--")
-    # # ax.plot(bx[2:3:end], z, "C2")
-    # ax.plot(bxₕ[2, :], z_dg, "C3--")
-    # # ax.plot(bx[3:3:end], z, "C4")
-    # ax.plot(bxₕ[3, :], z_dg, "C5--")
-    # ax.set_xlabel(L"\partial_x b")
-    # ax.set_ylabel(L"z")
-    # savefig("scratch/images/bx.png")
-    # println("scratch/images/bx.png")
-    # plt.close()
+    for i=1:3
+        z_dg = zeros(2nzs[i]-2)
+        for j=1:nzs[i]-1
+            z_dg[2j-1] = z_cols[i][j]
+            z_dg[2j] = z_cols[i][j+1]
+        end
+        fig, ax = plt.subplots(1, figsize=(2, 3.2))
+        ax.plot(bx[i], z_cols[i], "C0")
+        ax.plot(bxₕ[i], z_dg, "C1--")
+        ax.set_xlabel(L"\partial_x b")
+        ax.set_ylabel(L"z")
+        savefig("scratch/images/bx$i.png")
+        println("scratch/images/bx$i.png")
+        plt.close()
+        fig, ax = plt.subplots(1, figsize=(2, 3.2))
+        ax.plot(by[i], z_cols[i], "C0")
+        ax.plot(byₕ[i], z_dg, "C1--")
+        ax.set_xlabel(L"\partial_y b")
+        ax.set_ylabel(L"z")
+        savefig("scratch/images/by$i.png")
+        println("scratch/images/by$i.png")
+        plt.close()
+    end
 
     # solve
-    ωx = zeros(3nz)
-    ωy = zeros(3nz)
-    χx = zeros(3nz)
-    χy = zeros(3nz)
-    ωx_a = zeros(3nz)
-    ωy_a = zeros(3nz)
-    χx_a = zeros(3nz)
-    χy_a = zeros(3nz)
-    A = nuPGCM.get_baroclinic_LHS(z, ε², f)
+    ωx = zeros(np)
+    ωy = zeros(np)
+    χx = zeros(np)
+    χy = zeros(np)
+    ωx_a = zeros(np)
+    ωy_a = zeros(np)
+    χx_a = zeros(np)
+    χy_a = zeros(np)
     for i=1:3
-        r = nuPGCM.get_baroclinic_RHS(z, bxₕ[i, :], byₕ[i, :], 0, 0, 0, 0, ε²)
-        r_a = nuPGCM.get_baroclinic_RHS(z, bx[i:3:end], by[i:3:end], 0, 0, 0, 0, ε²)
+        perm = sortperm(z_cols[i])
+        A = nuPGCM.get_baroclinic_LHS(z_cols[i][perm], ε², f)
+        r = nuPGCM.get_baroclinic_RHS(z_cols[i][perm], bxₕ[i][perm], byₕ[i][perm], 0, 0, 0, 0, ε²)
+        r_a = nuPGCM.get_baroclinic_RHS(z_cols[i][perm], bx[i][perm], by[i][perm], 0, 0, 0, 0, ε²)
         sol = A\r
+        nz = nzs[i]
         ωx[(i-1)*nz+1:i*nz] = sol[0*nz+1:1*nz]
         ωy[(i-1)*nz+1:i*nz] = sol[1*nz+1:2*nz]
         χx[(i-1)*nz+1:i*nz] = sol[2*nz+1:3*nz]
         χy[(i-1)*nz+1:i*nz] = sol[3*nz+1:4*nz]
-        sol = A\r_a
-        ωx_a[(i-1)*nz+1:i*nz]= sol[0*nz+1:1*nz]
-        ωy_a[(i-1)*nz+1:i*nz]= sol[1*nz+1:2*nz]
-        χx_a[(i-1)*nz+1:i*nz]= sol[2*nz+1:3*nz]
-        χy_a[(i-1)*nz+1:i*nz]= sol[3*nz+1:4*nz]
+        sol_a = A\r_a
+        ωx_a[(i-1)*nz+1:i*nz]= sol_a[0*nz+1:1*nz]
+        ωy_a[(i-1)*nz+1:i*nz]= sol_a[1*nz+1:2*nz]
+        χx_a[(i-1)*nz+1:i*nz]= sol_a[2*nz+1:3*nz]
+        χy_a[(i-1)*nz+1:i*nz]= sol_a[3*nz+1:4*nz]
+
+        plot(sol_a[0*nz+1:1*nz], z_cols[i][perm])
+        plot(sol[0*nz+1:1*nz], z_cols[i][perm], "--")
+        savefig("scratch/images/omegax$i.png")
+        plt.close()
+        println(maximum(abs.(sol - sol_a)))
     end
     ωx_e = maximum(abs.(ωx - ωx_a))
     ωy_e = maximum(abs.(ωy - ωy_a))
