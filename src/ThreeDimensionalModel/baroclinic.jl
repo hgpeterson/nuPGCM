@@ -15,7 +15,9 @@ function get_baroclinic_LHS(z, ε², f)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
-    e = Dict("bot"=>[1], "sfc"=>[nz])
+    bot = nz
+    sfc = 1
+    e = Dict("bot"=>[nz], "sfc"=>[1])
     g = Grid(1, p, t, e)
 
     # indices
@@ -44,7 +46,7 @@ function get_baroclinic_LHS(z, ε², f)
         χyi = χymap[g.t[k, :]]
 
         for i=1:g.nn, j=1:g.nn
-            if g.t[k, i] ≠ 1 &&  g.t[k, i] ≠ nz
+            if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
                 # -ε²∂zz(ωx)
                 push!(A, (ωxi[i], ωxi[j], ε²*K[i, j]))
                 # -ωy
@@ -55,7 +57,7 @@ function get_baroclinic_LHS(z, ε², f)
                 # +ωx
                 push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
             end
-            if g.t[k, i] ≠ nz
+            if g.t[k, i] ≠ sfc
                 # -∂zz(χx)
                 push!(A, (χxi[i], χxi[j], K[i, j]))
                 # -ωx
@@ -70,14 +72,14 @@ function get_baroclinic_LHS(z, ε², f)
     end
 
     # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
-    push!(A, (ωxmap[1], χxmap[1], 1))
-    push!(A, (ωymap[1], χymap[1], 1))
+    push!(A, (ωxmap[bot], χxmap[bot], 1))
+    push!(A, (ωymap[bot], χymap[bot], 1))
 
     # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
-    push!(A, (ωxmap[nz], ωxmap[nz], 1))
-    push!(A, (ωymap[nz], ωymap[nz], 1))
-    push!(A, (χxmap[nz], χxmap[nz], 1))
-    push!(A, (χymap[nz], χymap[nz], 1))
+    push!(A, (ωxmap[sfc], ωxmap[sfc], 1))
+    push!(A, (ωymap[sfc], ωymap[sfc], 1))
+    push!(A, (χxmap[sfc], χxmap[sfc], 1))
+    push!(A, (χymap[sfc], χymap[sfc], 1))
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
@@ -102,7 +104,9 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
-    e = Dict("bot"=>[1], "sfc"=>[nz])
+    bot = nz
+    sfc = 1
+    e = Dict("bot"=>[bot], "sfc"=>[sfc])
     g = Grid(1, p, t, e)
 
     # indices
@@ -140,14 +144,14 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     end
 
     # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
-    r[ωxmap[1]] = 0
-    r[ωymap[1]] = 0
+    r[ωxmap[bot]] = 0
+    r[ωymap[bot]] = 0
 
     # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
-    r[ωxmap[nz]] = -τy/ε²
-    r[ωymap[nz]] = τx/ε²
-    r[χxmap[nz]] = Uy
-    r[χymap[nz]] = -Ux
+    r[ωxmap[sfc]] = -τy/ε²
+    r[ωymap[sfc]] = τx/ε²
+    r[χxmap[sfc]] = Uy
+    r[χymap[sfc]] = -Ux
 
     return r
 end
