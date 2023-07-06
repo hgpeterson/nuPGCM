@@ -9,86 +9,64 @@ pygui(false)
 
 set_out_folder("output")
 
-p_ref = [ 0  0  0
-          1  0  0
-          0  1  0
-          0  0  1
-          1  0  1
-          0  1  1]
+include("elements.jl")
 
-function φ(ξ, i)
-    if i == 1
-        return (1 - ξ[1] - ξ[2])*(1 - ξ[3])
-    elseif i == 2
-        return ξ[1]*(1 - ξ[3])
-    elseif i == 3
-        return ξ[2]*(1 - ξ[3])
-    elseif i == 4
-        return (1 - ξ[1] - ξ[2])*ξ[3]
-    elseif i == 5
-        return ξ[1]*ξ[3]
-    elseif i == 6
-        return ξ[2]*ξ[3]
-    end
-end
-function φξ(ξ, i)
-    if i == 1
-        return -(1 - ξ[3])
-    elseif i == 2
-        return (1 - ξ[3])
-    elseif i == 3
-        return 0
-    elseif i == 4
-        return -ξ[3]
-    elseif i == 5
-        return ξ[3]
-    elseif i == 6
-        return 0
-    end
-end
-function φη(ξ, i)
-    if i == 1
-        return -(1 - ξ[3])
-    elseif i == 2
-        return 0
-    elseif i == 3
-        return (1 - ξ[3])
-    elseif i == 4
-        return -ξ[3]
-    elseif i == 5
-        return 0
-    elseif i == 6
-        return ξ[3]
-    end
-end
-function φζ(ξ, i)
-    if i == 1
-        return -(1 - ξ[1] - ξ[2])
-    elseif i == 2
-        return -ξ[1]
-    elseif i == 3
-        return -ξ[2]
-    elseif i == 4
-        return (1 - ξ[1] - ξ[2])
-    elseif i == 5
-        return ξ[1]
-    elseif i == 6
-        return ξ[2]
-    end
-end
+function second_order_wedge_col(h)
+    # surface triangle
+    p_sfc = [0        0
+             2h/√3    0
+             h/√3     h
+             h/√3     0
+             3h/(2√3) h/2
+             h/(2√3)  h/2]
+        
+    # depths
+    H = [1+h, 1, 1, 1+h/2, 1, 1+h/2]
+    # H = [1, 1, 1, 1, 1, 1]
 
-xξ(ξ, p) = sum(φξ(ξ, i)*p[i, 1] for i=1:6)
-yξ(ξ, p) = sum(φξ(ξ, i)*p[i, 2] for i=1:6)
-zξ(ξ, p) = sum(φξ(ξ, i)*p[i, 3] for i=1:6)
-xη(ξ, p) = sum(φη(ξ, i)*p[i, 1] for i=1:6)
-yη(ξ, p) = sum(φη(ξ, i)*p[i, 2] for i=1:6)
-zη(ξ, p) = sum(φη(ξ, i)*p[i, 3] for i=1:6)
-xζ(ξ, p) = sum(φζ(ξ, i)*p[i, 1] for i=1:6)
-yζ(ξ, p) = sum(φζ(ξ, i)*p[i, 2] for i=1:6)
-zζ(ξ, p) = sum(φζ(ξ, i)*p[i, 3] for i=1:6)
-J(ξ, p) = inv([xξ(ξ, p) xη(ξ, p) xζ(ξ, p)
-               yξ(ξ, p) yη(ξ, p) yζ(ξ, p)
-               zξ(ξ, p) zη(ξ, p) zζ(ξ, p)])
+    # node grids
+    # z_cols = [0:-h:-H[i] for i ∈ eachindex(H)]
+    # nzs = [length(z) for z ∈ z_cols]
+    nz = Int64(round(1/h))
+    nzs = nz*ones(Int64, 6)
+    z_cols = [range(0, -H[i], length=nzs[i]) for i ∈ eachindex(nzs)]
+
+    # generate column
+    nt = maximum(nzs) - 1
+    np = sum(nzs) + 3*nt
+    p = zeros(np, 3)
+    t = Vector{Vector{Int64}}(undef, nt)
+    # start with surface
+    top = [1, 2, 3, 4, 5, 6]
+    p[top, :] = hcat(p_sfc, zeros(6))
+    # iterate down
+    i_p = 7
+    mid = [0, 0, 0]
+    bot = [0, 0, 0, 0, 0, 0]
+    for k=1:nt
+        # add bots
+        for i=1:6
+            p[i_p, :] = vcat(p_sfc[i, 1:2], z_cols[i][k+1])
+            bot[i] = i_p
+            i_p += 1
+        end
+        # # add mids
+        # for i=1:3
+        #     p[i_p, :] = vcat(p_sfc[i, 1:2], (z_cols[i][k] + z_cols[i][k+1])/2)
+        #     mid[i] = i_p
+        #     i_p += 1
+        # end
+        # t[k] = vcat(top[1:3], bot[1:3], top[4:6], bot[4:6], mid)
+        t[k] = vcat(top[1:3], bot[1:3], top[4:6], bot[4:6])
+        top[:] = bot[:]
+    end
+
+    # vtk_grid("output/col1.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k][1:6]) for k ∈ eachindex(t)]) do vtk end
+    # vtk_grid("output/col2.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k][7:12]) for k ∈ eachindex(t)]) do vtk end
+    # vtk_grid("output/col.vtu", p', [MeshCell(VTKCellTypes.VTK_QUADRATIC_WEDGE, t[k]) for k ∈ eachindex(t)]) do vtk end
+
+    return p, t
+end
 
 function convergence_element_col(h)
     # params 
@@ -101,15 +79,15 @@ function convergence_element_col(h)
              h/√3   h]
 
     # depths
-    # H = [1, 1, 1+h]
-    H = [1, 1, 1]
+    H = [1+h, 1, 1]
+    # H = [1, 1, 1]
 
     # node grids
-    # z_cols = [0:-h:-H[i] for i=1:3]
-    # nzs = [length(z_cols[i]) for i=1:3]
+    # z_cols = [0:-h:-H[i] for i ∈ eachindex(H)]
+    # nzs = [length(z) for z ∈ z_cols]
     nz = Int64(round(1/h))
     nzs = nz*ones(Int64, 3)
-    z_cols = [range(0, -H[i], length=nz) for i=1:3]
+    z_cols = [range(0, -H[i], length=nzs[i]) for i ∈ eachindex(nzs)]
 
     # generate column
     np = sum(nzs)
@@ -143,39 +121,49 @@ function convergence_element_col(h)
 
     vtk_grid("output/col.vtu", p', [MeshCell(size(t[k], 1) == 4 ? VTKCellTypes.VTK_TETRA : (size(t[k], 1) == 5 ? VTKCellTypes.VTK_PYRAMID : VTKCellTypes.VTK_WEDGE), t[k]) for k ∈ eachindex(t)]) do vtk end
 
+    # second order buoyancy
+    p2, t2 = second_order_wedge_col(h)
+
     # buoyancy
-    x = p[:, 1]
-    y = p[:, 2]
-    z = p[:, 3]
+    x = p2[:, 1]
+    y = p2[:, 2]
+    z = p2[:, 3]
     b = @. exp(x + y + z)
-    bx = [@. exp(p_sfc[i, 1] + p_sfc[i, 2] + z_cols[i]) for i=1:3]
-    by = [@. exp(p_sfc[i, 1] + p_sfc[i, 2] + z_cols[i]) for i=1:3] 
+    bx = [@. exp(p_sfc[i, 1] + p_sfc[i, 2] + z_cols[i]) for i ∈ eachindex(z_cols)]
+    by = [@. exp(p_sfc[i, 1] + p_sfc[i, 2] + z_cols[i]) for i ∈ eachindex(z_cols)] 
 
     # numerical gradients
     bxₕ = [zeros(2nz-2) for nz ∈ nzs]
     byₕ = [zeros(2nz-2) for nz ∈ nzs]
     # wedges
-    Dξ = [φξ(p_ref[i, :], j) for i=1:6, j=1:6]
-    Dη = [φη(p_ref[i, :], j) for i=1:6, j=1:6]
-    Dζ = [φζ(p_ref[i, :], j) for i=1:6, j=1:6]
+    w1 = Wedge(order=1)
+    w2 = Wedge(order=2)
+    Dξ = [φξ(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
+    Dη = [φη(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
+    Dζ = [φζ(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
     for k=1:nt
-        for j=1:6
-            jacobian = J(p_ref[j, :], p[t[k], :])
-            # display(jacobian)
+        for i=1:3
+            i1 = i 
+            jacobian = J(w1, w1.p_ref[i1, :], p[t[k], :])
             ξx = jacobian[1, 1]
             ηx = jacobian[2, 1]
             ζx = jacobian[3, 1]
             ξy = jacobian[1, 2]
             ηy = jacobian[2, 2]
             ζy = jacobian[3, 2]
-            for i=1:3
-                i1 = i 
-                i2 = i + 3
-                bxₕ[i][2k-1] += b[t[k][j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx)
-                bxₕ[i][2k]   += b[t[k][j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx)
-                byₕ[i][2k-1] += b[t[k][j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy)
-                byₕ[i][2k]   += b[t[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy)
-            end
+            bxₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j ∈ axes(w2.p_ref, 1))
+            byₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j ∈ axes(w2.p_ref, 1))
+
+            i2 = i + 3
+            jacobian = J(w1, w1.p_ref[i2, :], p[t[k], :])
+            ξx = jacobian[1, 1]
+            ηx = jacobian[2, 1]
+            ζx = jacobian[3, 1]
+            ξy = jacobian[1, 2]
+            ηy = jacobian[2, 2]
+            ζy = jacobian[3, 2]
+            bxₕ[i][2k] = sum(b[t2[k][j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j ∈ axes(w2.p_ref, 1))
+            byₕ[i][2k] = sum(b[t2[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j ∈ axes(w2.p_ref, 1))
         end
     end
     # # tetrahedron
@@ -202,21 +190,30 @@ function convergence_element_col(h)
 
     for i=1:3
         z_dg = zeros(2nzs[i]-2)
+        bx_dg = zeros(2nzs[i]-2)
+        by_dg = zeros(2nzs[i]-2)
         for j=1:nzs[i]-1
             z_dg[2j-1] = z_cols[i][j]
             z_dg[2j] = z_cols[i][j+1]
+            bx_dg[2j-1] = bx[i][j]
+            bx_dg[2j] = bx[i][j+1]
+            by_dg[2j-1] = by[i][j]
+            by_dg[2j] = by[i][j+1]
         end
+        bx_err = maximum(abs.(bx_dg - bxₕ[i]))
+        by_err = maximum(abs.(bx_dg - bxₕ[i]))
+        println(@sprintf("%1.1e  %1.1e", bx_err, by_err))
         fig, ax = plt.subplots(1, figsize=(2, 3.2))
-        ax.plot(bx[i], z_cols[i], "C0")
-        ax.plot(bxₕ[i], z_dg, "C1--")
+        ax.plot(bx[i], z_cols[i])
+        ax.plot(bxₕ[i], z_dg, "--")
         ax.set_xlabel(L"\partial_x b")
         ax.set_ylabel(L"z")
         savefig("scratch/images/bx$i.png")
         println("scratch/images/bx$i.png")
         plt.close()
         fig, ax = plt.subplots(1, figsize=(2, 3.2))
-        ax.plot(by[i], z_cols[i], "C0")
-        ax.plot(byₕ[i], z_dg, "C1--")
+        ax.plot(by[i], z_cols[i])
+        ax.plot(byₕ[i], z_dg, "--")
         ax.set_xlabel(L"\partial_y b")
         ax.set_ylabel(L"z")
         savefig("scratch/images/by$i.png")
@@ -302,11 +299,10 @@ function convergence_node_col()
         ωy_e = maximum(abs.(ωy - ωy_a.(z)))
         χx_e = maximum(abs.(χx - χx_a.(z)))
         χy_e = maximum(abs.(χy - χy_a.(z)))
-        println(@sprintf("%1.1e %1.1e %1.1e %1.1e", ωx_e, ωy_e, χx_e, χy_e))
-        println(@sprintf("%1.1e %1.1e %1.1e %1.1e", ωx_e/4, ωy_e/4, χx_e/4, χy_e/4))
+        println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
     end
 end
 
-convergence_element_col(0.1)
+convergence_element_col(0.01)
 
 println("Done.")
