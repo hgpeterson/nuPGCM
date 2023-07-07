@@ -21,7 +21,7 @@ function second_order_wedge_col(h)
              h/(2√3)  h/2]
         
     # depths
-    H = [1+h, 1, 1, 1+h/2, 1, 1+h/2]
+    H = [1, 1+h, 1, 1+h/2, 1+h/2, 1]
     # H = [1, 1, 1, 1, 1, 1]
 
     # node grids
@@ -33,7 +33,7 @@ function second_order_wedge_col(h)
 
     # generate column
     nt = maximum(nzs) - 1
-    np = sum(nzs) + 3*nt
+    np = sum(nzs)
     p = zeros(np, 3)
     t = Vector{Vector{Int64}}(undef, nt)
     # start with surface
@@ -41,7 +41,6 @@ function second_order_wedge_col(h)
     p[top, :] = hcat(p_sfc, zeros(6))
     # iterate down
     i_p = 7
-    mid = [0, 0, 0]
     bot = [0, 0, 0, 0, 0, 0]
     for k=1:nt
         # add bots
@@ -50,25 +49,17 @@ function second_order_wedge_col(h)
             bot[i] = i_p
             i_p += 1
         end
-        # # add mids
-        # for i=1:3
-        #     p[i_p, :] = vcat(p_sfc[i, 1:2], (z_cols[i][k] + z_cols[i][k+1])/2)
-        #     mid[i] = i_p
-        #     i_p += 1
-        # end
-        # t[k] = vcat(top[1:3], bot[1:3], top[4:6], bot[4:6], mid)
         t[k] = vcat(top[1:3], bot[1:3], top[4:6], bot[4:6])
         top[:] = bot[:]
     end
 
     # vtk_grid("output/col1.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k][1:6]) for k ∈ eachindex(t)]) do vtk end
     # vtk_grid("output/col2.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k][7:12]) for k ∈ eachindex(t)]) do vtk end
-    # vtk_grid("output/col.vtu", p', [MeshCell(VTKCellTypes.VTK_QUADRATIC_WEDGE, t[k]) for k ∈ eachindex(t)]) do vtk end
 
     return p, t
 end
 
-function convergence_element_col(h)
+function convergence(h)
     # params 
     ε² = 1e-2
     f = 1
@@ -79,7 +70,7 @@ function convergence_element_col(h)
              h/√3   h]
 
     # depths
-    H = [1+h, 1, 1]
+    H = [1, 1+h, 1]
     # H = [1, 1, 1]
 
     # node grids
@@ -101,25 +92,17 @@ function convergence_element_col(h)
     i_p = 4
     bot = [0, 0, 0]
     for k=1:nt
-        bot[:] = top[:]
-        longer_cols = findall(k+1 .≤ nzs)
-        for i ∈ longer_cols
+        # add bots
+        for i=1:3
             p[i_p, :] = vcat(p_sfc[i, 1:2], z_cols[i][k+1])
             bot[i] = i_p
             i_p += 1
         end
-        if length(longer_cols) == 1
-            t[k] = vcat(top, bot[longer_cols[1]])
-        elseif length(longer_cols) == 2
-            j = findfirst(k+1 .> nzs)
-            t[k] = [top[longer_cols[1]], top[longer_cols[2]], bot[longer_cols[2]], bot[longer_cols[1]], top[j]]
-        else length(longer_cols) == 3
-            t[k] = vcat(top, bot)
-        end
+        t[k] = vcat(top, bot)
         top[:] = bot[:]
     end
 
-    vtk_grid("output/col.vtu", p', [MeshCell(size(t[k], 1) == 4 ? VTKCellTypes.VTK_TETRA : (size(t[k], 1) == 5 ? VTKCellTypes.VTK_PYRAMID : VTKCellTypes.VTK_WEDGE), t[k]) for k ∈ eachindex(t)]) do vtk end
+    vtk_grid("output/col.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k]) for k ∈ eachindex(t)]) do vtk end
 
     # second order buoyancy
     p2, t2 = second_order_wedge_col(h)
@@ -135,7 +118,6 @@ function convergence_element_col(h)
     # numerical gradients
     bxₕ = [zeros(2nz-2) for nz ∈ nzs]
     byₕ = [zeros(2nz-2) for nz ∈ nzs]
-    # wedges
     w1 = Wedge(order=1)
     w2 = Wedge(order=2)
     Dξ = [φξ(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
@@ -166,27 +148,6 @@ function convergence_element_col(h)
             byₕ[i][2k] = sum(b[t2[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j ∈ axes(w2.p_ref, 1))
         end
     end
-    # # tetrahedron
-    # jacobian = Jacobians(p[t[end], :], [1 2 3 4]).Js[1, :, :]
-    # ξx = jacobian[1, 1]
-    # ηx = jacobian[2, 1]
-    # ζx = jacobian[3, 1]
-    # ξy = jacobian[1, 2]
-    # ηy = jacobian[2, 2]
-    # ζy = jacobian[3, 2]
-    # sf = ShapeFunctions(order=1, dim=3)
-    # p_ref_tet = nuPGCM.reference_element_nodes(1, 3)
-    # Dξ = [∂φ∂ξ(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
-    # Dη = [∂φ∂η(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
-    # Dζ = [∂φ∂ζ(sf, j, p_ref_tet[i, :]) for i=1:4, j=1:4]
-    # i = argmax(nzs) # column with extra node
-    # k = nt 
-    # i1 = i
-    # i2 = 4
-    # bxₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j=1:4)
-    # bxₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j=1:4)
-    # byₕ[i][2k-1] = sum(b[t[k][j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j=1:4)
-    # byₕ[i][2k]   = sum(b[t[k][j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j=1:4)
 
     for i=1:3
         z_dg = zeros(2nzs[i]-2)
@@ -269,40 +230,6 @@ function convergence_element_col(h)
     println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
 end
 
-function convergence_node_col()
-    ε² = 1e-2
-    f = 1
-    ωx_a(z) = exp(z) - 1
-    ωy_a(z) = -π/2*sin(π*z/2)
-    χx_a(z) = -exp(z) + 1/2*(1 + z)^2 + (2 + z)/exp(1)
-    χy_a(z) = -2/π*(1 + sin(π*z/2))
-    bx(z) = 1 - exp(z) + ε²*π^3/8*sin(π*z/2)
-    by(z) = -ε²*exp(z) + π/2*sin(π*z/2)
-    for nz=[2^5, 2^6, 2^8, 2^9]
-        z = -1:1/(nz-1):0
-        z_half = (z[2:end] + z[1:end-1])/2
-        z_dg = zeros(2nz-2)
-        for i=1:nz-1
-            z_dg[2i-1] = z[i]
-            z_dg[2i] = z[i+1]
-        end
-        A = nuPGCM.get_baroclinic_LHS(z, ε², f)
-        # r = nuPGCM.get_baroclinic_RHS(z, bx.(z), by.(z), -χy_a(0), χx_a(0), 0, 0, ε²)
-        # r = nuPGCM.get_baroclinic_RHS(z, bx.(z_half), by.(z_half), -χy_a(0), χx_a(0), 0, 0, ε²)
-        r = nuPGCM.get_baroclinic_RHS(z, bx.(z_dg), by.(z_dg), -χy_a(0), χx_a(0), 0, 0, ε²)
-        sol = A\r
-        ωx = sol[0*nz+1:1*nz]
-        ωy = sol[1*nz+1:2*nz]
-        χx = sol[2*nz+1:3*nz]
-        χy = sol[3*nz+1:4*nz]
-        ωx_e = maximum(abs.(ωx - ωx_a.(z)))
-        ωy_e = maximum(abs.(ωy - ωy_a.(z)))
-        χx_e = maximum(abs.(χx - χx_a.(z)))
-        χy_e = maximum(abs.(χy - χy_a.(z)))
-        println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
-    end
-end
-
-convergence_element_col(0.01)
+convergence(0.1)
 
 println("Done.")
