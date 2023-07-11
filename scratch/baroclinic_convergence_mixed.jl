@@ -15,10 +15,10 @@ function second_order_mixed_col(p_sfc, z_cols, nzs, p, t)
     p_sfc_mid = (p_sfc[1:3, :] + p_sfc[[2,3,1], :])/2
     z_cols_mid = [zeros(max(length(z_cols[i]), length(z_cols[mod1(i+1, 3)]))) for i=1:3]
     for i=1:3
-        nzs = [length(z_cols[i]), length(z_cols[mod1(i+1, 3)])]
-        i_min = argmin(nzs)
-        n_min = nzs[i_min]
-        n_max = nzs[mod1(i_min+1, 2)]
+        nz_i1_i2 = [length(z_cols[i]), length(z_cols[mod1(i+1, 3)])]
+        i_min = argmin(nz_i1_i2)
+        n_min = nz_i1_i2[i_min]
+        n_max = nz_i1_i2[mod1(i_min+1, 2)]
         for j=1:n_min
             z_cols_mid[i][j] = (z_cols[i][j] + z_cols[mod1(i+1, 3)][j])/2
         end
@@ -60,9 +60,7 @@ function second_order_mixed_col(p_sfc, z_cols, nzs, p, t)
         elseif length(t[k]) == 5
             # pyramid
             has_no_more_nodes = findfirst(nzs .< k+1)
-            println(has_more_nodes)
             has_more_nodes = mod1.((1:3) .+ (has_no_more_nodes - 1), 3) # ensure correct ordering
-            println(has_more_nodes)
             t2[k] = vcat(t[k], top[has_more_nodes], bot[has_more_nodes])
         elseif length(t[k]) == 4
             # tetra
@@ -92,11 +90,11 @@ function convergence_mixed(h)
              h/√3   h]
 
     # depths
-    H = [h, 0, h]
+    H = [4h, 0, 4h]
 
     # node grids
-    nz = Int64(round(1/h))
-    nzs = [2, 1, 2]
+    # nz = Int64(round(1/h))
+    nzs = [5, 1, 5]
     # nzs = [nz+2, nz, nz]
     z_cols = [range(0, -H[i], length=nzs[i]) for i ∈ eachindex(H)]
     # z_cols = [0:-h:-H[i] for i ∈ eachindex(H)]
@@ -125,13 +123,18 @@ function convergence_mixed(h)
             t[k] = vcat(top, bot)
         elseif length(has_more_nodes) == 2
             has_no_more_nodes = findfirst(nzs .< k+1)
-            t[k] = [top[has_more_nodes[1]], bot[has_more_nodes[1]], bot[has_more_nodes[2]], top[has_more_nodes[2]], top[has_no_more_nodes]]
+            # if has_no_more_nodes == 2
+            #     has_more_nodes = [3, 1]
+            # end
+            t[k] = vcat(top[has_no_more_nodes], top[has_more_nodes], bot[has_more_nodes])
         elseif length(has_more_nodes) == 1
             has_no_more_nodes = findall(nzs .< k+1)
             t[k] = vcat(top[has_more_nodes], top[has_no_more_nodes], bot[has_more_nodes])
         end
         top[:] = bot[:]
     end
+
+    println(t)
 
     vtk_grid("output/col.vtu", p', [MeshCell(length(t[k]) == 6 ? VTKCellTypes.VTK_WEDGE : (length(t[k]) == 5 ? VTKCellTypes.VTK_PYRAMID : VTKCellTypes.VTK_TETRA), t[k]) for k ∈ eachindex(t)]) do vtk end
 
@@ -149,11 +152,16 @@ function convergence_mixed(h)
     # numerical gradients
     bxₕ = [zeros(2nz-2) for nz ∈ nzs]
     byₕ = [zeros(2nz-2) for nz ∈ nzs]
-    w1 = Wedge(order=1)
-    w2 = Wedge(order=2)
-    Dξ_w = [φξ(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
-    Dη_w = [φη(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
-    Dζ_w = [φζ(w2, w1.p_ref[i, :], j) for i ∈ axes(w1.p_ref, 1), j ∈ axes(w2.p_ref, 1)]
+    wed1 = Wedge(order=1)
+    wed2 = Wedge(order=2)
+    Dξ_wed = [φξ(wed2, wed1.p_ref[i, :], j) for i ∈ axes(wed1.p_ref, 1), j ∈ axes(wed2.p_ref, 1)]
+    Dη_wed = [φη(wed2, wed1.p_ref[i, :], j) for i ∈ axes(wed1.p_ref, 1), j ∈ axes(wed2.p_ref, 1)]
+    Dζ_wed = [φζ(wed2, wed1.p_ref[i, :], j) for i ∈ axes(wed1.p_ref, 1), j ∈ axes(wed2.p_ref, 1)]
+    pyr1 = Pyramid(order=1)
+    pyr2 = Pyramid(order=2)
+    Dξ_pyr = [φξ(pyr2, pyr1.p_ref[i, :], j) for i ∈ axes(pyr1.p_ref, 1), j ∈ axes(pyr2.p_ref, 1)]
+    Dη_pyr = [φη(pyr2, pyr1.p_ref[i, :], j) for i ∈ axes(pyr1.p_ref, 1), j ∈ axes(pyr2.p_ref, 1)]
+    Dζ_pyr = [φζ(pyr2, pyr1.p_ref[i, :], j) for i ∈ axes(pyr1.p_ref, 1), j ∈ axes(pyr2.p_ref, 1)]
     tet1 = Tetra(order=1)
     tet2 = Tetra(order=2)
     Dξ_tet = [φξ(tet2, tet1.p_ref[i, :], j) for i ∈ axes(tet1.p_ref, 1), j ∈ axes(tet2.p_ref, 1)]
@@ -163,26 +171,51 @@ function convergence_mixed(h)
         if length(t[k]) == 6
             for i=1:3
                 i1 = i 
-                jacobian = J(w1, w1.p_ref[i1, :], p[t[k], :])
+                jacobian = J(wed1, wed1.p_ref[i1, :], p[t[k], :])
                 ξx = jacobian[1, 1]
                 ηx = jacobian[2, 1]
                 ζx = jacobian[3, 1]
                 ξy = jacobian[1, 2]
                 ηy = jacobian[2, 2]
                 ζy = jacobian[3, 2]
-                bxₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ_w[i1, j]*ξx + Dη_w[i1, j]*ηx + Dζ_w[i1, j]*ζx) for j ∈ axes(w2.p_ref, 1))
-                byₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ_w[i1, j]*ξy + Dη_w[i1, j]*ηy + Dζ_w[i1, j]*ζy) for j ∈ axes(w2.p_ref, 1))
+                bxₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ_wed[i1, j]*ξx + Dη_wed[i1, j]*ηx + Dζ_wed[i1, j]*ζx) for j ∈ axes(wed2.p_ref, 1))
+                byₕ[i][2k-1] = sum(b[t2[k][j]]*(Dξ_wed[i1, j]*ξy + Dη_wed[i1, j]*ηy + Dζ_wed[i1, j]*ζy) for j ∈ axes(wed2.p_ref, 1))
 
                 i2 = i + 3
-                jacobian = J(w1, w1.p_ref[i2, :], p[t[k], :])
+                jacobian = J(wed1, wed1.p_ref[i2, :], p[t[k], :])
                 ξx = jacobian[1, 1]
                 ηx = jacobian[2, 1]
                 ζx = jacobian[3, 1]
                 ξy = jacobian[1, 2]
                 ηy = jacobian[2, 2]
                 ζy = jacobian[3, 2]
-                bxₕ[i][2k] = sum(b[t2[k][j]]*(Dξ_w[i2, j]*ξx + Dη_w[i2, j]*ηx + Dζ_w[i2, j]*ζx) for j ∈ axes(w2.p_ref, 1))
-                byₕ[i][2k] = sum(b[t2[k][j]]*(Dξ_w[i2, j]*ξy + Dη_w[i2, j]*ηy + Dζ_w[i2, j]*ζy) for j ∈ axes(w2.p_ref, 1))
+                bxₕ[i][2k] = sum(b[t2[k][j]]*(Dξ_wed[i2, j]*ξx + Dη_wed[i2, j]*ηx + Dζ_wed[i2, j]*ζx) for j ∈ axes(wed2.p_ref, 1))
+                byₕ[i][2k] = sum(b[t2[k][j]]*(Dξ_wed[i2, j]*ξy + Dη_wed[i2, j]*ηy + Dζ_wed[i2, j]*ζy) for j ∈ axes(wed2.p_ref, 1))
+            end
+        elseif length(t[k]) == 5
+            has_more_nodes = findall(nzs .≥ k+1)
+            for i=2:3
+                i1 = i 
+                jacobian = J(pyr1, pyr1.p_ref[i1, :], p[t[k], :])
+                ξx = jacobian[1, 1]
+                ηx = jacobian[2, 1]
+                ζx = jacobian[3, 1]
+                ξy = jacobian[1, 2]
+                ηy = jacobian[2, 2]
+                ζy = jacobian[3, 2]
+                bxₕ[has_more_nodes[i-1]][2k-1] = sum(b[t2[k][j]]*(Dξ_pyr[i1, j]*ξx + Dη_pyr[i1, j]*ηx + Dζ_pyr[i1, j]*ζx) for j ∈ axes(pyr2.p_ref, 1))
+                byₕ[has_more_nodes[i-1]][2k-1] = sum(b[t2[k][j]]*(Dξ_pyr[i1, j]*ξy + Dη_pyr[i1, j]*ηy + Dζ_pyr[i1, j]*ζy) for j ∈ axes(pyr2.p_ref, 1))
+
+                i2 = i + 2
+                jacobian = J(pyr1, pyr1.p_ref[i2, :], p[t[k], :])
+                ξx = jacobian[1, 1]
+                ηx = jacobian[2, 1]
+                ζx = jacobian[3, 1]
+                ξy = jacobian[1, 2]
+                ηy = jacobian[2, 2]
+                ζy = jacobian[3, 2]
+                bxₕ[has_more_nodes[i-1]][2k] = sum(b[t2[k][j]]*(Dξ_pyr[i2, j]*ξx + Dη_pyr[i2, j]*ηx + Dζ_pyr[i2, j]*ζx) for j ∈ axes(pyr2.p_ref, 1))
+                byₕ[has_more_nodes[i-1]][2k] = sum(b[t2[k][j]]*(Dξ_pyr[i2, j]*ξy + Dη_pyr[i2, j]*ηy + Dζ_pyr[i2, j]*ζy) for j ∈ axes(pyr2.p_ref, 1))
             end
         elseif length(t[k]) == 4
             i = argmax(nzs)
@@ -291,6 +324,6 @@ function convergence_mixed(h)
     println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
 end
 
-convergence_mixed(0.01)
+convergence_mixed(0.1)
 
 println("Done.")
