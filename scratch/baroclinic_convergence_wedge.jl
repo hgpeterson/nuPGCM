@@ -59,7 +59,7 @@ function second_order_wedge_col(h)
     return p, t
 end
 
-function convergence(h)
+function convergence_wedge(h)
     # params 
     ε² = 1e-2
     f = 1
@@ -164,21 +164,17 @@ function convergence(h)
         bx_err = maximum(abs.(bx_dg - bxₕ[i]))
         by_err = maximum(abs.(bx_dg - bxₕ[i]))
         println(@sprintf("%1.1e  %1.1e", bx_err, by_err))
-        fig, ax = plt.subplots(1, figsize=(2, 3.2))
-        ax.plot(bx[i], z_cols[i])
-        ax.plot(bxₕ[i], z_dg, "--")
-        ax.set_xlabel(L"\partial_x b")
-        ax.set_ylabel(L"z")
-        savefig("scratch/images/bx$i.png")
-        println("scratch/images/bx$i.png")
-        plt.close()
-        fig, ax = plt.subplots(1, figsize=(2, 3.2))
-        ax.plot(by[i], z_cols[i])
-        ax.plot(byₕ[i], z_dg, "--")
-        ax.set_xlabel(L"\partial_y b")
-        ax.set_ylabel(L"z")
-        savefig("scratch/images/by$i.png")
-        println("scratch/images/by$i.png")
+        fig, ax = plt.subplots(1, 2, figsize=(4, 3.2), sharey=true)
+        ax[1].plot(bx[i], z_cols[i])
+        ax[1].plot(bxₕ[i], z_dg, "--")
+        ax[1].set_xlabel(L"\partial_x b")
+        ax[1].set_ylabel(L"z")
+        ax[2].plot(by[i], z_cols[i])
+        ax[2].plot(byₕ[i], z_dg, "--")
+        ax[2].set_xlabel(L"\partial_y b")
+        ax[1].set_title(latexstring(L"i = ", i))
+        savefig("scratch/images/bxby$i.png")
+        println("scratch/images/bxby$i.png")
         plt.close()
     end
 
@@ -230,6 +226,6 @@ function convergence(h)
     println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
 end
 
-convergence(0.1)
+convergence_wedge(0.1)
 
 println("Done.")
