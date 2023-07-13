@@ -237,6 +237,9 @@ end
 
 ################################################################################
 
+x(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
+y(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
+z(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
 xξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
 yξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
 zξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
@@ -247,5 +250,8 @@ xζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 
 yζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
 zζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
 J(el::AbstractElement, ξ, p) = inv([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p)
+                                    yξ(el, ξ, p) yη(el, ξ, p) yζ(el, ξ, p)
+                                    zξ(el, ξ, p) zη(el, ξ, p) zζ(el, ξ, p)])
+j(el::AbstractElement, ξ, p) = det([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p)
                                     yξ(el, ξ, p) yη(el, ξ, p) yζ(el, ξ, p)
                                     zξ(el, ξ, p) zη(el, ξ, p) zζ(el, ξ, p)])
