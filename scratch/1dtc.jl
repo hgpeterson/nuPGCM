@@ -4,9 +4,6 @@ using SparseArrays
 using LinearAlgebra
 using Printf
 
-include("utils.jl")
-include("baroclinic.jl")
-
 plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)

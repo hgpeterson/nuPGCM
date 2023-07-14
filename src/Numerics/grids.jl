@@ -6,74 +6,51 @@ struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     Js::A
 end
 
-struct Grid{IN<:Integer,SF<:ShapeFunctions,SFI<:ShapeFunctionIntegrals,J<:Jacobians,FM<:AbstractMatrix,IM<:AbstractMatrix,IV<:AbstractVector}
-    # order of shape functions on this grid
-    order::IN
-
-    # dimension of space
-    dim::IN
-
-    # shape functions on this grid
-    sf::SF
-
-    # shape function integrals
-    sfi::SFI
+struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:AbstractMatrix, V<:AbstractVector}
+    # elements on this grid
+    el::E
 
     # Jacobians
     J::J
 
     # node positions
-    p::FM # float matrix
+    p::P
 
     # number of nodes
-    np::IN
+    np::I
 
     # node indices defining each element
-    t::IM # integer matrix
+    t::T
 
     # number of elements
-    nt::IN
+    nt::I
 
     # number of nodes per element
-    nn::IN
+    nn::I
 
     # edge node indices for different boundaries
-    e::Dict{String, IV} # dictionary of integer vectors
+    e::Dict{String, V} # dictionary of vectors
 end
 
 """
-    g = Grid(p, t, e, order)
+    g = Grid(order, p, t, e)
 
 Construct a FE grid of order `order` with points `p`, elements `t`, and boundary nodes `e`.
 """
-function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
-    # dimension of space
+function Grid(order::Integer, p, t, e::Dict)
+    # elements that make up the grid
     dim = size(p, 2)
+    if dim == 1
+        el = Line(order=order)
+    elseif dim == 2
+        el = Triangle(order=order)
+    elseif dim == 3
+        el = Wedge(order=order)
+    else
+        error("Unsupported grid dimensions `$dim`.")
+    end
 
-    # order of grid
-    if order == 0
-        # only need centroids
-        p0 = zeros(size(t, 1), dim)
-        e0 = Dict()
-        for bdy ∈ e
-            e0[bdy.first] = IN[]
-        end
-        for k in axes(t, 1)
-            p0[k, :] = 1/(dim + 1)*sum(p[t[k, :], :], dims=1)
-            for bdy ∈ e
-                bdy_name = bdy.first
-                bdy_nodes = bdy.second
-                if any([t[k, i] ∈ bdy_nodes for i ∈ axes(t, 2)])
-                    # at least one of the points in this element is on the boundary, make centroid a bounday node
-                    e0[bdy_name] = [e0[bdy_name]; k]
-                end
-            end
-        end
-        p = p0
-        t = zeros(IN, size(t, 1), 1)
-        t[:, 1] = 1:size(t, 1)
-        e = e0
-    elseif order == 1
+    if order == 1
         # in case grid is higher order, downscale
         t = t[:, 1:dim+1]
         np = maximum(t)
@@ -100,13 +77,7 @@ function Grid(order::IN, p, t, e, sf, sfi) where IN <: Integer
     # compute Jacobians
     J = Jacobians(p, t)
 
-    return Grid(order, dim, sf, sfi, J, p, np, t, nt, nn, e)
-end
-function Grid(order, p, t, e::Dict)
-    # setup shape functions and their integrals
-    sf = ShapeFunctions(order=order, dim=size(p, 2))
-    sfi = ShapeFunctionIntegrals(sf, sf)
-    return Grid(order, p, t, e, sf, sfi)
+    return Grid(el, J, p, np, t, nt, nn, e)
 end
 function Grid(order, p, t, e::AbstractVector)
     # make e a dict
@@ -116,8 +87,6 @@ end
 function Grid(order, gfile::String)
     # read grid data
     p, t, e = read_gfile_h5(gfile)
-    e = Dict("bdy"=>e)
-
     return Grid(order, p, t, e) 
 end
 function Grid(order, g::Grid)

@@ -23,6 +23,17 @@ export
     quad_weights_points,
 
     # finite elements
+    Line,
+    Triangle,
+    Wedge,
+    x,
+    y,
+    z,
+    J,
+    j,
+    φξ,
+    φη,
+    φζ,
     ShapeFunctions,
     reference_element_nodes,
     ShapeFunctionIntegrals,
@@ -146,6 +157,7 @@ end
 include("Numerics/interpolation.jl")
 include("Numerics/derivatives.jl")
 include("Numerics/integrals.jl")
+include("Numerics/elements.jl")
 include("Numerics/shape_functions.jl")
 include("Numerics/reference_elements.jl")
 include("Numerics/grids.jl")

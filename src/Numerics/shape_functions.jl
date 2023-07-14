@@ -125,7 +125,7 @@ function ShapeFunctionIntegrals(sf_trial::ShapeFunctions, sf_test::ShapeFunction
     dim = sf_trial.dim
 
     # quadrature weights and points
-    w, ξ = quad_weights_points(deg=max(1, sf_trial.order + sf_test.order), dim=dim)
+    w, ξ = quad_weights_points(dim=dim)
 
     # mass
     M = compute_integral_matrix((ξ, i, j) -> φ(sf_trial, j, ξ)*φ(sf_test, i, ξ), w, ξ, sf_test.n, sf_trial.n)
