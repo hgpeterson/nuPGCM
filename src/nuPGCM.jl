@@ -26,22 +26,14 @@ export
     Line,
     Triangle,
     Wedge,
-    x,
-    y,
-    z,
-    J,
-    j,
+    φ,
     φξ,
     φη,
     φζ,
-    ShapeFunctions,
-    reference_element_nodes,
-    ShapeFunctionIntegrals,
-    φ,
-    ∂φ,
-    ∂φ∂ξ,
-    ∂φ∂η,
-    ∂φ∂ζ,
+    J,
+    j,
+    x,
+    ξ,
     Grid,
     all_edges,
     all_faces,
@@ -58,6 +50,8 @@ export
     ∂x,
     ∂y,
     ∂z,
+
+    ### All models ###
 
     # saving models
     save_setup,
@@ -156,10 +150,8 @@ end
 # include code
 include("Numerics/interpolation.jl")
 include("Numerics/derivatives.jl")
-include("Numerics/integrals.jl")
 include("Numerics/elements.jl")
-include("Numerics/shape_functions.jl")
-include("Numerics/reference_elements.jl")
+include("Numerics/integrals.jl")
 include("Numerics/grids.jl")
 include("Numerics/fields.jl")
 

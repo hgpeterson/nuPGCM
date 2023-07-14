@@ -32,10 +32,10 @@ function get_K(g::Grid)
     return sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np)
 end
 
-function get_A(sf_χ::ShapeFunctions, sf_b::ShapeFunctions)
-    w, ξ = quad_weights_points(deg=max(1, sf_χ.order + 2*sf_b.order - 2), dim=3)
-    f(ξ, i, j, k, d1, d2) = ∂φ(sf_χ, k, d1, ξ)*∂φ(sf_b, j, d2, ξ)*φ(sf_b, i, ξ)
-    return [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:sf_b.n, j=1:sf_b.n, k=1:sf_χ.n, d1=1:3, d2=1:3]
+function get_A(el_χ::Wedge, el_b::Wedge)
+    w, ξ = quad_weights_points(el_b)
+    f(ξ, i, j, k, d1, d2) = ∂φ(el_χ, k, d1, ξ)*∂φ(el_b, j, d2, ξ)*φ(el_b, i, ξ)
+    return [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:el_b.n, j=1:el_b.n, k=1:el_χ.n, d1=1:3, d2=1:3]
 end
 
 function AdvectionArrays(A, g::Grid, gb::Grid)

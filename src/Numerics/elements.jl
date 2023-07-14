@@ -192,9 +192,6 @@ end
 
 #### Jacobians ####
 
-x(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
-y(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
-z(el::AbstractElement, ξ, p) = sum(φ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
 xξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
 yξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
 zξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
@@ -210,3 +207,24 @@ J(el::AbstractElement, ξ, p) = inv([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p
 j(el::AbstractElement, ξ, p) = det([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p)
                                     yξ(el, ξ, p) yη(el, ξ, p) yζ(el, ξ, p)
                                     zξ(el, ξ, p) zη(el, ξ, p) zζ(el, ξ, p)])
+
+#### Transformations #### 
+
+x(el::Union{Triangle, Wedge}, ξ, p) = sum(φ(el, ξ, i)*p[i, :] for i ∈ axes(p, 1))
+x(el::Line, ξ, p) = sum(φ(el, ξ, i)*p[i] for i ∈ eachindex(p))
+
+function ξ(el::Line, x, p)
+    a = (p[2] - p[1])/2
+    b = (p[1] + p[2])/2
+    return (x - b)/a
+end
+function ξ(el::Triangle, x, p)
+    A = [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
+    b = p[1, :]
+    return A\(x .- b)
+end
+function ξ(el::Wedge, x, p)
+    ζ = (ξ(Line(order=1), x[3], [p[1, 3], p[4, 3]]) + 1)/2
+    ξη = ξ(Triangle(order=1), x[1:2], p[1:3, 1:2])
+    return [ξη[1], ξη[2], ζ]
+end

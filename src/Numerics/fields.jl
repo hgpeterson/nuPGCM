@@ -9,10 +9,7 @@ minimum(u::Field) = minimum(u.values)
 argmax(u::Field) = argmax(u.values)
 argmin(u::Field) = argmin(u.values)
 
-struct FEField{IN<:Integer,V<:AbstractVector,G<:Grid} <: Field
-    # order of polynomials defining shape functions
-    order::IN
-
+struct FEField{V<:AbstractVector, G<:Grid} <: Field
     # values of FE field on the nodes of the grid
     values::V
 
@@ -21,17 +18,13 @@ struct FEField{IN<:Integer,V<:AbstractVector,G<:Grid} <: Field
 end
 
 """
-    u = FEField(gfile, order, values)
+    u = FEField(values, g)
+    u = FEField(value, g)
+    u = FEField(f, g)
 
-Construct FE field from grid saved at `gfile` of order `order` with node values `values`.
+Construct finite element field of `values` over a grid `g`. If only one `value` is given, 
+field is constant. If a function is given, `values` are `f` at the nodes of `g`.
 """
-function FEField(order::Integer, values::AbstractVector, gfile::String)
-    g = Grid(gfile, order)
-    return FEField(order, values, g)
-end
-function FEField(values::AbstractVector, g::Grid)
-    return FEField(g.order, values, g)
-end
 function FEField(value::Number, g::Grid)
     return FEField(value*ones(g.np), g)
 end
@@ -41,20 +34,17 @@ end
 
 # operations on FEFields
 getindex(u::FEField, i) = u.values[i]
-^(u::FEField, n::Number) = FEField(u.order, u.values .^ n, u.g)
-log(u::FEField) = FEField(u.order, log.(u.values), u.g)
-abs(u::FEField) = FEField(u.order, abs.(u.values), u.g)
--(u::FEField, v::FEField) = FEField(u.order, u.values - v.values, u.g)
--(u::FEField) = FEField(u.order, -u.values, u.g)
-+(u::FEField, v::FEField) = FEField(u.order, u.values + v.values, u.g)
-*(u::FEField, v::FEField) = FEField(u.order, u.values .* v.values, u.g)
-/(u::FEField, v::FEField) = FEField(u.order, u.values ./ v.values, u.g)
-/(u::FEField, n::Number) = FEField(u.order, u.values / n, u.g)
+^(u::FEField, n::Number) = FEField(u.values .^ n, u.g)
+log(u::FEField) = FEField(log.(u.values), u.g)
+abs(u::FEField) = FEField(abs.(u.values), u.g)
+-(u::FEField, v::FEField) = FEField(u.values - v.values, u.g)
+-(u::FEField) = FEField(-u.values, u.g)
++(u::FEField, v::FEField) = FEField(u.values + v.values, u.g)
+*(u::FEField, v::FEField) = FEField(u.values .* v.values, u.g)
+/(u::FEField, v::FEField) = FEField(u.values ./ v.values, u.g)
+/(u::FEField, n::Number) = FEField(u.values / n, u.g)
 
-struct DGField{IN<:Integer,M<:AbstractMatrix,G<:Grid} <: Field
-    # order of polynomials defining shape functions
-    order::IN
-
+struct DGField{M<:AbstractMatrix, G<:Grid} <: Field
     # values of DG field on the nodes of the grid
     values::M
 
@@ -63,17 +53,13 @@ struct DGField{IN<:Integer,M<:AbstractMatrix,G<:Grid} <: Field
 end
 
 """
-    u = DGField(gfile, order, values)
+    u = DGField(values, g)
+    u = DGField(value, g)
+    u = DGField(f, g)
 
-Construct DG field from grid saved at `gfile` of order `order` with node values `values`.
+Construct discontinuous Galerkin field of `values` over a grid `g`. If only one `value` is given, 
+field is constant. If a function is given, `values` are `f` at the nodes of `g`.
 """
-function DGField(order::Integer, values::AbstractMatrix, gfile::String)
-    g = Grid(gfile, order)
-    return DGField(order, values, g)
-end
-function DGField(values::AbstractMatrix, g::Grid)
-    return DGField(g.order, values, g)
-end
 function DGField(value::Number, g::Grid)
     return DGField(value*ones(g.nt, g.nn), g)
 end
@@ -83,19 +69,19 @@ end
 
 # operations on DGFields
 getindex(u::DGField, i, j) = u.values[i, j]
-^(u::DGField, n::Number) = DGField(u.order, u.values .^ n, u.g)
-log(u::DGField) = DGField(u.order, log.(u.values), u.g)
-abs(u::DGField) = DGField(u.order, abs.(u.values), u.g)
--(u::DGField, v::DGField) = DGField(u.order, u.values - v.values, u.g)
--(u::DGField) = DGField(u.order, -u.values, u.g)
-+(u::DGField, v::DGField) = DGField(u.order, u.values + v.values, u.g)
-*(u::DGField, v::DGField) = DGField(u.order, u.values .* v.values, u.g)
-/(u::DGField, v::DGField) = DGField(u.order, u.values ./ v.values, u.g)
+^(u::DGField, n::Number) = DGField(u.values .^ n, u.g)
+log(u::DGField) = DGField(log.(u.values), u.g)
+abs(u::DGField) = DGField(abs.(u.values), u.g)
+-(u::DGField, v::DGField) = DGField(u.values - v.values, u.g)
+-(u::DGField) = DGField(-u.values, u.g)
++(u::DGField, v::DGField) = DGField(u.values + v.values, u.g)
+*(u::DGField, v::DGField) = DGField(u.values .* v.values, u.g)
+/(u::DGField, v::DGField) = DGField(u.values ./ v.values, u.g)
 
 # operations between FE and DG fields
-*(u::DGField, v::FEField) = DGField(u.order, [u[k, i]*v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
+*(u::DGField, v::FEField) = DGField([u[k, i]*v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 *(u::FEField, v::DGField) = v * u
-/(u::DGField, v::FEField) = DGField(u.order, [u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
+/(u::DGField, v::FEField) = DGField([u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 /(u::FEField, v::DGField) = (v / u)^-1
 
 # convert DGField to FEField by averaging
@@ -110,10 +96,10 @@ function FEField(u::DGField)
         end
     end
     u_cg ./= count
-    return FEField(u.order, u_cg, g)
+    return FEField(u_cg, g)
 end
 
-struct FVField{V<:AbstractVector,G<:Grid} <: Field
+struct FVField{V<:AbstractVector, G<:Grid} <: Field
     # values of FV field on the elements of the grid
     values::V
 
@@ -122,14 +108,13 @@ struct FVField{V<:AbstractVector,G<:Grid} <: Field
 end
 
 """
-    u = FVField(gfile, values)
+    u = FVField(values, g)
+    u = FVField(value, g)
+    u = FVField(f, g)
 
-Construct FV field from grid saved at `gfile` with element values `values`.
+Construct finite volume field of `values` over a grid `g`. If only one `value` is given, 
+field is constant. If a function is given, `values` are `f` on the elements of `g`.
 """
-function FVField(values::AbstractVector, gfile::String)
-    g = Grid(gfile, 1)
-    return FVField(values, g)
-end
 function FVField(value::Number, g::Grid)
     return FVField(value*ones(g.nt), g)
 end
@@ -196,26 +181,13 @@ function pt_sign(p₁, p₂, p₃)
 end
 
 """
-    bool = pt_in_tet(x, p)
+    bool = pt_in_wedge(x, p)
 
-Determine if point `x` is in tetrahedron with nodes `p`.
-(See https://stackoverflow.com/questions/25179693/how-to-check-whether-the-point-is-in-the-tetrahedron-or-not).
+Determine if point `x` is in wedge with nodes `p` (assuming wedge is 
+aligned in the vertical).
 """
-function pt_in_tet(x, p)
-    v1 = p[1, :]
-    v2 = p[2, :]
-    v3 = p[3, :]
-    v4 = p[4, :]
-    return same_side(x, v1, v2, v3, v4) &&
-           same_side(x, v2, v3, v4, v1) &&
-           same_side(x, v3, v4, v1, v2) &&
-           same_side(x, v4, v1, v2, v3)
-end
-function same_side(x, v1, v2, v3, v4)
-    normal = cross(v2 - v1, v3 - v1)
-    dotv4 = dot(normal, v4 - v1)
-    dotx = dot(normal, x - v1)
-    return (sign(dotv4) == sign(dotx)) || dotx == 0
+function pt_in_wedge(x, p)
+    return pt_in_tri(x[1:2], p[1:3, 1:2]) && pt_in_line(x[3], p[[1,4], 3])
 end
 
 
@@ -224,22 +196,25 @@ end
 
 Determine index `k` of element on grid `g` in which the point `x` lies.
 """
-function get_k(x, g)
-    if g.dim == 1
-        pt_check = pt_in_line
-    elseif g.dim == 2
-        pt_check = pt_in_tri
-    elseif g.dim == 3
-        pt_check = pt_in_tet
-    else
-        error("Dimension $dim not supported for evaluation.")
-    end
+function get_k(x, g, pt_check::Function)
     for k=1:g.nt 
         if pt_check(x, g.p[g.t[k, 1:g.dim+1], :])
             return k
         end
     end
     error("Cannot find element; p₀=$x is not inside mesh domain.")
+end
+function get_k(x, g, el::Line)
+    return get_k(x, g, pt_in_line)
+end
+function get_k(x, g, el::Triangle)
+    return get_k(x, g, pt_in_tri)
+end
+function get_k(x, g, el::Wedge)
+    return get_k(x, g, pt_in_wedge)
+end
+function get_k(x, g)
+    return get_k(x, g, g.el)
 end
 
 """
