@@ -198,7 +198,7 @@ Determine index `k` of element on grid `g` in which the point `x` lies.
 """
 function get_k(x, g, pt_check::Function)
     for k=1:g.nt 
-        if pt_check(x, g.p[g.t[k, 1:g.dim+1], :])
+        if pt_check(x, g.p[g.t[k, 1:g.el.dim+1], :])
             return k
         end
     end
@@ -235,17 +235,17 @@ function (u::Field)(x)
 end
 function (u::FEField)(x, k)
     # transform to reference element
-    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[u.g.t[k, i]]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
+    return sum(u[u.g.t[k, i]]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
 end
 function (u::DGField)(x, k)
     # transform to reference element
-    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[k, i]*φ(u.g.sf, i, ξ) for i=1:u.g.nn)
+    return sum(u[k, i]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
 end
 function (u::FVField)(x, k)
     return u[k]
@@ -269,17 +269,17 @@ function ∂(u::Field, x, j)
 end
 function ∂(u::FEField, x, k, j)
     # transform to reference element
-    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[u.g.t[k, i]]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+    return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
 end
 function ∂(u::DGField, x, k, j)
     # transform to reference element
-    ξ = transform_to_ref_el(x, u.g.p[u.g.t[k, 1:u.g.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[k, i]*∂φ(u.g.sf, i, l, ξ)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+    return sum(u[k, i]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
 end
 function ∂(u::FVField, x, k, j)
     return 0

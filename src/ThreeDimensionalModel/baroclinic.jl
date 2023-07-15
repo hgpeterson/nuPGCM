@@ -15,8 +15,8 @@ function get_baroclinic_LHS(z, ε², f)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
-    bot = nz
-    sfc = 1
+    bot = 1
+    sfc = nz
     e = Dict("bot"=>[nz], "sfc"=>[1])
     g = Grid(1, p, t, e)
 
@@ -27,15 +27,15 @@ function get_baroclinic_LHS(z, ε², f)
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
 
-    # unpack
-    J = g.J
-    s = g.sfi
+    # quadrature
+    wts, pts = quad_weights_points(g.el)
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:g.nt
         # stiffness and mass matrices
-        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        K = [ref_el_quad(ξ->φξ(el, ξ, i)*φξ(el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
+        JJ = J.Js[k, :, end]*J.Js[k, :, end]' #TODO
         K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
         M = J.dets[k]*s.M
 
@@ -104,8 +104,8 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     nz = size(z, 1)
     p = reshape(z, (nz, 1))
     t = [i + j - 1 for i=1:nz-1, j=1:2]
-    bot = nz
-    sfc = 1
+    bot = 1
+    sfc = nz
     e = Dict("bot"=>[bot], "sfc"=>[sfc])
     g = Grid(1, p, t, e)
 

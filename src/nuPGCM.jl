@@ -23,10 +23,12 @@ export
     quad_weights_points,
 
     # finite elements
+    AbstractElement,
     Line,
     Triangle,
     Wedge,
     φ,
+    ∂φ,
     φξ,
     φη,
     φζ,
