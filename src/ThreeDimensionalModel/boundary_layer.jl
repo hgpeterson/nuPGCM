@@ -14,7 +14,10 @@ function test_1d()
     y = 1
 
     # numerical sol
-    sol = solve_baroclinic_1dfe(z, bx, by, Ux, Uy, τx, τy, ε², y)
+
+    A = get_baroclinic_LHS(z, ε², y)
+    r = get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
+    sol = A\r
     ωx = sol[1:nz]
     ωy = sol[nz+1:2nz]
     χx = sol[2nz+1:3nz]

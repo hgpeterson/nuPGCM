@@ -17,7 +17,7 @@ function get_baroclinic_LHS(z, ε², f)
     t = [i + j - 1 for i=1:nz-1, j=1:2]
     bot = 1
     sfc = nz
-    e = Dict("bot"=>[nz], "sfc"=>[1])
+    e = Dict("bot"=>[bot], "sfc"=>[sfc])
     g = Grid(1, p, t, e)
 
     # indices
@@ -30,14 +30,16 @@ function get_baroclinic_LHS(z, ε², f)
     # quadrature
     wts, pts = quad_weights_points(g.el)
 
+    # stiffness and mass matrix over reference element
+    K_el = [ref_el_quad(ξ->φξ(g.el, ξ, i)*φξ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
+    M_el = [ref_el_quad(ξ->φ(g.el, ξ, i)*φ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
+
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:g.nt
         # stiffness and mass matrices
-        K = [ref_el_quad(ξ->φξ(el, ξ, i)*φξ(el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
-        JJ = J.Js[k, :, end]*J.Js[k, :, end]' #TODO
-        K = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        M = J.dets[k]*s.M
+        K = K_el*g.J.Js[k, 1, 1]^2*g.J.dets[k]
+        M = M_el*g.J.dets[k]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]
@@ -116,15 +118,17 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
 
-    # unpack
-    J = g.J
-    s = g.sfi
+    # quadrature
+    wts, pts = quad_weights_points(g.el)
+
+    # mass matrix over reference element
+    M_el = [ref_el_quad(ξ->φ(g.el, ξ, i)*φ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
 
     # stamp system
     r = zeros(N)
     for k=1:g.nt
         # mass matrix
-        M = J.dets[k]*s.M
+        M = M_el*g.J.dets[k]
 
         if size(bx, 1) == g.nt
             # bx, by are constant discontinuous

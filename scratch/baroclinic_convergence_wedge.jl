@@ -34,9 +34,9 @@ function convergence_wedge(h)
     f = 1
 
     # surface triangle 
-    p_sfc = [0      0
-             2h/√3  0
-             h/√3   h]
+    p_sfc = [0  0
+             h  0
+             0  h]
 
     # node grids
     σ = -1:h:0
@@ -54,12 +54,13 @@ function convergence_wedge(h)
     # p_sfc2 = vcat(p_sfc, p2[np+1:np+3, 1:2])
 
     # buoyancy
-    # H = [1+h, 1, 1, 1+h/2, 1, 1+h/2]
-    H = [1, 1, 1, 1, 1, 1]
+    H =  [1, 1+h, 1+h, 1+h/2, 1+h, 1+h/2]
+    Hx = [1, 1, 1]
+    Hy = [1, 1, 1]
     x2 = p2[:, 1]
     y2 = p2[:, 2]
     σ2 = p2[:, 3]
-    z2 = σ2#.*vcat(repeat(H[1:3], nσ), repeat(H[4:6], nσ))
+    z2 = σ2.*vcat(repeat(H[1:3], nσ), repeat(H[4:6], nσ))
     b = @. exp(x2 + y2 + z2)
     bx = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ]
     by = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ] 
@@ -75,26 +76,20 @@ function convergence_wedge(h)
     for k=1:nt
         for i=1:3
             i1 = i 
-            jacobian = J(w1, w1.p_ref[i1, :], p[t[k, :], :])
-            ξx = jacobian[1, 1]
-            ηx = jacobian[2, 1]
-            ζx = jacobian[3, 1]
-            ξy = jacobian[1, 2]
-            ηy = jacobian[2, 2]
-            ζy = jacobian[3, 2]
-            bxₕ[i, 2k-1] = sum(b[t2[k, j]]*(Dξ[i1, j]*ξx + Dη[i1, j]*ηx + Dζ[i1, j]*ζx) for j=1:w2.n)
-            byₕ[i, 2k-1] = sum(b[t2[k, j]]*(Dξ[i1, j]*ξy + Dη[i1, j]*ηy + Dζ[i1, j]*ζy) for j=1:w2.n)
+            jac = J(w1, w1.p_ref[i1, :], p[t[k, :], :])
+            bxₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 1] + Dη[i1, j]*jac[2, 1] + Dζ[i1, j]*jac[3, 1]) for j=1:w2.n)
+            byₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 2] + Dη[i1, j]*jac[2, 2] + Dζ[i1, j]*jac[3, 2]) for j=1:w2.n)
+            bσ = sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 3] + Dη[i1, j]*jac[2, 3] + Dζ[i1, j]*jac[3, 3]) for j=1:w2.n)
+            bxₕ[i, 2k-1] -= σ[k]*Hx[i]/H[i]*bσ
+            byₕ[i, 2k-1] -= σ[k]*Hy[i]/H[i]*bσ
 
             i2 = i + 3
-            jacobian = J(w1, w1.p_ref[i2, :], p[t[k, :], :])
-            ξx = jacobian[1, 1]
-            ηx = jacobian[2, 1]
-            ζx = jacobian[3, 1]
-            ξy = jacobian[1, 2]
-            ηy = jacobian[2, 2]
-            ζy = jacobian[3, 2]
-            bxₕ[i, 2k] = sum(b[t2[k, j]]*(Dξ[i2, j]*ξx + Dη[i2, j]*ηx + Dζ[i2, j]*ζx) for j=1:w2.n)
-            byₕ[i, 2k] = sum(b[t2[k, j]]*(Dξ[i2, j]*ξy + Dη[i2, j]*ηy + Dζ[i2, j]*ζy) for j=1:w2.n)
+            jac = J(w1, w1.p_ref[i2, :], p[t[k, :], :])
+            bxₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 1] + Dη[i2, j]*jac[2, 1] + Dζ[i2, j]*jac[3, 1]) for j=1:w2.n)
+            byₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 2] + Dη[i2, j]*jac[2, 2] + Dζ[i2, j]*jac[3, 2]) for j=1:w2.n)
+            bσ = sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 3] + Dη[i2, j]*jac[2, 3] + Dζ[i2, j]*jac[3, 3]) for j=1:w2.n)
+            bxₕ[i, 2k] -= σ[k+1]*Hx[i]/H[i]*bσ
+            byₕ[i, 2k] -= σ[k+1]*Hy[i]/H[i]*bσ
         end
     end
 
