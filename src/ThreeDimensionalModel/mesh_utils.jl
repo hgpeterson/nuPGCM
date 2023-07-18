@@ -40,11 +40,11 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     # g1 = Grid(1, p2[1:np1, :], t2[:, 1:6], e1)
     g1 = Grid(1, g2)
 
-    H = [1 - g1.p[i, 1]^2 - g1.p[i, 2]^2 for i=1:g1.np]
-    pz = copy(g1.p)
-    pz[:, 3] .*= H
-    vtk_grid("$out_folder/mesh.vtu", pz', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk end
+    vtk_grid("$out_folder/mesh.vtu", g1.p', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk 
+        vtk["bot"] = [i ∈ g1.e["bot"] ? 1 : 0 for i=1:g1.np]
+        vtk["sfc"] = [i ∈ g1.e["sfc"] ? 1 : 0 for i=1:g1.np]
+    end
     println("$out_folder/mesh.vtu")
 
-    return g1, g2
+    return g1, g2, σ
 end

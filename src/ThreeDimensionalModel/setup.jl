@@ -63,44 +63,19 @@ end
 # Constructors for ModelSetup2DPG
 ################################################################################
 
-function ModelSetup3D()
-    # hardcode for now
-    ε² = 1e-4
-    μ = 1e0
-    ϱ = 1e-4
-    Δt = 1e-3*μ*ϱ/ε²
-    H(x) = 1 - x[1]^2 - x[2]^2
-    Hx(x) = -2x[1]
-    Hy(x) = -2x[2]
-    f(x) = 1.
-    fy(x) = 0.
-    # f(x) = 1 + x[2]
-    # fy(x) = 1.
-    τx(x) = 0.
-    τy(x) = 0.
-    τx_x(x) = 0.
-    τx_y(x) = 0.
-    τy_x(x) = 0.
-    τy_y(x) = 0.
-    showplots = true
+function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1, nσ=0, chebyshev=false)
+    # second order surface mesh
+    g_sfc1 = Grid(2, g_sfc1)
 
-    # surface mesh
-    geo = "circle"
-    nref = 2
-    g_sfc = Grid(1, "meshes/$geo/mesh$nref.h5")
+    # 3d mesh
+    g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
 
     # convert functions to fields
-    H = FEField(H, g_sfc)
-    Hx = FEField(Hx, g_sfc)
-    Hy = FEField(Hy, g_sfc)
-    f = FEField(f, g_sfc)
-    fy = FEField(fy, g_sfc)
-    τx = FEField(τx, g_sfc)
-    τy = FEField(τy, g_sfc)
-    τx_x = FEField(τx_x, g_sfc)
-    τx_y = FEField(τx_y, g_sfc)
-    τy_x = FEField(τy_x, g_sfc)
-    τy_y = FEField(τy_y, g_sfc)
+    H = FEField(H, g_sfc2)
+    τx = FEField(τx, g_sfc2)
+    τy = FEField(τy, g_sfc2)
+
+    # TODO: take their gradients here
 
     if showplots
         quick_plot(H, L"H", "$out_folder/H.png")
@@ -111,16 +86,6 @@ function ModelSetup3D()
         curl = (τy_x - τx_y)*H - (τy*Hx - τx*Hy)
         quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
     end
-
-    # mesh
-    # g, g_cols, z_cols, nzs, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=false)
-    g, g_cols, z_cols, nzs, p_to_tri = gen_3D_valign_mesh(geo, nref, H; chebyshev=true, tessellate=true)
-
-    # second order b
-    sf2 = ShapeFunctions(order=2, dim=3)
-    sfi2 = ShapeFunctionIntegrals(sf2, sf2)
-    b_cols = [Grid(2, col.p, col.t, col.e, sf2, sfi2) for col ∈ g_cols]
-    # b_cols = g_cols
 
     # derivative matrices
     Dxs = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)

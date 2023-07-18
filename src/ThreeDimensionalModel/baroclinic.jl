@@ -27,12 +27,9 @@ function get_baroclinic_LHS(z, ε², f)
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
 
-    # quadrature
-    wts, pts = quad_weights_points(g.el)
-
     # stiffness and mass matrix over reference element
-    K_el = [ref_el_quad(ξ->φξ(g.el, ξ, i)*φξ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
-    M_el = [ref_el_quad(ξ->φ(g.el, ξ, i)*φ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
+    K_el = stiffness_matrix(g.el)[:, :, 1, 1]
+    M_el = mass_matrix(g.el)
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
@@ -118,11 +115,8 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
 
-    # quadrature
-    wts, pts = quad_weights_points(g.el)
-
     # mass matrix over reference element
-    M_el = [ref_el_quad(ξ->φ(g.el, ξ, i)*φ(g.el, ξ, j), wts, pts) for i=1:g.el.n, j=1:g.el.n]
+    M_el = mass_matrix(g.el)
 
     # stamp system
     r = zeros(N)

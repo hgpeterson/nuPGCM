@@ -70,13 +70,13 @@ function convergence_wedge(h)
     byₕ = zeros(3, 2nσ-2)
     w1 = Wedge(order=1)
     w2 = Wedge(order=2)
-    Dξ = [φξ(w2, w1.p_ref[i, :], j) for i=1:w1.n, j=1:w2.n]
-    Dη = [φη(w2, w1.p_ref[i, :], j) for i=1:w1.n, j=1:w2.n]
-    Dζ = [φζ(w2, w1.p_ref[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dξ = [φξ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dη = [φη(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dζ = [φζ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     for k=1:nt
         for i=1:3
             i1 = i 
-            jac = J(w1, w1.p_ref[i1, :], p[t[k, :], :])
+            jac = J(w1, w1.p[i1, :], p[t[k, :], :])
             bxₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 1] + Dη[i1, j]*jac[2, 1] + Dζ[i1, j]*jac[3, 1]) for j=1:w2.n)
             byₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 2] + Dη[i1, j]*jac[2, 2] + Dζ[i1, j]*jac[3, 2]) for j=1:w2.n)
             bσ = sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 3] + Dη[i1, j]*jac[2, 3] + Dζ[i1, j]*jac[3, 3]) for j=1:w2.n)
@@ -84,7 +84,7 @@ function convergence_wedge(h)
             byₕ[i, 2k-1] -= σ[k]*Hy[i]/H[i]*bσ
 
             i2 = i + 3
-            jac = J(w1, w1.p_ref[i2, :], p[t[k, :], :])
+            jac = J(w1, w1.p[i2, :], p[t[k, :], :])
             bxₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 1] + Dη[i2, j]*jac[2, 1] + Dζ[i2, j]*jac[3, 1]) for j=1:w2.n)
             byₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 2] + Dη[i2, j]*jac[2, 2] + Dζ[i2, j]*jac[3, 2]) for j=1:w2.n)
             bσ = sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 3] + Dη[i2, j]*jac[2, 3] + Dζ[i2, j]*jac[3, 3]) for j=1:w2.n)
@@ -170,6 +170,6 @@ function convergence_wedge(h)
     println(@sprintf("%1.1e  %1.1e  %1.1e  %1.1e", ωx_e, ωy_e, χx_e, χy_e))
 end
 
-convergence_wedge(0.1)
+convergence_wedge(0.01)
 
 println("Done.")
