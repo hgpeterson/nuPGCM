@@ -308,34 +308,22 @@ end
 φη(el, ξ, i) = ∂φ(el, ξ, i, 2)
 φζ(el, ξ, i) = ∂φ(el, ξ, i, 3)
 
-#### Jacobians ####
-
-xξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
-yξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
-zξ(el::AbstractElement, ξ, p) = sum(φξ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
-xη(el::AbstractElement, ξ, p) = sum(φη(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
-yη(el::AbstractElement, ξ, p) = sum(φη(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
-zη(el::AbstractElement, ξ, p) = sum(φη(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
-xζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 1] for i ∈ axes(p, 1))
-yζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 2] for i ∈ axes(p, 1))
-zζ(el::AbstractElement, ξ, p) = sum(φζ(el, ξ, i)*p[i, 3] for i ∈ axes(p, 1))
-J(el::Line, ξ, p) = 1/xξ(el, ξ, p)
-J(el::Triangle, ξ, p) = inv([xξ(el, ξ, p) xη(el, ξ, p)
-                             yξ(el, ξ, p) yη(el, ξ, p)])
-J(el::Wedge, ξ, p) = inv([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p)
-                          yξ(el, ξ, p) yη(el, ξ, p) yζ(el, ξ, p)
-                          zξ(el, ξ, p) zη(el, ξ, p) zζ(el, ξ, p)])
-j(el::Line, ξ, p) = 1/xξ(el, ξ, p)
-j(el::Triangle, ξ, p) = det([xξ(el, ξ, p) xη(el, ξ, p)
-                             yξ(el, ξ, p) yη(el, ξ, p)])
-j(el::Wedge, ξ, p) = det([xξ(el, ξ, p) xη(el, ξ, p) xζ(el, ξ, p)
-                          yξ(el, ξ, p) yη(el, ξ, p) yζ(el, ξ, p)
-                          zξ(el, ξ, p) zη(el, ξ, p) zζ(el, ξ, p)])
-
 #### Transformations #### 
 
 x(el::Union{Triangle, Wedge}, ξ, p) = sum(φ(el, ξ, i)*p[i, :] for i ∈ axes(p, 1))
 x(el::Line, ξ, p) = sum(φ(el, ξ, i)*p[i] for i ∈ eachindex(p))
+
+function transformation_matrix(el::Line, p)
+    return (p[2] - p[1])/2
+end
+function transformation_matrix(el::Triangle, p)
+    return [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
+end
+function transformation_matrix(el::Wedge, p)
+    return [p[2, 1]-p[1, 1]  p[2, 2]-p[1, 2]  0
+            p[3, 1]-p[1, 1]  p[3, 2]-p[1, 2]  0
+            0                0                p[4, 3]-p[1, 3]]
+end
 
 function ξ(el::Line, x, p)
     a = (p[2] - p[1])/2

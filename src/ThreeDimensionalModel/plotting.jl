@@ -62,19 +62,21 @@ function write_vtk(g, fname, data)
     points = g.p'
 
     # cells
-    if g.order == 0 
-        cell_type = VTKCellTypes.VTK_VERTEX
-    elseif g.order == 1
-        cell_type = VTKCellTypes.VTK_TETRA
-    elseif g.order == 2
-        cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
+    if g.el <: Triangle 
+        if g.el.n == 3
+            cell_type = VTKCellTypes.VTK_TRIANGLE
+        elseif g.el.n == 6
+            cell_type = VTKCellTypes.VTK_QUADRATIC_TRIANGLE
+        end
+    elseif g.el <: Wedge
+        cell_type = VTKCellTypes.VTK_WEDGE
     end
     cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
 
     # save as vtu file
     vtk_grid(fname, points, cells) do vtk
         for d ∈ data
-            if typeof(d.second) <: FEField
+            if typeof(d.second) <: AbstractField
                 vtk[d.first] = d.second.values
             else
                 vtk[d.first] = d.second

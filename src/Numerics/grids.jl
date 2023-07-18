@@ -75,7 +75,7 @@ function Grid(order::Integer, p, t, e::Dict)
     nn = size(t, 2)
 
     # compute Jacobians
-    J = Jacobians(p, t)
+    J = Jacobians(el, p, t)
 
     return Grid(el, J, p, np, t, nt, nn, e)
 end
@@ -288,61 +288,51 @@ function boundary_nodes(t)
 end
 
 """
-    J = Jacobians(g)
+    J = Jacobians(el, p, t)
 
 Compute Jacobian terms for transformations from reference element to element on grid.
 Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation ξ ↦ x is 
     x = A*ξ + b
 where
-    A in 1D = (x₂ - x₁)/2,
-    A in 2D = [x₂ - x₁  x₃ - x₁],
-    A in 3D = [x₂ - x₁  x₃ - x₁  x₄ - x₁].
-    b in 1D = (x₂ + x₁)/2,
-    b in 2D = x₁
-    b in 3D = x₁
-In other words, A = ∂x/∂ξ is the Jacobian. To transform from global coordinates to 
-the reference element, we then need the inverse of A, J = ∂ξ/∂x:
+    A for Line = (x₂ - x₁)/2,
+    b for Line = (x₂ + x₁)/2,
+
+    A for Triangle = [x₂-x₁  y₂-y₁
+                      x₃-x₁  y₃-y₁],
+    b for Triangle = [x₁, y₁]
+
+    A for Wedge = [x₂-x₁  y₂-y₁  0
+                   x₃-x₁  y₃-y₁  0
+                   0      0      z₄-z₁],
+    b for Wedge = [x₁, y₁, z₁]
+Note that this is only possible for our special wedges that have flat tops and aligned 
+bottom and top triangles. We call A = ∂x/∂ξ the Jacobian. To transform from global 
+coordinates to the reference element, we then need the inverse of A, J = ∂ξ/∂x:
     J in 1D = ∂ξ/∂x,
-    J in 2D = [∂ξ/∂x  ∂ξ/∂y;  ∂η/∂x  ∂η/∂y],
-    J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z;  ∂η/∂x  ∂η/∂y  ∂η/∂z;  ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
+    J in 2D = [∂ξ/∂x  ∂ξ/∂y
+               ∂η/∂x  ∂η/∂y],
+    J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z
+               ∂η/∂x  ∂η/∂y  ∂η/∂z
+               ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
 """
-function Jacobians(p, t)
+function Jacobians(el::AbstractElement, p, t)
     # indices
     nt = size(t, 1)
-    dim = size(p, 2)
 
     # pre-allocate
     dets = zeros(nt)
-    Js = zeros(nt, dim, dim)
+    Js = zeros(nt, el.dim, el.dim)
     
-    if dim == 3
-        # TODO: Implement J for Wedges
-        return Jacobians(dets, Js)
-    end
-
     # loop through elements in grid
     for k=1:nt
         # build A
-        A = [p[t[k, j+1], i] - p[t[k, 1], i] for i=1:dim, j=1:dim]
-
-        if dim == 1
-            # A = (x₂ - x₁)/2 for 1D case
-            A /= 2.0
-        end
+        A = transformation_matrix(el, p[t[k, :], :])
 
         # compute determinant
         dets[k] = abs(det(A))
 
         # invert for J
-        Js[k, :, :] = inv(A)
+        Js[k, :, :] .= inv(A)
     end
     return Jacobians(dets, Js)
-end
-function Jacobians(g::Grid)
-    return Jacobians(g.p, g.t)
-end
-function Jacobians(gfile::String)
-    # get order 1 FE grid
-    g = Grid(gfile, 1)
-    return Jacobians(g)
 end

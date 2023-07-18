@@ -4,46 +4,45 @@
 #   (2) Setup/Params
 ################################################################################
 
-struct ModelState3D{IN<:Integer,F<:Field,FV<:AbstractVector}
+struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField}
     # buoyancy
-	b::FV
+	b::F2
 
     # vorticity
-	ωx::F
-	ωy::F
+	ωx::F1
+	ωy::F1
 
     # streamfunction
-    χx::F
-    χy::F
+    χx::F1
+    χy::F1
 
     # iteration
-    i::IN
+    i::I
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F<:Field,G<:Grid,M<:AbstractMatrix,GV1<:AbstractVector,ZV<:AbstractVector,IV<:AbstractVector,CV<:AbstractVector,
-                    GV2<:AbstractVector,DV<:AbstractVector,FV<:AbstractVector,FA<:Factorization,FTV<:AbstractVector}
+struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:Grid,GS2<:Grid,G1<:Grid,G2<:Grid,V<:AbstractVector,
+                    I<:Integer,DV<:AbstractVector,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,FTV<:AbstractVector}
     ε²::FT
     μ::FT
     ϱ::FT
     Δt::FT
-    H::F
-    Hx::F
-    Hy::F
-    f::F
-    fy::F
-    τx::F
-    τy::F
-    τx_x::F
-    τx_y::F
-    τy_x::F
-    τy_y::F
-    g_sfc::G
-    g::G
-    g_cols::GV1
-    z_cols::ZV
-    nzs::IV
-    p_to_tri::CV
-    b_cols::GV2
+    H::F2
+    Hx::F1
+    Hy::F1
+    f::FT
+    β::FT
+    τx::F2
+    τy::F2
+    τx_x::F1
+    τx_y::F1
+    τy_x::F1
+    τy_y::F1
+    g_sfc1::GS1
+    g_sfc2::GS2
+    g1::G1
+    g2::G2
+    σ::V
+    nσ::I
     Dxs::DV
     Dys::DV
     baroclinic_LHSs::FV
@@ -60,32 +59,39 @@ struct ModelSetup3D{FT<:AbstractFloat,F<:Field,G<:Grid,M<:AbstractMatrix,GV1<:Ab
 end
 
 ################################################################################
-# Constructors for ModelSetup2DPG
+# Constructors for ModelSetup3D
 ################################################################################
 
 function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1, nσ=0, chebyshev=false)
     # second order surface mesh
-    g_sfc1 = Grid(2, g_sfc1)
+    g_sfc2 = Grid(2, g_sfc1)
 
-    # 3d mesh
+    # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
 
-    # convert functions to fields
+    # convert functions to FE fields
     H = FEField(H, g_sfc2)
     τx = FEField(τx, g_sfc2)
     τy = FEField(τy, g_sfc2)
 
-    # TODO: take their gradients here
+    # store their gradients as DG fields
+    Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    Hy = DGField([∂y(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τx_x = DGField([∂x(τx, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τx_y = DGField([∂y(τx, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τy_x = DGField([∂x(τy, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τy_y = DGField([∂y(τy, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
-    if showplots
-        quick_plot(H, L"H", "$out_folder/H.png")
-        quick_plot(Hx, L"H_x", "$out_folder/Hx.png")
-        quick_plot(Hy, L"H_y", "$out_folder/Hy.png")
-        f_over_H = f/(H + FEField(1e-5, g_sfc))
-        quick_plot(f_over_H, L"f/H", "$out_folder/f_over_H.png", vmax=6)
-        curl = (τy_x - τx_y)*H - (τy*Hx - τx*Hy)
-        quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
-    end
+    # plots
+    quick_plot(H, L"H", "$out_folder/H.png")
+    quick_plot(Hx, L"H_x", "$out_folder/Hx.png")
+    quick_plot(Hy, L"H_y", "$out_folder/Hy.png")
+    f_over_H = FEField(x->f + β*x[2], g_sfc2)/(H + FEField(1e-5, g_sfc2))
+    quick_plot(f_over_H, L"f/H", "$out_folder/f_over_H.png", vmax=6)
+    curl = (τy_x - τx_y)*H - (τy*Hx - τx*Hy)
+    quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
+
+    return
 
     # derivative matrices
     Dxs = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)

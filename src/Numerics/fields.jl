@@ -1,15 +1,15 @@
 # for defining operations on FEField's
 import Base: -, +, *, /, ^, log, abs, maximum, minimum, argmax, argmin, getindex
 
-abstract type Field end
+abstract type AbstractField{V, G} end
 
 # operations on Fields
-maximum(u::Field) = maximum(u.values)
-minimum(u::Field) = minimum(u.values)
-argmax(u::Field) = argmax(u.values)
-argmin(u::Field) = argmin(u.values)
+maximum(u::AbstractField) = maximum(u.values)
+minimum(u::AbstractField) = minimum(u.values)
+argmax(u::AbstractField) = argmax(u.values)
+argmin(u::AbstractField) = argmin(u.values)
 
-struct FEField{V<:AbstractVector, G<:Grid} <: Field
+struct FEField{V<:AbstractVector, G<:Grid} <: AbstractField{V, G}
     # values of FE field on the nodes of the grid
     values::V
 
@@ -44,9 +44,9 @@ abs(u::FEField) = FEField(abs.(u.values), u.g)
 /(u::FEField, v::FEField) = FEField(u.values ./ v.values, u.g)
 /(u::FEField, n::Number) = FEField(u.values / n, u.g)
 
-struct DGField{M<:AbstractMatrix, G<:Grid} <: Field
+struct DGField{V<:AbstractMatrix, G<:Grid} <: AbstractField{V, G}
     # values of DG field on the nodes of the grid
-    values::M
+    values::V
 
     # grid field exists on
     g::G
@@ -99,7 +99,7 @@ function FEField(u::DGField)
     return FEField(u_cg, g)
 end
 
-struct FVField{V<:AbstractVector, G<:Grid} <: Field
+struct FVField{V<:AbstractVector, G<:Grid} <: AbstractField{V, G}
     # values of FV field on the elements of the grid
     values::V
 
@@ -190,7 +190,6 @@ function pt_in_wedge(x, p)
     return pt_in_tri(x[1:2], p[1:3, 1:2]) && pt_in_line(x[3], p[[1,4], 3])
 end
 
-
 """
     k = get_k(x, g)
 
@@ -222,7 +221,7 @@ end
 
 Evaluate FEField `u` at point `x` on the grid.
 """
-function (u::Field)(x)
+function (u::AbstractField)(x)
     try
         # find element x is in
         k = get_k(x, u.g)
@@ -235,14 +234,14 @@ function (u::Field)(x)
 end
 function (u::FEField)(x, k)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
     return sum(u[u.g.t[k, i]]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
 end
 function (u::DGField)(x, k)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
     return sum(u[k, i]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
@@ -256,7 +255,7 @@ end
 
 Evaluate the `j`th partial derivative of `u` at `x`.
 """
-function ∂(u::Field, x, j)
+function ∂(u::AbstractField, x, j)
     try
         # find element x is in
         k = get_k(x, u.g)
@@ -269,26 +268,26 @@ function ∂(u::Field, x, j)
 end
 function ∂(u::FEField, x, k, j)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+    return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
 function ∂(u::DGField, x, k, j)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, 1:u.g.el.dim+1], :])
+    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[k, i]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.dim)
+    return sum(u[k, i]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
 function ∂(u::FVField, x, k, j)
     return 0
 end
 
 # shortcuts
-∂x(u::Field, x) = ∂(u, x, 1)
-∂y(u::Field, x) = ∂(u, x, 2)
-∂z(u::Field, x) = ∂(u, x, 3)
-∂x(u::Field, x, k) = ∂(u, x, k, 1)
-∂y(u::Field, x, k) = ∂(u, x, k, 2)
-∂z(u::Field, x, k) = ∂(u, x, k, 3)
+∂x(u::AbstractField, x) = ∂(u, x, 1)
+∂y(u::AbstractField, x) = ∂(u, x, 2)
+∂z(u::AbstractField, x) = ∂(u, x, 3)
+∂x(u::AbstractField, x, k) = ∂(u, x, k, 1)
+∂y(u::AbstractField, x, k) = ∂(u, x, k, 2)
+∂z(u::AbstractField, x, k) = ∂(u, x, k, 3)

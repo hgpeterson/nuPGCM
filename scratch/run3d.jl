@@ -12,11 +12,15 @@ function bowl()
     μ = 1e0
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
+    f = 0.
+    β = 1.
     H(x) = 1 - x[1]^2 - x[2]^2
     τx(x) = 0.
     τy(x) = 0.
 
-    g_sfc = Grid(1, "meshes/circle/mesh0.h5")
+    g_sfc1 = Grid(1, "meshes/circle/mesh3.h5")
+
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1)
 
     # m = ModelSetup3D()
     # # b = [FEField(x -> x[3], g) for g ∈ m.b_cols]

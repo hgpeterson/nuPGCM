@@ -41,7 +41,7 @@ export
     all_faces,
     boundary_nodes,
     Jacobians,
-    Field,
+    AbstractField,
     FEField,
     DGField,
     FVField,
