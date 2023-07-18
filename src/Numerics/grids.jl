@@ -52,7 +52,7 @@ function Grid(order::Integer, p, t, e::Dict)
 
     if order == 1
         # in case grid is higher order, downscale
-        t = t[:, 1:dim+1]
+        t = t[:, 1:el.n]
         np = maximum(t)
         p = p[1:np, :]
         for bdy ∈ e
@@ -61,7 +61,7 @@ function Grid(order::Integer, p, t, e::Dict)
             e[bdy_name] = bdy_nodes[bdy_nodes .≤ np]
         end
     elseif order == 2
-        if size(t, 2) != (dim + 2)*(dim + 1)/2
+        if size(t, 2) != el.n 
             # add nodes for higher orders
             p, t, e = add_nodes(p, t, e, order)
         end
@@ -314,6 +314,11 @@ function Jacobians(p, t)
     # pre-allocate
     dets = zeros(nt)
     Js = zeros(nt, dim, dim)
+    
+    if dim == 3
+        # TODO: Implement J for Wedges
+        return Jacobians(dets, Js)
+    end
 
     # loop through elements in grid
     for k=1:nt

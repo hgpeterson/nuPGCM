@@ -144,7 +144,7 @@ function __init__()
 end
 
 # default output folder, can be changed
-out_folder = ""
+out_folder = "output"
 function set_out_folder(of::String)
     global out_folder = of
 end

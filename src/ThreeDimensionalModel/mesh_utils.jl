@@ -1,256 +1,50 @@
-function gen_3D_valign_mesh(geo, nref, H; chebyshev=false, tessellate=nothing)
-    # surface mesh
-    g_sfc = H.g
-
-    # will we need to tessellate?
-    if tessellate === nothing
-        tessellate = !isfile("meshes/$geo/t_col_$(nref)_1.h5")
-    end
-    progress_string = tessellate ? "Generating columns..." : "Loading columns..."
-
-    # x and y for convenience
-    x = g_sfc.p[:, 1]
-    y = g_sfc.p[:, 2]
-
-    # mesh res
-    emap, edges, bndix = all_edges(g_sfc.t)
-    h = 1/size(edges, 1)*sum(norm(g_sfc.p[edges[i, 1], :] - g_sfc.p[edges[i, 2], :]) for i in axes(edges, 1))
-
-    # mapping from points to triangles:
-    #   `p_to_tri[i]` is vector of cartesian indices pointing to where point `i` is in `g_sfc.t`
-    p_to_tri = [findall(I -> i ∈ g_sfc.t[I], CartesianIndices(size(g_sfc.t))) for i=1:g_sfc.np]
-
-    # mapping from triangles to points in 3D: 
-    #   `tri_to_p[k, i][j]` is the `j`th point in the vertical for the `i`th point of triangle `k`
-    tri_to_p = [Int64[] for k=1:g_sfc.nt, i=1:3] # allocate
-
-    # z_cols
-    z_cols = Vector{Vector{Float64}}(undef, g_sfc.np)
-
-    # add points to p, e, and tri_to_p
-    # nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : ceil(H[i]/h) for i=1:g_sfc.np]
-    nzs = Int64[i ∈ g_sfc.e["bdy"] ? 1 : max(ceil(H[i]/h), 6) for i=1:g_sfc.np]
-    p = zeros(sum(nzs), 3)
-    e = Dict("sfc"=>Int64[], "bot"=>Int64[])
-    np = 0
-    for i=1:g_sfc.np
-        # vertical grid
-        nz = nzs[i]
-        if nz == 1
-            z = [0]
-        else
-            if chebyshev
-                z = -H[i]*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
-            else
-                z = range(-H[i], 0, length=nz)
-            end
-        end
-
-        # add to p
-        p[np+1:np+nz, :] = [x[i]*ones(nz)  y[i]*ones(nz)  z]
-        z_cols[i] = z
-
-        # add to e
-        e["bot"] = [e["bot"]; np + 1]
-        e["sfc"] = [e["sfc"]; np + nz]
-
-        # add to tri_to_p
-        for I ∈ p_to_tri[i]
-            for j=np+1:np+nz
-                push!(tri_to_p[I], j)
-            end
-        end
-
-        # iterate
-        np += nz
+function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
+    if nσ == 0
+        # by default, compute nσ to roughly match surface mesh
+        emap, edges, bndix = all_edges(g_sfc1.t)
+        h = 1/size(edges, 1)*sum(norm(g_sfc1.p[edges[i, 1], :] - g_sfc1.p[edges[i, 2], :]) for i ∈ axes(edges, 1))
+        nσ = Int64(round(1/h)) + 1
     end
 
-    # size of each column
-    nzs = [size(z, 1) for z ∈ z_cols]
-
-    # setup shape functions and their integrals now since they're the same for each grid
-    sf = ShapeFunctions(order=1, dim=3)
-    sfi = ShapeFunctionIntegrals(sf, sf)
-
-    # columnwise and global tessellation
-    g_cols = Vector{Grid}(undef, g_sfc.nt)
-    t = Matrix{Int64}(undef, 0, 4) 
-    @showprogress progress_string for k=1:g_sfc.nt
-        # number of points in vertical for each vertex of sfc tri
-        lens = length.(tri_to_p[k, :])
-
-        # local p and e for col
-        nodes_col = [tri_to_p[k, 1]; tri_to_p[k, 2]; tri_to_p[k, 3]]
-        p_col = p[nodes_col, :]  
-        e_bot_col = [1, lens[1]+1, lens[1]+lens[2]+1]
-        e_sfc_col = [lens[1], lens[1]+lens[2], lens[1]+lens[2]+lens[3]]
-
-        # either compute or load t for col
-        if tessellate
-            t_col = generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)
-        else
-            t_col = load_t_col(geo, nref, k)
-        end
-
-        # add to global t
-        t = [t; nodes_col[t_col]]
-
-        # create e_col dictionary
-        e_col = Dict("sfc"=>e_sfc_col, "bot"=>e_bot_col)
-
-        # save column data
-        g_cols[k] = Grid(1, p_col, t_col, e_col, sf, sfi)
+    # σ coordinates for node grids
+    if chebyshev
+        σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2
+    else
+        σ = -1:1/(nσ-1):0
     end
 
-    g = Grid(1, p, t, e)
+    # node points on second order grid
+    p2 = hcat(repeat(g_sfc2.p, inner=(nσ, 1)), repeat(σ, g_sfc2.np))
+    np2 = g_sfc2.np*nσ
 
-    return g, g_cols, z_cols, nzs, p_to_tri
-end
-
-function generate_t_col(geo, nref, k, p, tri_to_p, lens, nodes_col)
-    # start local t
-    t_col = Matrix{Int64}(undef, 0, 4) 
-
-    # first top tri is at sfc
-    top = [tri_to_p[k, i][1] for i=1:3]
-
-    # continue down to bottom
-    for j=2:maximum(lens)
-        # make bottom tri from next nodes down or top tri nodes
-        bot = [j ≤ lens[i] ? tri_to_p[k, i][j] : top[i] for i=1:3]
-
-        # use delaunay to tessellate
-        ig = unique(vcat(top, bot))
-        tl = delaunay(p[ig, :]).simplices
-
-        # add to t_col
-        i_col = Int64.(indexin(ig, nodes_col))
-        t_col = [t_col; i_col[tl]]
-
-        # continue
-        top = bot
-    end
-
-    save_t_col(geo, nref, k, t_col)
-
-    return t_col
-end
-
-function save_t_col(geo, nref, k, t_col)
-    h5open("meshes/$geo/t_col_$(nref)_$k.h5", "w") do file
-        write(file, "t_col", t_col)
-    end
-end
-
-function load_t_col(geo, nref, k)
-    file = h5open("meshes/$geo/t_col_$(nref)_$k.h5", "r")
-    t_col = read(file, "t_col")
-    close(file)
-    return t_col
-end
-
-function get_gb(m::ModelSetup3D)
-    # unpack
-    b_cols = m.b_cols
-    g_sfc = m.g_sfc
-
-    # allocate
-    np = sum(g.np for g ∈ b_cols)
-    nt = sum(g.nt for g ∈ b_cols)
-    p = zeros(Float64, np, 3)
-    t = zeros(Int64, nt, 10)
-    ebot = zeros(Int64, 6*g_sfc.nt)
-    esfc = zeros(Int64, 6*g_sfc.nt)
-
-    # add each column
-    i_p = 0
-    i_t = 0
-    for k=1:g_sfc.nt
-        g = b_cols[k]
-        np_k = g.np
-        nt_k = g.nt
-        p[i_p+1:i_p+np_k, :] = g.p
-        t[i_t+1:i_t+nt_k, :] = i_p .+ g.t
-        ebot[6k-5:6k] = g.e["bot"]
-        esfc[6k-5:6k] = g.e["sfc"]
-        i_p += np_k
-        i_t += nt_k
-    end
-
-    # add tag indices to p
-    ptag = hcat(p, 1:np)
-
-    # sort rows
-    ptag = sortslices(ptag, dims=1)
-
-    # remove duplicate points
-    keep = zeros(Bool, np)
-    keep[unique(i -> ptag[i, 1:3], 1:np)] .= 1
-    p = ptag[keep, 1:3]
-
-    # position of ith point is p[pmap[i], :] 
-    pmap = cumsum(keep)
-    invpermute!(pmap, Int64.(ptag[:, 4]))
-
-    # apply map to and e
-    t = pmap[t]
-    ebot = pmap[ebot]
-    esfc = pmap[ebot]
-    e = Dict("bot" => ebot, "sfc" => esfc)
-
-    # # plot
-    # points = p'
-    # cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA
-    # cells = [MeshCell(cell_type, t[i, :]) for i ∈ axes(t, 1)]
-    # vtk_grid("$out_folder/gb.vtu", points, cells) do vtk
-    # end
-
-    # make grid
-    gb = Grid(2, p, t, e)
-
-    return gb, pmap
-end
-
-function merge_cols(b, gb, b_cols, pmap)
-    b_merged = zeros(gb.np)
-    i_p = 0
-    for k ∈ eachindex(b_cols)
-        g = b_cols[k]
-        b_merged[pmap[i_p+1:i_p+g.np]] = b[k].values
-        i_p += g.np
-    end
-    return b_merged
-end
-
-function split_cols(b, b_cols, pmap)
-    b_split = [FEField(zeros(g.np), g) for g ∈ b_cols]
-    i_p = 0
-    for k ∈ eachindex(b_cols)
-        g = b_cols[k]
-        b_split[k].values[:] = b[pmap[i_p+1:i_p+g.np]]
-        i_p += g.np
-    end
-    return b_split
-end
-
-function get_b_z_cols(gb, g_sfc)
-    tol = 1e-1/sqrt(g_sfc.np)
-    g_sfc2 = Grid(2, g_sfc)
-    b_z_cols_indices = zeros(Bool, g_sfc2.np, gb.np)
-    @showprogress "hell yeah brother" for i=1:g_sfc2.np
-        for j=1:gb.np
-            b_z_cols_indices[i, j] = (norm(gb.p[j, 1:2] - g_sfc2.p[i, :]) < tol)
+    # node connectivities on second order grid
+    t2 = zeros(Int64, g_sfc2.nt*(nσ - 1), 12)
+    for k_sfc=1:g_sfc2.nt
+        for j=1:nσ-1
+            t2[(k_sfc-1)*(nσ-1)+j, 1:3]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j
+            t2[(k_sfc-1)*(nσ-1)+j, 4:6]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j .+ 1
+            t2[(k_sfc-1)*(nσ-1)+j, 7:9]   = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j
+            t2[(k_sfc-1)*(nσ-1)+j, 10:12] = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j .+ 1
         end
     end
-    b_z_cols_indices = [findall(j->b_z_cols_indices[i, j], 1:gb.np) for i=1:g_sfc2.np]
-    perms = [sortperm(gb.p[b_z_cols_indices[i], 3]) for i=1:g_sfc2.np]
-    b_z_cols_indices = [b_z_cols_indices[i][perms[i]] for i=1:g_sfc2.np]
-    b_z_cols = [gb.p[b_z_cols_indices[i], 3] for i=1:g_sfc2.np]
 
-    # checks
-    # nps = [g.np for g ∈ m.b_cols]
-    # nps_b = [sum(size(b_z_cols[g_sfc2.t[k, i]], 1) for i=1:g_sfc2.nn) for k=1:g_sfc2.nt]
-    # display(all(nps_b .== nps))
-    # display(findall(k -> nps_b[k] != nps[k], 1:g_sfc2.nt))
-    return b_z_cols_indices, b_z_cols
+    # boundaries on second order grid
+    e2 = Dict("sfc"=>collect(nσ:nσ:np2), "bot"=>collect(1:nσ:np2-nσ+1))
+
+    # second order grid
+    g2 = Grid(2, p2, t2, e2)
+
+    # first order grid
+    # np1 = g_sfc1.np*nσ
+    # e1 = Dict("sfc"=>collect(nσ:nσ:np1), "bot"=>collect(1:nσ:np1-nσ+1))
+    # g1 = Grid(1, p2[1:np1, :], t2[:, 1:6], e1)
+    g1 = Grid(1, g2)
+
+    H = [1 - g1.p[i, 1]^2 - g1.p[i, 2]^2 for i=1:g1.np]
+    pz = copy(g1.p)
+    pz[:, 3] .*= H
+    vtk_grid("$out_folder/mesh.vtu", pz', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk end
+    println("$out_folder/mesh.vtu")
+
+    return g1, g2
 end
