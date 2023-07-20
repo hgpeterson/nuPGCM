@@ -234,17 +234,17 @@ function (u::AbstractField)(x)
 end
 function (u::FEField)(x, k)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
+    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[u.g.t[k, i]]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
+    return sum(u[u.g.t[k, i]]*φ(u.g.el, ξ, i) for i=1:u.g.nn)
 end
 function (u::DGField)(x, k)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
+    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[k, i]*φ(u.g.el, ξ₀, i) for i=1:u.g.nn)
+    return sum(u[k, i]*φ(u.g.el, ξ, i) for i=1:u.g.nn)
 end
 function (u::FVField)(x, k)
     return u[k]
@@ -268,17 +268,17 @@ function ∂(u::AbstractField, x, j)
 end
 function ∂(u::FEField, x, k, j)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
+    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
+    return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
 function ∂(u::DGField, x, k, j)
     # transform to reference element
-    ξ₀ = ξ(u.g.el, x, u.g.p[u.g.t[k, :], :])
+    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
 
     # sum weighted combinations of element k's basis functions at x
-    return sum(u[k, i]*∂φ(u.g.el, ξ₀, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
+    return sum(u[k, i]*∂φ(u.g.el, ξ, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
 function ∂(u::FVField, x, k, j)
     return 0

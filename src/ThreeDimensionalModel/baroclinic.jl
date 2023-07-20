@@ -137,7 +137,7 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
             r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
             r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
         else
-            error("Unsupported baroclinic RHS size.")
+            error("Unsupported length of buoyancy gradient vector for baroclinc problem. Expected $(g.nt), $(2g.nt), or $(g.np), got $(length(bx)).")
         end
     end
 
@@ -154,39 +154,41 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots=false)
     # pre-allocate 
-    ωx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    ωy_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χx_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χy_Ux = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    nσ = length(σ)
+    ωx_Ux = zeros(g_sfc1.np, nσ)
+    ωy_Ux = zeros(g_sfc1.np, nσ)
+    χx_Ux = zeros(g_sfc1.np, nσ)
+    χy_Ux = zeros(g_sfc1.np, nσ)
     
     # compute and store
-    for i=1:g_sfc.np
-        # keep coastline set to zero
-        nz = nzs[i]
-        if nz == 1
+    for i=1:g_sfc1.np
+        # H = 0 solution
+        if i ∈ g_sfc1.e["bdy"]
+            ωx_Ux[i, :] .= 0
+            ωy_Ux[i, :] = -3*σ
+            χx_Ux[i, :] .= 0
+            χy_Ux[i, :] .= 0
             continue
         end
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(z_cols[i], zeros(nz-1), zeros(nz-1), H[i]^2, 0, 0, 0, ε²)
+        r = get_baroclinic_RHS(σ*H[i], zeros(nσ-1), zeros(nσ-1), H[i]^2, 0, 0, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
 
-        # store in each element column
-        for I ∈ p_to_tri[i]
-            ωx_Ux[I] = sol[0*nz+1:1*nz]
-            ωy_Ux[I] = sol[1*nz+1:2*nz]
-            χx_Ux[I] = sol[2*nz+1:3*nz]
-            χy_Ux[I] = sol[3*nz+1:4*nz]
-        end
+        # store 
+        ωx_Ux[i, :] = sol[0*nσ+1:1*nσ]
+        ωy_Ux[i, :] = sol[1*nσ+1:2*nσ]
+        χx_Ux[i, :] = sol[2*nσ+1:3*nσ]
+        χy_Ux[i, :] = sol[3*nσ+1:4*nσ]
     end
 
     if showplots
-        ωx_Ux_bot = DGField([ωx_Ux[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
-        ωy_Ux_bot = DGField([ωy_Ux[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
+        ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
         quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "$out_folder/omegax_Ux_bot.png")
         quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "$out_folder/omegay_Ux_bot.png")
         # write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
@@ -299,70 +301,43 @@ Compute gradient matrices for element column `g_col`.
 Stored in arrays such that `Dxs[i]` is and (2*nz[i]-2) × (b_col.np) matrix that gives bx
 for node column i when multiplied by b in `b_col`.  
 """
-function get_b_gradient_matrices(b_col, g_col, nzs) 
-    if b_col.order == 1
-        Dξ = [∂φ(g_col.sf, i, 1, 0) for i=1:g_col.nn]
-        Dη = [∂φ(g_col.sf, i, 2, 0) for i=1:g_col.nn]
-        Dζ = [∂φ(g_col.sf, i, 3, 0) for i=1:g_col.nn]
-        Dxs = Vector{SparseMatrixCSC}(undef, 3)
-        Dys = Vector{SparseMatrixCSC}(undef, 3)
-        n = 0
+function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
+    # unpack
+    w1 = g1.el
+    w2 = g2.el
+    J = g1.J
+    nσ = length(σ)
+    g_sfc2 = H.g
+
+    Dξ = [φξ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dη = [φη(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dζ = [φζ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
+    Dxs = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
+    Dys = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
+    @showprogress "Computing buoyancy gradient matrices..." for k=1:g_sfc2.nt
         for i=1:3
-            nz = nzs[i]
+            i1 = i 
+            i2 = i + 3
             Dx = Tuple{Int64,Int64,Float64}[]
             Dy = Tuple{Int64,Int64,Float64}[]
-            for j=1:nz-1
-                k_tet = findfirst(k -> n+j ∈ g_col.t[k, :] && n+j+1 ∈ g_col.t[k, :], 1:g_col.nt)
-                ξx = g_col.J.Js[k_tet, 1, 1]
-                ξy = g_col.J.Js[k_tet, 1, 2]
-                ηx = g_col.J.Js[k_tet, 2, 1]
-                ηy = g_col.J.Js[k_tet, 2, 2]
-                ζx = g_col.J.Js[k_tet, 3, 1]
-                ζy = g_col.J.Js[k_tet, 3, 2]
-                for l=1:g_col.nn
-                    push!(Dx, (j, g_col.t[k_tet, l], Dξ[l]*ξx + Dη[l]*ηx + Dζ[l]*ζx))
-                    push!(Dy, (j, g_col.t[k_tet, l], Dξ[l]*ξy + Dη[l]*ηy + Dζ[l]*ζy))
+            for j=1:nσ-1
+                k_w = (nσ - 1)*(k - 1) + j
+                jac = J.Js[k_w, :, :]
+                for l=1:w2.n
+                    push!(Dx, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]))
+                    push!(Dy, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 2] + Dη[i1, l]*jac[2, 2] + Dζ[i1, l]*jac[3, 2]))
+                    push!(Dx, (2j-1, g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
+                    push!(Dy, (2j-1, g2.t[k_w, l], -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
+
+                    push!(Dx, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]))
+                    push!(Dy, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 2] + Dη[i2, l]*jac[2, 2] + Dζ[i2, l]*jac[3, 2]))
+                    push!(Dx, (2j, g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
+                    push!(Dy, (2j, g2.t[k_w, l], -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
                 end
             end
-            Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), nz-1, g_col.np)
-            Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), nz-1, g_col.np)
-            n += nz
+            Dxs[k, i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nσ-2, g2.np)
+            Dys[k, i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nσ-2, g2.np)
         end
-    elseif b_col.order == 2
-        p1_ref = reference_element_nodes(1, 3)
-        Dξ = [∂φ(b_col.sf, j, 1, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
-        Dη = [∂φ(b_col.sf, j, 2, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
-        Dζ = [∂φ(b_col.sf, j, 3, p1_ref[i, :]) for i=1:g_col.nn, j=1:b_col.nn]
-        Dxs = Vector{SparseMatrixCSC}(undef, 3)
-        Dys = Vector{SparseMatrixCSC}(undef, 3)
-        n = 0
-        for i=1:3
-            nz = nzs[i]
-            Dx = Tuple{Int64,Int64,Float64}[]
-            Dy = Tuple{Int64,Int64,Float64}[]
-            for j=1:nz-1
-                k_tet = findfirst(k -> n+j ∈ g_col.t[k, :] && n+j+1 ∈ g_col.t[k, :], 1:g_col.nt)
-                ξx = g_col.J.Js[k_tet, 1, 1]
-                ξy = g_col.J.Js[k_tet, 1, 2]
-                ηx = g_col.J.Js[k_tet, 2, 1]
-                ηy = g_col.J.Js[k_tet, 2, 2]
-                ζx = g_col.J.Js[k_tet, 3, 1]
-                ζy = g_col.J.Js[k_tet, 3, 2]
-                i1_tet = findfirst(i -> g_col.t[k_tet, i] == n+j, 1:g_col.nn) 
-                i2_tet = findfirst(i -> g_col.t[k_tet, i] == n+j+1, 1:g_col.nn)
-                for l=1:b_col.nn
-                    push!(Dx, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξx + Dη[i1_tet, l]*ηx + Dζ[i1_tet, l]*ζx))
-                    push!(Dx, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξx + Dη[i2_tet, l]*ηx + Dζ[i2_tet, l]*ζx))
-                    push!(Dy, (2j-1, b_col.t[k_tet, l], Dξ[i1_tet, l]*ξy + Dη[i1_tet, l]*ηy + Dζ[i1_tet, l]*ζy))
-                    push!(Dy, (2j,   b_col.t[k_tet, l], Dξ[i2_tet, l]*ξy + Dη[i2_tet, l]*ηy + Dζ[i2_tet, l]*ζy))
-                end
-            end
-            Dxs[i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nz-2, b_col.np)
-            Dys[i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nz-2, b_col.np)
-            n += nz
-        end
-    else
-        error("Unsupported b_col order.")
     end
 
     return Dxs, Dys

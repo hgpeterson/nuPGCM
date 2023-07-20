@@ -310,9 +310,19 @@ end
 
 #### Transformations #### 
 
-x(el::Union{Triangle, Wedge}, ξ, p) = sum(φ(el, ξ, i)*p[i, :] for i ∈ axes(p, 1))
-x(el::Line, ξ, p) = sum(φ(el, ξ, i)*p[i] for i ∈ eachindex(p))
+"""
+    A = transformation_matrix(el, p)
 
+Returns matrix `A` for the transformation ξ ↦ x, which is of the form 
+    x = A*ξ + b
+where
+    A for Line = (x₂ - x₁)/2,
+    A for Triangle = [x₂-x₁  y₂-y₁
+                      x₃-x₁  y₃-y₁],
+    A for Wedge = [x₂-x₁  y₂-y₁  0
+                   x₃-x₁  y₃-y₁  0
+                   0      0      z₄-z₁].
+"""
 function transformation_matrix(el::Line, p)
     return (p[2] - p[1])/2
 end
@@ -325,20 +335,45 @@ function transformation_matrix(el::Wedge, p)
             0                0                p[4, 3]-p[1, 3]]
 end
 
-function ξ(el::Line, x, p)
-    a = (p[2] - p[1])/2
-    b = (p[1] + p[2])/2
-    return (x - b)/a
+"""
+    b = transformation_vector(el, p)
+
+Returns vector `b` for the transformation ξ ↦ x, which is of the form 
+    x = A*ξ + b
+where
+    b for Line = (x₂ + x₁)/2,
+    b for Triangle = [x₁, y₁],
+    b for Wedge = [x₁, y₁, z₁].
+"""
+function transformation_vector(el::Line, p)
+    return (p[1] + p[2])/2
 end
-function ξ(el::Triangle, x, p)
-    A = [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
-    b = p[1, :]
+function transformation_vector(el::Union{Triangle, Wedge}, p)
+    return p[1, :]
+end
+
+"""
+    ξ = transform_to_ref_el(el, x, p)
+
+Returns coordinates `ξ` in reference element that map to `x` in the element
+defined by the nodes `p`.
+"""
+function transform_to_ref_el(el, x, p)
+    A = transformation_matrix(el, p)
+    b = transformation_vector(el, p)
     return A\(x .- b)
 end
-function ξ(el::Wedge, x, p)
-    ζ = (ξ(Line(order=1), x[3], [p[1, 3], p[4, 3]]) + 1)/2
-    ξη = ξ(Triangle(order=1), x[1:2], p[1:3, 1:2])
-    return [ξη[1], ξη[2], ζ]
+
+"""
+    x = transform_from_ref_el(el, ξ, p)
+
+Returns coordinates `x` in element defined by the nodes `p` that map to `ξ` 
+in the reference element.
+"""
+function transform_from_ref_el(el, ξ, p)
+    A = transformation_matrix(el, p)
+    b = transformation_vector(el, p)
+    return A*ξ .+ b
 end
 
 #### Some useful finite element matrices ####

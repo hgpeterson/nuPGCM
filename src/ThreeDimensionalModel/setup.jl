@@ -91,26 +91,22 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     curl = (τy_x - τx_y)*H - (τy*Hx - τx*Hy)
     quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
 
-    return
-
     # derivative matrices
-    Dxs = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
-    Dys = Vector{Vector{SparseMatrixCSC}}(undef, g_sfc.nt)
-    @showprogress "Saving derivative matrices..." for k=1:g_sfc.nt
-        Dxs[k], Dys[k] = get_b_gradient_matrices(b_cols[k], g_cols[k], nzs[g_sfc.t[k, :]]) 
-    end
-
-    # baroclinc LHSs
-    baroclinic_LHSs = [nzs[i] > 1 ? get_baroclinic_LHS(z_cols[i], ε², f(g_sfc.p[i, :])) : lu(sparse([1;;])) for i ∈ eachindex(z_cols)]
+    Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
+    
+    # baroclinc LHS for each node column on first order grid
+    baroclinic_LHSs = [i ∉ g_sfc1.e["bdy"] ? get_baroclinic_LHS(σ*H[i], ε², f + β*g_sfc1.p[i, 2]) : lu(sparse([1;;])) for i=1:g_sfc1.np]
 
     # get transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε², showplots=showplots)
-    ωx_Ux_bot = FEField([ωx_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
-    ωy_Ux_bot = FEField([ωy_Ux[p_to_tri[i][1]][1] for i=1:g_sfc.np], g_sfc)/H^2
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε², showplots=true)
+    ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
 
     # bottom drag coefficients
-    r_sym = ωy_Ux_bot/H
-    r_asym = ωx_Ux_bot/H
+    r_sym  = FEField(ωy_Ux_bot.values./H[1:g_sfc1.np], g_sfc1)
+    r_asym = FEField(ωx_Ux_bot.values./H[1:g_sfc1.np], g_sfc1)
+
+    return
 
     # barotropic LHS
     barotropic_LHS = get_barotropic_LHS(g_sfc, r_sym, r_asym, f, fy, H, Hx, Hy, ε²)
