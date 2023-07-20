@@ -152,8 +152,10 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
     JEBAR = get_JEBAR(m, b, showplots=showplots)
 
     # unpack
-    g = m.g_sfc
-    ε² = m.ε²
+    g = m.g_sfc1
+    bdy = g.e["bdy"]
+    J = g.J
+    el = g.el
 
     # indices
     N = g.np
@@ -162,9 +164,6 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
     bdy = g.e["bdy"]
     J = g.J
 
-    # integration
-    quad_wts, quad_pts = quad_weights_points(deg=7, dim=2)
-
     # stamp
     rhs = zeros(N)
     for k=1:g.nt
@@ -172,16 +171,16 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
         ∂x∂ξ = J.dets[k]
 
         # transformation from reference triangle
-        T(ξ) = transform_from_ref_el(ξ, g.p[g.t[k, 1:3], :])
+        T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
 
         # rhs
         function func_r(ξ, i)
             x = T(ξ)
             ω_b_bot_div = ∂x(ωx_b_bot, x, k) + ∂y(ωy_b_bot, x, k)
-            φi = φ(g.sf, i, ξ)
-            return (-JEBAR(x, k) + ε²*ω_b_bot_div)*φi*∂x∂ξ
+            φ_i = φ(el, ξ, i)
+            return (-JEBAR(x, k) + ε²*ω_b_bot_div)*φ_i*∂x∂ξ
         end
-        r = [ref_el_quad(ξ -> func_r(ξ, i), quad_wts, quad_pts) for i=1:g.nn]
+        r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
 
         rhs[g.t[k, :]] += r
     end
@@ -196,56 +195,40 @@ end
 
 function get_JEBAR(m::ModelSetup3D, b; showplots=false)
     # unpack
-    g_sfc = m.g_sfc
-    p_to_tri = m.p_to_tri
-    z_cols = m.z_cols
-    nzs = m.nzs
+    g_sfc1 = m.g_sfc1
+    σ = m.σ
     Dxs = m.Dxs
     Dys = m.Dys
-    H = m.H
     Hx = m.Hx
     Hy = m.Hy
 
     # compute b gradients
-    bx = [Dxs[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    by = [Dys[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    bx = [Dxs[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    by = [Dys[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
 
     # compute and store
-    JEBAR = zeros(g_sfc.nt, g_sfc.nn)
-    for i=1:g_sfc.np
-        # keep coastline set to zero
-        nz = nzs[i]
-        if nz == 1
-            continue
-        end
-
-        # create 1D grid
-        p = reshape(z_cols[i], (nz, 1))
-        t = [i + j - 1 for i=1:nz-1, j=1:2]
-        e = Dict("bot"=>[1], "sfc"=>[nz])
-        g = Grid(1, p, t, e)
-
-        # compute JEBAR with bx and by from each different element column
-        for I ∈ p_to_tri[i]
-            γx = integrate_γ(g, bx[I]) 
-            γy = integrate_γ(g, by[I]) 
-            JEBAR[I] = (Hx[i]*γy - Hy[i]*γx)/H[i]^2
+    JEBAR = zeros(g_sfc1.nt, g_sfc1.nn)
+    for k=1:g_sfc1.nt
+        for i=1:g_sfc1.nn
+            γx = integrate_γ(bx[k, i], σ) 
+            γy = integrate_γ(by[k, i], σ) 
+            JEBAR[k, i] = Hy[k, i]*γx - Hx[k, i]*γy
         end
     end
-    JEBAR = DGField(JEBAR, g_sfc)
+    JEBAR = DGField(JEBAR, g_sfc1)
 
     if showplots
-        quick_plot(JEBAR*H^2, L"H^2 J(1/H, \gamma)", "$out_folder/JEBAR.png")
+        JEBARH2 = DGField([JEBAR[k, i]*m.H[g_sfc1.t[k, i]]^2 for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+        quick_plot(JEBARH2, L"H^2 J(1/H, \gamma)", "$out_folder/JEBAR.png")
     end
     return JEBAR
 end
 
 """
-    ∫ zf dz = integrate_γ(g, f)
+    ∫ σf dσ = integrate_γ(f, σ)
 
-Integrat z*f over [-H, 0] for DG array `f` over grid `g` using trapezoidal rule.
+Integrate `σ` times DG field `f` over σ using trapezoidal rule.
 """
-function integrate_γ(g, f)
-    return sum((f[2k-1]*g.p[g.t[k, 2]] + f[2k]*g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
-    # return sum(f[k]*(g.p[g.t[k, 2]] + g.p[g.t[k, 1]])/2 * (g.p[g.t[k, 2]] - g.p[g.t[k, 1]]) for k=1:g.nt)
+function integrate_γ(f, σ)
+    return sum((f[2k-1]*σ[k] + f[2k]*σ[k+1])/2 * (σ[k] - σ[k+1]) for k=1:length(σ)-1)
 end

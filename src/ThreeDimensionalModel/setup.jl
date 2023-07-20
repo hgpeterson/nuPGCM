@@ -68,6 +68,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
 
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
+    nσ = length(σ)
 
     # convert functions to FE fields
     H = FEField(H, g_sfc2)
@@ -98,9 +99,9 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
 
     # derivative matrices
-    # Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
-    Dxs = zeros(2, 2)
-    Dys = zeros(2, 2)
+    Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
+    # Dxs = zeros(2, 2)
+    # Dys = zeros(2, 2)
     
     # baroclinc LHS for each node column on first order grid
     baroclinic_LHSs = [i ∉ g_sfc1.e["bdy"] ? get_baroclinic_LHS(σ*H[i], ε², f + β*g_sfc1.p[i, 2]) : lu(sparse([1;;])) for i=1:g_sfc1.np]

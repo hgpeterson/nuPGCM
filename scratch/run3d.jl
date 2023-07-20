@@ -18,13 +18,20 @@ function bowl()
     τx(x) = -cos(π*x[2])
     τy(x) = 0.
 
-    g_sfc1 = Grid(1, "meshes/circle/mesh3.h5")
+    g_sfc1 = Grid(1, "meshes/circle/mesh2.h5")
 
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, g_sfc1)
 
     Ψ = m.barotropic_LHS\m.barotropic_RHS_τ
     Ψ = FEField(Ψ, m.g_sfc1)
     nuPGCM.quick_plot(Ψ, L"\Psi", "$out_folder/psi.png")
+
+
+    # δ = 0.1
+    # b = FEField(x -> H(x)*x[3] + δ*exp(-H(x)*(x[3] + 1)/δ), m.g2)
+    b = FEField(x->x[1]*x[2], m.g2)
+    nuPGCM.quick_plot(FEField(x->x[2]^2-x[1]^2, g_sfc1), L"H^2 J(1/H, \gamma)", "$out_folder/JEBAR_a.png")
+    invert(m, b, showplots=true)
 
     return m
 

@@ -1,25 +1,22 @@
 function invert(m::ModelSetup3D, b; showplots=false)
     # unpack
-    g_sfc = m.g_sfc
-    g_cols = m.g_cols
-    p_to_tri = m.p_to_tri
+    g_sfc1 = m.g_sfc1
     H = m.H
 
     # get buoyancy ω and χ
     ωx_b, ωy_b, χx_b, χy_b = get_buoyancy_ω_and_χ(m, b, showplots=showplots)
-    ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
-    ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)/H
-    # convert to cg
-    ωx_b_bot = FEField(ωx_b_bot)
-    ωy_b_bot = FEField(ωy_b_bot)
+    ωx_b_bot = DGField([ωx_b[k, i, 1]/H[g_sfc1.t[k, i]] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    ωy_b_bot = DGField([ωy_b[k, i, 1]/H[g_sfc1.t[k, i]] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     # solve barotropic
     barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot, showplots=showplots)
     Ψ = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
-    Ψ = FEField(Ψ, g_sfc)
+    Ψ = FEField(Ψ, g_sfc1)
     if showplots
         quick_plot(Ψ, L"\Psi", "$out_folder/psi.png")
     end
+
+    return
 
     # take gradients to get Uˣ and Uʸ
     Ux, Uy = get_Ux_Uy(Ψ, showplots=showplots)

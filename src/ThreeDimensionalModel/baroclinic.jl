@@ -236,52 +236,49 @@ end
 
 function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
-    g_sfc = m.g_sfc
-    p_to_tri = m.p_to_tri
-    z_cols = m.z_cols
-    nzs = m.nzs
+    g_sfc1 = m.g_sfc1
+    σ = m.σ
+    nσ = m.nσ
+    H = m.H
     Dxs = m.Dxs
     Dys = m.Dys
     ε² = m.ε²
     baroclinic_LHSs = m.baroclinic_LHSs
 
     # setup arrays
-    bx = [Dxs[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    by = [Dys[k][i]*b[k].values for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    bx = [Dxs[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    by = [Dys[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
 
-    # pre-allocate 
-    ωx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    ωy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χx_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χy_b = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    # pre-allocate
+    ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    ωy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    χx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    χy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
 
     # compute and store
-    for i=1:g_sfc.np
-        # keep coastline set to zero
-        nz = nzs[i]
-        if nz == 1
-            continue
-        end
+    for k=1:g_sfc1.nt
+        for i=1:g_sfc1.nn
+            ig = g_sfc1.t[k, i]
+            # H = 0 solution: all zeros
+            if ig ∈ g_sfc1.e["bdy"]
+                continue
+            end
 
-        # solve baroclinic problem with bx and by from each different element column
-        for I ∈ p_to_tri[i]
-            # get rhs with bx and by and all else zeros
-            r = get_baroclinic_RHS(z_cols[i], bx[I], by[I], 0, 0, 0, 0, ε²)
-
-            # solve baroclinc problem
-            sol = baroclinic_LHSs[i]\r
+            # solve baroclinic problem with bx and by from element column
+            r = get_baroclinic_RHS(σ*H[ig], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
+            sol = baroclinic_LHSs[ig]\r
 
             # store
-            ωx_b[I] = sol[0*nz+1:1*nz]
-            ωy_b[I] = sol[1*nz+1:2*nz]
-            χx_b[I] = sol[2*nz+1:3*nz]
-            χy_b[I] = sol[3*nz+1:4*nz]
+            ωx_b[k, i, :] = sol[0*nσ+1:1*nσ]
+            ωy_b[k, i, :] = sol[1*nσ+1:2*nσ]
+            χx_b[k, i, :] = sol[2*nσ+1:3*nσ]
+            χy_b[k, i, :] = sol[3*nσ+1:4*nσ]
         end
     end
 
     if showplots
-        ωx_b_bot = DGField([ωx_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
-        ωy_b_bot = DGField([ωy_b[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωx_b_bot = DGField([ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+        ωy_b_bot = DGField([ωy_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
         quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "$out_folder/omegax_b_bot.png")
         quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "$out_folder/omegay_b_bot.png")
         # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
