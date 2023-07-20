@@ -128,7 +128,7 @@ function add_nodes(p, t, e, order)
             pnew = [pnew; new_pts]
             tnew = hcat(tnew, size(p, 1) + (i - 2)*(size(p, 1) - 1) .+ emap)
         end
-        enew = e
+        enew = copy(e)
     else
         if order == 2
             # add midpoints
@@ -140,16 +140,16 @@ function add_nodes(p, t, e, order)
             tnew = hcat(t, np0 .+ emap)
 
             # add points that were on each boundary of `e` (TODO: improve performance here)
+            enew = copy(e)
             for bdy ∈ e
                 bdy_name = bdy.first
                 bdy_nodes = bdy.second
                 for i ∈ axes(edges, 1)
                     if edges[i, 1] ∈ bdy_nodes && edges[i, 2] ∈ bdy_nodes
-                        e[bdy_name] = [e[bdy_name]; np0 + i]
+                        enew[bdy_name] = [enew[bdy_name]; np0 + i]
                     end
                 end
             end
-            enew = e
         else
             error("Unsupported grid order `$order` for dimension `$dim`.")
         end

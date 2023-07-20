@@ -164,12 +164,9 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots
     
     # compute and store
     for i=1:g_sfc1.np
-        # H = 0 solution
+        # H = 0 solution: ωʸ = -3σ, all else zeros
         if i ∈ g_sfc1.e["bdy"]
-            ωx_Ux[i, :] .= 0
             ωy_Ux[i, :] = -3*σ
-            χx_Ux[i, :] .= 0
-            χy_Ux[i, :] .= 0
             continue
         end
 
@@ -197,39 +194,38 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc, p_to_tri, z_cols, nzs, H, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots=false)
     # pre-allocate 
-    ωx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    ωy_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χx_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χy_τx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
+    nσ = length(σ)
+    ωx_τx = zeros(g_sfc1.np, nσ)
+    ωy_τx = zeros(g_sfc1.np, nσ)
+    χx_τx = zeros(g_sfc1.np, nσ)
+    χy_τx = zeros(g_sfc1.np, nσ)
     
     # compute and store
-    for i=1:g_sfc.np
-        # keep coastline set to zero
-        nz = nzs[i]
-        if nz == 1
+    for i=1:g_sfc1.np
+        # H = 0 solution: ωʸ = (3σ + 2)/2ε², all else zeros
+        if i ∈ g_sfc1.e["bdy"]
+            ωy_τx[i, :] = @. (3*σ + 2)/(2ε²)
             continue
         end
 
-        # get rhs with τˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(z_cols[i], zeros(nz-1), zeros(nz-1), 0, 0, H[i]^2, 0, ε²)
+        # get rhs with τˣ = 1 and all else zeros
+        r = get_baroclinic_RHS(σ*H[i], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
 
-        # store in each element column
-        for I ∈ p_to_tri[i]
-            ωx_τx[I] = sol[0*nz+1:1*nz]
-            ωy_τx[I] = sol[1*nz+1:2*nz]
-            χx_τx[I] = sol[2*nz+1:3*nz]
-            χy_τx[I] = sol[3*nz+1:4*nz]
-        end
+        # store
+        ωx_τx[i, :] = sol[0*nσ+1:1*nσ]
+        ωy_τx[i, :] = sol[1*nσ+1:2*nσ]
+        χx_τx[i, :] = sol[2*nσ+1:3*nσ]
+        χy_τx[i, :] = sol[3*nσ+1:4*nσ]
     end
 
     if showplots
-        ωx_τx_bot = DGField([ωx_τx[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
-        ωy_τx_bot = DGField([ωy_τx[k, i][1] for k=1:g_sfc.nt, i=1:g_sfc.nn], g_sfc)
+        ωx_τx_bot = FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
+        ωy_τx_bot = FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
         quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "$out_folder/omegax_taux_bot.png")
         quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "$out_folder/omegay_taux_bot.png")
         # write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
