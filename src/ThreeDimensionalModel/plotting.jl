@@ -16,7 +16,7 @@ function quick_plot(u::FVField, cb_label, fname; vmax=nothing)
     quick_plot_save(fname, ax)
 end
 function quick_plot(u::DGField, args...; kwargs...)
-    quick_plot(FVField(u), args..., kwargs...)
+    quick_plot(FEField(u), args..., kwargs...)
 end
 # function quick_plot(u::DGField, cb_label, fname)
 #     fig, ax = plt.subplots(1, 2, gridspec_kw=Dict("width_ratios"=>[20, 1]))
@@ -86,12 +86,17 @@ function write_vtk(g, fname, data)
     println(fname)
 end
 
-function plot_ω_χ(ωx, ωy, χx, χy, g_cols)
-    # global p, t, e
-    np = sum(g.np for g ∈ g_cols)
-    nt = sum(g.nt for g ∈ g_cols)
+function plot_ω_χ(m, ωx, ωy, χx, χy)
+    # unpack 
+    g = m.g1
+    g_sfc2 = m.g_sfc2
+    H = m.H
+    nσ = m.nσ
+
+    # DG p, t
+    np = g.nt*g.nn
     p = zeros(Float64, (np, 3))
-    t = zeros(Int64, (nt, 4))
+    t = zeros(Int64, (g.nt, 6))
 
     # global solutions
     ωx_plot = zeros(np)
@@ -99,32 +104,47 @@ function plot_ω_χ(ωx, ωy, χx, χy, g_cols)
     χx_plot = zeros(np)
     χy_plot = zeros(np)
 
-    # current indices
-    i_p = 0
-    i_t = 0
-
     # all the nodes within each column will have a unique tag
-    for k ∈ eachindex(g_cols)
-        # column
-        g = g_cols[k]
-
-        # add nodes, triangles, and edge nodes
-        p[i_p+1:i_p+g.np, :] = g.p
-        t[i_t+1:i_t+g.nt, :] = i_p .+ g.t
-
-        # unpack solutions
-        ωx_plot[i_p+1:i_p+g.np] = vcat(ωx[k, 1], ωx[k, 2], ωx[k, 3])
-        ωy_plot[i_p+1:i_p+g.np] = vcat(ωy[k, 1], ωy[k, 2], ωy[k, 3])
-        χx_plot[i_p+1:i_p+g.np] = vcat(χx[k, 1], χx[k, 2], χx[k, 3])
-        χy_plot[i_p+1:i_p+g.np] = vcat(χy[k, 1], χy[k, 2], χy[k, 3])
-
-        # increment
-        i_p += g.np
-        i_t += g.nt
+    i_p = 0
+    for k_sfc=1:g_sfc2.nt
+        for j=1:nσ-1
+            k_w = (k_sfc - 1)*(nσ - 1) + j
+            p[i_p+1:i_p+6, 1:2] = g.p[g.t[k_w, :], 1:2]
+            p[i_p+1:i_p+3, 3] = g.p[g.t[k_w, 1:3], 3].*H[g_sfc2.t[k_sfc, 1:3]]
+            p[i_p+4:i_p+6, 3] = g.p[g.t[k_w, 4:6], 3].*H[g_sfc2.t[k_sfc, 1:3]]
+            t[k_w, :] = i_p+1:i_p+6
+            ωx_plot[i_p+1:i_p+6] = ωx[k_w, :]
+            ωy_plot[i_p+1:i_p+6] = ωy[k_w, :]
+            χx_plot[i_p+1:i_p+6] = χx[k_w, :]
+            χy_plot[i_p+1:i_p+6] = χy[k_w, :]
+            i_p += 6
+        end
     end
 
+    # # map solutions from [k_sfc, i_sfc, j] to [k_wedge, i_wedge]
+    # ωx_plot = zeros(g.nt, g.nn)
+    # ωy_plot = zeros(g.nt, g.nn)
+    # χx_plot = zeros(g.nt, g.nn)
+    # χy_plot = zeros(g.nt, g.nn)
+    # nσ = size(ωx, 3)
+    # for k_sfc ∈ axes(ωx, 1)
+    #     for i ∈ axes(ωx, 2)
+    #         for j=1:nσ-1
+    #             k_w = (k_sfc - 1)*(nσ - 1) + j
+    #             ωx_plot[k_w, i] = ωx[k_sfc, i, j]
+    #             ωy_plot[k_w, i] = ωy[k_sfc, i, j]
+    #             χx_plot[k_w, i] = χx[k_sfc, i, j]
+    #             χy_plot[k_w, i] = χy[k_sfc, i, j]
+    #             ωx_plot[k_w, i+3] = ωx[k_sfc, i, j+1]
+    #             ωy_plot[k_w, i+3] = ωy[k_sfc, i, j+1]
+    #             χx_plot[k_w, i+3] = χx[k_sfc, i, j+1]
+    #             χy_plot[k_w, i+3] = χy[k_sfc, i, j+1]
+    #         end
+    #     end
+    # end
+
     # save as .vtu
-    cells = [MeshCell(VTKCellTypes.VTK_TETRA, t[i, :]) for i ∈ axes(t, 1)]
+    cells = [MeshCell(VTKCellTypes.VTK_WEDGE, t[i, :]) for i ∈ axes(t, 1)]
     vtk_grid("output/omega_chi.vtu", p', cells) do vtk
         vtk["omega^x"] = ωx_plot
         vtk["omega^y"] = ωy_plot

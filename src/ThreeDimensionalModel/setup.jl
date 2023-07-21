@@ -4,7 +4,7 @@
 #   (2) Setup/Params
 ################################################################################
 
-struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField}
+struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField,FS1<:AbstractField}
     # buoyancy
 	b::F2
 
@@ -15,6 +15,9 @@ struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField}
     # streamfunction
     χx::F1
     χy::F1
+
+    # barotropic streamfunction
+    Ψ::FS1
 
     # iteration
     i::I
@@ -62,7 +65,7 @@ end
 # Constructors for ModelSetup3D
 ################################################################################
 
-function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1, nσ=0, chebyshev=false)
+function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1; nσ=0, chebyshev=false)
     # second order surface mesh
     g_sfc2 = Grid(2, g_sfc1)
 

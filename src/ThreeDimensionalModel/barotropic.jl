@@ -152,6 +152,7 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
     JEBAR = get_JEBAR(m, b, showplots=showplots)
 
     # unpack
+    ε² = m.ε²
     g = m.g_sfc1
     bdy = g.e["bdy"]
     J = g.J
@@ -159,10 +160,6 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
 
     # indices
     N = g.np
-
-    # unpack
-    bdy = g.e["bdy"]
-    J = g.J
 
     # stamp
     rhs = zeros(N)
@@ -218,8 +215,7 @@ function get_JEBAR(m::ModelSetup3D, b; showplots=false)
     JEBAR = DGField(JEBAR, g_sfc1)
 
     if showplots
-        JEBARH2 = DGField([JEBAR[k, i]*m.H[g_sfc1.t[k, i]]^2 for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-        quick_plot(JEBARH2, L"H^2 J(1/H, \gamma)", "$out_folder/JEBAR.png")
+        quick_plot(JEBAR, L"J(1/H, \gamma)", "$out_folder/JEBAR.png")
     end
     return JEBAR
 end
@@ -230,5 +226,5 @@ end
 Integrate `σ` times DG field `f` over σ using trapezoidal rule.
 """
 function integrate_γ(f, σ)
-    return sum((f[2k-1]*σ[k] + f[2k]*σ[k+1])/2 * (σ[k] - σ[k+1]) for k=1:length(σ)-1)
+    return sum((f[2k-1]*σ[k] + f[2k]*σ[k+1])/2 * (σ[k+1] - σ[k]) for k=1:length(σ)-1)
 end

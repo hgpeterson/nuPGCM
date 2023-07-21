@@ -1,6 +1,7 @@
-function invert(m::ModelSetup3D, b; showplots=false)
+function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
+    nσ = m.nσ
     H = m.H
 
     # get buoyancy ω and χ
@@ -10,69 +11,47 @@ function invert(m::ModelSetup3D, b; showplots=false)
 
     # solve barotropic
     barotropic_RHS_b = get_barotropic_RHS_b(m, b, ωx_b_bot, ωy_b_bot, showplots=showplots)
-    Ψ = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
-    Ψ = FEField(Ψ, g_sfc1)
+    Ψ.values[:] = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
     if showplots
         quick_plot(Ψ, L"\Psi", "$out_folder/psi.png")
     end
-
-    return
 
     # take gradients to get Uˣ and Uʸ
     Ux, Uy = get_Ux_Uy(Ψ, showplots=showplots)
 
     # put them all together to get full ω's and χ's
-    nzs = [size(z, 1) for z ∈ m.z_cols]
-    ωx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    ωy = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χx = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    χy = [zeros(nzs[g_sfc.t[k, i]]) for k=1:g_sfc.nt, i=1:g_sfc.nn]
-    for i=1:g_sfc.np
-        for I ∈ p_to_tri[i]
-            ωx[I] = ωx_b[I] + Ux[I[1]]*m.ωx_Ux[I]/m.H[i]^2 - Uy[I[1]]*m.ωy_Ux[I]/m.H[i]^2
-            ωy[I] = ωy_b[I] + Ux[I[1]]*m.ωy_Ux[I]/m.H[i]^2 + Uy[I[1]]*m.ωx_Ux[I]/m.H[i]^2
-            χx[I] = χx_b[I] + Ux[I[1]]*m.χx_Ux[I]/m.H[i]^2 - Uy[I[1]]*m.χy_Ux[I]/m.H[i]^2
-            χy[I] = χy_b[I] + Ux[I[1]]*m.χy_Ux[I]/m.H[i]^2 + Uy[I[1]]*m.χx_Ux[I]/m.H[i]^2
+    for k=1:g_sfc1.nt
+        for i=1:g_sfc1.nn
+            ig = g_sfc1.t[k, i]
+            for j=1:nσ-1
+                k_w = (k - 1)*(nσ - 1) + j
+                ωx.values[k_w, i] = ωx_b[k, i, j] + Ux[k]*m.ωx_Ux[ig, j]/m.H[ig]^2 - Uy[k]*m.ωy_Ux[ig, j]/m.H[ig]^2 #FIXME: add τ's
+                ωy.values[k_w, i] = ωy_b[k, i, j] + Ux[k]*m.ωy_Ux[ig, j]/m.H[ig]^2 + Uy[k]*m.ωx_Ux[ig, j]/m.H[ig]^2
+                χx.values[k_w, i] = χx_b[k, i, j] + Ux[k]*m.χx_Ux[ig, j]/m.H[ig]^2 - Uy[k]*m.χy_Ux[ig, j]/m.H[ig]^2
+                χy.values[k_w, i] = χy_b[k, i, j] + Ux[k]*m.χy_Ux[ig, j]/m.H[ig]^2 + Uy[k]*m.χx_Ux[ig, j]/m.H[ig]^2
+                ωx.values[k_w, i+3] = ωx_b[k, i, j+1] + Ux[k]*m.ωx_Ux[ig, j+1]/m.H[ig]^2 - Uy[k]*m.ωy_Ux[ig, j+1]/m.H[ig]^2 
+                ωy.values[k_w, i+3] = ωy_b[k, i, j+1] + Ux[k]*m.ωy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k]*m.ωx_Ux[ig, j+1]/m.H[ig]^2
+                χx.values[k_w, i+3] = χx_b[k, i, j+1] + Ux[k]*m.χx_Ux[ig, j+1]/m.H[ig]^2 - Uy[k]*m.χy_Ux[ig, j+1]/m.H[ig]^2
+                χy.values[k_w, i+3] = χy_b[k, i, j+1] + Ux[k]*m.χy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k]*m.χx_Ux[ig, j+1]/m.H[ig]^2
+            end
         end
     end
     if showplots
-        plot_ω_χ(ωx, ωy, χx, χy, g_cols)
-    end
-
-    # cg for now
-    g = m.g
-    ωx_cg = zeros(g.np)
-    ωy_cg = zeros(g.np)
-    χx_cg = zeros(g.np)
-    χy_cg = zeros(g.np)
-    n = 0
-    for i=1:g_sfc.np
-        nz = nzs[i]
-        weight = size(p_to_tri[i], 1)
-        for I ∈ p_to_tri[i]
-            ωx_cg[n+1:n+nz] += ωx[I]/weight
-            ωy_cg[n+1:n+nz] += ωy[I]/weight
-            χx_cg[n+1:n+nz] += χx[I]/weight
-            χy_cg[n+1:n+nz] += χy[I]/weight
-        end
-        n += nz
-    end
-    ωx = FEField(ωx_cg, g)
-    ωy = FEField(ωy_cg, g)
-    χx = FEField(χx_cg, g)
-    χy = FEField(χy_cg, g)
-    if showplots
-        write_vtk(g, "$out_folder/omega_chi_cg.vtu", Dict("omega^x"=>ωx, "omega^y"=>ωy, "chi^x"=>χx, "chi^y"=>χy))
+        plot_ω_χ(m, ωx, ωy, χx, χy)
     end
 
     return ωx, ωy, χx, χy, Ψ
 end
+function invert(m::ModelSetup3D, b; kwargs...)
+    ωx = DGField(0, m.g1)
+    ωy = DGField(0, m.g1)
+    χx = DGField(0, m.g1)
+    χy = DGField(0, m.g1)
+    Ψ = FEField(0, m.g_sfc1)
+    return invert!(m, b, ωx, ωy, χx, χy, Ψ; kwargs...)
+end
 function invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
-    ωx, ωy, χx, χy, Ψ = invert(m, s.b; kwargs...)
-    s.ωx.values[:] = ωx.values
-    s.ωy.values[:] = ωy.values
-    s.χx.values[:] = χx.values
-    s.χy.values[:] = χy.values
+    invert!(m, s.b, s.ωx, s.ωy, s.χx, s.χy, s.Ψ; kwargs...)
     return s
 end
 

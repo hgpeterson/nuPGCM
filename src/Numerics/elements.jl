@@ -317,10 +317,10 @@ Returns matrix `A` for the transformation ξ ↦ x, which is of the form
     x = A*ξ + b
 where
     A for Line = (x₂ - x₁)/2,
-    A for Triangle = [x₂-x₁  y₂-y₁
-                      x₃-x₁  y₃-y₁],
-    A for Wedge = [x₂-x₁  y₂-y₁  0
-                   x₃-x₁  y₃-y₁  0
+    A for Triangle = [x₂-x₁  x₃-x₁
+                      y₂-y₁  y₃-y₁],
+    A for Wedge = [x₂-x₁  x₃-x₁  0
+                   y₂-y₁  y₃-y₁  0
                    0      0      z₄-z₁].
 """
 function transformation_matrix(el::Line, p)
@@ -330,8 +330,8 @@ function transformation_matrix(el::Triangle, p)
     return [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
 end
 function transformation_matrix(el::Wedge, p)
-    return [p[2, 1]-p[1, 1]  p[2, 2]-p[1, 2]  0
-            p[3, 1]-p[1, 1]  p[3, 2]-p[1, 2]  0
+    return [p[2, 1]-p[1, 1]  p[3, 1]-p[1, 1]  0
+            p[2, 2]-p[1, 2]  p[3, 2]-p[1, 2]  0
             0                0                p[4, 3]-p[1, 3]]
 end
 

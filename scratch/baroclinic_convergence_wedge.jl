@@ -34,9 +34,13 @@ function convergence_wedge(h)
     f = 1
 
     # surface triangle 
-    p_sfc = [0  0
-             h  0
-             0  h]
+    # p_sfc = [0  0
+    #          h  0
+    #          0  h]
+    p_sfc = [ 0.124797  0.257943
+    0.166628  0.184961
+    0.208122  0.257599]
+    display(nuPGCM.transformation_matrix(Triangle(order=1), p_sfc))
 
     # node grids
     σ = -1:h:0
@@ -49,21 +53,27 @@ function convergence_wedge(h)
     p = hcat(repeat(p_sfc, nσ), repeat(σ, inner=3))
     vtk_grid("output/col.vtu", p', [MeshCell(VTKCellTypes.VTK_WEDGE, t[k, :]) for k ∈ axes(t, 1)]) do vtk end
 
+    display(nuPGCM.transformation_matrix(Wedge(order=1), p[t[1, :], :]))
+
     # second order buoyancy
     p2, t2 = second_order_wedge_col(p, t)
-    # p_sfc2 = vcat(p_sfc, p2[np+1:np+3, 1:2])
+    p_sfc2 = vcat(p_sfc, p2[np+1:np+3, 1:2])
 
     # buoyancy
-    H =  [1, 1+h, 1+h, 1+h/2, 1+h, 1+h/2]
-    Hx = [1, 1, 1]
-    Hy = [1, 1, 1]
+    # H =  [1, 1+h, 1+h, 1+h/2, 1+h, 1+h/2]
+    H = [1 - p_sfc2[i, 1]^2 - p_sfc2[i, 2]^2 for i=1:6]
+    # Hx = [1, 1, 1]
+    # Hy = [1, 1, 1]
     x2 = p2[:, 1]
     y2 = p2[:, 2]
     σ2 = p2[:, 3]
-    z2 = σ2.*vcat(repeat(H[1:3], nσ), repeat(H[4:6], nσ))
-    b = @. exp(x2 + y2 + z2)
-    bx = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ]
-    by = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ] 
+    # z2 = σ2.*vcat(repeat(H[1:3], nσ), repeat(H[4:6], nσ))
+    b = @. (1 - x2^2 - y2^2)*σ2
+    bx = [-2*p_sfc[i, 1]*σ[j] for i=1:3, j=1:nσ]
+    by = [-2*p_sfc[i, 2]*σ[j] for i=1:3, j=1:nσ] 
+    # b = @. exp(x2 + y2 + z2)
+    # bx = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ]
+    # by = [exp(p_sfc[i, 1] + p_sfc[i, 2] + σ[j]*H[i]) for i=1:3, j=1:nσ] 
 
     # numerical gradients
     bxₕ = zeros(3, 2nσ-2)
@@ -80,16 +90,16 @@ function convergence_wedge(h)
             i1 = i 
             bxₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 1] + Dη[i1, j]*jac[2, 1] + Dζ[i1, j]*jac[3, 1]) for j=1:w2.n)
             byₕ[i, 2k-1] += sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 2] + Dη[i1, j]*jac[2, 2] + Dζ[i1, j]*jac[3, 2]) for j=1:w2.n)
-            bσ = sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 3] + Dη[i1, j]*jac[2, 3] + Dζ[i1, j]*jac[3, 3]) for j=1:w2.n)
-            bxₕ[i, 2k-1] -= σ[k]*Hx[i]/H[i]*bσ
-            byₕ[i, 2k-1] -= σ[k]*Hy[i]/H[i]*bσ
+            # bσ = sum(b[t2[k, j]]*(Dξ[i1, j]*jac[1, 3] + Dη[i1, j]*jac[2, 3] + Dζ[i1, j]*jac[3, 3]) for j=1:w2.n)
+            # bxₕ[i, 2k-1] -= σ[k]*Hx[i]/H[i]*bσ
+            # byₕ[i, 2k-1] -= σ[k]*Hy[i]/H[i]*bσ
 
             i2 = i + 3
             bxₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 1] + Dη[i2, j]*jac[2, 1] + Dζ[i2, j]*jac[3, 1]) for j=1:w2.n)
             byₕ[i, 2k] += sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 2] + Dη[i2, j]*jac[2, 2] + Dζ[i2, j]*jac[3, 2]) for j=1:w2.n)
-            bσ = sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 3] + Dη[i2, j]*jac[2, 3] + Dζ[i2, j]*jac[3, 3]) for j=1:w2.n)
-            bxₕ[i, 2k] -= σ[k+1]*Hx[i]/H[i]*bσ
-            byₕ[i, 2k] -= σ[k+1]*Hy[i]/H[i]*bσ
+            # bσ = sum(b[t2[k, j]]*(Dξ[i2, j]*jac[1, 3] + Dη[i2, j]*jac[2, 3] + Dζ[i2, j]*jac[3, 3]) for j=1:w2.n)
+            # bxₕ[i, 2k] -= σ[k+1]*Hx[i]/H[i]*bσ
+            # byₕ[i, 2k] -= σ[k+1]*Hy[i]/H[i]*bσ
         end
     end
 

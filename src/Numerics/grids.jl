@@ -295,10 +295,10 @@ Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation 
     x = A*ξ + b
 where
     A for Line = (x₂ - x₁)/2,
-    A for Triangle = [x₂-x₁  y₂-y₁
-                      x₃-x₁  y₃-y₁],
-    A for Wedge = [x₂-x₁  y₂-y₁  0
-                   x₃-x₁  y₃-y₁  0
+    A for Triangle = [x₂-x₁  x₃-x₁
+                      y₂-y₁  y₃-y₁],
+    A for Wedge = [x₂-x₁  x₃-x₁  0
+                   y₂-y₁  y₃-y₁  0
                    0      0      z₄-z₁].
 Note that this is only possible for our special wedges that have flat tops and aligned 
 bottom and top triangles. We call A = ∂x/∂ξ the Jacobian. To transform from global 
