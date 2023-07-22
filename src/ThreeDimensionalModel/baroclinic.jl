@@ -324,8 +324,8 @@ function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
 
                     push!(Dx, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]))
                     push!(Dy, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 2] + Dη[i2, l]*jac[2, 2] + Dζ[i2, l]*jac[3, 2]))
-                    push!(Dx, (2j, g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
-                    push!(Dy, (2j, g2.t[k_w, l], -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
+                    push!(Dx, (2j, g2.t[k_w, l], -σ[j+1]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
+                    push!(Dy, (2j, g2.t[k_w, l], -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
                 end
             end
             Dxs[k, i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nσ-2, g2.np)

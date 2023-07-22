@@ -21,16 +21,14 @@ function bowl()
 
     g_sfc1 = Grid(1, "meshes/circle/mesh2.h5")
 
-    # m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, g_sfc1)
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, g_sfc1)
 
     # Ψ = m.barotropic_LHS\m.barotropic_RHS_τ
     # Ψ = FEField(Ψ, m.g_sfc1)
     # nuPGCM.quick_plot(Ψ, L"\Psi", "$out_folder/psi.png")
 
     δ = 0.1
-    # b = FEField(x -> H(x)*x[3], m.g2)
-    # b = FEField(x -> H(x)*x[3] + δ*exp(-H(x)*(x[3] + 1)/δ), m.g2)
-    b = FEField(x -> δ*exp(-H(x)*(x[3] + 1)/δ), m.g2)
+    b = FEField(x -> H(x)*x[3] + δ*exp(-H(x)*(x[3] + 1)/δ), m.g2)
 
     H = m.H
     σ = m.σ
@@ -40,10 +38,6 @@ function bowl()
     k = 100
     i = 1
     ig = g_sfc1.t[k, i]
-    display(g_sfc1.p[g_sfc1.t[k, :], :])
-    display(H[ig])
-    display(m.Hx[k, i])
-    display(m.Hy[k, i])
     bx = Dxs[k, i]*b.values
     by = Dys[k, i]*b.values
     z_dg = zeros(2nσ-2)
