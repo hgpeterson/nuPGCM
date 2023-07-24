@@ -1,5 +1,5 @@
 """
-    A = get_baroclinic_LHS(z, ε², f)
+    A = get_baroclinic_LHS(g, ε², f)
 
 Create LU-factored matrix for 1D baroclinc problem:
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
@@ -10,22 +10,15 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_LHS(z, ε², f)
-    # create 1D grid
-    nz = size(z, 1)
-    p = reshape(z, (nz, 1))
-    t = [i + j - 1 for i=1:nz-1, j=1:2]
-    bot = 1
-    sfc = nz
-    e = Dict("bot"=>[bot], "sfc"=>[sfc])
-    g = Grid(1, p, t, e)
-
+function get_baroclinic_LHS(g, ε², f)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
     χxmap = 2*g.np+1:3*g.np
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
+    bot = g.e["bot"][1]
+    sfc = g.e["sfc"][1]
 
     # stiffness and mass matrix over reference element
     K_el = stiffness_matrix(g.el)[:, :, 1, 1]
@@ -87,7 +80,7 @@ function get_baroclinic_LHS(z, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
+    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
@@ -98,22 +91,15 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
-    # create 1D grid
-    nz = size(z, 1)
-    p = reshape(z, (nz, 1))
-    t = [i + j - 1 for i=1:nz-1, j=1:2]
-    bot = 1
-    sfc = nz
-    e = Dict("bot"=>[bot], "sfc"=>[sfc])
-    g = Grid(1, p, t, e)
-
+function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
     χxmap = 2*g.np+1:3*g.np
     χymap = 3*g.np+1:4*g.np
     N = 4*g.np
+    bot = g.e["bot"][1]
+    sfc = g.e["sfc"][1]
 
     # mass matrix over reference element
     M_el = mass_matrix(g.el)
@@ -154,7 +140,7 @@ function get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, H, ε²; showplots=false)
     # pre-allocate 
     nσ = length(σ)
     ωx_Ux = zeros(g_sfc1.np, nσ)
@@ -163,24 +149,25 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots
     χy_Ux = zeros(g_sfc1.np, nσ)
     
     # compute and store
-    for i=1:g_sfc1.np
-        # H = 0 solution: ωʸ = -3σ, all else zeros
-        if i ∈ g_sfc1.e["bdy"]
-            ωy_Ux[i, :] = -3*σ
-            continue
-        end
+    for i ∈ eachindex(in_nodes1)
+        ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(σ*H[i], zeros(nσ-1), zeros(nσ-1), H[i]^2, 0, 0, 0, ε²)
+        r = get_baroclinic_RHS(g_cols1[i], zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
 
         # store 
-        ωx_Ux[i, :] = sol[0*nσ+1:1*nσ]
-        ωy_Ux[i, :] = sol[1*nσ+1:2*nσ]
-        χx_Ux[i, :] = sol[2*nσ+1:3*nσ]
-        χy_Ux[i, :] = sol[3*nσ+1:4*nσ]
+        ωx_Ux[ig, :] = sol[0*nσ+1:1*nσ]
+        ωy_Ux[ig, :] = sol[1*nσ+1:2*nσ]
+        χx_Ux[ig, :] = sol[2*nσ+1:3*nσ]
+        χy_Ux[ig, :] = sol[3*nσ+1:4*nσ]
+    end
+
+    # H = 0 solution: ωʸ = -3σ, all else zeros
+    for i ∈ g_sfc1.e["bdy"]
+        ωy_Ux[i, :] = -3*σ
     end
 
     if showplots
@@ -194,7 +181,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, ε²; showplots=false)
     # pre-allocate 
     nσ = length(σ)
     ωx_τx = zeros(g_sfc1.np, nσ)
@@ -203,24 +190,25 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, σ, H, ε²; showplots=fals
     χy_τx = zeros(g_sfc1.np, nσ)
     
     # compute and store
-    for i=1:g_sfc1.np
-        # H = 0 solution: ωʸ = (3σ + 2)/2ε², all else zeros
-        if i ∈ g_sfc1.e["bdy"]
-            ωy_τx[i, :] = @. (3*σ + 2)/(2ε²)
-            continue
-        end
+    for i ∈ eachindex(in_nodes1)
+        ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = get_baroclinic_RHS(σ*H[i], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
+        r = get_baroclinic_RHS(g_cols1[i], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
 
         # store
-        ωx_τx[i, :] = sol[0*nσ+1:1*nσ]
-        ωy_τx[i, :] = sol[1*nσ+1:2*nσ]
-        χx_τx[i, :] = sol[2*nσ+1:3*nσ]
-        χy_τx[i, :] = sol[3*nσ+1:4*nσ]
+        ωx_τx[ig, :] = sol[0*nσ+1:1*nσ]
+        ωy_τx[ig, :] = sol[1*nσ+1:2*nσ]
+        χx_τx[ig, :] = sol[2*nσ+1:3*nσ]
+        χy_τx[ig, :] = sol[3*nσ+1:4*nσ]
+    end
+
+    # H = 0 solution: ωʸ = (3σ + 2)/2ε², all else zeros
+    for i ∈ g_sfc1.e["bdy"]
+        ωy_τx[i, :] = @. (3*σ + 2)/(2ε²)
     end
 
     if showplots
@@ -237,13 +225,13 @@ end
 function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
-    σ = m.σ
+    g_cols1 = m.g_cols1
     nσ = m.nσ
-    H = m.H
     Dxs = m.Dxs
     Dys = m.Dys
     ε² = m.ε²
     baroclinic_LHSs = m.baroclinic_LHSs
+    in_nodes1 = m.in_nodes1
 
     # setup arrays
     bx = [Dxs[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
@@ -265,8 +253,9 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
             end
 
             # solve baroclinic problem with bx and by from element column
-            r = get_baroclinic_RHS(σ*H[ig], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
-            sol = baroclinic_LHSs[ig]\r
+            j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
+            r = get_baroclinic_RHS(g_cols1[j], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
+            sol = baroclinic_LHSs[j]\r
 
             # store
             ωx_b[k, i, :] = sol[0*nσ+1:1*nσ]
