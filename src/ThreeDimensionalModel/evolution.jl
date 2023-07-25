@@ -1,68 +1,85 @@
 struct AdvectionArrays{A<:AbstractArray}
-    Ax::A
-    Ay::A
-    Az1::A
-    Az2::A
+    Aξ::A
+    Aη::A
+    Aσξ::A
+    Aση::A
 end
 
 function get_M(g::Grid)
     J = g.J
-    s = g.sfi
+    el = g.el
+    M_el = mass_matrix(el)
     M = Tuple{Int64, Int64, Float64}[]
     for k=1:g.nt 
-        Mᵏ = J.dets[k]*s.M 
-        for i=1:g.nn, j=1:g.nn
+        Mᵏ = J.dets[k]*M_el 
+        for i=1:el.n, j=1:el.n
             push!(M, (g.t[k, i], g.t[k, j], Mᵏ[i, j]))
         end
     end
-    return sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, g.np)
+    return dropzeros!(sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, g.np))
 end
 
 function get_K(g::Grid)
     J = g.J
-    s = g.sfi
+    el = g.el
+    K_el = stiffness_matrix(el)
     K = Tuple{Int64, Int64, Float64}[]
     for k=1:g.nt 
-        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
-        Kᵏ = J.dets[k]*sum(s.K.*JJ, dims=(1, 2))[1, 1, :, :]
-        for i=1:g.nn, j=1:g.nn
+        Kᵏ = K_el*J.Js[k, 1, 1]^2*g.J.dets[k]
+        for i=1:el.n, j=1:el.n
             push!(K, (g.t[k, i], g.t[k, j], -Kᵏ[i, j]))
         end
     end
-    return sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np)
+    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
 end
 
-function get_A(el_χ::Wedge, el_b::Wedge)
-    w, ξ = quad_weights_points(el_b)
-    f(ξ, i, j, k, d1, d2) = ∂φ(el_χ, k, d1, ξ)*∂φ(el_b, j, d2, ξ)*φ(el_b, i, ξ)
-    return [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), w, ξ) for i=1:el_b.n, j=1:el_b.n, k=1:el_χ.n, d1=1:3, d2=1:3]
-end
+function AdvectionArrays(g1::Grid, g2::Grid, H, nσ)
+    # unpack
+    g_sfc2 = H.g
+    J = g1.J
+    el1 = g1.el
+    el2 = g2.el
 
-function AdvectionArrays(A, g::Grid, gb::Grid)
-    J = g.J
-    Ax  = zeros(g.nt, gb.nn, gb.nn, g.nn)
-    Ay  = zeros(g.nt, gb.nn, gb.nn, g.nn)
-    Az1 = zeros(g.nt, gb.nn, gb.nn, g.nn)
-    Az2 = zeros(g.nt, gb.nn, gb.nn, g.nn)
-    for k=1:g.nt
-        # -∂z(χʸ)*∂x(b)
-        Ax[k, :, :, :] = -sum(A[:, :, :, d1, d2]*J.Js[k, d1, 3]*J.Js[k, d2, 1]*J.dets[k] for d1=1:3, d2=1:3)
-        # ∂z(χˣ)*∂y(b)
-        Ay[k, :, :, :] = sum(A[:, :, :, d1, d2]*J.Js[k, d1, 3]*J.Js[k, d2, 2]*J.dets[k] for d1=1:3, d2=1:3)
-        # [∂x(χʸ) - ∂y(χˣ)]*∂z(b)
-        Az1[k, :, :, :] = sum(A[:, :, :, d1, d2]*J.Js[k, d1, 1]*J.Js[k, d2, 3]*J.dets[k] for d1=1:3, d2=1:3)
-        Az2[k, :, :, :] = -sum(A[:, :, :, d1, d2]*J.Js[k, d1, 2]*J.Js[k, d2, 3]*J.dets[k] for d1=1:3, d2=1:3)
+    # allocate
+    Aξ  = zeros(g1.nt, el2.n, el2.n, el1.n)
+    Aη  = zeros(g1.nt, el2.n, el2.n, el1.n)
+    Aσξ = zeros(g1.nt, el2.n, el2.n, el1.n)
+    Aση = zeros(g1.nt, el2.n, el2.n, el1.n)
+    @showprogress "Making advection arrays" for k_w=1:g1.nt
+        # unpack
+        jac = J.Js[k_w, :, :]
+        Δ = J.dets[k_w]
+
+        # surface tri
+        k_sfc = div(k_w-1, nσ-1) + 1
+
+        # general integral
+        A_from_ref = transformation_matrix(g_sfc2.el, g_sfc2.p[g_sfc2.t[k_sfc, 1:3], :])
+        b_from_ref = transformation_vector(g_sfc2.el, g_sfc2.p[g_sfc2.t[k_sfc, 1:3], :])
+        x(ξ) = A_from_ref*ξ[1:2] + b_from_ref
+        f(ξ, i, j, k, d1, d2) = ∂φ(el1, ξ, k, d1)*∂φ(el2, ξ, j, d2)*φ(el2, ξ, i)/H(x(ξ), k_sfc)
+        A = [ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), el2) for i=1:el2.n, j=1:el2.n, k=1:el1.n, d1=1:3, d2=1:3]
+
+        # -∂σ(χη)*∂ξ(b)/H
+        Aξ[k_w, :, :, :] = -sum(A[:, :, :, d1, d2]*jac[d1, 3]*jac[d2, 1]*Δ for d1=1:3, d2=1:3)
+
+        # ∂σ(χξ)*∂η(b)/H
+        Aη[k_w, :, :, :] = sum(A[:, :, :, d1, d2]*jac[d1, 3]*jac[d2, 2]*Δ for d1=1:3, d2=1:3)
+
+        # [∂ξ(χη) - ∂η(χξ)]*∂σ(b)/H
+        Aσξ[k_w, :, :, :] = sum(A[:, :, :, d1, d2]*jac[d1, 1]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
+        Aση[k_w, :, :, :] = -sum(A[:, :, :, d1, d2]*jac[d1, 2]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
     end
-    return AdvectionArrays(Ax, Ay, Az1, Az2)
+    return AdvectionArrays(Aξ, Aη, Aσξ, Aση)
 end
 
-function advection(As::AdvectionArrays, χx, χy, b, g::Grid, gb::Grid)
-    adv = zeros(gb.np)
-    for k=1:gb.nt, i=1:gb.nn
-        adv[gb.t[k, i]] += sum(As.Ax[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Ay[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]]  for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Az1[k, i, ib, iχ]*b[gb.t[k, ib]]*χy[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn) +
-                           sum(As.Az2[k, i, ib, iχ]*b[gb.t[k, ib]]*χx[g.t[k, iχ]] for ib=1:gb.nn, iχ=1:g.nn)
+function advection(As::AdvectionArrays, χξ, χη, b, g1::Grid, g2::Grid)
+    adv = zeros(g2.np)
+    for k=1:g2.nt, i=1:g2.nn
+        adv[g2.t[k, i]] += sum(As.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[g1.t[k, iχ]]  for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(As.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[g1.t[k, iχ]]  for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(As.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[g1.t[k, iχ]] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(As.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[g1.t[k, iχ]] for ib=1:g2.nn, iχ=1:g1.nn)
     end
     return adv
 end
@@ -73,54 +90,48 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     ϱ = m.ϱ
     ε² = m.ε²
     Δt = m.Δt
-    g = m.g 
-    b_cols = m.b_cols
+    g1 = m.g1
+    g2 = m.g2
+    nσ = m.nσ
+    H = m.H
+    g_col = m.g_col
+    in_nodes2 = m.in_nodes2
 
     T = 1e-2*μ*ϱ/ε²
-    n_steps = 20
+    n_steps = 100
     Δt = T/n_steps
 
-    # second order grid for b
-    # gb, pmap = get_gb(m)
-    # b = merge_cols(s.b, gb, b_cols, pmap)
-
-    # matrices
-    # M = get_M(gb)
-    # K = get_K(gb)
-    # LHS_diff = lu(μ*ϱ*M - ε²*Δt/2*K)
-    # LHS_diff = μ*ϱ*M - ε²*Δt/2*K
-    # RHS_diff = μ*ϱ*M + ε²*Δt/2*K
+    # # advection matrices
+    # M = get_M(g2)
     # LHS_adv = cholesky(μ*ϱ*M)
-    # LHS_adv = μ*ϱ*M
-    # A = get_A(g.sf, gb.sf)
-    # As = AdvectionArrays(A, g, gb)
-    Ms = [get_M(g) for g ∈ b_cols]
-    Ks = [get_K(g) for g ∈ b_cols]
-    # LHS_diffs = [lu(μ*ϱ*Ms[i] - ε²*Δt/2*Ks[i]) for i ∈ eachindex(b_cols)]
-    LHS_diffs = [μ*ϱ*Ms[i] - ε²*Δt/2*Ks[i] for i ∈ eachindex(b_cols)]
-    RHS_diffs = [μ*ϱ*Ms[i] + ε²*Δt/2*Ks[i] for i ∈ eachindex(b_cols)]
+    # As = AdvectionArrays(g1, g2, H, nσ)
 
-    # # pvd file
-    # rm("$out_folder/state.pvd", force=true)
-    # rm("$out_folder/state*.vtu", force=true)
-    # pvd = paraview_collection("$out_folder/state", append=true)
+    # diffusion matrices
+    M_col = get_M(g_col)
+    K_col = get_K(g_col)
+    LHS_diffs = [lu(μ*ϱ*M_col - ε²/H[i]^2*Δt/2*K_col) for i ∈ in_nodes2]
+    RHS_diffs = [μ*ϱ*M_col + ε²/H[i]^2*Δt/2*K_col for i ∈ in_nodes2]
+
+    # pvd file
+    rm("$out_folder/state.pvd", force=true)
+    rm("$out_folder/state*.vtu", force=true)
+    pvd = paraview_collection("$out_folder/state", append=true)
 
     # solve
-    n_steps = 10
     for i=1:n_steps
         if mod(i, 10) == 0
             # update state
             invert!(m, s, showplots=true)
-            get_u(m, s, showplots=true)
+            # get_u(m, s, showplots=true)
 
             # save state
-            cell_type = VTKCellTypes.VTK_TETRA
-            cells = [MeshCell(cell_type, g.t[i, :]) for i ∈ axes(g.t, 1)]
-            vtk_grid("$out_folder/state$i", g.p', cells) do vtk
-                vtk["omega^x"] = s.ωx.values
-                vtk["omega^y"] = s.ωy.values
-                vtk["chi^x"] = s.χx.values
-                vtk["chi^y"] = s.χy.values
+            cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
+            vtk_grid("$out_folder/state$i", g1.p', cells) do vtk
+                vtk["b"] = s.b.values[1:g1.np]
+                # vtk["omega^x"] = s.ωx.values
+                # vtk["omega^y"] = s.ωy.values
+                # vtk["chi^x"] = s.χx.values
+                # vtk["chi^y"] = s.χy.values
                 pvd[i*Δt] = vtk
             end
             println("$out_folder/state$i.vtu")
@@ -156,29 +167,29 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # s.b[:] = split_cols(b, b_cols, pmap)
 
         # just diffusion
-        # b = LHS_diff\(RHS_diff*b)
-        # b = cg!(b, LHS_diff, RHS_diff*b)
-        # s.b[:] = split_cols(b, b_cols, pmap)
-        # s.b[:] = [FEField(LHS_diffs[j]\(RHS_diffs[j]*s.b[j].values), b_cols[j]) for j ∈ eachindex(b_cols)]
-        s.b[:] = [FEField(cg!(s.b[j].values, LHS_diffs[j], RHS_diffs[j]*s.b[j].values), b_cols[j]) for j ∈ eachindex(b_cols)]
+        for i ∈ eachindex(in_nodes2)
+            ig = in_nodes2[i]
+            inds = (ig-1)*nσ+1:(ig-1)*nσ+nσ
+            s.b.values[inds] = LHS_diffs[i]\(RHS_diffs[i]*s.b.values[inds])
+        end
 
-        # analytical solution
-        # ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
-        ba = [FEField([b_a(g.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - g.p[j, 1]^2 - g.p[j, 2]^2) for j=1:g.np], g) for g ∈ b_cols]
-        errs = FVField([maximum(abs(s.b[j] - ba[j])) for j ∈ eachindex(b_cols)], m.g_sfc)
-        # b = ba
-        # s.b[:] = split_cols(ba, b_cols, pmap)
-        # println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
-        println(@sprintf("Max Error: %1.1e", maximum(errs)))
-        quick_plot(errs, "Error", "$out_folder/error.png")
+        # # analytical solution
+        # # ba = [b_a(gb.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - gb.p[j, 1]^2 - gb.p[j, 2]^2) for j=1:gb.np]
+        # ba = [FEField([b_a(g.p[j, 3], i*Δt, ε²/μ/ϱ, 1 - g.p[j, 1]^2 - g.p[j, 2]^2) for j=1:g.np], g) for g ∈ b_cols]
+        # errs = FVField([maximum(abs(s.b[j] - ba[j])) for j ∈ eachindex(b_cols)], m.g_sfc)
+        # # b = ba
+        # # s.b[:] = split_cols(ba, b_cols, pmap)
+        # # println(@sprintf("Max Error: %1.1e", maximum(abs.(b - ba))))
+        # println(@sprintf("Max Error: %1.1e", maximum(errs)))
+        # quick_plot(errs, "Error", "$out_folder/error.png")
 
-        # if any(isnan.(b))
-        #     error("Solution blew up 😢")
-        # end
+        if any(isnan.(s.b.values))
+            error("Solution blew up 😢")
+        end
     end
 
-    # vtk_save(pvd)
-    # println("$out_folder/state.pvd")
+    vtk_save(pvd)
+    println("$out_folder/state.pvd")
 
     # # save b
     # cell_type = VTKCellTypes.VTK_QUADRATIC_TETRA

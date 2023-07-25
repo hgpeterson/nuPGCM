@@ -23,7 +23,7 @@ struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField,FS1<:Abstract
     i::I
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:Grid,GS2<:Grid,G1<:Grid,G2<:Grid,GCs<:AbstractVector,
+struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:Grid,GS2<:Grid,G1<:Grid,G2<:Grid,GC<:Grid,
                     V<:AbstractVector,IN<:AbstractVector,I<:Integer,DV<:AbstractMatrix,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
                     FTV<:AbstractVector}
     ε²::FT
@@ -45,8 +45,7 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:G
     g_sfc2::GS2
     g1::G1
     g2::G2
-    g_cols1::GCs
-    g_cols2::GCs
+    g_col::GC
     in_nodes1::IN
     in_nodes2::IN
     σ::V
@@ -81,6 +80,13 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
 
+    # 1D grid
+    nσ = length(σ)
+    p = σ
+    t = [i + j - 1 for i=1:nσ-1, j=1:2]
+    e = Dict("bot"=>[1], "sfc"=>[nσ])
+    g_col = Grid(1, p, t, e)
+
     # convert functions to FE fields
     H = FEField(H, g_sfc2)
     τx = FEField(τx, g_sfc2)
@@ -88,23 +94,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     H1 = FEField(H[1:g_sfc1.np], g_sfc1)
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
     τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
-
-    # 1D grids
-    nσ = length(σ)
-    t = [i + j - 1 for i=1:nσ-1, j=1:2]
-    e = Dict("bot"=>[1], "sfc"=>[nσ])
-    g_cols1 = Vector{Grid}(undef, length(in_nodes1))
-    for i ∈ eachindex(in_nodes1)
-        ig = in_nodes1[i]
-        p = σ*H[ig]
-        g_cols1[i] = Grid(1, p, t, e)
-    end
-    g_cols2 = Vector{Grid}(undef, length(in_nodes2))
-    for i ∈ eachindex(in_nodes2)
-        ig = in_nodes2[i]
-        p = σ*H[ig]
-        g_cols2[i] = Grid(1, p, t, e)
-    end
 
     # store their gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -127,10 +116,10 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
     
     # baroclinc LHS for each node column on first order grid
-    baroclinic_LHSs = [get_baroclinic_LHS(g_cols1[i], ε², f + β*g_sfc1.p[in_nodes1[i], 2]) for i ∈ eachindex(in_nodes1)]
+    baroclinic_LHSs = [get_baroclinic_LHS(g_col, H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
 
     # get transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, H, ε², showplots=true)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε², showplots=true)
     ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
 
@@ -144,7 +133,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     barotropic_LHS = get_barotropic_LHS(r_sym, r_asym, f, β, H, Hx, Hy, ε²)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, ε², showplots=true)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε², showplots=true)
     ωx_τx_bot = FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωy_τx_bot = FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωx_τy_bot = -ωy_τx_bot
@@ -157,7 +146,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
 
-    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc1, g_sfc2, g1, g2, g_cols1, g_cols2, 
+    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
                         ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 end

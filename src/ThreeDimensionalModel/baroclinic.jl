@@ -10,7 +10,7 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_LHS(g, ε², f)
+function get_baroclinic_LHS(g, H, ε², f)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -27,9 +27,12 @@ function get_baroclinic_LHS(g, ε², f)
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:g.nt
+        # scale Jacobians by H
+        Δ = g.J.dets[k]*H
+        ξx = g.J.Js[k, 1, 1]/H
         # stiffness and mass matrices
-        K = K_el*g.J.Js[k, 1, 1]^2*g.J.dets[k]
-        M = M_el*g.J.dets[k]
+        K = K_el*ξx^2*Δ
+        M = M_el*Δ
 
         # indices
         ωxi = ωxmap[g.t[k, :]]
@@ -80,7 +83,7 @@ function get_baroclinic_LHS(g, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
+    r = get_baroclinic_RHS(g, H, bx, by, Ux, Uy, τx, τy, ε²)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
@@ -91,7 +94,7 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
+function get_baroclinic_RHS(g, H, bx, by, Ux, Uy, τx, τy, ε²)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -107,8 +110,11 @@ function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     # stamp system
     r = zeros(N)
     for k=1:g.nt
+        # scale Jacobian by H
+        Δ = g.J.dets[k]*H
+
         # mass matrix
-        M = M_el*g.J.dets[k]
+        M = M_el*Δ
 
         if size(bx, 1) == g.nt
             # bx, by are constant discontinuous
@@ -140,9 +146,9 @@ function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε²; showplots=false)
     # pre-allocate 
-    nσ = length(σ)
+    nσ = g_col.np
     ωx_Ux = zeros(g_sfc1.np, nσ)
     ωy_Ux = zeros(g_sfc1.np, nσ)
     χx_Ux = zeros(g_sfc1.np, nσ)
@@ -153,7 +159,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ
         ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(g_cols1[i], zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
+        r = get_baroclinic_RHS(g_col, H[ig], zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -167,7 +173,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ
 
     # H = 0 solution: ωʸ = -3σ, all else zeros
     for i ∈ g_sfc1.e["bdy"]
-        ωy_Ux[i, :] = -3*σ
+        ωy_Ux[i, :] = -3*g_col.p
     end
 
     if showplots
@@ -181,9 +187,9 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε²; showplots=false)
     # pre-allocate 
-    nσ = length(σ)
+    nσ = g_col.np
     ωx_τx = zeros(g_sfc1.np, nσ)
     ωy_τx = zeros(g_sfc1.np, nσ)
     χx_τx = zeros(g_sfc1.np, nσ)
@@ -194,7 +200,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, ε�
         ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = get_baroclinic_RHS(g_cols1[i], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
+        r = get_baroclinic_RHS(g_col, H[ig], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -208,7 +214,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_cols1, in_nodes1, σ, ε�
 
     # H = 0 solution: ωʸ = (3σ + 2)/2ε², all else zeros
     for i ∈ g_sfc1.e["bdy"]
-        ωy_τx[i, :] = @. (3*σ + 2)/(2ε²)
+        ωy_τx[i, :] = @. (3*g_col.p + 2)/(2ε²)
     end
 
     if showplots
@@ -225,7 +231,8 @@ end
 function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
-    g_cols1 = m.g_cols1
+    H = m.H
+    g_col = m.g_col
     nσ = m.nσ
     Dxs = m.Dxs
     Dys = m.Dys
@@ -234,8 +241,8 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     in_nodes1 = m.in_nodes1
 
     # setup arrays
-    bx = [Dxs[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
-    by = [Dys[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    bx = [Dxs[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    by = [Dys[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
 
     # pre-allocate
     ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
@@ -254,7 +261,7 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 
             # solve baroclinic problem with bx and by from element column
             j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = get_baroclinic_RHS(g_cols1[j], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
+            r = get_baroclinic_RHS(g_col, H[ig], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
             sol = baroclinic_LHSs[j]\r
 
             # store
@@ -277,11 +284,15 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 end
 
 """
-    Dxs, Dys = get_b_gradient_matrices(b_col, g_col, nzs)    
+    Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
 
-Compute gradient matrices for element column `g_col`.
-Stored in arrays such that `Dxs[i]` is and (2*nz[i]-2) × (b_col.np) matrix that gives bx
-for node column i when multiplied by b in `b_col`.  
+Compute gradient matrices for element column in the 3D mesh `g1` (second order `g2`).
+Store the sparse transpose to save memory so that `Dxs[k, i]` is a (g2.np) × (2*nσ-2) matrix
+that gives 
+
+    ∂x(b) = ∂ξ(b) - σ*Hx/H ∂σ(b) 
+
+for node column i in surface element k when transposed and multiplied by b.
 """
 function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
     # unpack
@@ -317,8 +328,9 @@ function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
                     push!(Dy, (2j, g2.t[k_w, l], -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
                 end
             end
-            Dxs[k, i] = sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), 2nσ-2, g2.np)
-            Dys[k, i] = sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), 2nσ-2, g2.np)
+            # store the transpose to save memory
+            Dxs[k, i] = dropzeros!(sparse((x -> x[2]).(Dx), (x -> x[1]).(Dx), (x -> x[3]).(Dx), g2.np, 2nσ-2))
+            Dys[k, i] = dropzeros!(sparse((x -> x[2]).(Dy), (x -> x[1]).(Dy), (x -> x[3]).(Dy), g2.np, 2nσ-2))
         end
     end
 

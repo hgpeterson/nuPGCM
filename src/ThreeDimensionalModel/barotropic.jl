@@ -200,8 +200,8 @@ function get_JEBAR(m::ModelSetup3D, b; showplots=false)
     Hy = m.Hy
 
     # compute b gradients
-    bx = [Dxs[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
-    by = [Dys[k, i]*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    bx = [Dxs[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    by = [Dys[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
 
     # compute and store
     JEBAR = zeros(g_sfc1.nt, g_sfc1.nn)
