@@ -48,3 +48,7 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
 
     return g1, g2, σ
 end
+
+# get indices
+
+# k_sfc = div(k_w-1, nσ-1) + 1
