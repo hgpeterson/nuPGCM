@@ -142,10 +142,12 @@ FVField(u::DGField) = FVField([sum(u[k, i] for i=1:u.g.nn)/u.g.nn for k=1:u.g.nt
 Compute L2 norm, ‖u‖ ≡ √(∫ u² dx), of finite element function `u`.
 """
 function L2norm(u::FEField)
-    return sqrt(sum(u[u.g.t[k, j]]*u[u.g.t[k, i]]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
+    M = mass_matrix(u.g.el)
+    return sqrt(sum(u[u.g.t[k, j]]*u[u.g.t[k, i]]*M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
 end
 function L2norm(u::DGField)
-    return sqrt(sum(u[k, j]*u[k, i]*u.g.sfi.M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
+    M = mass_matrix(u.g.el)
+    return sqrt(sum(u[k, j]*u[k, i]*M[i, j]*u.g.J.dets[k] for k=1:u.g.nt, i=1:u.g.nn, j=1:u.g.nn))
 end
 function L2norm(u::FVField)
     return sqrt(sum(u[k]^2*u.g.J.dets[k] for k=1:u.g.nt))

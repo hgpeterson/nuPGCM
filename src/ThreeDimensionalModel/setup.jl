@@ -133,7 +133,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     barotropic_LHS = get_barotropic_LHS(r_sym, r_asym, f, β, H, Hx, Hy, ε²)
 
     # get ω_τ's
-    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε², showplots=true)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε², showplots=true)
     ωx_τx_bot = FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωy_τx_bot = FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωx_τy_bot = -ωy_τx_bot

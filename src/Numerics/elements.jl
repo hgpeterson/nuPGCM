@@ -378,5 +378,5 @@ end
 
 #### Some useful finite element matrices ####
 
-stiffness_matrix(el::AbstractElement) = [ref_el_quad(ξ->∂φ(el, ξ, i, k)*∂φ(el, ξ, j, l), el) for i=1:el.n, j=1:el.n, k=1:el.dim, l=1:el.dim]
+stiffness_matrix(el::AbstractElement) = [ref_el_quad(ξ->∂φ(el, ξ, i, k)*∂φ(el, ξ, j, l), el) for k=1:el.dim, l=1:el.dim, i=1:el.n, j=1:el.n]
 mass_matrix(el::AbstractElement) = [ref_el_quad(ξ->φ(el, ξ, i)*φ(el, ξ, j), el) for i=1:el.n, j=1:el.n]

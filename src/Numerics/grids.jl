@@ -6,6 +6,54 @@ struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     Js::A
 end
 
+
+"""
+    J = Jacobians(el, p, t)
+
+Compute Jacobian terms for transformations from reference element to element on grid.
+Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation ξ ↦ x is 
+    x = A*ξ + b
+where
+    A for Line = (x₂ - x₁)/2,
+    A for Triangle = [x₂-x₁  x₃-x₁
+                      y₂-y₁  y₃-y₁],
+    A for Wedge = [x₂-x₁  x₃-x₁  0
+                   y₂-y₁  y₃-y₁  0
+                   0      0      z₄-z₁].
+Note that this is only possible for our special wedges that have flat tops and aligned 
+bottom and top triangles. We call A = ∂x/∂ξ the Jacobian. To transform from global 
+coordinates to the reference element, we then need the inverse of A, J = ∂ξ/∂x:
+    J in 1D = ∂ξ/∂x,
+    J in 2D = [∂ξ/∂x  ∂ξ/∂y
+               ∂η/∂x  ∂η/∂y],
+    J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z
+               ∂η/∂x  ∂η/∂y  ∂η/∂z
+               ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
+"""
+function Jacobians(el::AbstractElement, p, t)
+    # indices
+    nt = size(t, 1)
+
+    # pre-allocate
+    dets = zeros(nt)
+    Js = zeros(nt, el.dim, el.dim)
+    
+    # loop through elements in grid
+    for k=1:nt
+        # build A
+        A = transformation_matrix(el, p[t[k, :], :])
+
+        # compute determinant
+        dets[k] = abs(det(A))
+
+        # invert for J
+        Js[k, :, :] .= inv(A)
+    end
+    return Jacobians(dets, Js)
+end
+
+################################################################################
+
 struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:AbstractMatrix, V<:AbstractVector}
     # elements on this grid
     el::E
@@ -287,47 +335,45 @@ function boundary_nodes(t)
     end
 end
 
-"""
-    J = Jacobians(el, p, t)
+################################################################################
 
-Compute Jacobian terms for transformations from reference element to element on grid.
-Given the vertices xᵢ ∈ ℜᵈ of the reference element, the transformation ξ ↦ x is 
-    x = A*ξ + b
-where
-    A for Line = (x₂ - x₁)/2,
-    A for Triangle = [x₂-x₁  x₃-x₁
-                      y₂-y₁  y₃-y₁],
-    A for Wedge = [x₂-x₁  x₃-x₁  0
-                   y₂-y₁  y₃-y₁  0
-                   0      0      z₄-z₁].
-Note that this is only possible for our special wedges that have flat tops and aligned 
-bottom and top triangles. We call A = ∂x/∂ξ the Jacobian. To transform from global 
-coordinates to the reference element, we then need the inverse of A, J = ∂ξ/∂x:
-    J in 1D = ∂ξ/∂x,
-    J in 2D = [∂ξ/∂x  ∂ξ/∂y
-               ∂η/∂x  ∂η/∂y],
-    J in 3D = [∂ξ/∂x  ∂ξ/∂y  ∂ξ/∂z
-               ∂η/∂x  ∂η/∂y  ∂η/∂z
-               ∂ζ/∂x  ∂ζ/∂y  ∂ζ/∂z].
-"""
-function Jacobians(el::AbstractElement, p, t)
-    # indices
-    nt = size(t, 1)
-
-    # pre-allocate
-    dets = zeros(nt)
-    Js = zeros(nt, el.dim, el.dim)
-    
-    # loop through elements in grid
-    for k=1:nt
-        # build A
-        A = transformation_matrix(el, p[t[k, :], :])
-
-        # compute determinant
-        dets[k] = abs(det(A))
-
-        # invert for J
-        Js[k, :, :] .= inv(A)
+function mass_matrix(g::Grid)
+    J = g.J
+    el = g.el
+    M_el = mass_matrix(el)
+    M = Tuple{Int64, Int64, Float64}[]
+    for k=1:g.nt, i=1:el.n, j=1:el.n
+        push!(M, (g.t[k, i], g.t[k, j], J.dets[k]*M_el[i, j]))
     end
-    return Jacobians(dets, Js)
+    return dropzeros!(sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, g.np))
+end
+
+function stiffness_matrix(g::Grid)
+    J = g.J
+    el = g.el
+    K_el = stiffness_matrix(el)
+    K = Tuple{Int64, Int64, Float64}[]
+    for k=1:g.nt
+        JJ = J.Js[k, :, :]*J.Js[k, :, :]'
+        Kᵏ = J.dets[k]*sum(K_el.*JJ, dims=(1, 2))[1, 1, :, :]
+        for i=1:el.n, j=1:el.n
+            push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+end
+
+function stiffness_matrix_zz(g::Grid)
+    J = g.J
+    el = g.el
+    K_el = stiffness_matrix(el)
+    K = Tuple{Int64, Int64, Float64}[]
+    for k=1:g.nt
+        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
+        Kᵏ = J.dets[k]*sum(K_el.*JJ, dims=(1, 2))[1, 1, :, :]
+        for i=1:el.n, j=1:el.n
+            push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
 end

@@ -20,19 +20,16 @@ function get_baroclinic_LHS(g, H, ε², f)
     bot = g.e["bot"][1]
     sfc = g.e["sfc"][1]
 
-    # stiffness and mass matrix over reference element
-    K_el = stiffness_matrix(g.el)[:, :, 1, 1]
+    # stiffness and mass matrices on reference element
+    K_el = stiffness_matrix(g.el)[1, 1, :, :]
     M_el = mass_matrix(g.el)
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:g.nt
-        # scale Jacobians by H
-        Δ = g.J.dets[k]*H
-        ξx = g.J.Js[k, 1, 1]/H
-        # stiffness and mass matrices
-        K = K_el*ξx^2*Δ
-        M = M_el*Δ
+        # scale by jacobian
+        K = K_el*g.J.Js[k, 1, 1]^2*g.J.dets[k]
+        M = M_el*g.J.dets[k]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]
@@ -43,23 +40,23 @@ function get_baroclinic_LHS(g, H, ε², f)
         for i=1:g.nn, j=1:g.nn
             if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
                 # -ε²∂zz(ωx)
-                push!(A, (ωxi[i], ωxi[j], ε²*K[i, j]))
+                push!(A, (ωxi[i], ωxi[j], ε²/H^2*K[i, j]))
                 # -ωy
                 push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
 
                 # -ε²∂zz(ωy)
-                push!(A, (ωyi[i], ωyi[j], ε²*K[i, j]))
+                push!(A, (ωyi[i], ωyi[j], ε²/H^2*K[i, j]))
                 # +ωx
                 push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
             end
             if g.t[k, i] ≠ sfc
                 # -∂zz(χx)
-                push!(A, (χxi[i], χxi[j], K[i, j]))
+                push!(A, (χxi[i], χxi[j], 1/H^2*K[i, j]))
                 # -ωx
                 push!(A, (χxi[i], ωxi[j], -M[i, j]))
 
                 # -∂zz(χy)
-                push!(A, (χyi[i], χyi[j], K[i, j]))
+                push!(A, (χyi[i], χyi[j], 1/H^2*K[i, j]))
                 # -ωy
                 push!(A, (χyi[i], ωyi[j], -M[i, j]))
             end
@@ -83,7 +80,7 @@ function get_baroclinic_LHS(g, H, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(g, H, bx, by, Ux, Uy, τx, τy, ε²)
+    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
@@ -94,7 +91,7 @@ with bc
     z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(g, H, bx, by, Ux, Uy, τx, τy, ε²)
+function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -110,11 +107,8 @@ function get_baroclinic_RHS(g, H, bx, by, Ux, Uy, τx, τy, ε²)
     # stamp system
     r = zeros(N)
     for k=1:g.nt
-        # scale Jacobian by H
-        Δ = g.J.dets[k]*H
-
         # mass matrix
-        M = M_el*Δ
+        M = M_el*g.J.dets[k]
 
         if size(bx, 1) == g.nt
             # bx, by are constant discontinuous
@@ -159,7 +153,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, �
         ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(g_col, H[ig], zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
+        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -187,7 +181,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, �
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε²; showplots=false)
+function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; showplots=false)
     # pre-allocate 
     nσ = g_col.np
     ωx_τx = zeros(g_sfc1.np, nσ)
@@ -200,7 +194,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε²; 
         ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = get_baroclinic_RHS(g_col, H[ig], zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
+        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -231,7 +225,6 @@ end
 function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
-    H = m.H
     g_col = m.g_col
     nσ = m.nσ
     Dxs = m.Dxs
@@ -261,7 +254,7 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 
             # solve baroclinic problem with bx and by from element column
             j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = get_baroclinic_RHS(g_col, H[ig], bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
+            r = get_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
             sol = baroclinic_LHSs[j]\r
 
             # store
