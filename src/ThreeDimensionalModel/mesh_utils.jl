@@ -49,6 +49,28 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     return g1, g2, σ
 end
 
-# get indices
+#### index mappings
 
-# k_sfc = div(k_w-1, nσ-1) + 1
+"""
+    k_sfc = get_k_sfc(k_w, nσ) 
+
+Returns index of the surface triangle `k_sfc` associated with the wedge `k_w` 
+for a mesh with `nσ` vertical nodes.
+"""
+get_k_sfc(k_w, nσ) = div(k_w-1, nσ-1) + 1
+
+"""
+    k_ws = get_k_ws(k_sfc, nσ) 
+
+Returns indices of the wedges `k_ws` that lie under the surface triangle with index
+`k_sfc` for a mesh with `nσ` vertical nodes.
+"""
+get_k_ws(k_sfc, nσ) = (nσ-1)*(k_sfc-1)+1:(nσ-1)*(k_sfc-1)+nσ-1
+
+"""
+    inds = get_col_inds(i, nσ) 
+
+Returns the indices `inds` for the nodes in the `i`th column of a mesh with `nσ` 
+vertical nodes.
+"""
+get_col_inds(i, nσ) = (i-1)*nσ+1:(i-1)*nσ+nσ
