@@ -54,7 +54,7 @@ end
 
 ################################################################################
 
-struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:AbstractMatrix, V<:AbstractVector}
+struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:AbstractMatrix, V<:AbstractVector, PT<:AbstractVector}
     # elements on this grid
     el::E
 
@@ -78,6 +78,9 @@ struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:
 
     # edge node indices for different boundaries
     e::Dict{String, V} # dictionary of vectors
+
+    # map from p to t
+    p_to_t::PT
 end
 
 """
@@ -125,7 +128,10 @@ function Grid(order::Integer, p, t, e::Dict)
     # compute Jacobians
     J = Jacobians(el, p, t)
 
-    return Grid(el, J, p, np, t, nt, nn, e)
+    # map from p to t
+    p_to_t = get_p_to_t(t, np)
+
+    return Grid(el, J, p, np, t, nt, nn, e, p_to_t)
 end
 function Grid(order, p, t, e::AbstractVector)
     # make e a dict
@@ -334,6 +340,14 @@ function boundary_nodes(t)
         return unique(boundary_faces(t))
     end
 end
+
+"""
+    p_to_t = get_p_to_t(t, np)
+
+Returns a vector of vectors of CartesianIndices `p_to_t` such that p_to_t[i] lists
+all the keys in `t` that point to the ith node of the mesh of size `np`.
+"""
+get_p_to_t(t, np) = [findall(j -> j == i, t) for i=1:np]
 
 ################################################################################
 

@@ -23,28 +23,28 @@ struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField,FS1<:Abstract
     i::I
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:Grid,GS2<:Grid,G1<:Grid,G2<:Grid,GC<:Grid,
+struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS<:Grid,G<:Grid,GC<:Grid,
                     V<:AbstractVector,IN<:AbstractVector,I<:Integer,DV<:AbstractMatrix,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
-                    FTV<:AbstractVector}
+                    FTV<:AbstractVector,HM<:SparseMatrixCSC,A<:AbstractArray}
     ε²::FT
     μ::FT
     ϱ::FT
     Δt::FT
-    H::F2
-    Hx::F1
-    Hy::F1
+    H::F1
+    Hx::F2
+    Hy::F2
     f::FT
     β::FT
-    τx::F2
-    τy::F2
-    τx_x::F1
-    τx_y::F1
-    τy_x::F1
-    τy_y::F1
-    g_sfc1::GS1
-    g_sfc2::GS2
-    g1::G1
-    g2::G2
+    τx::F1
+    τy::F1
+    τx_x::F2
+    τx_y::F2
+    τy_x::F2
+    τy_y::F2
+    g_sfc1::GS
+    g_sfc2::GS
+    g1::G
+    g2::G
     g_col::GC
     in_nodes1::IN
     in_nodes2::IN
@@ -63,6 +63,11 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS1<:G
     χx_τx::M
     χy_τx::M
     barotropic_RHS_τ::FTV
+    HM::HM
+    Aξ::A
+    Aη::A
+    Aσξ::A
+    Aση::A
 end
 
 ################################################################################
@@ -146,7 +151,11 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
 
+    # HM and advection arrays for evolution
+    HM = get_HM(g2, H, nσ)
+    Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
+
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
-                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
+                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση)
 end

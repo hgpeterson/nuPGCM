@@ -198,13 +198,19 @@ end
 Determine index `k` of element on grid `g` in which the point `x` lies.
 """
 function get_k(x, g, pt_check::Function)
-    for k=1:g.nt 
-        if pt_check(x, g.p[g.t[k, 1:g.el.dim+1], :])
-            return k
+    # get index of nearest node on mesh
+    i_nearest = argmin(norm(g.p[i, :] - x) for i=1:g.np)
+
+    # loop over elements that contain this node
+    for I ∈ g.p_to_t[i_nearest]
+        if pt_check(x, g.p[g.t[I[1], :], :])
+            return I[1]
         end
     end
-    error("Cannot find element; p₀=$x is not inside mesh domain.")
+
+    error("Failed to locate element; $x is not inside mesh domain?")
 end
+
 function get_k(x, g, el::Line)
     return get_k(x, g, pt_in_line)
 end

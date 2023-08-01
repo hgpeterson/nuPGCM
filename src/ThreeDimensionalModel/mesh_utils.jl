@@ -21,10 +21,10 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     t2 = zeros(Int64, g_sfc2.nt*(nσ - 1), 12)
     for k_sfc=1:g_sfc2.nt
         for j=1:nσ-1
-            t2[(k_sfc-1)*(nσ-1)+j, 1:3]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j
-            t2[(k_sfc-1)*(nσ-1)+j, 4:6]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j .+ 1
-            t2[(k_sfc-1)*(nσ-1)+j, 7:9]   = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j
-            t2[(k_sfc-1)*(nσ-1)+j, 10:12] = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j .+ 1
+            t2[get_k_w(k_sfc, nσ, j), 1:3]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j
+            t2[get_k_w(k_sfc, nσ, j), 4:6]   = nσ*(g_sfc2.t[k_sfc, 1:3] .- 1) .+ j .+ 1
+            t2[get_k_w(k_sfc, nσ, j), 7:9]   = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j
+            t2[get_k_w(k_sfc, nσ, j), 10:12] = nσ*(g_sfc2.t[k_sfc, 4:6] .- 1) .+ j .+ 1
         end
     end
 
@@ -35,9 +35,6 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     g2 = Grid(2, p2, t2, e2)
 
     # first order grid
-    # np1 = g_sfc1.np*nσ
-    # e1 = Dict("sfc"=>collect(nσ:nσ:np1), "bot"=>collect(1:nσ:np1-nσ+1))
-    # g1 = Grid(1, p2[1:np1, :], t2[:, 1:6], e1)
     g1 = Grid(1, g2)
 
     vtk_grid("$out_folder/mesh.vtu", g1.p', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk 
@@ -54,18 +51,26 @@ end
 """
     k_sfc = get_k_sfc(k_w, nσ) 
 
-Returns index of the surface triangle `k_sfc` associated with the wedge `k_w` 
-for a mesh with `nσ` vertical nodes.
+Returns index `k_sfc` of the surface triangle associated with the wedge of 
+index `k_w` for a mesh with `nσ` vertical nodes.
 """
-get_k_sfc(k_w, nσ) = div(k_w-1, nσ-1) + 1
+get_k_sfc(k_w, nσ) = div(k_w - 1, nσ - 1) + 1
+
+"""
+    k_w = get_k_w(k_sfc, nσ, j) 
+
+Returns index `k_w` of the `j`th wedge that lies under the surface triangle of index
+`k_sfc` for a mesh with `nσ` vertical nodes.
+"""
+get_k_w(k_sfc, nσ, j) = (k_sfc - 1)*(nσ - 1) + j
 
 """
     k_ws = get_k_ws(k_sfc, nσ) 
 
-Returns indices of the wedges `k_ws` that lie under the surface triangle with index
+Returns indices `k_ws` of the wedges that lie under the surface triangle with index
 `k_sfc` for a mesh with `nσ` vertical nodes.
 """
-get_k_ws(k_sfc, nσ) = (nσ-1)*(k_sfc-1)+1:(nσ-1)*(k_sfc-1)+nσ-1
+get_k_ws(k_sfc, nσ) = get_k_w(k_sfc, nσ, 1):get_k_w(k_sfc, nσ, nσ - 1)
 
 """
     inds = get_col_inds(i, nσ) 
@@ -73,4 +78,4 @@ get_k_ws(k_sfc, nσ) = (nσ-1)*(k_sfc-1)+1:(nσ-1)*(k_sfc-1)+nσ-1
 Returns the indices `inds` for the nodes in the `i`th column of a mesh with `nσ` 
 vertical nodes.
 """
-get_col_inds(i, nσ) = (i-1)*nσ+1:(i-1)*nσ+nσ
+get_col_inds(i, nσ) = (i - 1)*nσ + 1:(i - 1)*nσ + nσ

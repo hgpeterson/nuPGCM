@@ -1,16 +1,18 @@
-function get_HM(m::ModelSetup3D)
+"""
+    HM = get_HM(g2, H, nσ)
+
+Compute `HM` = ∫ `H` φᵢ φⱼ for second order 3D grid `g2` with `nσ` vertical nodes.
+"""
+function get_HM(g2, H::FEField, nσ)
     # unpack
-    g2 = m.g2
-    H = m.H
-    g_sfc2 = m.g_sfc2
+    g_sfc2 = H.g
     tri2 = g_sfc2.el
     J = g2.J
     w2 = g2.el
-    nσ = m.nσ
 
+    # stamp
     HM = Tuple{Int64, Int64, Float64}[]
-    for k_sfc=1:g_sfc2.nt
-        # ∫ Hφᵢφⱼ 
+    @showprogress "Building depth-weighted mass matrix..." for k_sfc=1:g_sfc2.nt
         x(ξ) = transform_from_ref_el(tri2, ξ[1:2], g_sfc2.p[g_sfc2.t[k_sfc, 1:3], :])
         f(ξ, i, j) = H(x(ξ), k_sfc)*φ(w2, ξ, i)*φ(w2, ξ, j)
         HM_el = [ref_el_quad(ξ -> f(ξ, i, j), w2) for i=1:w2.n, j=1:w2.n]
@@ -21,17 +23,18 @@ function get_HM(m::ModelSetup3D)
     return dropzeros!(sparse((x->x[1]).(HM), (x->x[2]).(HM), (x->x[3]).(HM), g2.np, g2.np))
 end
 
-struct AdvectionArrays{A<:AbstractArray}
-    Aξ::A
-    Aη::A
-    Aσξ::A
-    Aση::A
-end
+"""
+    Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
 
-function AdvectionArrays(m)
+Compute advection arrays of the form ∫ φᵢ∂φⱼ∂φₖ where φᵢ and φⱼ are defined on the 
+second order grid `g2` and φₖ is defined on the first order grid `g1`. These are then
+multiplied by the proper Jacobian terms to get the arrays:
+    • `Aξ` for the -∂σ(χη)*∂ξ(b) term,
+    • `Aη` for the ∂σ(χξ)*∂η(b) term, and
+    • `Aσξ` and `Aση` for the [∂ξ(χη) - ∂η(χξ)]*∂σ(b) term.
+"""
+function get_advection_arrays(g1, g2)
     # unpack
-    g1 = m.g1
-    g2 = m.g2
     J = g1.J
     w1 = g1.el
     w2 = g2.el
@@ -46,7 +49,7 @@ function AdvectionArrays(m)
     Aσξ = zeros(g1.nt, w2.n, w2.n, w1.n)
     Aση = zeros(g1.nt, w2.n, w2.n, w1.n)
 
-    @showprogress "Setting up advection array..." for k=1:g1.nt
+    @showprogress "Setting up advection arrays..." for k=1:g1.nt
         # unpack
         jac = J.Js[k, :, :]
         Δ = J.dets[k]
@@ -61,25 +64,26 @@ function AdvectionArrays(m)
         Aσξ[k, :, :, :] = sum(A[:, :, :, d1, d2]*jac[d1, 1]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
         Aση[k, :, :, :] = -sum(A[:, :, :, d1, d2]*jac[d1, 2]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
     end
-    return AdvectionArrays(Aξ, Aη, Aσξ, Aση)
+
+    return Aξ, Aη, Aσξ, Aση
 end
 
-function advection(As::AdvectionArrays, χξ::DGField, χη::DGField, b::FEField)
-    g1 = χξ.g
-    g2 = b.g
+function advection(m::ModelSetup3D, χξ, χη, b)
+    g1 = m.g1
+    g2 = m.g2
     adv = zeros(g2.np)
     for k=1:g2.nt, i=1:g2.nn
-        adv[g2.t[k, i]] += sum(As.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(As.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(As.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(As.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
+        adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χη[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χξ[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
     end
     return adv
 end
 
-function RK2(f, u, Δt)
-    return u + Δt*f(u + Δt/2*f(u))
-end
+# function RK2(f, u, Δt)
+#     return u + Δt*f(u + Δt/2*f(u))
+# end
 
 function evolve!(m::ModelSetup3D, s::ModelState3D)
     # unpack
@@ -91,40 +95,31 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     g2 = m.g2
     nσ = m.nσ
     H = m.H
+    HM = m.HM
     g_sfc1 = m.g_sfc1
     g_col = m.g_col
     in_nodes2 = m.in_nodes2
 
     # integration time
     α = ε²/μ/ϱ
-    # T = 5e-2/α
-    # n_steps = 50
-    # Δt = T/n_steps
-    Δt = 1e-3
-    n_steps = 11
+    T = 5e-2/α
+    n_steps = 50
+    Δt = T/n_steps
+    # Δt = 1e-3
+    # n_steps = 11
 
-    # advection matrices
-    HM = get_HM(m)
-    LHS_adv = lu(HM)
-    # LHS_adv = cholesky(HM)
-    As = AdvectionArrays(m)
-    # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
-    s.χx.values[:] .= 0.0
-    # s.χy.values[:] = @. -g1.p[g1.t, 3]*(1 - g1.p[g1.t, 1]^2 - g1.p[g1.t, 2]^2)^3
-    s.χy.values[:] = @. -g1.p[g1.t, 3]*(2 - g1.p[g1.t, 1]^2 - g1.p[g1.t, 2]^2)
-    # turn down diffusion
-    α /= 1e4
-    println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc1.np), 1/2/(nσ - 1))))
-    println(@sprintf("    Δt: %1.1e", Δt))
+    # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
+    # s.χx.values[:] .= 0.0
+    # # s.χy.values[:] = @. -g1.p[g1.t, 3]*(1 - g1.p[g1.t, 1]^2 - g1.p[g1.t, 2]^2)^3
+    # s.χy.values[:] = @. -g1.p[g1.t, 3]*(2 - g1.p[g1.t, 1]^2 - g1.p[g1.t, 2]^2)
+    # println(@sprintf("CFL Δt: %1.1e", min(1/sqrt(g_sfc1.np), 1/2/(nσ - 1))))
+    # println(@sprintf("    Δt: %1.1e", Δt))
 
     # diffusion matrices
     M_col = mass_matrix(g_col)
     K_col = stiffness_matrix_zz(g_col)
     LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_col) for i ∈ in_nodes2]
     RHS_diffs = [M_col - α/H[i]^2*Δt/2*K_col for i ∈ in_nodes2]
-
-    # for ∫b
-    M = mass_matrix(g2)
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
@@ -137,61 +132,75 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         pz[i, 3] *= 2 - pz[i, 1]^2 - pz[i, 2]^2
     end
 
+    # initial condition
+    println(@sprintf("∫b₀ = %1.5e", sum(HM*s.b.values)))
+    cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
+    vtk_grid("$out_folder/state0", pz', cells) do vtk
+        vtk["b"] = s.b.values[1:g1.np]
+        vtk["ba"] = s.b.values[1:g1.np]
+        vtk["err"] = zeros(g1.np)
+        pvd[0] = vtk
+    end
+    println("$out_folder/state0.vtu")
+
     # solve
+    adv = zeros(g2.np) # pre-allocate for cg!
+    t0 = time()
     for i=1:n_steps
-        # println(i)
-        if mod(i-1, 10) == 0 || i == n_steps
-            # advection solution
-            ba = [ba_adv(g2.p[j, :], (i-1)*Δt) for j=1:g2.np]
+        # # rk2
+        # cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+        # bhalf = s.b.values - Δt/2*adv
+        # cg!(adv, HM, advection(m, s.χx, s.χy, bhalf))
+        # s.b.values[:] = s.b.values - Δt*adv
+
+        # Δt/2 advection step
+        invert!(m, s)
+        cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+        s.b.values[:] = s.b.values - Δt/2*adv
+
+        # Δt diffusion step
+        for j ∈ eachindex(in_nodes2)
+            ig = in_nodes2[j]
+            inds = get_col_inds(ig, nσ)
+            s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
+        end
+
+        # Δt/2 advection step
+        invert!(m, s)
+        cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+        s.b.values[:] = s.b.values - Δt/2*adv
+
+        if any(isnan.(s.b.values))
+            error("Solution blew up 😢")
+        end
+
+        if mod(i, 10) == 0 || i == n_steps
+            # # advection solution
+            # ba = [ba_adv(g2.p[j, :], i*Δt) for j=1:g2.np]
             # # diffusion solution
-            # ba = [ba_diff(g2.p[j, 3], (i-1)*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
+            # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
-            # error
-            println(@sprintf("Max Error: %1.1e", maximum(abs.(s.b.values - ba))))
+            # info
+            println(@sprintf("\n%d steps in %d s", i, time()-t0))
+            # println(@sprintf("Max Error: %1.1e", maximum(abs.(s.b.values - ba))))
+            println(@sprintf("∫b = %1.5e", sum(HM*s.b.values)))
 
-            # ∫ b
-            println(@sprintf("∫b = %1.5e", sum(M*s.b.values)))
-
-            # # update state
-            # invert!(m, s, showplots=true)
+            # show state
+            invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
             vtk_grid("$out_folder/state$i", pz', cells) do vtk
                 vtk["b"] = s.b.values[1:g1.np]
-                vtk["ba"] = ba[1:g1.np]
-                vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np])
-                pvd[(i-1)*Δt] = vtk
+                # vtk["ba"] = ba[1:g1.np]
+                # vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np])
+                vtk["ωξ"] = FEField(s.ωx).values
+                vtk["ωη"] = FEField(s.ωy).values
+                vtk["χξ"] = FEField(s.χx).values
+                vtk["χη"] = FEField(s.χy).values
+                pvd[i*Δt] = vtk
             end
             println("$out_folder/state$i.vtu")
-        end
-
-        # RK2: u + Δt*f(u + Δt/2*f(u))
-        b1 = FEField(s.b.values - Δt/2*(LHS_adv\advection(As, s.χx, s.χy, s.b)), g2)
-        s.b.values[:] = s.b.values - Δt*(LHS_adv\advection(As, s.χx, s.χy, b1))
-        # for i ∈ g_sfc1.e["bdy"]
-        #     s.b.values[get_col_inds(i, nσ)] .= 0
-        # end
-
-        # Δt/2 advection step
-        # invert!(m, s)
-        # RHS_adv = HM*s.b.values - Δt*advection(As, s.χx, s.χy, s.b)
-        # s.b.values[:] = LHS_adv\RHS_adv
-
-        # # Δt diffusion step
-        # for j ∈ eachindex(in_nodes2)
-        #     ig = in_nodes2[j]
-        #     inds = get_col_inds(ig, nσ)
-        #     s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
-        # end
-
-        # # Δt/2 advection step
-        # # invert!(m, s)
-        # RHS_adv = HM*s.b.values - Δt/2*advection(As, s.χx, s.χy, s.b)
-        # s.b.values[:] = LHS_adv\RHS_adv
-
-        if any(isnan.(s.b.values))
-            error("Solution blew up 😢")
         end
     end
 
@@ -227,10 +236,21 @@ function ba_adv(x, t)
 end
 
 ## advection convergence tests with H = 2 - x^2 - y^2
-# Δt = 1e-3
-# n_steps = 11
 
-# mesh0  6.7e-3
-# mesh1  2.7e-3
-# mesh2  4.7e-3
-# mesh3  1.7e-3
+# Δt = 1e-3, n_steps = 11
+# mesh  error
+# 0     6.7e-3
+# 1     2.7e-3
+# 2     4.7e-3
+# 3     1.7e-3
+
+# mesh 2, T = 1e-2
+# nsteps  error
+# 2       2.4e-3
+# 16      4.4e-3
+# 128     4.6e-3
+
+# mesh 3, T = 1e-2
+# nsteps  error
+# 2       8.8e-4 
+# 16      1.6e-3

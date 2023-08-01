@@ -86,7 +86,7 @@ function write_vtk(g, fname, data)
     println(fname)
 end
 
-function plot_ω_χ(m, ωx, ωy, χx, χy)
+function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     # unpack 
     g = m.g1
     g_sfc2 = m.g_sfc2
@@ -108,7 +108,7 @@ function plot_ω_χ(m, ωx, ωy, χx, χy)
     i_p = 0
     for k_sfc=1:g_sfc2.nt
         for j=1:nσ-1
-            k_w = (k_sfc - 1)*(nσ - 1) + j
+            k_w = get_k_w(k_sfc, nσ, j)
             p[i_p+1:i_p+6, 1:2] = g.p[g.t[k_w, :], 1:2]
             p[i_p+1:i_p+3, 3] = g.p[g.t[k_w, 1:3], 3].*H[g_sfc2.t[k_sfc, 1:3]]
             p[i_p+4:i_p+6, 3] = g.p[g.t[k_w, 4:6], 3].*H[g_sfc2.t[k_sfc, 1:3]]
@@ -121,35 +121,47 @@ function plot_ω_χ(m, ωx, ωy, χx, χy)
         end
     end
 
-    # # map solutions from [k_sfc, i_sfc, j] to [k_wedge, i_wedge]
-    # ωx_plot = zeros(g.nt, g.nn)
-    # ωy_plot = zeros(g.nt, g.nn)
-    # χx_plot = zeros(g.nt, g.nn)
-    # χy_plot = zeros(g.nt, g.nn)
-    # nσ = size(ωx, 3)
-    # for k_sfc ∈ axes(ωx, 1)
-    #     for i ∈ axes(ωx, 2)
-    #         for j=1:nσ-1
-    #             k_w = (k_sfc - 1)*(nσ - 1) + j
-    #             ωx_plot[k_w, i] = ωx[k_sfc, i, j]
-    #             ωy_plot[k_w, i] = ωy[k_sfc, i, j]
-    #             χx_plot[k_w, i] = χx[k_sfc, i, j]
-    #             χy_plot[k_w, i] = χy[k_sfc, i, j]
-    #             ωx_plot[k_w, i+3] = ωx[k_sfc, i, j+1]
-    #             ωy_plot[k_w, i+3] = ωy[k_sfc, i, j+1]
-    #             χx_plot[k_w, i+3] = χx[k_sfc, i, j+1]
-    #             χy_plot[k_w, i+3] = χy[k_sfc, i, j+1]
-    #         end
-    #     end
-    # end
-
     # save as .vtu
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, t[i, :]) for i ∈ axes(t, 1)]
-    vtk_grid("output/omega_chi.vtu", p', cells) do vtk
+    vtk_grid(fname, p', cells) do vtk
         vtk["omega^x"] = ωx_plot
         vtk["omega^y"] = ωy_plot
         vtk["chi^x"] = χx_plot
         vtk["chi^y"] = χy_plot
     end
-    println("output/omega_chi.vtu")
+    println(fname)
+end
+
+function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label="", fname="slice.png")
+    u = FEField(u)
+    nx = 2^5
+    nσ = 2^5
+    x = range(-0.999, 0.999, length=nx)
+    y = 0.0
+    σ = range(-1., 0., length=nσ)
+    Hs = [m.H([x[i], y]) for i ∈ eachindex(x)] 
+    xx = repeat(x', nσ, 1)
+    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
+    us = [u([x[j], y, σ[i]]) for i ∈ eachindex(σ), j ∈ eachindex(x)]
+    bs = [s.b([x[j], y, σ[i]]) for i ∈ eachindex(σ), j ∈ eachindex(x)]
+    vmax = maximum(abs.(us))
+
+    fig, ax = plt.subplots(1, figsize=(3.2, 2))
+    img = ax.pcolormesh(xx, zz, us, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
+    levels = range(-vmax, vmax, length=8)
+    ax.contour(xx, zz, us, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    cb = colorbar(img, ax=ax, label=cb_label)
+    levels = range(-1, 0, length=20)
+    ax.contour(xx, zz, bs, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.fill_between(xx[1, :], zz[1, :], minimum(zz), color="k", alpha=0.3, lw=0.0)
+    ax.axis("equal")
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    savefig("$out_folder/$fname")
+    println("$out_folder/$fname")
+    plt.close()
 end
