@@ -1,16 +1,20 @@
 """
-    A = get_baroclinic_LHS(g, ε², f)
+    A = get_baroclinic_LHS(g, ν, H, ε², f)
 
 Create LU-factored matrix for 1D baroclinc problem:
-    -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
-    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
+    -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
+    -ε²∂zz(νωʸ) + ωˣ = -∂x(b),
       -∂zz(χˣ) - ωˣ = 0,
       -∂zz(χʸ) - ωʸ = 0,
 with bc
-    z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
+    z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_LHS(g, H, ε², f)
+function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
+    # unpack
+    J = g.J
+    el = g.el
+
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -20,16 +24,23 @@ function get_baroclinic_LHS(g, H, ε², f)
     bot = g.e["bot"][1]
     sfc = g.e["sfc"][1]
 
+    # make ν a finite element field
+    ν = FEField(ν, g)
+
     # stiffness and mass matrices on reference element
-    K_el = stiffness_matrix(g.el)[1, 1, :, :]
-    M_el = mass_matrix(g.el)
+    K_el = stiffness_matrix(el)[1, 1, :, :]
+    M_el = mass_matrix(el)
 
     # stamp system
     A = Tuple{Int64,Int64,Float64}[]
     for k=1:g.nt
         # scale by jacobian
-        K = K_el*g.J.Js[k, 1, 1]^2*g.J.dets[k]
-        M = M_el*g.J.dets[k]
+        K = K_el*J.Js[k, 1, 1]^2*J.dets[k]
+        M = M_el*J.dets[k]
+
+        # ∫ ν ∂φᵢ∂φⱼ
+        σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
+        νK = [ref_el_quad(ξ -> ν(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]
@@ -37,15 +48,15 @@ function get_baroclinic_LHS(g, H, ε², f)
         χxi = χxmap[g.t[k, :]]
         χyi = χymap[g.t[k, :]]
 
-        for i=1:g.nn, j=1:g.nn
+        for i=1:el.n, j=1:el.n
             if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
                 # -ε²∂zz(ωx)
-                push!(A, (ωxi[i], ωxi[j], ε²/H^2*K[i, j]))
+                push!(A, (ωxi[i], ωxi[j], ε²/H^2*νK[i, j]))
                 # -ωy
                 push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
 
                 # -ε²∂zz(ωy)
-                push!(A, (ωyi[i], ωyi[j], ε²/H^2*K[i, j]))
+                push!(A, (ωyi[i], ωyi[j], ε²/H^2*νK[i, j]))
                 # +ωx
                 push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
             end
@@ -67,9 +78,9 @@ function get_baroclinic_LHS(g, H, ε², f)
     push!(A, (ωxmap[bot], χxmap[bot], 1))
     push!(A, (ωymap[bot], χymap[bot], 1))
 
-    # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
-    push!(A, (ωxmap[sfc], ωxmap[sfc], 1))
-    push!(A, (ωymap[sfc], ωymap[sfc], 1))
+    # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
+    push!(A, (ωxmap[sfc], ωxmap[sfc], ν[sfc]*ε²))
+    push!(A, (ωymap[sfc], ωymap[sfc], ν[sfc]*ε²))
     push!(A, (χxmap[sfc], χxmap[sfc], 1))
     push!(A, (χymap[sfc], χymap[sfc], 1))
 
@@ -83,15 +94,19 @@ end
     r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
 
 Create RHS vector for 1D baroclinc problem:
-    -ε²∂zz(ωˣ) - ωʸ =  ∂y(b),
-    -ε²∂zz(ωʸ) + ωˣ = -∂x(b),
+    -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
+    -ε²∂zz(νωʸ) + ωˣ = -∂x(b),
       -∂zz(χˣ) - ωˣ = 0,
       -∂zz(χʸ) - ωʸ = 0,
 with bc
-    z = 0:   ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
+    z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
+function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy, ε²)
+    # unpack
+    J = g.J
+    el = g.el
+
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -102,13 +117,13 @@ function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     sfc = g.e["sfc"][1]
 
     # mass matrix over reference element
-    M_el = mass_matrix(g.el)
+    M_el = mass_matrix(el)
 
     # stamp system
     r = zeros(N)
     for k=1:g.nt
         # mass matrix
-        M = M_el*g.J.dets[k]
+        M = M_el*J.dets[k]
 
         if size(bx, 1) == g.nt
             # bx, by are constant discontinuous
@@ -131,9 +146,9 @@ function get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
     r[ωxmap[bot]] = 0
     r[ωymap[bot]] = 0
 
-    # z = 0: ωˣ = -τʸ/ε², ωʸ = τˣ/ε², χˣ = Uʸ, χʸ = -Uˣ,
-    r[ωxmap[sfc]] = -τy/ε²
-    r[ωymap[sfc]] = τx/ε²
+    # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
+    r[ωxmap[sfc]] = -τy
+    r[ωymap[sfc]] = τx
     r[χxmap[sfc]] = Uy
     r[χymap[sfc]] = -Ux
 

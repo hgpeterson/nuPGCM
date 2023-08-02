@@ -23,7 +23,7 @@ struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField,FS1<:Abstract
     i::I
 end
 
-struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS<:Grid,G<:Grid,GC<:Grid,
+struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:AbstractField,GS<:Grid,G<:Grid,GC<:Grid,
                     V<:AbstractVector,IN<:AbstractVector,I<:Integer,DV<:AbstractMatrix,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
                     FTV<:AbstractVector,HM<:SparseMatrixCSC,A<:AbstractArray}
     ε²::FT
@@ -41,6 +41,8 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,GS<:Gr
     τx_y::F2
     τy_x::F2
     τy_y::F2
+    ν::F3
+    κ::F3
     g_sfc1::GS
     g_sfc2::GS
     g1::G
@@ -74,7 +76,7 @@ end
 # Constructors for ModelSetup3D
 ################################################################################
 
-function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, g_sfc1; nσ=0, chebyshev=false)
+function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, ν::Function, κ::Function, g_sfc1; nσ=0, chebyshev=false)
     # second order surface mesh
     g_sfc2 = Grid(2, g_sfc1)
 
@@ -99,6 +101,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     H1 = FEField(H[1:g_sfc1.np], g_sfc1)
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
     τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
+    ν = FEField([ν(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
+    κ = FEField([κ(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
 
     # store their gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -121,7 +125,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
     
     # baroclinc LHS for each node column on first order grid
-    baroclinic_LHSs = [get_baroclinic_LHS(g_col, H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
+    baroclinic_LHSs = [get_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
 
     # get transport ω and χ
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε², showplots=true)
@@ -155,7 +159,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     HM = get_HM(g2, H, nσ)
     Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
 
-    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, g_sfc1, g_sfc2, g1, g2, g_col,
+    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
                         ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση)
 end

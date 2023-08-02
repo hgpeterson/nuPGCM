@@ -8,18 +8,20 @@ pygui(false)
 set_out_folder("output")
 
 function setup()
-    ε² = 1e-2
+    ε² = 1e-4
     μ = 1e0
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
-    β = 0.
+    β = 1.
     H(x) = 1 - x[1]^2 - x[2]^2
     # τx(x) = -cos(π*x[2])
     τx(x) = 0.
     τy(x) = 0.
-    g_sfc1 = Grid(1, "meshes/circle/mesh2.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, g_sfc1)
+    κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
+    ν(σ, H) = μ*κ(σ, H)
+    g_sfc1 = Grid(1, "meshes/circle/mesh3.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=true)
     return m
 end
 
@@ -32,6 +34,8 @@ function run(m)
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     evolve!(m, s)
+    nuPGCM.plot_slice(m, s, s.χx, cb_label=L"Streamfunction $\chi^x$", fname="$out_folder/chix_slice.png")
+    nuPGCM.plot_slice(m, s, s.χy, cb_label=L"Streamfunction $\chi^y$", fname="$out_folder/chiy_slice.png")
     return s
 end
 

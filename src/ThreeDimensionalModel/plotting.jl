@@ -161,7 +161,7 @@ function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label
     ax.set_ylabel(L"Vertical coordinate $z$")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    savefig("$out_folder/$fname")
-    println("$out_folder/$fname")
+    savefig(fname)
+    println(fname)
     plt.close()
 end

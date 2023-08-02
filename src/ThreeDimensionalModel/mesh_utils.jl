@@ -57,6 +57,14 @@ index `k_w` for a mesh with `nσ` vertical nodes.
 get_k_sfc(k_w, nσ) = div(k_w - 1, nσ - 1) + 1
 
 """
+    i_sfc = get_i_sfc(i, nσ) 
+
+Returns index `i_sfc` of the surface node associated with the `i`th node on
+the 3D wedge mesh with `nσ` vertical nodes.
+"""
+get_i_sfc(i, nσ) = div(i - 1, nσ) + 1
+
+"""
     k_w = get_k_w(k_sfc, nσ, j) 
 
 Returns index `k_w` of the `j`th wedge that lies under the surface triangle of index
