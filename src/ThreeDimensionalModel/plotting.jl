@@ -1,3 +1,72 @@
+"""
+    fig, ax, im = tplot(p, t, u)
+
+Plot filled contour color plot of solution `u` on mesh defined by nodes positions `p` and connectivities `t`.
+"""
+function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, cb_label="", cb_orientation="vertical")
+    fig, ax = subplots(1)
+
+    # set vmax
+    if vmax == 0.
+        vmax = maximum(abs.(u))
+        extend = "neither"
+    else
+        # set extend
+        if maximum(u) > vmax && minimum(u) < -vmax
+            extend = "both"
+        elseif maximum(u) > vmax && minimum(u) > -vmax
+            extend = "max"
+        elseif maximum(u) < vmax && minimum(u) < -vmax
+            extend = "min"
+        else
+            extend = "neither"
+        end
+    end
+
+    if size(u, 1) == size(t, 1)
+        # `u` represents values on triangle faces
+        shading = "flat"
+    elseif size(u, 1) == size(p, 1)
+        # `u` represents values on triangle vertices
+        shading = "gouraud"
+    end
+
+    im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
+    if contour
+        levels = vmax*[-3/4, -1/2, -1/4, 1/4, 1/2, 3/4]
+        ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
+    end
+    cb = colorbar(im, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation)
+    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+
+    # no spines
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    return fig, ax, im
+end
+function tplot(u::FEField; kwargs...)
+    return tplot(u.g.p, u.g.t, u.values; kwargs...)
+end
+function tplot(u::FVField; kwargs...)
+    return tplot(u.g.p, u.g.t, u.values; kwargs...)
+end
+
+"""
+    fig, ax, im = tplot(p, t)
+
+Plot triangular mesh with nodes `p` and triangles `t`.
+"""
+function tplot(p, t; lw=0.2, edgecolors="k")
+    fig, ax = subplots(1)
+    im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors=edgecolors, linewidth=lw, rasterized=true)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    return fig, ax, im
+end
+function tplot(g::Grid; kwargs...)
+    return tplot(g.p, g.t; kwargs...)
+end
+
 function quick_plot_save(fname, ax)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
@@ -7,11 +76,11 @@ function quick_plot_save(fname, ax)
     println(fname)
     plt.close()
 end
-function quick_plot(u::FEField, cb_label, fname; vmax=nothing)
+function quick_plot(u::FEField, cb_label, fname; vmax=0.)
     fig, ax, im = tplot(u, contour=true, vmax=vmax, cb_label=cb_label)
     quick_plot_save(fname, ax)
 end
-function quick_plot(u::FVField, cb_label, fname; vmax=nothing)
+function quick_plot(u::FVField, cb_label, fname; vmax=0.)
     fig, ax, im = tplot(u, contour=false, vmax=vmax, cb_label=cb_label)
     quick_plot_save(fname, ax)
 end
@@ -132,13 +201,15 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     println(fname)
 end
 
-function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label="", fname="slice.png")
+function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label="", fname="$out_folder/slice.png")
     u = FEField(u)
     nx = 2^5
-    nσ = 2^5
+    nσ = m.nσ
     x = range(-0.999, 0.999, length=nx)
     y = 0.0
-    σ = range(-1., 0., length=nσ)
+    # σ = range(-1., 0., length=nσ)
+    # σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2
+    σ = m.σ
     Hs = [m.H([x[i], y]) for i ∈ eachindex(x)] 
     xx = repeat(x', nσ, 1)
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)

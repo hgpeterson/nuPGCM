@@ -15,13 +15,12 @@ function setup()
     f = 1.
     β = 1.
     H(x) = 1 - x[1]^2 - x[2]^2
-    # τx(x) = -cos(π*x[2])
     τx(x) = 0.
     τy(x) = 0.
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     ν(σ, H) = μ*κ(σ, H)
-    g_sfc1 = Grid(1, "meshes/circle/mesh3.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=true)
+    g_sfc1 = Grid(Triangle(order=1), "meshes/circle/mesh0.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=true, advection=false)
     return m
 end
 
@@ -40,6 +39,6 @@ function run(m)
 end
 
 m = setup()
-s = run(m)
+# s = run(m)
 
 println("Done.")

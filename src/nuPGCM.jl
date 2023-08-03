@@ -35,9 +35,8 @@ export
     transform_from_ref_el,
     transform_to_ref_el,
     Grid,
+    add_midpoints,
     all_edges,
-    all_faces,
-    boundary_nodes,
     Jacobians,
     AbstractField,
     FEField,
@@ -105,7 +104,6 @@ export
     # plotting
     ridge_plot,
     plot_state_2DPG,
-    tplot,
 
     # BL theory
     get_full_soln,

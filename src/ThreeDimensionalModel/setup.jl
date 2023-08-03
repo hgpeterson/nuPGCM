@@ -70,15 +70,17 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     Aη::A
     Aσξ::A
     Aση::A
+    advection::Bool
 end
 
 ################################################################################
 # Constructors for ModelSetup3D
 ################################################################################
 
-function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy::Function, ν::Function, κ::Function, g_sfc1; nσ=0, chebyshev=false)
+function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Function, τy_func::Function, 
+                      ν_func::Function, κ_func::Function, g_sfc1; nσ=0, chebyshev=false, advection=true)
     # second order surface mesh
-    g_sfc2 = Grid(2, g_sfc1)
+    g_sfc2 = add_midpoints(g_sfc1)
 
     # indices of nodes in interior
     in_nodes1 = findall(i -> i ∉ g_sfc1.e["bdy"], 1:g_sfc1.np)
@@ -92,17 +94,17 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     p = σ
     t = [i + j - 1 for i=1:nσ-1, j=1:2]
     e = Dict("bot"=>[1], "sfc"=>[nσ])
-    g_col = Grid(1, p, t, e)
+    g_col = Grid(Line(order=1), p, t, e)
 
     # convert functions to FE fields
-    H = FEField(H, g_sfc2)
-    τx = FEField(τx, g_sfc2)
-    τy = FEField(τy, g_sfc2)
+    H = FEField(H_func, g_sfc2)
+    τx = FEField(τx_func, g_sfc2)
+    τy = FEField(τy_func, g_sfc2)
     H1 = FEField(H[1:g_sfc1.np], g_sfc1)
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
     τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
-    ν = FEField([ν(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
-    κ = FEField([κ(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
+    ν = FEField([ν_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
+    κ = FEField([κ_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
 
     # store their gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -135,8 +137,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     # bottom drag coefficients
     r_sym  = ωy_Ux_bot/H1^3
     r_asym = ωx_Ux_bot/H1^3
-    # r_sym = FEField(0.1./H1.values/ε², g_sfc1)
-    # r_asym = FEField(0.0, g_sfc1)
 
     # barotropic LHS
     barotropic_LHS = get_barotropic_LHS(r_sym, r_asym, f, β, H, Hx, Hy, ε²)
@@ -156,10 +156,15 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::Function, τx::Function, τy:
     barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
 
     # HM and advection arrays for evolution
-    HM = get_HM(g2, H, nσ)
-    Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
+    if advection
+        HM = get_HM(g2, H, nσ)
+        Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
+    else
+        HM = spzeros(g2.np, g2.np)
+        Aξ = Aη = Aσξ = Aση = zeros(Float64, 1, 1, 1, 1)
+    end
 
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
-                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση)
+                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση, advection)
 end

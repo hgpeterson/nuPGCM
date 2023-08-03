@@ -8,9 +8,9 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
 
     # σ coordinates for node grids
     if chebyshev
-        σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2
+        σ = collect(-(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2)
     else
-        σ = -1:1/(nσ-1):0
+        σ = collect(-1:1/(nσ-1):0)
     end
 
     # node points on second order grid
@@ -32,10 +32,12 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     e2 = Dict("sfc"=>collect(nσ:nσ:np2), "bot"=>collect(1:nσ:np2-nσ+1))
 
     # second order grid
-    g2 = Grid(2, p2, t2, e2)
+    g2 = Grid(Wedge(order=2), p2, t2, e2)
 
     # first order grid
-    g1 = Grid(1, g2)
+    np1 = g_sfc1.np*nσ
+    e1 = Dict("sfc"=>collect(nσ:nσ:np1), "bot"=>collect(1:nσ:np1-nσ+1))
+    g1 = Grid(Wedge(order=1), p2[1:np1, :], t2[:, 1:6], e1)
 
     vtk_grid("$out_folder/mesh.vtu", g1.p', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk 
         vtk["bot"] = [i ∈ g1.e["bot"] ? 1 : 0 for i=1:g1.np]

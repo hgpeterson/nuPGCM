@@ -1,3 +1,5 @@
+#### Jacobians ####
+
 struct Jacobians{V<:AbstractVector, A<:AbstractArray}
     # |∂x/∂ξ| for each element
     dets::V
@@ -52,9 +54,9 @@ function Jacobians(el::AbstractElement, p, t)
     return Jacobians(dets, Js)
 end
 
-################################################################################
+#### Grids ####
 
-struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractMatrix, T<:AbstractMatrix, V<:AbstractVector, PT<:AbstractVector}
+struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractVecOrMat, T<:AbstractMatrix, V<:AbstractVector, PT<:AbstractVector}
     # elements on this grid
     el::E
 
@@ -88,38 +90,7 @@ end
 
 Construct a FE grid of order `order` with points `p`, elements `t`, and boundary nodes `e`.
 """
-function Grid(order::Integer, p, t, e::Dict)
-    # elements that make up the grid
-    dim = size(p, 2)
-    if dim == 1
-        el = Line(order=order)
-    elseif dim == 2
-        el = Triangle(order=order)
-    elseif dim == 3
-        el = Wedge(order=order)
-    else
-        error("Unsupported grid dimensions `$dim`.")
-    end
-
-    if order == 1
-        # in case grid is higher order, downscale
-        t = t[:, 1:el.n]
-        np = maximum(t)
-        p = p[1:np, :]
-        for bdy ∈ e
-            bdy_name = bdy.first
-            bdy_nodes = bdy.second
-            e[bdy_name] = bdy_nodes[bdy_nodes .≤ np]
-        end
-    elseif order == 2
-        if size(t, 2) != el.n 
-            # add nodes for higher orders
-            p, t, e = add_nodes(p, t, e, order)
-        end
-    else
-        error("Unsupported grid order `$order`.")
-    end
-
+function Grid(el::AbstractElement, p, t, e::Dict)
     # indices
     np = size(p, 1)
     nt = size(t, 1)
@@ -133,18 +104,17 @@ function Grid(order::Integer, p, t, e::Dict)
 
     return Grid(el, J, p, np, t, nt, nn, e, p_to_t)
 end
-function Grid(order, p, t, e::AbstractVector)
+function Grid(el::AbstractElement, p, t, e::AbstractVector)
     # make e a dict
-    e = Dict("bdy"=>e)
-    return Grid(order, p, t, e)
+    return Grid(el, p, t, Dict("bdy"=>e))
 end
-function Grid(order, gfile::String)
+function Grid(el::AbstractElement, gfile::String)
     # read grid data
     p, t, e = read_gfile_h5(gfile)
-    return Grid(order, p, t, e) 
+    return Grid(el, p, t, e) 
 end
-function Grid(order, g::Grid)
-    return Grid(order, g.p, g.t, g.e) 
+function Grid(el::AbstractElement, g::Grid)
+    return Grid(el, g.p, g.t, g.e) 
 end
 
 """
@@ -154,191 +124,11 @@ Load grid from HDF5 file `gfile`.
 """
 function read_gfile_h5(gfile)
     file = h5open(gfile, "r")
-    p = read(file, "p")
-    t = read(file, "t")
-    e = read(file, "e")
+    p::Matrix{Float64} = read(file, "p")
+    t::Matrix{Int64} = read(file, "t")
+    e::Vector{Int64} = read(file, "e")[:]
     close(file)
-    t = convert(Matrix{Int64}, t)
-    e = convert(Vector{Int64}, e[:])
     return p, t, e
-end
-
-"""
-	p, t, e = add_nodes(p, t, e, order)
-
-Add nodes to mesh for higher-order shape functions.
-"""
-function add_nodes(p, t, e, order)
-    # dimension of space
-    dim = size(p, 2)
-
-    emap, edges, bndix = all_edges(t)
-
-    if dim == 1
-        pnew = copy(p)
-        tnew = copy(t)
-        for i=2:order
-            new_pts = reshape((order - i + 1)/order*p[edges[:, 1], :] + (i - 1)/order*p[edges[:, 2], :], (size(edges, 1), :))
-            pnew = [pnew; new_pts]
-            tnew = hcat(tnew, size(p, 1) + (i - 2)*(size(p, 1) - 1) .+ emap)
-        end
-        enew = copy(e)
-    else
-        if order == 2
-            # add midpoints
-            np0 = size(p, 1)
-            new_pts = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), :))
-            pnew = [p; new_pts]
-
-            # map to triangle data structure
-            tnew = hcat(t, np0 .+ emap)
-
-            # add points that were on each boundary of `e` (TODO: improve performance here)
-            enew = copy(e)
-            for bdy ∈ e
-                bdy_name = bdy.first
-                bdy_nodes = bdy.second
-                for i ∈ axes(edges, 1)
-                    if edges[i, 1] ∈ bdy_nodes && edges[i, 2] ∈ bdy_nodes
-                        enew[bdy_name] = [enew[bdy_name]; np0 + i]
-                    end
-                end
-            end
-        else
-            error("Unsupported grid order `$order` for dimension `$dim`.")
-        end
-    end
-
-    return pnew, tnew, enew
-end
-
-"""
-    fmap, faces, bndix = all_faces(t)
-
-1) Find all unique `faces` (nf x 3 array) in the tetrahedral mesh `t`.
-2) Determine indices of boundary faces with `bndix`.
-3) Map local faces to global faces with `fmap` (nt x 4 array): `fmap[k,i]` is the 
-global face number for local face `i` in tetrahedron `k`.
-"""
-function all_faces(t)
-    # form all faces
-    if size(t, 2) == 10
-        # support for second order tetrahedra
-        ftag = [t[:, [1,2,3,5,6,7]]; t[:, [1,2,4,5,9,8]]; t[:, [1,3,4,7,10,8]]; t[:, [2,3,4,6,10,9]]]
-        nn = 6
-    else
-        # otherwise just do corners
-        ftag = [t[:, [1,2,3]]; t[:, [1,2,4]]; t[:, [1,3,4]]; t[:, [2,3,4]]]
-        nn = 3
-    end
-    nfaces = size(ftag, 1)
-
-    # sort columns and tag with global indices in last column
-    ftag = hcat(sort(ftag, dims=2), 1:nfaces)
-
-    # sort rows
-    ftag = sortslices(ftag, dims=1)
-
-    # indices of unique faces
-    keep = zeros(Bool, nfaces)
-    keep[unique(i -> ftag[i, 1:nn], 1:nfaces)] .= 1
-
-    # keep unique faces
-    faces = ftag[keep, 1:nn]
-
-    # mapping from local to global face index
-    fmap = cumsum(keep)
-    invpermute!(fmap, ftag[:, nn+1])
-    fmap = reshape(fmap, :, 4)
-
-    # face `i` has no duplicates if `i` and `i+1` are in `keep`
-    bndix = findall(i -> keep[i]*keep[i+1], 1:nfaces-1)
-    if keep[nfaces]
-        bndix = [bndix; nfaces]
-    end
-    bndix = cumsum(keep)[bndix]
-
-    return fmap, faces, bndix
-end
-
-"""
-    emap, edges, bndix = all_edges(t)
-
-1) Find all unique `edges` (ne x 2 array) in the tessellation `t`.
-2) Determine indices of boundary edges with `bndix`.
-3) Map local edges to global edges with `emap` (nt x dim+1 array): `emap[k,i]` is the 
-global edge number for local edge `i` in element `k`.
-"""
-function all_edges(t; handle_bdy=true)
-    # dimension of space
-    dim = size(t, 2) - 1
-
-    # get all possible edge index pairs
-    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
-    pairs = [1 2
-             2 3
-             1 3
-             1 4
-             2 4
-             3 4]
-
-    # find all edges
-    etag = t[:, pairs[1, :]]
-    for i=2:ne
-        etag = vcat(etag, t[:, pairs[i, :]])
-    end
-    nedges = size(etag, 1)
-
-    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
-    etag = [sort(etag, dims=2)  1:nedges]
-
-    # now sort so that first column goes from lowest to highest node index
-    etag = sortslices(etag, dims=1)
-
-    # determine if edge is a duplicate or should be kept
-    keep = zeros(Bool, nedges)
-    keep[unique(i -> etag[i, 1:2], 1:size(etag, 1))] .= 1
-
-    # only keep unique edges
-    edges = etag[keep, 1:2]
-
-    # boundary edges
-    if handle_bdy
-        if dim == 1 || dim == 2
-            # in 1D and 2D, no duplicates
-            dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
-            dup = [dup; false]
-            dup = dup[keep]
-            bndix = findall(.!dup)
-        elseif dim == 3
-            # in 3D, on boundary face (TODO: improve performance here)
-            bfaces = boundary_faces(t)
-            _, bedges, _ = all_edges(bfaces)
-            bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
-        end
-    else
-        bndix = []
-    end
-
-    # compute mapping to global indices
-    emap = cumsum(keep)
-    invpermute!(emap, etag[:, 3])
-    emap = reshape(emap, :, ne)
-
-    return emap, edges, bndix
-end
-
-function boundary_faces(t)
-    fmap, faces, bndix = all_faces(t)
-    return faces[bndix, :]
-end
-function boundary_nodes(t)
-    if size(t, 2) == 3
-        emap, edges, bndix = all_edges(t)
-        return unique(edges[bndix, :])
-    elseif size(t, 2) == 4
-        return unique(boundary_faces(t))
-    end
 end
 
 """
@@ -349,7 +139,93 @@ all the keys in `t` that point to the ith node of the mesh of size `np`.
 """
 get_p_to_t(t, np) = [findall(j -> j == i, t) for i=1:np]
 
-################################################################################
+"""
+    g2 = add_midpoints(g)
+
+Add midpoints to the grid `g` to make it second order.
+"""
+function add_midpoints(g::Grid, el::Triangle)
+    # unpack
+    np1 = g.np
+    p = g.p
+    t = g.t
+    e = g.e
+
+    # get edges
+    emap, edges, bndix = all_edges(t)
+
+    # add midpoints
+    mids = 1/2*reshape(p[edges[:, 1], :] + p[edges[:, 2], :], (size(edges, 1), :))
+    p2 = [p; mids]
+    np2 = size(p2, 1)
+
+    # map to elements
+    t2 = hcat(t, np1 .+ emap)
+
+    # add points that were on each boundary of `e` (TODO: improve performance here)
+    e2 = copy(e)
+    for bdy ∈ e
+        bdy_name = bdy.first
+        bdy_nodes = bdy.second
+        for i ∈ bndix
+            if edges[i, 1] ∈ bdy_nodes && edges[i, 2] ∈ bdy_nodes
+                e2[bdy_name] = [e2[bdy_name]; np1 + i]
+            end
+        end
+    end
+
+    # second order triangle element
+    el2 = Triangle(order=2)
+
+    # p2 to t2 map
+    p2_to_t2 = get_p_to_t(t2, np2)
+
+    return Grid(el2, g.J, p2, np2, t2, g.nt, el2.n, e2, p2_to_t2)
+end
+add_midpoints(g::Grid) = add_midpoints(g, g.el)
+
+"""
+    emap, edges, bndix = all_edges(t)
+
+1) Find all unique `edges` (ne x 2 array) in the triangluation `t`.
+2) Determine indices of boundary edges with `bndix`.
+3) Map local edges to global edges with `emap` (nt x 3 array): `emap[k,i]` is the 
+global edge number for local edge `i` in element `k`.
+"""
+function all_edges(t)
+    # get all possible edges
+    edges = vcat(t[:, [1, 2]], t[:, [2, 3]], t[:, [3, 1]])
+
+    # order node indices so lowest ones are in first column
+    sort!(edges, dims=2)
+
+    # tag each edge with its global index in 3rd column
+    etag = hcat(edges, 1:3*size(t, 1))
+
+    # now sort so that first column goes from lowest to highest node index
+    etag[:] = sortslices(etag, dims=1)
+
+    # determine if edge is a duplicate or should be kept
+    dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
+    keep = .![false; dup]
+
+    # only keep unique edges
+    edges = etag[keep, 1:2]
+
+    # compute mapping to global indices
+    emap = cumsum(keep)
+    invpermute!(emap, etag[:, 3])
+    emap = reshape(emap, :, 3)
+
+    # boundary edges: no duplicates
+    dup = [dup; false]
+    dup = dup[keep]
+    bndix = findall(.!dup)
+
+    return emap, edges, bndix
+end
+
+#### Matrices ####
 
 function mass_matrix(g::Grid)
     J = g.J

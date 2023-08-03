@@ -170,10 +170,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
         # cg!(adv, HM, advection(m, s.χx, s.χy, bhalf))
         # s.b.values[:] = s.b.values - Δt*adv
 
-        # # Δt/2 advection step
-        # invert!(m, s)
-        # cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
-        # s.b.values[:] = s.b.values - Δt/2*adv
+        if m.advection
+            # Δt/2 advection step
+            invert!(m, s)
+            cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values - Δt/2*adv
+        end
 
         # Δt diffusion step
         for j ∈ eachindex(in_nodes2)
@@ -182,10 +184,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
 
-        # # Δt/2 advection step
-        # invert!(m, s)
-        # cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
-        # s.b.values[:] = s.b.values - Δt/2*adv
+        if m.advection
+            # Δt/2 advection step
+            invert!(m, s)
+            cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values - Δt/2*adv
+        end
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
