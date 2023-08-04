@@ -9,10 +9,13 @@ set_out_folder("output/bowl2D/")
 
 function run()
     # parameters
-    ε² = 1e-2
+    ε² = 1e-4
     μ = 1e0
     ϱ = 1e-4
-    Δt = 1e-3*μ*ϱ/ε²
+    α = ε²/μ/ϱ
+    T = 5e-2/α
+    n_steps = 50
+    Δt = T/n_steps
     f = 1.
     L = 1.
     nξ = 2^8 
@@ -36,7 +39,8 @@ function run()
     Hx_func(x) = -2*H0*x/L^2
 
     # diffusivity
-    κ_func(ξ, σ) = ε²/μ/ϱ
+    # κ_func(ξ, σ) = ε²/μ/ϱ
+    κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
 
     # viscosity
     ν_func(ξ, σ) = μ*ϱ*κ_func(ξ, σ)
@@ -83,8 +87,8 @@ function run()
     ax.set_xlim([0, m.ξ[end]])
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    savefig("$out_folder/ux_bowl2D.png")
-    println("$out_folder/ux_bowl2D.png")
+    savefig("$(out_folder)ux_bowl2D.png")
+    println("$(out_folder)ux_bowl2D.png")
     plt.close()
 
     fig, ax = plt.subplots(1)
@@ -105,8 +109,39 @@ function run()
     ax.set_xlim([0, m.ξ[end]])
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    savefig("$out_folder/uy_bowl2D.png")
-    println("$out_folder/uy_bowl2D.png")
+    savefig("$(out_folder)uy_bowl2D.png")
+    println("$(out_folder)uy_bowl2D.png")
+    plt.close()
+
+    ix = argmin(abs.(m.ξ .- 0.5))
+    println(m.ξ[ix])
+    H = m.H[ix]
+    z = m.z[ix, :]
+    ωx = -1/H*differentiate(s.uη[ix, :], m.σ)
+    ωy =  1/H*differentiate(s.uξ[ix, :], m.σ)
+    χx =  H*cumtrapz(s.uη[ix, :], m.σ)
+    χy = -H*cumtrapz(s.uξ[ix, :], m.σ)
+    b = s.b[ix, :]
+    bz = 1/H*differentiate(s.b[ix, :], m.σ)
+    fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
+    ax[1, 1].plot(ωx, z)
+    ax[1, 2].plot(ωy, z)
+    ax[1, 3].plot(b, z)
+    ax[2, 1].plot(χx, z)
+    ax[2, 2].plot(χy, z)
+    ax[2, 3].plot(bz, z)
+    ax[1, 1].set_xlabel(L"\omega^x")
+    ax[1, 2].set_xlabel(L"\omega^y")
+    ax[1, 3].set_xlabel(L"b")
+    ax[2, 1].set_xlabel(L"\chi^x")
+    ax[2, 2].set_xlabel(L"\chi^y")
+    ax[2, 3].set_xlabel(L"\partial_z b")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1, 1].set_ylim(-H, 0)
+    ax[2, 1].set_ylim(-H, 0)
+    savefig("$(out_folder)profiles2D.png")
+    println("$(out_folder)profiles2D.png")
     plt.close()
 
     Uy = [trapz(s.uη[i, :], m.z[i, :]) for i=1:m.nξ]
@@ -115,8 +150,8 @@ function run()
     ax.plot(m.x[:, 1], Ψ)
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Barotropic streamfunction $\Psi$")
-    savefig("$out_folder/psi_bowl2D.png")
-    println("$out_folder/psi_bowl2D.png")
+    savefig("$(out_folder)psi_bowl2D.png")
+    println("$(out_folder)psi_bowl2D.png")
     plt.close()
 end
 

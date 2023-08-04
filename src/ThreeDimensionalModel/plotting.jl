@@ -201,55 +201,145 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     println(fname)
 end
 
-function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label="", fname="$out_folder/slice.png")
-    u = FEField(u)
+function plot_xslices(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/xslices.png")
+    # params
     nx = 2^5
     nσ = m.nσ
-    x = range(-0.999, 0.999, length=nx)
-    y = 0.0
-    # σ = range(-1., 0., length=nσ)
-    # σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2
     σ = m.σ
-    Hs = [m.H([x[i], y]) for i ∈ eachindex(x)] 
+
+    # get x slice
+    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
+    x = range(neary[2], neary[3], length=nx)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x[i], y], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+
+    # get indices of wedges
+    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
+    k_ws = hcat(k_ws, k_ws[:, end])
+
+    # nσ × nx coords
+    Hs = [m.H([x[i], y], k_sfcs[i]) for i=1:nx] 
     xx = repeat(x', nσ, 1)
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
-    us = [u([x[j], y, σ[i]]) for i ∈ eachindex(σ), j ∈ eachindex(x)]
-    bs = [s.b([x[j], y, σ[i]]) for i ∈ eachindex(σ), j ∈ eachindex(x)]
-    vmax = maximum(abs.(us))
 
-    fig, ax = plt.subplots(1, figsize=(3.2, 2))
-    img = ax.pcolormesh(xx, zz, us, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
-    levels = range(-vmax, vmax, length=8)
-    ax.contour(xx, zz, us, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-    cb = colorbar(img, ax=ax, label=cb_label)
-    levels = range(-1, 0, length=20)
-    ax.contour(xx, zz, bs, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
-    ax.fill_between(xx[1, :], zz[1, :], minimum(zz), color="k", alpha=0.3, lw=0.0)
-    ax.axis("equal")
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
+    # evaluate
+    ωx_fe = FEField(s.ωx)
+    ωy_fe = FEField(s.ωy)
+    χx_fe = FEField(s.χx)
+    χy_fe = FEField(s.χy)
+    ωx = [ωx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    ωy = [ωy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χx = [χx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χy = [χy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    bs = [s.b([x[j], y, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
+
+    # plot
+    fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
+    plot_slice(ax[1, 1], xx, zz, ωx, bs, L"Vorticity $\omega^x$")
+    plot_slice(ax[1, 2], xx, zz, ωy, bs, L"Vorticity $\omega^y$")
+    plot_slice(ax[2, 1], xx, zz, χx, bs, L"Streamfunction $\chi^x$")
+    plot_slice(ax[2, 2], xx, zz, χy, bs, L"Streamfunction $\chi^y$")
+    for a in ax
+        a.set_xticks(-1:0.5:1)
+        a.set_yticks(-1:0.5:0)
+        a.set_xlabel(L"Zonal coordinate $x$")
+        a.set_ylabel(L"Vertical coordinate $z$")
+    end
+    subplots_adjust(hspace=0.3, wspace=0.5)
     savefig(fname)
     println(fname)
     plt.close()
 end
 
-function plot_profiles(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/profiles.png")
-    x = 0.5
-    y = 0.
+function plot_yslices(m::ModelSetup3D, s::ModelState3D, x; fname="$out_folder/yslices.png")
+    # params
+    ny = 2^5
+    nσ = m.nσ
     σ = m.σ
+
+    # get y slice
+    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    nearx = sort(bdy[sortperm(abs.(bdy[:, 1] .- x)), 2][1:4])
+    y = range(nearx[2], nearx[3], length=ny)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x, y[i]], m.g_sfc1, m.g_sfc1.el) for i=1:ny]
+
+    # get indices of wedges
+    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:ny, j=1:nσ-1]
+    k_ws = hcat(k_ws, k_ws[:, end])
+
+    # nσ × nx coords
+    Hs = [m.H([x, y[i]], k_sfcs[i]) for i=1:ny] 
+    yy = repeat(y', nσ, 1)
+    zz = repeat(σ, 1, ny).*repeat(Hs', nσ, 1)
+
+    # evaluate
+    ωx_fe = FEField(s.ωx)
+    ωy_fe = FEField(s.ωy)
+    χx_fe = FEField(s.χx)
+    χy_fe = FEField(s.χy)
+    ωx = [ωx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    ωy = [ωy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    χx = [χx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    χy = [χy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    bs = [s.b([x, y[j], σ[i]], k_ws[j, i])   for i=1:nσ, j=1:ny]
+
+    # plot
+    fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
+    plot_slice(ax[1, 1], yy, zz, ωx, bs, L"Vorticity $\omega^x$")
+    plot_slice(ax[1, 2], yy, zz, ωy, bs, L"Vorticity $\omega^y$")
+    plot_slice(ax[2, 1], yy, zz, χx, bs, L"Streamfunction $\chi^x$")
+    plot_slice(ax[2, 2], yy, zz, χy, bs, L"Streamfunction $\chi^y$")
+    for a in ax
+        a.set_xticks(-1:0.5:1)
+        a.set_yticks(-1:0.5:0)
+        a.set_xlabel(L"Meridional coordinate $y$")
+        a.set_ylabel(L"Vertical coordinate $z$")
+    end
+    subplots_adjust(hspace=0.3, wspace=0.5)
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
+function plot_slice(ax, xx, zz, u, b, cb_label)
+    vmax = maximum(abs.(u))
+    img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
+    levels = range(-vmax, vmax, length=8)
+    ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235)
+    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    levels = range(-1, 0, length=20)
+    ax.contour(xx, zz, b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    ax.fill_between(xx[1, :], zz[1, :], minimum(zz), color="k", alpha=0.3, lw=0.0)
+    ax.axis("equal")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+end
+
+function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folder/profiles.png")
+    k_sfc = get_k([x, y], m.g_sfc1, m.g_sfc1.el)
+
+    σ = m.σ
+    nσ = m.nσ
     H = m.H([x, y])
     z = σ*H
+    k_ws = get_k_ws(k_sfc, nσ)
+    k_ws = [k_ws; k_ws[end]]
 
-    ωx = [s.ωx([x, y, σ[i]]) for i ∈ eachindex(z)]
-    ωy = [s.ωy([x, y, σ[i]]) for i ∈ eachindex(z)]
-    χx = [s.χx([x, y, σ[i]]) for i ∈ eachindex(z)]
-    χy = [s.χy([x, y, σ[i]]) for i ∈ eachindex(z)]
-    b = [s.b([x, y, σ[i]]) for i ∈ eachindex(z)]
-    bz = [∂z(s.b, [x, y, σ[i]])/H for i ∈ eachindex(z)]
+    ωx_fe = FEField(s.ωx)
+    ωy_fe = FEField(s.ωy)
+    χx_fe = FEField(s.χx)
+    χy_fe = FEField(s.χy)
+    ωx = [ωx_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
+    ωy = [ωy_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
+    χx = [χx_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
+    χy = [χy_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
+    b = [s.b([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
+    bz = [∂z(s.b, [x, y, σ[i]], k_ws[i])/H for i ∈ eachindex(σ)]
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
     ax[1, 1].plot(ωx, z)
@@ -266,6 +356,7 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/prof
     ax[2, 3].set_xlabel(L"\partial_z b")
     ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f, y = %1.1f\$", x, y)))
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
     savefig(fname)

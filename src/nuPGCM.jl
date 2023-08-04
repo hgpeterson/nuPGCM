@@ -112,7 +112,12 @@ export
 
     # model structs
     ModelSetup3D,
-    ModelState3D
+    ModelState3D,
+
+    # plotting
+    plot_profiles,
+    plot_xslices,
+    plot_yslices
 
 # packages
 using PyPlot
