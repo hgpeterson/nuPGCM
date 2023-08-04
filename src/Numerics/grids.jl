@@ -137,7 +137,15 @@ end
 Returns a vector of vectors of CartesianIndices `p_to_t` such that p_to_t[i] lists
 all the keys in `t` that point to the ith node of the mesh of size `np`.
 """
-get_p_to_t(t, np) = [findall(j -> j == i, t) for i=1:np]
+function get_p_to_t(t, np)
+    p_to_t = [CartesianIndex[] for i=1:np]
+    for k ∈ axes(t, 1)
+        for i ∈ axes(t, 2)
+            push!(p_to_t[t[k, i]], CartesianIndex(k, i))
+        end
+    end
+    return p_to_t
+end
 
 """
     g2 = add_midpoints(g)

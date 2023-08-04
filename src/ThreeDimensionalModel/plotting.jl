@@ -236,3 +236,39 @@ function plot_slice(m::ModelSetup3D, s::ModelState3D, u::AbstractField; cb_label
     println(fname)
     plt.close()
 end
+
+function plot_profiles(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/profiles.png")
+    x = 0.5
+    y = 0.
+    σ = m.σ
+    H = m.H([x, y])
+    z = σ*H
+
+    ωx = [s.ωx([x, y, σ[i]]) for i ∈ eachindex(z)]
+    ωy = [s.ωy([x, y, σ[i]]) for i ∈ eachindex(z)]
+    χx = [s.χx([x, y, σ[i]]) for i ∈ eachindex(z)]
+    χy = [s.χy([x, y, σ[i]]) for i ∈ eachindex(z)]
+    b = [s.b([x, y, σ[i]]) for i ∈ eachindex(z)]
+    bz = [∂z(s.b, [x, y, σ[i]])/H for i ∈ eachindex(z)]
+
+    fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
+    ax[1, 1].plot(ωx, z)
+    ax[1, 2].plot(ωy, z)
+    ax[1, 3].plot(b, z)
+    ax[2, 1].plot(χx, z)
+    ax[2, 2].plot(χy, z)
+    ax[2, 3].plot(bz, z)
+    ax[1, 1].set_xlabel(L"\omega^x")
+    ax[1, 2].set_xlabel(L"\omega^y")
+    ax[1, 3].set_xlabel(L"b")
+    ax[2, 1].set_xlabel(L"\chi^x")
+    ax[2, 2].set_xlabel(L"\chi^y")
+    ax[2, 3].set_xlabel(L"\partial_z b")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1, 1].set_ylim(-H, 0)
+    ax[2, 1].set_ylim(-H, 0)
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
