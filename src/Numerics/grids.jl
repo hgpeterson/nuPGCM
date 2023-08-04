@@ -126,7 +126,7 @@ function read_gfile_h5(gfile)
     file = h5open(gfile, "r")
     p::Matrix{Float64} = read(file, "p")
     t::Matrix{Int64} = read(file, "t")
-    e::Vector{Int64} = read(file, "e")[:]
+    e::Vector{Int64} = read(file, "e")
     close(file)
     return p, t, e
 end
@@ -170,9 +170,9 @@ function add_midpoints(g::Grid, el::Triangle)
     # map to elements
     t2 = hcat(t, np1 .+ emap)
 
-    # add points that were on each boundary of `e` (TODO: improve performance here)
+    # add points that were on each boundary of `e`
     e2 = copy(e)
-    for bdy ∈ e
+    for bdy ∈ e2
         bdy_name = bdy.first
         bdy_nodes = bdy.second
         for i ∈ bndix
