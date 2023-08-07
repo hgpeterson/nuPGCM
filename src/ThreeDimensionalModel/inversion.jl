@@ -38,6 +38,60 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     end
     if showplots
         plot_ω_χ(m, ωx, ωy, χx, χy)
+
+        x = 0.5
+        y = 0.0
+        k_sfc = get_k([x, y], g_sfc1, g_sfc1.el)
+        i = 3
+        ig = g_sfc1.t[k_sfc, i]
+        # x = g_sfc1.p[g_sfc1.t[k_sfc, i], 1]
+        # y = g_sfc1.p[g_sfc1.t[k_sfc, i], 2]
+        σ = m.σ
+        nσ = m.nσ
+        H = m.H[ig]
+        z = σ*H
+        k_ws = get_k_ws(k_sfc, nσ)
+        k_ws = [k_ws; k_ws[end]]
+
+        ωy_U = Ux[k_sfc]*m.ωy_Ux[ig, :]/H^2 + Uy[k_sfc]*m.ωx_Ux[ig, :]/H^2
+        χy_U = Ux[k_sfc]*m.χy_Ux[ig, :]/H^2 + Uy[k_sfc]*m.χx_Ux[ig, :]/H^2
+        # ωy_U = Uy[k_sfc]*m.ωx_Ux[ig, :]/H^2
+        # χy_U = Uy[k_sfc]*m.χx_Ux[ig, :]/H^2
+        ωy_b = ωy_b[k_sfc, i, :]
+        χy_b = χy_b[k_sfc, i, :]
+        ωy_fe = FEField(ωy)
+        χy_fe = FEField(χy)
+        # ωys = [ωy([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+        # χys = [χy([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+        ωys = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+        χys = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+
+        fig, ax = plt.subplots(1, 3, figsize=(6, 3.2), sharey=true)
+        ax[1].plot(ωy_b + ωy_U, z, "k", label=L"\omega^y")
+        ax[1].plot(ωys, z, "k--")
+        ax[1].plot(ωy_U, z, label=L"\omega^y_U")
+        ax[1].plot(ωy_b, z, label=L"\omega^y_b")
+        ax[2].plot(χy_b + χy_U, z, "k", label=L"\chi^y")
+        ax[2].plot(χys, z, "k--")
+        ax[2].plot(χy_U, z, label=L"\chi^y_U")
+        ax[2].plot(χy_b, z, label=L"\chi^y_b")
+        for i=1:3
+            by = m.Dys[k_sfc, i]'*b.values
+            for j=1:nσ-1
+                ax[3].plot(by[2j-1:2j], [z[j], z[j+1]], "C$(i-1)")
+            end
+        end
+        ax[1].legend()
+        ax[2].legend()
+        ax[3].legend()
+        ax[1].set_xlabel(L"\omega^y")
+        ax[2].set_xlabel(L"\chi^y")
+        ax[3].set_xlabel(L"\partial_y b")
+        ax[1].set_ylabel(L"Vertical coordinate $z$")
+        ax[1].set_ylim(-H, 0)
+        savefig("$out_folder/profile_debug.png")
+        println("$out_folder/profile_debug.png")
+        plt.close()
     end
 
     return ωx, ωy, χx, χy, Ψ

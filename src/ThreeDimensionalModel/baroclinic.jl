@@ -91,7 +91,7 @@ function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy, ε²)
+    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
@@ -102,7 +102,7 @@ with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy, ε²)
+function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
     # unpack
     J = g.J
     el = g.el
@@ -155,7 +155,7 @@ function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy, ε²)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε²; showplots=false)
+function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; showplots=false)
     # pre-allocate 
     nσ = g_col.np
     ωx_Ux = zeros(g_sfc1.np, nσ)
@@ -168,7 +168,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, �
         ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0, ε²)
+        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -209,7 +209,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; sho
         ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0, ε²)
+        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -244,7 +244,6 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
     nσ = m.nσ
     Dxs = m.Dxs
     Dys = m.Dys
-    ε² = m.ε²
     baroclinic_LHSs = m.baroclinic_LHSs
     in_nodes1 = m.in_nodes1
 
@@ -269,7 +268,7 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 
             # solve baroclinic problem with bx and by from element column
             j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = get_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0, ε²)
+            r = get_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0)
             sol = baroclinic_LHSs[j]\r
 
             # store
@@ -299,14 +298,15 @@ Store the sparse transpose to save memory so that `Dxs[k, i]` is a (g2.np) × (2
 that gives 
 
     ∂x(b) = ∂ξ(b) - σ*Hx/H ∂σ(b) 
+    ∂y(b) = ∂η(b) - σ*Hy/H ∂σ(b) 
 
 for node column i in surface element k when transposed and multiplied by b.
 """
-function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
+function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     # unpack
     w1 = g1.el
     w2 = g2.el
-    J = g1.J
+    # J = g1.J
     nσ = length(σ)
     g_sfc2 = H.g
 
@@ -315,6 +315,10 @@ function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     Dζ = [φζ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dxs = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
     Dys = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
+    # I = zeros(Int64, (nσ-1)*w2.n*2)
+    # J = zeros(Int64, (nσ-1)*w2.n*2)
+    # Vx = zeros(Float64, (nσ-1)*w2.n*2)
+    # Vy = zeros(Float64, (nσ-1)*w2.n*2)
     @showprogress "Computing buoyancy gradient matrices..." for k=1:g_sfc2.nt
         for i=1:3
             i1 = i 
@@ -323,8 +327,22 @@ function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
             Dy = Tuple{Int64,Int64,Float64}[]
             for j=1:nσ-1
                 k_w = (nσ - 1)*(k - 1) + j
-                jac = J.Js[k_w, :, :]
+                jac = g1.J.Js[k_w, :, :]
                 for l=1:w2.n
+                    # I[(j-1)*w2.n*2+2l-1] = 2j - 1 
+                    # J[(j-1)*w2.n*2+2l-1] = g2.t[k_w, l] 
+                    # Vx[(j-1)*w2.n*2+2l-1] = Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1] 
+                    #                        -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])
+                    # Vy[(j-1)*w2.n*2+2l-1] = Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]
+                    #                        -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])
+
+                    # I[(j-1)*w2.n*2+2l] = 2j
+                    # J[(j-1)*w2.n*2+2l] = g2.t[k_w, l] 
+                    # Vx[(j-1)*w2.n*2+2l] = Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1] 
+                    #                        -σ[j+1]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])
+                    # Vy[(j-1)*w2.n*2+2l] = Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]
+                    #                        -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])
+
                     push!(Dx, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]))
                     push!(Dy, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 2] + Dη[i1, l]*jac[2, 2] + Dζ[i1, l]*jac[3, 2]))
                     push!(Dx, (2j-1, g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
@@ -339,6 +357,8 @@ function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
             # store the transpose to save memory
             Dxs[k, i] = dropzeros!(sparse((x -> x[2]).(Dx), (x -> x[1]).(Dx), (x -> x[3]).(Dx), g2.np, 2nσ-2))
             Dys[k, i] = dropzeros!(sparse((x -> x[2]).(Dy), (x -> x[1]).(Dy), (x -> x[3]).(Dy), g2.np, 2nσ-2))
+            # Dxs[k, i] = dropzeros!(sparse(J, I, Vx, g2.np, 2nσ-2))
+            # Dys[k, i] = dropzeros!(sparse(J, I, Vy, g2.np, 2nσ-2))
         end
     end
 

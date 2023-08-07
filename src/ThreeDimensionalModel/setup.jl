@@ -130,7 +130,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     baroclinic_LHSs = [get_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
 
     # get transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, ε², showplots=true)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, showplots=true)
     ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
     ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
 

@@ -1,11 +1,11 @@
 using nuPGCM
 using PyPlot
 
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-set_out_folder("output/bowl2D/")
+set_out_folder("../output/bowl2D/")
 
 function run()
     # parameters
@@ -39,8 +39,8 @@ function run()
     Hx_func(x) = -2*H0*x/L^2
 
     # diffusivity
-    # κ_func(ξ, σ) = ε²/μ/ϱ
-    κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
+    κ_func(ξ, σ) = ε²/μ/ϱ
+    # κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
 
     # viscosity
     ν_func(ξ, σ) = μ*ϱ*κ_func(ξ, σ)
@@ -50,8 +50,9 @@ function run()
     N2_func(ξ, σ) = N2
     
     # timestepping
-    t_plot = 10*Δt
-    t_save = 10*Δt
+    t_plot = T/5
+    println(T/5/Δt)
+    t_save = T/5
     
     # create model struct
     m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -66,7 +67,7 @@ function run()
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 5*t_save, t_plot, t_save) 
+    evolve!(m, s, T, t_plot, t_save) 
 
     # plots
     fig, ax = plt.subplots(1)
@@ -114,7 +115,6 @@ function run()
     plt.close()
 
     ix = argmin(abs.(m.ξ .- 0.5))
-    println(m.ξ[ix])
     H = m.H[ix]
     z = m.z[ix, :]
     ωx = -1/H*differentiate(s.uη[ix, :], m.σ)

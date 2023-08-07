@@ -334,12 +334,12 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folde
     ωy_fe = FEField(s.ωy)
     χx_fe = FEField(s.χx)
     χy_fe = FEField(s.χy)
-    ωx = [ωx_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
-    ωy = [ωy_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
-    χx = [χx_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
-    χy = [χy_fe([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
-    b = [s.b([x, y, σ[i]], k_ws[i]) for i ∈ eachindex(σ)]
-    bz = [∂z(s.b, [x, y, σ[i]], k_ws[i])/H for i ∈ eachindex(σ)]
+    ωx = [ωx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    ωy = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χx = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χy = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    b = [s.b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    bz = [∂z(s.b, [x, y, σ[i]], k_ws[i])/H for i=1:nσ]
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
     ax[1, 1].plot(ωx, z)
@@ -356,7 +356,7 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folde
     ax[2, 3].set_xlabel(L"\partial_z b")
     ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
-    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f, y = %1.1f\$", x, y)))
+    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f \\quad y = %1.1f\$", x, y)))
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
     savefig(fname)
