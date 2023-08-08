@@ -38,9 +38,10 @@ function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
         K = K_el*J.Js[k, 1, 1]^2*J.dets[k]
         M = M_el*J.dets[k]
 
-        # ∫ ν ∂φᵢ∂φⱼ
+        # ∫ ν ∂φⱼ∂φᵢ + ∫ ∂(ν) φⱼ∂φᵢ
         σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
-        νK = [ref_el_quad(ξ -> ν(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
+        νK = [ref_el_quad(ξ -> ν(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n] + 
+             [ref_el_quad(ξ -> ∂(ν, σ(ξ), k, 1)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]
@@ -50,12 +51,12 @@ function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
 
         for i=1:el.n, j=1:el.n
             if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
-                # -ε²∂zz(ωx)
+                # -ε²∂zz(ν*ωx)
                 push!(A, (ωxi[i], ωxi[j], ε²/H^2*νK[i, j]))
                 # -ωy
                 push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
 
-                # -ε²∂zz(ωy)
+                # -ε²∂zz(ν*ωy)
                 push!(A, (ωyi[i], ωyi[j], ε²/H^2*νK[i, j]))
                 # +ωx
                 push!(A, (ωyi[i], ωxi[j], f*M[i, j]))

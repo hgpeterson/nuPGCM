@@ -8,7 +8,7 @@ pygui(false)
 set_out_folder("../output")
 
 function setup()
-    ε² = 1e-2
+    ε² = 1e-4
     μ = 1e0
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
@@ -20,7 +20,7 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     ν(σ, H) = μ*κ(σ, H)
     g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=false)
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=2^6, chebyshev=true, advection=false)
     return m
 end
 
@@ -43,17 +43,15 @@ end
 function test_baroclinic()
     ε² = 1e-4
     μ = 1e0
-    ϱ = 1e-4
     f = 1.
-    β = 0.
     x = 0.5
     y = 0
     H = 1 - x^2 - y^2
     nσ = 2^10
     σ = -1:1/(nσ-1):0
     z = σ*H
-    # ν = @. μ*(1e-2 + exp(-H*(σ + 1)/0.1))
-    ν = 1
+    ν = @. μ*(1e-2 + exp(-H*(σ + 1)/0.1))
+    # ν = 1
     p = collect(σ)
     t = [i + j - 1 for i=1:nσ-1, j=1:2]
     e = Dict("bot"=>[1], "sfc"=>[nσ])
@@ -65,7 +63,7 @@ function test_baroclinic()
     bx = @. 2x*exp(-H*(σ+1)/δ)
     by = zeros(nσ)
     Ux = 0
-    Uy = 6e-2
+    Uy = 1e-1
     τx = 0
     τy = 0
     r = nuPGCM.get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
@@ -96,9 +94,9 @@ function test_baroclinic()
     plt.close()
 end
 
-# m = setup()
-# s = run(m)
+m = setup()
+s = run(m)
 
-test_baroclinic()
+# test_baroclinic()
 
 println("Done.")

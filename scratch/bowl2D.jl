@@ -39,8 +39,8 @@ function run()
     Hx_func(x) = -2*H0*x/L^2
 
     # diffusivity
-    κ_func(ξ, σ) = ε²/μ/ϱ
-    # κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
+    # κ_func(ξ, σ) = ε²/μ/ϱ
+    κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
 
     # viscosity
     ν_func(ξ, σ) = μ*ϱ*κ_func(ξ, σ)
@@ -62,6 +62,8 @@ function run()
 
     # set initial state
     b = copy(m.z)
+    # δ = 0.2
+    # b = @. m.z + δ*exp(-(m.z+m.H)/δ) - δ*exp(m.z/δ)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
