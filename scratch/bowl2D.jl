@@ -9,12 +9,12 @@ set_out_folder("../output/bowl2D/")
 
 function run()
     # parameters
-    ε² = 1e-4
+    ε² = 1e-2
     μ = 1e0
-    ϱ = 1e-4
+    ϱ = 1e0
     α = ε²/μ/ϱ
     T = 5e-2/α
-    n_steps = 50
+    n_steps = 500
     Δt = T/n_steps
     f = 1.
     L = 1.
@@ -51,7 +51,6 @@ function run()
     
     # timestepping
     t_plot = T/5
-    println(T/5/Δt)
     t_save = T/5
     
     # create model struct

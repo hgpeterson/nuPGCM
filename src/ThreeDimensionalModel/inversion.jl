@@ -83,7 +83,6 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
         end
         ax[1].legend()
         ax[2].legend()
-        ax[3].legend()
         ax[1].set_xlabel(L"\omega^y")
         ax[2].set_xlabel(L"\chi^y")
         ax[3].set_xlabel(L"\partial_y b")

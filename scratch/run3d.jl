@@ -8,7 +8,7 @@ pygui(false)
 set_out_folder("../output")
 
 function setup()
-    ε² = 1e-4
+    ε² = 1e-2
     μ = 1e0
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
@@ -19,8 +19,8 @@ function setup()
     τy(x) = 0.
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     ν(σ, H) = μ*κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=2^6, chebyshev=true, advection=false)
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=true)
     return m
 end
 
