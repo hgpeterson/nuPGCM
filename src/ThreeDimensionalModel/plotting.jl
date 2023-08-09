@@ -359,6 +359,9 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folde
     ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f \\quad y = %1.1f\$", x, y)))
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
+    for a ∈ ax
+        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    end
     savefig(fname)
     println(fname)
     plt.close()

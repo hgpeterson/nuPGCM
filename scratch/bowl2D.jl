@@ -54,7 +54,7 @@ function run()
     t_save = T/5
     
     # create model struct
-    m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     save_setup(m)
@@ -65,7 +65,7 @@ function run()
     # b = @. m.z + δ*exp(-(m.z+m.H)/δ) - δ*exp(m.z/δ)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
-    s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
+    s = ModelState2D(b, χ, uξ, uη, uσ, i)
 
     # solve
     evolve!(m, s, T, t_plot, t_save) 
@@ -141,6 +141,9 @@ function run()
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
+    for a ∈ ax
+        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    end
     savefig("$(out_folder)profiles2D.png")
     println("$(out_folder)profiles2D.png")
     plt.close()

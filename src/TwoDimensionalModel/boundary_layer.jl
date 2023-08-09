@@ -4,7 +4,7 @@
 Construct full solutions `χ` = χI + χB and `b` = bI + bB at ξ = ξ[ix] from BL theory.
 The full solutions exist on the new grid `z`.
 """
-function get_full_soln(m::ModelSetup2DPG, s::ModelState2DPG, z::Vector{Float64}, ix::Int64)
+function get_full_soln(m::ModelSetup2D, s::ModelState2D, z, ix)
     # interior vars
     bI = s.b[ix, :]
     χI = s.χ[ix, :]

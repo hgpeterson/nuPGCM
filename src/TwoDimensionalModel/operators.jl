@@ -3,7 +3,7 @@
 
 Compute the 2D ξ derivative matrix.
 """
-function get_Dξ(ξ::Array{Float64,1}, L::Float64, periodic::Bool)
+function get_Dξ(ξ, L, periodic)
     nξ = size(ξ, 1)
     
     Dξ = Tuple{Int64,Int64,Float64}[]
@@ -66,7 +66,7 @@ end
 
 Compute the σ derivative matrix.
 """
-function get_Dσ(σ::AbstractArray{<:Real,1})
+function get_Dσ(σ)
     nσ = size(σ, 1)
 
     Dσ = Tuple{Int64,Int64,Float64}[]
@@ -105,7 +105,7 @@ end
 
 Compute diffusion matrix needed for 2D evolution
 """
-function get_D(ξ::Array{Float64,1}, σ::Array{Float64,1}, κ::Array{Float64,2},  H::Array{Float64,1})
+function get_D(ξ, σ, κ,  H)
     nξ = size(ξ, 1)
     nσ = size(σ, 1)
     n_pts = nξ*nσ
@@ -162,7 +162,7 @@ end
 
 Compute derivative of `field` in ξ-direction in terrian-following coordinates.
 """
-function ∂ξ(m::ModelSetup2DPG, field::Array{Float64})
+function ∂ξ(m::ModelSetup2D, field)
     return m.Dξ*field
 end
 
@@ -171,7 +171,7 @@ end
 
 Compute derivative of `field` in σ-direction in terrian-following coordinates.
 """
-function ∂σ(m::ModelSetup2DPG, field::Array{Float64,2})
+function ∂σ(m::ModelSetup2D, field)
     return (m.Dσ*field')'
 end
 
@@ -181,7 +181,7 @@ end
 Compute derivative of `field` in x-direction in terrian-following coordinates.
 Note: ∂x() = ∂ξ() - ∂x(H)*σ*∂σ()/H
 """
-function ∂x(m::ModelSetup2DPG, field::Array{Float64,2})
+function ∂x(m::ModelSetup2D, field)
     # ∂ξ(field)
     dfdx = ∂ξ(m, field)
 
@@ -197,7 +197,7 @@ end
 Compute dz(`field`) in terrian-following coordinates.
 Note: dz() = dσ()/H
 """
-function ∂z(m::ModelSetup2DPG, field::Array{Float64,2})
+function ∂z(m::ModelSetup2D, field)
     # dσ(field)/H
     fz = ∂σ(m, field)./repeat(m.H, 1, m.nσ)
     return fz
@@ -208,7 +208,7 @@ end
 
 Transform from terrain-following coordinates to cartesian coordinates.
 """
-function transform_from_TF(m::ModelSetup2DPG, s::ModelState2DPG)
+function transform_from_TF(m::ModelSetup2D, s::ModelState2D)
     u = s.uξ
     v = s.uη
     w = s.uσ.*repeat(m.H, 1, m.nσ) + repeat(m.σ', m.nξ, 1).*repeat(m.Hx, 1, m.nσ).*s.uξ

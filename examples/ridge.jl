@@ -51,7 +51,7 @@ function run_ridge(; bl = false)
     t_save = 3*secs_in_year
     
     # create model struct
-    m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
     # save and log params
     save_setup(m)
@@ -63,7 +63,7 @@ function run_ridge(; bl = false)
     end
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
-    s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
+    s = ModelState2D(b, χ, uξ, uη, uσ, i)
 
     # solve
     evolve!(m, s, 15*secs_in_year, t_plot, t_save) 

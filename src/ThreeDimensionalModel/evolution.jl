@@ -84,40 +84,40 @@ function get_advection_arrays(g1, g2)
     return Aξ, Aη, Aσξ, Aση
 end
 
-# function advection(m::ModelSetup3D, χx, χy, b)
-#     g1 = m.g1
-#     g2 = m.g2
-#     adv = zeros(g2.np)
-#     for k=1:g2.nt, i=1:g2.nn
-#         adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
-#     end
-#     return adv
-# end
-
-function advection_chunk!(adv, k_chunk, m::ModelSetup3D, χx, χy, b)
+function advection(m::ModelSetup3D, χx, χy, b)
     g1 = m.g1
     g2 = m.g2
-    for k=k_chunk, i=1:g2.nn
-        adv[k, i] = sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                    sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                    sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                    sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
+    adv = zeros(g2.np)
+    for k=1:g2.nt, i=1:g2.nn
+        adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                           sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
     end
     return adv
 end
 
-function advection(m::ModelSetup3D, χx, χy, b)
-    k_chunks = Iterators.partition(1:m.g1.nt, m.g1.nt ÷ Threads.nthreads())
-    adv = zeros(m.g1.nt, m.g2.nn)
-    tasks = map(k_chunks) do k_chunk
-        Threads.@spawn advection_chunk!(adv, k_chunk, m, χx, χy, b)
-    end
-    fetch.(tasks)
-    return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
-end
+# function advection_chunk!(adv, k_chunk, m::ModelSetup3D, χx, χy, b)
+#     g1 = m.g1
+#     g2 = m.g2
+#     for k=k_chunk, i=1:g2.nn
+#         adv[k, i] = sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                     sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                     sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                     sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
+#     end
+#     return adv
+# end
+
+# function advection(m::ModelSetup3D, χx, χy, b)
+#     k_chunks = Iterators.partition(1:m.g1.nt, m.g1.nt ÷ Threads.nthreads())
+#     adv = zeros(m.g1.nt, m.g2.nn)
+#     tasks = map(k_chunks) do k_chunk
+#         Threads.@spawn advection_chunk!(adv, k_chunk, m, χx, χy, b)
+#     end
+#     fetch.(tasks)
+#     return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
+# end
 
 function evolve!(m::ModelSetup3D, s::ModelState3D)
     # unpack
@@ -138,7 +138,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # integration time
     α = ε²/μ/ϱ
     T = 5e-2/α
-    n_steps = 10
+    n_steps = 50
     Δt = T/n_steps
     # Δt = 1e-3
     # n_steps = 11

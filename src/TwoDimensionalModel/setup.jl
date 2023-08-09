@@ -4,38 +4,38 @@
 #   (2) Setup/Params
 ################################################################################
 
-struct ModelState2DPG
+struct ModelState2D{M<:AbstractMatrix, V<:AbstractVector}
     # buoyancy (m s-2)
-	b::Array{Float64,2}
+	b::M
 
     # streamfunction (m2 s-1)
-    χ::Array{Float64,2}
+    χ::M
 
     # velocities (m s-1)
-	uξ::Array{Float64,2}
-	uη::Array{Float64,2}
-	uσ::Array{Float64,2}
+	uξ::M
+	uη::M
+	uσ::M
 
     # iteration
-    i::Array{Int64,1}
+    i::V
 end
 
-struct ModelSetup2DPG
+struct ModelSetup2D{I<:Integer, F<:AbstractFloat, V<:AbstractVector, M<:AbstractMatrix, SM<:SparseMatrixCSC, SV<:AbstractVector}
     # use BL model or full?
     bl::Bool 
 
 	# Coriolis parameter (s-1)
-	f::Float64
+	f::F
 
 	# U = 0 or no?
 	no_net_transport::Bool
 
     # width of domain (m)
-	L::Float64
+	L::F
 
 	# number of grid points
-	nξ::Int64
-	nσ::Int64
+	nξ::I
+	nσ::I
 
     # coordinates
     coords::String
@@ -44,41 +44,41 @@ struct ModelSetup2DPG
     periodic::Bool
 
 	# grid coordinates
-	ξ::Array{Float64,1}
-	σ::Array{Float64,1}
-    x::Array{Float64,2}
-    z::Array{Float64,2}
+	ξ::V
+	σ::V
+    x::M
+    z::M
 
     # depth (m)
-    H::Array{Float64, 1}
+    H::V
 
     # derivative of depth w.r.t. x
-    Hx::Array{Float64,1}
+    Hx::V
 
     # turbulent viscosity (m2 s-1)
-	ν::Array{Float64,2}
+	ν::M
 
     # turbulent diffusivity (m2 s-1)
-	κ::Array{Float64,2}
+	κ::M
 
     # buoyancy frequency (s-2)
-	N2::Array{Float64,2}
+	N2::M
 
     # timestep (s)
-	Δt::Float64
+	Δt::F
 
     # derivative matrices
-    Dξ::SparseMatrixCSC{Float64,Int64}
-    Dσ::SparseMatrixCSC{Float64,Int64}
+    Dξ::SM
+    Dσ::SM
 
     # diffusion matrix
-    D::SparseMatrixCSC{Float64,Int64}
+    D::SM
 
     # inversion LHSs
-    inversion_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}
+    inversion_LHSs::SV
 
     # U = 1 solution
-    χ_U::Array{Float64,2}
+    χ_U::M
 end
 
 ################################################################################
@@ -86,13 +86,12 @@ end
 ################################################################################
 
 """
-    m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
+    m = ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
 
-Construct a ModelSetup2DPG struct using analytical functions of H, Hx, ν, κ, and N.
+Construct a ModelSetup2D struct using analytical functions of H, Hx, ν, κ, and N.
 """
-function ModelSetup2DPG(bl::Bool, f::Float64, no_net_transport::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
-                    periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, H_func::Function, Hx_func::Function, 
-                    ν_func::Function, κ_func::Function, N2_func::Function, Δt::Real)
+function ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, 
+                      H_func::Function, Hx_func::Function, ν_func::Function, κ_func::Function, N2_func::Function, Δt)
     # evaluate functions 
     H = @. H_func(ξ)
     Hx = @. Hx_func(ξ)
@@ -110,17 +109,16 @@ function ModelSetup2DPG(bl::Bool, f::Float64, no_net_transport::Bool, L::Float64
     z = repeat(σ', nξ, 1).*repeat(H, 1, nσ)
 
     # pass to setup for arrays
-    return ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
+    return ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
 end
 
 """
-    m = ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2 Δt)
+    m = ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2 Δt)
 
-Construct a ModelSetup2DPG struct using arrays of H, Hx, ν, and κ.
+Construct a ModelSetup2D struct using arrays of H, Hx, ν, and κ.
 """
-function ModelSetup2DPG(bl::Bool, f::Float64, no_net_transport::Bool, L::Float64, nξ::Int64, nσ::Int64, coords::String, 
-                    periodic::Bool, ξ::Array{Float64,1}, σ::Array{Float64,1}, x::Array{Float64,2}, z::Array{Float64,2}, 
-                    H::Array{Float64,1}, Hx::Array{Float64,1}, ν::Array{Float64,2}, κ::Array{Float64,2}, N2::Array{Float64,2}, Δt::Real)
+function ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, 
+                      H::V, Hx::V, ν::M, κ::M, N2::M, Δt) where {V<:AbstractVector, M<:AbstractMatrix}
     # get derivative matrices
     Dξ = get_Dξ(ξ, L, periodic)
     Dσ = get_Dσ(σ)
@@ -129,14 +127,11 @@ function ModelSetup2DPG(bl::Bool, f::Float64, no_net_transport::Bool, L::Float64
     D = get_D(ξ, σ, κ, H)
 
     # inversion LHSs
-    inversion_LHSs = Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}(undef, nξ) 
-    for i=1:nξ 
-        inversion_LHSs[i] = get_inversion_LHS(ν[i, :], f, H[i], σ)
-    end  
+    inversion_LHSs = [get_inversion_LHS(ν[i, :], f, H[i], σ) for i=1:nξ]
     
     # U = 1 inversion solution  
     inversion_RHS = get_inversion_RHS(f^2 ./ν, 1)
     χ_U = get_χ(inversion_LHSs, inversion_RHS) 
 
-    return ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversion_LHSs, χ_U)
+    return ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt, Dξ, Dσ, D, inversion_LHSs, χ_U)
 end

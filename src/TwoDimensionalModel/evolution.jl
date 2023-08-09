@@ -7,7 +7,7 @@
 
 Generate the left-hand side matrix for the evolution problem with flux boundary conditions on the boundaries.
 """
-function get_evolution_LHS(m::ModelSetup2DPG, a::Real)
+function get_evolution_LHS(m::ModelSetup2D, a)
     # bottom and top boundaries in 1D
     umap = reshape(1:m.nξ*m.nσ, m.nξ, m.nσ)    
     bottomBdy = umap[:, 1]
@@ -28,7 +28,7 @@ end
 
 Modify the right-hand side vector `RHS` to include boundary conditions at the top and bottom.
 """
-function reset_BCs!(m::ModelSetup2DPG, s::ModelState2DPG, RHS::Array{Float64,2})
+function reset_BCs!(m::ModelSetup2D, s::ModelState2D, RHS)
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if m.bl
         RHS[:, 1] = s.χ[:, 1].*∂ξ(m, s.b[:, 1])./m.κ[:, 1]
@@ -45,7 +45,7 @@ end
 
 Solve evoluion equation for `b` and update model state.
 """
-function evolve!(m::ModelSetup2DPG, s::ModelState2DPG, t_final::Real, t_plot::Real, t_save::Real)
+function evolve!(m::ModelSetup2D, s::ModelState2D, t_final, t_plot, t_save)
     # grid points
     n_pts = m.nξ*m.nσ
 

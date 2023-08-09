@@ -13,7 +13,7 @@
 
 Save .h5 file for parameters.
 """
-function save_setup(m::ModelSetup2DPG, save_file::String)
+function save_setup(m::ModelSetup2D, save_file)
     save_file = string(out_folder, save_file)
     file = h5open(save_file, "w")
     write(file, "bl", m.bl)
@@ -54,7 +54,7 @@ function save_setup(m::ModelSetup2DPG, save_file::String)
     log_params(ofile, @sprintf("          z[2] - z[1] ~ %1.2f m\n", m.z[1, 2] - m.z[1, 1]))
     close(ofile)
 end
-function save_setup(m)
+function save_setup(m::ModelSetup2D)
     save_setup(m, "setup.h5")
 end
 
@@ -63,7 +63,7 @@ end
 
 Load .h5 setup file given by `filename`.
 """
-function load_setup_2D(filename::String)
+function load_setup_2D(filename)
     file = h5open(filename, "r")
     bl = read(file, "bl")
     f = read(file, "f")
@@ -83,7 +83,7 @@ function load_setup_2D(filename::String)
     κ = read(file, "κ")
     N2 = read(file, "N2")
     Δt = read(file, "Δt")
-    return ModelSetup2DPG(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
+    return ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
 end
 
 """
@@ -91,7 +91,7 @@ end
 
 Save .h5 state file.
 """
-function save_state(s::ModelState2DPG, save_file::String)
+function save_state(s::ModelState2D, save_file::String)
     save_file = string(out_folder, save_file)
     file = h5open(save_file, "w")
     write(file, "b", s.b)
@@ -103,7 +103,7 @@ function save_state(s::ModelState2DPG, save_file::String)
     close(file)
     println(save_file)
 end
-function save_state(s::ModelState2DPG, iSave::Int64)
+function save_state(s::ModelState2D, iSave::Integer)
     save_state(s, "state$iSave.h5")
 end
 
@@ -112,7 +112,7 @@ end
 
 Load .h5 state file given by `filename`.
 """
-function load_state_2D(filename::String)
+function load_state_2D(filename)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")
@@ -121,6 +121,6 @@ function load_state_2D(filename::String)
     uσ = read(file, "uσ")
     i = read(file, "i")
     close(file)
-    s = ModelState2DPG(b, χ, uξ, uη, uσ, i)
+    s = ModelState2D(b, χ, uξ, uη, uσ, i)
     return s
 end

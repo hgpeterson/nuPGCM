@@ -10,7 +10,7 @@ set_out_folder("../output")
 function setup()
     ε² = 1e-2
     μ = 1e0
-    ϱ = 1e-4
+    ϱ = 1e0
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
     β = 0.

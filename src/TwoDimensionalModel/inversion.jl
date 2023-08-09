@@ -7,7 +7,7 @@
 
 Setup left hand side of linear system for problem.
 """
-function get_inversion_LHS(ν::Vector{Float64}, f::Float64, H::Float64, σ::Vector{Float64})
+function get_inversion_LHS(ν, f, H, σ)
     nσ = size(σ, 1)
     A = Tuple{Int64,Int64,Float64}[]  
 
@@ -84,7 +84,7 @@ end
 
 Setup right hand side of linear system for problem.
 """
-function get_inversion_RHS(rhs::Matrix{Float64}, U::Real)
+function get_inversion_RHS(rhs, U)
     # boundary conditions
     rhs[:, [1, 2, end]] .= 0 # χ = 0, dσ(χ) = 0 at σ = -1, dσσ(χ) = 0 at σ = 0
     rhs[:, end-1] .= U       # χ = U at σ = 0
@@ -96,13 +96,13 @@ end
 
 Compute inversion solution given right hand side `inversion_RHS`.
 """
-function get_χ(m::ModelSetup2DPG, inversion_RHS::Matrix{Float64})
+function get_χ(m::ModelSetup2D, inversion_RHS)
     return get_χ(m.inversion_LHSs, inversion_RHS)
 end
-function get_χ(inversion_LHSs::Array{SuiteSparse.UMFPACK.UmfpackLU{Float64,Int64}}, inversion_RHS::Matrix{Float64})
+function get_χ(inversion_LHSs, inversion_RHS)
     # solve
     χ = zeros(size(inversion_RHS))
-    for i=1:size(χ, 1)
+    for i ∈ axes(χ, 1)
         χ[i, :] = inversion_LHSs[i]\inversion_RHS[i, :]
     end
     return χ
@@ -114,7 +114,7 @@ end
 Compute U such that it satisfies constraint equation derived from
 island rule.
 """
-function get_U(m::ModelSetup2DPG, χ_b::Matrix{Float64})
+function get_U(m::ModelSetup2D, χ_b)
     # first term: ⟨(ν*χ_b_zz)_z⟩ at z = 0
     term1 = zeros(m.nξ)
     for i=1:m.nξ
@@ -151,7 +151,7 @@ function get_U(m::ModelSetup2DPG, χ_b::Matrix{Float64})
 
     return -(term1 + term2)/(term3 + term4)
 end
-function get_U_BL(m::ModelSetup2DPG, b::Matrix{Float64})
+function get_U_BL(m::ModelSetup2D, b)
     # bx
     bx = ∂x(m, b)
 
@@ -184,7 +184,7 @@ end
 Take streamfunction `χ` and compute `uξ`, `uη`, `uσ`, and `U`
 from its definition. Computation is different depending on choice of coordinates.
 """
-function post_process(m::ModelSetup2DPG, χ::Matrix{Float64})
+function post_process(m::ModelSetup2D, χ)
     # χ at σ = 0 is vertical integral of uξ
     U = χ[1, end] # just take first one since they all must be the same
 
@@ -216,7 +216,7 @@ end
 
 Invert for flow given current model state buoyancy perturbation.
 """
-function invert(m::ModelSetup2DPG, b::Matrix{Float64})
+function invert(m::ModelSetup2D, b)
     # buoyancy solution: rhs = dx(b), U = 0;
     # (U = 1 solution `sol_U` is stored in ModelSetup2DPG struct)
     rhs = ∂x(m, b)
@@ -254,7 +254,7 @@ function invert(m::ModelSetup2DPG, b::Matrix{Float64})
 
     return χ, uξ, uη, uσ, U
 end
-function invert!(m::ModelSetup2DPG, s::ModelState2DPG)
+function invert!(m::ModelSetup2D, s::ModelState2D)
     χ, uξ, uη, uσ, U = invert(m, s.b)
     s.χ[:, :] = χ
     s.uξ[:, :] = uξ

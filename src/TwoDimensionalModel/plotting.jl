@@ -20,8 +20,7 @@ Optional:
     - set xlabel with `xlabel`
     - set colorbar pad with `pad`
 """
-function ridge_plot(m::ModelSetup2DPG, s::ModelState2DPG, field::Array{Float64,2}, 
-                title::AbstractString, cb_label::AbstractString; 
+function ridge_plot(m::ModelSetup2D, s::ModelState2D, field, title, cb_label; 
                 ax=nothing, vext=nothing, cmap="RdBu_r", style="contour",
                 cb_orientation="vertical", xlabel=nothing, pad=nothing)
     # km
@@ -174,7 +173,7 @@ end
 
 Make some ridge plots of the current model state using the label number `i_img`.
 """
-function plot_state(m::ModelSetup2DPG, s::ModelState2DPG, i_img::Int64)
+function plot_state(m::ModelSetup2D, s::ModelState2D, i_img)
     # convert to physical coordinates 
     u, v, w = transform_from_TF(m, s)
 
