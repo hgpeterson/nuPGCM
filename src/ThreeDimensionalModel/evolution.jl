@@ -4,7 +4,7 @@ function get_K_col(g, κ)
     el = g.el
     K = Tuple{Int64, Int64, Float64}[]
     for k=1:g.nt
-        # ∫ ν ∂φᵢ∂φⱼ
+        # ∫ κ ∂φᵢ∂φⱼ
         σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
         κK = [ref_el_quad(ξ -> κ(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
         for i=1:el.n, j=1:el.n
@@ -23,20 +23,25 @@ function get_HM(g2, H::FEField, nσ)
     # unpack
     g_sfc2 = H.g
     tri2 = g_sfc2.el
-    J = g2.J
     w2 = g2.el
 
+    # compute general integrals
+    f(ξ, i, j, k) = φ(w2, ξ, i)*φ(w2, ξ, j)*φ(tri2, ξ[1:2], k)
+    A = [ref_el_quad(ξ -> f(ξ, i, j, k), w2) for i=1:w2.n, j=1:w2.n, k=1:tri2.n]
+
     # stamp
-    HM = Tuple{Int64, Int64, Float64}[]
-    @showprogress "Building depth-weighted mass matrix..." for k_sfc=1:g_sfc2.nt
-        x(ξ) = transform_from_ref_el(tri2, ξ[1:2], g_sfc2.p[g_sfc2.t[k_sfc, 1:3], :])
-        f(ξ, i, j) = H(x(ξ), k_sfc)*φ(w2, ξ, i)*φ(w2, ξ, j)
-        HM_el = [ref_el_quad(ξ -> f(ξ, i, j), w2) for i=1:w2.n, j=1:w2.n]
-        for k_w=get_k_ws(k_sfc, nσ), i=1:w2.n, j=1:w2.n
-            push!(HM, (g2.t[k_w, i], g2.t[k_w, j], J.dets[k_w]*HM_el[i, j]))
-        end
+    N = g2.nt*w2.n^2
+    I = zeros(Int64, N)
+    J = zeros(Int64, N)
+    V = zeros(Float64, N)
+    n = 1
+    @showprogress "Building depth-weighted mass matrix..." for k=1:g2.nt, i=1:w2.n, j=1:w2.n
+        I[n] = g2.t[k, i]
+        J[n] = g2.t[k, j]
+        V[n] = g2.J.dets[k]*sum(A[i, j, :].*H[g_sfc2.t[get_k_sfc(k, nσ), :]])
+        n += 1
     end
-    return dropzeros!(sparse((x->x[1]).(HM), (x->x[2]).(HM), (x->x[3]).(HM), g2.np, g2.np))
+    return dropzeros!(sparse(I, J, V, g2.np, g2.np))
 end
 
 """
@@ -84,42 +89,42 @@ function get_advection_arrays(g1, g2)
     return Aξ, Aη, Aσξ, Aση
 end
 
-function advection(m::ModelSetup3D, χx, χy, b)
-    g1 = m.g1
-    g2 = m.g2
-    adv = zeros(g2.np)
-    for k=1:g2.nt, i=1:g2.nn
-        adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-                           sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
-    end
-    return adv
-end
-
-# function advection_chunk!(adv, k_chunk, m::ModelSetup3D, χx, χy, b)
+# function advection(m::ModelSetup3D, χx, χy, b)
 #     g1 = m.g1
 #     g2 = m.g2
-#     for k=k_chunk, i=1:g2.nn
-#         adv[k, i] = sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                     sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                     sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                     sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
+#     adv = zeros(g2.np)
+#     for k=1:g2.nt, i=1:g2.nn
+#         adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                            sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                            sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+#                            sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
 #     end
 #     return adv
 # end
 
-# function advection(m::ModelSetup3D, χx, χy, b)
-#     k_chunks = Iterators.partition(1:m.g1.nt, m.g1.nt ÷ Threads.nthreads())
-#     adv = zeros(m.g1.nt, m.g2.nn)
-#     tasks = map(k_chunks) do k_chunk
-#         Threads.@spawn advection_chunk!(adv, k_chunk, m, χx, χy, b)
-#     end
-#     fetch.(tasks)
-#     return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
-# end
+function advection_chunk!(adv, k_chunk, m::ModelSetup3D, χx, χy, b)
+    g1 = m.g1
+    g2 = m.g2
+    for k=k_chunk, i=1:g2.nn
+        adv[k, i] = sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                    sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                    sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
+                    sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
+    end
+    return adv
+end
 
-function evolve!(m::ModelSetup3D, s::ModelState3D)
+function advection(m::ModelSetup3D, χx, χy, b)
+    k_chunks = Iterators.partition(1:m.g1.nt, m.g1.nt ÷ Threads.nthreads())
+    adv = zeros(m.g1.nt, m.g2.nn)
+    tasks = map(k_chunks) do k_chunk
+        Threads.@spawn advection_chunk!(adv, k_chunk, m, χx, χy, b)
+    end
+    fetch.(tasks)
+    return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
+end
+
+function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # unpack
     μ = m.μ
     ϱ = m.ϱ
@@ -135,13 +140,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     g_col = m.g_col
     in_nodes2 = m.in_nodes2
 
-    # integration time
-    α = ε²/μ/ϱ
-    T = 5e-2/α
+    # timestep
     n_steps = 50
-    Δt = T/n_steps
-    # Δt = 1e-3
-    # n_steps = 11
+    n_steps_plot = 10
+    Δt = t_final/50
+    # n_steps = Int64(t_final/Δt)
+    # n_steps_plot = Int64(t_plot/Δt)
 
     # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
     # s.χx.values[:] .= 0.0
@@ -151,6 +155,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # println(@sprintf("    Δt: %1.1e", Δt))
 
     # diffusion matrices
+    α = ε²/μ/ϱ
     M_col = mass_matrix(g_col)
     K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
@@ -164,7 +169,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     # for plotting
     pz = copy(g1.p)
     for i=1:g1.np
-        pz[i, 3] *= 2 - pz[i, 1]^2 - pz[i, 2]^2
+        pz[i, 3] *= H[get_i_sfc(i, nσ)]
     end
 
     # initial condition
@@ -178,19 +183,25 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
     end
     println("$out_folder/state0.vtu")
 
+    # for CFL
+    dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
+    dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
+    dσ = 1/(nσ-1) # !! only for evenly spaced nodes
+
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
     t0 = time()
     for i=1:n_steps
+        println("\nstep $i")
         if m.advection
             # Δt/2 advection step
-            invert!(m, s)
-            @time cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+            @time "invert!" invert!(m, s)
+            @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             s.b.values[:] = s.b.values - Δt/2*adv
         end
 
         # Δt diffusion step
-        for j ∈ eachindex(in_nodes2)
+        @time "diffusion" for j ∈ eachindex(in_nodes2)
             ig = in_nodes2[j]
             inds = get_col_inds(ig, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
@@ -198,8 +209,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
 
         if m.advection
             # Δt/2 advection step
-            invert!(m, s)
-            cg!(adv, HM, advection(m, s.χx, s.χy, s.b))
+            @time "invert!" invert!(m, s)
+            @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             s.b.values[:] = s.b.values - Δt/2*adv
         end
 
@@ -207,7 +218,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
             error("Solution blew up 😢")
         end
 
-        if mod(i, 10) == 0 || i == n_steps
+        if mod(i, n_steps_plot) == 0 || i == n_steps
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt) for j=1:g2.np]
             # # diffusion solution
@@ -217,9 +228,23 @@ function evolve!(m::ModelSetup3D, s::ModelState3D)
             println(@sprintf("\n%d steps in %d s", i, time()-t0))
             # println(@sprintf("Max Error: %1.1e", maximum(abs.(s.b.values - ba))))
             println(@sprintf("∫b = %1.5e", sum(HM*s.b.values)))
+            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            # println(@sprintf("CFL Δt_x: %1.1e", minimum(dx./abs.(ux))))
+            # println(@sprintf("CFL Δt_y: %1.1e", minimum(dy./abs.(uy))))
+            # println(@sprintf("CFL Δt_σ: %1.1e", minimum(dσ./abs.(uσ))))
+            # println(@sprintf("      Δt: %1.1e", Δt))
 
             # show state
             invert!(m, s, showplots=true)
+
+            # profile and slice plots
+            plot_profiles(m, s,  0.5, 0.0, fname="$out_folder/profiles_x=+0.5_y=0.0.png")
+            plot_profiles(m, s, -0.5, 0.0, fname="$out_folder/profiles_x=-0.5_y=0.0.png")
+            plot_xslices(m, s, 0.0, fname="$out_folder/xslices_y=0.0.png")
+            plot_yslices(m, s, 0.0, fname="$out_folder/yslices_x=0.0.png")
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]

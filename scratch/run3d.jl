@@ -10,7 +10,7 @@ set_out_folder("../output")
 function setup()
     ε² = 1e-2
     μ = 1e0
-    ϱ = 1e0
+    ϱ = 1e-2
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
     β = 0.
@@ -30,13 +30,12 @@ function run(m)
     b = FEField(x -> H(x)*x[3], m.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + 0.5)^2)/0.02), m.g2)
-    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    @time ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
-    evolve!(m, s)
-    plot_profiles(m, s,  0.5, 0.0, fname="$out_folder/profiles_x=+0.5_y=0.0.png")
-    plot_profiles(m, s, -0.5, 0.0, fname="$out_folder/profiles_x=-0.5_y=0.0.png")
-    plot_xslices(m, s, 0.0, fname="$out_folder/xslices_y=0.0.png")
-    plot_yslices(m, s, 0.0, fname="$out_folder/yslices_x=0.0.png")
+    # t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
+    # t_plot = t_final/5
+    # evolve!(m, s, t_final, t_plot)
     return s
 end
 
@@ -94,7 +93,7 @@ function test_baroclinic()
     plt.close()
 end
 
-m = setup()
+# m = setup()
 s = run(m)
 
 # test_baroclinic()

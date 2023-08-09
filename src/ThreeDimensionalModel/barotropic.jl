@@ -155,18 +155,11 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
     ε² = m.ε²
     g = m.g_sfc1
     bdy = g.e["bdy"]
-    J = g.J
     el = g.el
 
-    # indices
-    N = g.np
-
     # stamp
-    rhs = zeros(N)
-    for k=1:g.nt
-        # Jacobian
-        ∂x∂ξ = J.dets[k]
-
+    rhs = zeros(g.np)
+    @time for k=1:g.nt
         # transformation from reference triangle
         T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
 
@@ -175,7 +168,7 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, ωx_b_bot, ωy_b_bot; showplot
             x = T(ξ)
             ω_b_bot_div = ∂x(ωx_b_bot, x, k) + ∂y(ωy_b_bot, x, k)
             φ_i = φ(el, ξ, i)
-            return (-JEBAR(x, k) + ε²*ω_b_bot_div)*φ_i*∂x∂ξ
+            return (-JEBAR(x, k) + ε²*ω_b_bot_div)*φ_i*g.J.dets[k]
         end
         r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
 
