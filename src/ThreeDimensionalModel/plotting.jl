@@ -201,9 +201,9 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     println(fname)
 end
 
-function plot_xslices(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/xslices.png")
+function plot_xslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, y; fname="$out_folder/xslices.png")
     # params
-    nx = 2^5
+    nx = 2^8
     nσ = m.nσ
     σ = m.σ
 
@@ -225,22 +225,22 @@ function plot_xslices(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/xs
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
 
     # evaluate
-    ωx_fe = FEField(s.ωx)
-    ωy_fe = FEField(s.ωy)
-    χx_fe = FEField(s.χx)
-    χy_fe = FEField(s.χy)
-    ωx = [ωx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    ωy = [ωy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    χx = [χx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    χy = [χy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    bs = [s.b([x[j], y, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
+    ωx_fe = FEField(ωx)
+    ωy_fe = FEField(ωy)
+    χx_fe = FEField(χx)
+    χy_fe = FEField(χy)
+    ωxs = [ωx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    ωys = [ωy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χxs = [χx_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χys = [χy_fe([x[j], y, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    bs = [b([x[j], y, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
-    plot_slice(ax[1, 1], xx, zz, ωx, bs, L"Vorticity $\omega^x$")
-    plot_slice(ax[1, 2], xx, zz, ωy, bs, L"Vorticity $\omega^y$")
-    plot_slice(ax[2, 1], xx, zz, χx, bs, L"Streamfunction $\chi^x$")
-    plot_slice(ax[2, 2], xx, zz, χy, bs, L"Streamfunction $\chi^y$")
+    plot_slice(ax[1, 1], xx, zz, ωxs, bs, L"Vorticity $\omega^x$")
+    plot_slice(ax[1, 2], xx, zz, ωys, bs, L"Vorticity $\omega^y$")
+    plot_slice(ax[2, 1], xx, zz, χxs, bs, L"Streamfunction $\chi^x$")
+    plot_slice(ax[2, 2], xx, zz, χys, bs, L"Streamfunction $\chi^y$")
     for a in ax
         a.set_xticks(-1:0.5:1)
         a.set_yticks(-1:0.5:0)
@@ -252,10 +252,13 @@ function plot_xslices(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/xs
     println(fname)
     plt.close()
 end
+function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
+    plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
+end
 
-function plot_yslices(m::ModelSetup3D, s::ModelState3D, x; fname="$out_folder/yslices.png")
+function plot_yslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, x; fname="$out_folder/yslices.png")
     # params
-    ny = 2^5
+    ny = 2^8
     nσ = m.nσ
     σ = m.σ
 
@@ -277,22 +280,22 @@ function plot_yslices(m::ModelSetup3D, s::ModelState3D, x; fname="$out_folder/ys
     zz = repeat(σ, 1, ny).*repeat(Hs', nσ, 1)
 
     # evaluate
-    ωx_fe = FEField(s.ωx)
-    ωy_fe = FEField(s.ωy)
-    χx_fe = FEField(s.χx)
-    χy_fe = FEField(s.χy)
-    ωx = [ωx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
-    ωy = [ωy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
-    χx = [χx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
-    χy = [χy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
-    bs = [s.b([x, y[j], σ[i]], k_ws[j, i])   for i=1:nσ, j=1:ny]
+    ωx_fe = FEField(ωx)
+    ωy_fe = FEField(ωy)
+    χx_fe = FEField(χx)
+    χy_fe = FEField(χy)
+    ωxs = [ωx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    ωys = [ωy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    χxs = [χx_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    χys = [χy_fe([x, y[j], σ[i]], k_ws[j, i]) for i=1:nσ, j=1:ny]
+    bs = [b([x, y[j], σ[i]], k_ws[j, i])   for i=1:nσ, j=1:ny]
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
-    plot_slice(ax[1, 1], yy, zz, ωx, bs, L"Vorticity $\omega^x$")
-    plot_slice(ax[1, 2], yy, zz, ωy, bs, L"Vorticity $\omega^y$")
-    plot_slice(ax[2, 1], yy, zz, χx, bs, L"Streamfunction $\chi^x$")
-    plot_slice(ax[2, 2], yy, zz, χy, bs, L"Streamfunction $\chi^y$")
+    plot_slice(ax[1, 1], yy, zz, ωxs, bs, L"Vorticity $\omega^x$")
+    plot_slice(ax[1, 2], yy, zz, ωys, bs, L"Vorticity $\omega^y$")
+    plot_slice(ax[2, 1], yy, zz, χxs, bs, L"Streamfunction $\chi^x$")
+    plot_slice(ax[2, 2], yy, zz, χys, bs, L"Streamfunction $\chi^y$")
     for a in ax
         a.set_xticks(-1:0.5:1)
         a.set_yticks(-1:0.5:0)
@@ -303,6 +306,9 @@ function plot_yslices(m::ModelSetup3D, s::ModelState3D, x; fname="$out_folder/ys
     savefig(fname)
     println(fname)
     plt.close()
+end
+function plot_xslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
+    plot_xslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
 function plot_slice(ax, xx, zz, u, b, cb_label)
@@ -320,7 +326,7 @@ function plot_slice(ax, xx, zz, u, b, cb_label)
     ax.spines["bottom"].set_visible(false)
 end
 
-function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folder/profiles.png")
+function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y; fname="$out_folder/profiles.png")
     k_sfc = get_k([x, y], m.g_sfc1, m.g_sfc1.el)
 
     σ = m.σ
@@ -330,24 +336,25 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folde
     k_ws = get_k_ws(k_sfc, nσ)
     k_ws = [k_ws; k_ws[end]]
 
-    ωx_fe = FEField(s.ωx)
-    ωy_fe = FEField(s.ωy)
-    χx_fe = FEField(s.χx)
-    χy_fe = FEField(s.χy)
-    ωx = [ωx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    ωy = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    χx = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    χy = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    b = [s.b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    bz = [∂z(s.b, [x, y, σ[i]], k_ws[i])/H for i=1:nσ]
+    ωx_fe = FEField(ωx)
+    ωy_fe = FEField(ωy)
+    χx_fe = FEField(χx)
+    χy_fe = FEField(χy)
+    ωxs = [ωx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    ωys = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χxs = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χys = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    bs = [b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    # bzs = [∂z(b, [x, y, σ[i]], k_ws[i])/H for i=1:nσ]
+    bzs = differentiate(bs, z)
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
-    ax[1, 1].plot(ωx, z)
-    ax[1, 2].plot(ωy, z)
-    ax[1, 3].plot(b, z)
-    ax[2, 1].plot(χx, z)
-    ax[2, 2].plot(χy, z)
-    ax[2, 3].plot(bz, z)
+    ax[1, 1].plot(ωxs, z)
+    ax[1, 2].plot(ωys, z)
+    ax[1, 3].plot(bs, z)
+    ax[2, 1].plot(χxs, z)
+    ax[2, 2].plot(χys, z)
+    ax[2, 3].plot(bzs, z)
     ax[1, 1].set_xlabel(L"\omega^x")
     ax[1, 2].set_xlabel(L"\omega^y")
     ax[1, 3].set_xlabel(L"b")
@@ -362,6 +369,42 @@ function plot_profiles(m::ModelSetup3D, s::ModelState3D, x, y; fname="$out_folde
     for a ∈ ax
         a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     end
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+function plot_profiles(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
+    plot_profiles(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
+end
+
+function plot_U_xslice(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/U_xslice.png")
+    # params
+    nx = 2^8
+
+    # # get x slice
+    # bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    # neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
+    # x = range(neary[2], neary[3], length=nx)
+    x = range(0.95, 0.99, length=nx)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x[i], y], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+
+    Ux, Uy = get_Ux_Uy(s.Ψ)
+    Uxs = [Ux([x[i], y], k_sfcs[i]) for i=1:nx]
+    Uys = [Uy([x[i], y], k_sfcs[i]) for i=1:nx]
+    fig, ax = plt.subplots(1, 2, figsize=(6.4, 2))
+    ax[1].plot(x, Uxs)
+    ax[2].plot(x, Uys)
+    ax[1].set_xlabel(L"Zonal coordinate $x$")
+    ax[2].set_xlabel(L"Zonal coordinate $x$")
+    ax[1].set_ylabel(L"$U^x$")
+    ax[2].set_ylabel(L"$U^y$")
+    ax[1].set_title(latexstring(@sprintf("y = %1.1f", y)), x=1.1, y=1.1)
+    for a ∈ ax
+        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    end
+    subplots_adjust(wspace=0.2)
     savefig(fname)
     println(fname)
     plt.close()

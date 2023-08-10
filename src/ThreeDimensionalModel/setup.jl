@@ -42,6 +42,7 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     τy_x::F2
     τy_y::F2
     ν::F3
+    ν_bot::F1
     κ::F3
     g_sfc1::GS
     g_sfc2::GS
@@ -100,11 +101,11 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     H = FEField(H_func, g_sfc2)
     τx = FEField(τx_func, g_sfc2)
     τy = FEField(τy_func, g_sfc2)
-    H1 = FEField(H[1:g_sfc1.np], g_sfc1)
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
     τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
     ν = FEField([ν_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
     κ = FEField([κ_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
+    ν_bot = FEField([ν[get_i_bot(i, nσ)] for i=1:g_sfc1.np], g_sfc1)
 
     # store their gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -131,29 +132,25 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # get transport ω and χ
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, showplots=true)
-    ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
-    ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
-
-    # bottom drag coefficients
-    r_sym  = ωy_Ux_bot/H1^3
-    r_asym = ωx_Ux_bot/H1^3
+    νωx_Ux_bot = ν_bot*FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    νωy_Ux_bot = ν_bot*FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
 
     # barotropic LHS
-    barotropic_LHS = get_barotropic_LHS(r_sym, r_asym, f, β, H, Hx, Hy, ε²)
+    # barotropic_LHS = get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+    barotropic_LHS = get_barotropic_LHS(g_sfc2, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
 
     # get ω_τ's
     ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε², showplots=true)
-    ωx_τx_bot = FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
-    ωy_τx_bot = FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
-    ωx_τy_bot = -ωy_τx_bot
-    ωy_τy_bot = ωx_τx_bot
-    ωx_τ_bot = (τx1*ωx_τx_bot + τy1*ωx_τy_bot)/H1
-    ωy_τ_bot = (τx1*ωy_τx_bot + τy1*ωy_τy_bot)/H1
-    quick_plot(ωx_τ_bot*H1, L"H \omega^x_\tau(-H)", "$out_folder/omegax_tau_bot.png")
-    quick_plot(ωy_τ_bot*H1, L"H \omega^y_\tau(-H)", "$out_folder/omegay_tau_bot.png")
+    νωx_τx_bot = ν_bot*FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    νωy_τx_bot = ν_bot*FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
+    νωy_τ_bot = τx1*νωy_τx_bot + τy1*νωx_τx_bot
+    quick_plot(νωx_τ_bot, L"\nu\omega^x_\tau|_{-H}", "$out_folder/nu_omegax_tau_bot.png")
+    quick_plot(νωy_τ_bot, L"\nu\omega^y_\tau|_{-H}", "$out_folder/nu_omegay_tau_bot.png")
 
     # barotropic RHS due to wind stress
-    barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, ωx_τ_bot, ωy_τ_bot, ε²)
+    # barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc2, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
 
     # HM and advection arrays for evolution
     if advection
@@ -164,7 +161,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
         Aξ = Aη = Aσξ = Aση = zeros(Float64, 1, 1, 1, 1)
     end
 
-    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, κ, g_sfc1, g_sfc2, g1, g2, g_col,
+    return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
                         ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση, advection)
 end

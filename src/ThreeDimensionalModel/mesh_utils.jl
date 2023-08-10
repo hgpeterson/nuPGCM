@@ -83,9 +83,25 @@ Returns indices `k_ws` of the wedges that lie under the surface triangle with in
 get_k_ws(k_sfc, nσ) = get_k_w(k_sfc, nσ, 1):get_k_w(k_sfc, nσ, nσ - 1)
 
 """
-    inds = get_col_inds(i, nσ) 
+    inds = get_col_inds(i_sfc, nσ) 
 
-Returns the indices `inds` for the nodes in the `i`th column of a mesh with `nσ` 
+Returns the indices `inds` for the nodes in the `i_sfc`th column of a mesh with `nσ` 
 vertical nodes.
 """
-get_col_inds(i, nσ) = (i - 1)*nσ + 1:(i - 1)*nσ + nσ
+get_col_inds(i_sfc, nσ) = get_i_bot(i_sfc, nσ):get_i_top(i_sfc, nσ)
+
+"""
+    i = get_i_bot(i_sfc, nσ) 
+
+Returns the index `i` for the bottom node in the `i_sfc`th column of a mesh with `nσ` 
+vertical nodes.
+"""
+get_i_bot(i_sfc, nσ) = (i_sfc - 1)*nσ + 1
+
+"""
+    i = get_i_top(i_sfc, nσ) 
+
+Returns the index `i` for the top node in the `i_sfc`th column of a mesh with `nσ` 
+vertical nodes.
+"""
+get_i_top(i_sfc, nσ) = i_sfc*nσ

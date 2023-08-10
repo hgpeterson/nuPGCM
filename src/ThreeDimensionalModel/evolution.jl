@@ -141,9 +141,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    n_steps = 50
+    n_steps = 500
     n_steps_plot = 10
-    Δt = t_final/50
+    Δt = t_final/500
     # n_steps = Int64(t_final/Δt)
     # n_steps_plot = Int64(t_plot/Δt)
 
@@ -239,12 +239,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
             # show state
             invert!(m, s, showplots=true)
-
-            # profile and slice plots
-            plot_profiles(m, s,  0.5, 0.0, fname="$out_folder/profiles_x=+0.5_y=0.0.png")
-            plot_profiles(m, s, -0.5, 0.0, fname="$out_folder/profiles_x=-0.5_y=0.0.png")
-            plot_xslices(m, s, 0.0, fname="$out_folder/xslices_y=0.0.png")
-            plot_yslices(m, s, 0.0, fname="$out_folder/yslices_x=0.0.png")
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
