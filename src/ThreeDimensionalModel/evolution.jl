@@ -124,13 +124,8 @@ function advection(m::ModelSetup3D, χx, χy, b)
     return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
 end
 
-function RK4(f, u, Δt)
-    k1 = f(u)
-    k2 = f(u + Δt/2*k1)
-    k3 = f(u + Δt/2*k2)
-    k4 = f(u + Δt*k3)
-    return u + Δt/6*(k1 + 2k2 + 2k3 + k4)
-end
+RK2(f, u, Δt) = u + Δt*f(u + Δt/2*f(u))
+AB2(f, u, u_prev, Δt) = u + Δt/2*(3*f(u) - f(u_prev))
 
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # unpack
@@ -201,37 +196,48 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
+    b_prev = copy(s.b.values)
     t0 = time()
     for i=1:n_steps
         # println("\nstep $i")
-        # if m.advection
-        #     # Δt/2 advection step
-        #     # @time "invert!" invert!(m, s)
-        #     @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
-        #     s.b.values[:] = s.b.values - Δt/2*adv
-        # end
+        if m.advection
+            # Δt/2 advection step
+            # @time "invert!" invert!(m, s)
+            # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
+            # s.b.values[:] = s.b.values - Δt/2*adv
 
-        # # Δt diffusion step
+            s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt/2)
+
+            # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
+            # b_prev[:] = s.b.values
+            # s.b.values[:] = bnew
+        end
+
+        # Δt diffusion step
         # @time "diffusion" for j ∈ eachindex(in_nodes2)
-        #     ig = in_nodes2[j]
-        #     inds = get_col_inds(ig, nσ)
-        #     s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
-        # end
+        for j ∈ eachindex(in_nodes2)
+            ig = in_nodes2[j]
+            inds = get_col_inds(ig, nσ)
+            s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
+        end
 
-        # if m.advection
-        #     # Δt/2 advection step
-        #     # @time "invert!" invert!(m, s)
-        #     @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
-        #     s.b.values[:] = s.b.values - Δt/2*adv
-        # end
+        if m.advection
+            # Δt/2 advection step
+            # @time "invert!" invert!(m, s)
+            # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
+            # s.b.values[:] = s.b.values - Δt/2*adv
 
-        f(u) = cg!(adv, HM, -advection(m, s.χx, s.χy, u))
-        # k1 = f(u)
-        # k2 = f(u + Δt/2*k1)
-        # k3 = f(u + Δt/2*k2)
-        # k4 = f(u + Δt*k3)
-        # u + Δt/6*(k1 + 2k2 + 2k3 + k4)
-        s.b.values[:] = RK4(f, s.b.values, Δt)
+            s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt/2)
+
+            # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
+            # b_prev[:] = s.b.values
+            # s.b.values[:] = bnew
+        end
+
+        # s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt)
+        # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt)
+        # b_prev[:] = s.b.values
+        # s.b.values[:] = bnew
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")

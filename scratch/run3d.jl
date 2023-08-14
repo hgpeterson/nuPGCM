@@ -23,7 +23,7 @@ function setup()
     # κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=true)
     return m
 end
@@ -49,7 +49,7 @@ function run(m)
     return s
 end
 
-m = setup()
+# m = setup()
 s = run(m)
 
 function test_baroclinic()
