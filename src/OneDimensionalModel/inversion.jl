@@ -1,10 +1,10 @@
 """
-    LHS = get_inversion_LHS(ν, z, f, θ)
+    LHS = get_inversion_LHS(ν, f, z, transport_constraint)
 
-Setup left hand side of linear system for problem.
+Setup left hand side of linear system for 1D inversion problem.
 """
-function get_inversion_LHS(ν::Array{Float64,1}, z::Array{Float64,1}, f::Float64, transport_constraint::Bool)
-    nz = size(z, 1)
+function get_inversion_LHS(ν, f, z, transport_constraint::Bool)
+    nz = length(z)
     iU = nz + 1
     A = Tuple{Int64,Int64,Float64}[]  
 
@@ -118,9 +118,9 @@ end
 """
     RHS = get_inversion_RHS(m, b)
 
-Setup right hand side of linear system for problem.
+Setup right hand side of linear system for 1D inversion problem.
 """
-function get_inversion_RHS(m::ModelSetup1DPG, b::Array{Float64,1}, χ::Vector{Float64})
+function get_inversion_RHS(m::ModelSetup1D, b)
     # last row is for U
     rhs = zeros(m.nz+1)
     iU = m.nz + 1
@@ -130,10 +130,6 @@ function get_inversion_RHS(m::ModelSetup1DPG, b::Array{Float64,1}, χ::Vector{Fl
 
     # boundary conditions require zeros on RHS
     rhs[[1, 2, m.nz-1, m.nz]] .= 0
-
-    # # bottom b.c. 1: dzz(χ) = -Cd/ν dz(χ)^2
-    # Cd = 2.5e-3
-    # rhs[1] = -Cd/m.ν[1]*differentiate_pointwise(χ[1:3], m.z[1:3], m.z[1], 1)^2
 
     # if dx(p) ~ 0 then 
     #   (1) set U for transport-constrained 1D solution
@@ -154,7 +150,7 @@ end
 Take solution `sol` and extract reshaped `χ`. Compute `u`, `v`
 from definition of χ.
 """
-function post_process(m::ModelSetup1DPG, sol::Vector{Float64})
+function post_process(m::ModelSetup1D, sol)
     iU = m.nz + 1
 
     # transport at iU
@@ -178,16 +174,15 @@ end
 
 Wrapper function that inverts for flow given buoyancy perturbation `b`.
 """
-function invert(m::ModelSetup1DPG, b::Array{Float64,1}, χ::Vector{Float64})
-    if m.bl # BL Solution
+function invert(m::ModelSetup1D, b)
+    if m.bl 
+        # BL Solution
         bz = differentiate(b, m.z)
         sol = @. m.U - m.ν/m.f^2*bz*tan(m.θ) 
         push!(sol, sol[end])
-    else # full solution
-        # compute RHS
-        rhs = get_inversion_RHS(m, b, χ)
-
-        # solve full inversion
+    else 
+        # full solution
+        rhs = get_inversion_RHS(m, b)
         sol = m.inversion_LHS\rhs
     end
 
@@ -196,9 +191,10 @@ function invert(m::ModelSetup1DPG, b::Array{Float64,1}, χ::Vector{Float64})
 
     return χ, u, v
 end
-function invert!(m::ModelSetup1DPG, s::ModelState1DPG)
-    χ, u, v = invert(m, s.b, s.χ)
+function invert!(m::ModelSetup1D, s::ModelState1D)
+    χ, u, v = invert(m, s.b)
     s.χ[:] = χ
     s.u[:] = u
     s.v[:] = v
+    return s
 end

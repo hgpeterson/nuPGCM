@@ -10,26 +10,27 @@ set_out_folder("../output/")
 function run(; bl = false)
     # parameters
     f = -5.5e-5
-    L = 2e6
+    L = 2e5
     nξ = 2^8 + 1 
     nσ = 2^8
-    coords = "cartesian"
-    periodic = true
+    coords = "axisymmetric"
+    periodic = false
 
     # grids: even spacing in ξ and chebyshev in σ (unless bl)
-    ξ = collect(0:L/nξ:(L - L/nξ))
+    ξ = collect(L/nξ:L/nξ:L)
     if bl
         σ = collect(-1:1/(nσ-1):0)
     else
         σ = @. -(cos(pi*(0:nσ-1)/(nσ-1)) + 1)/2  
     end
     
-    # topography: sine
+    # topography: bowl
     no_net_transport = true
-    H0 = 2e3
-    amp = 0.4*H0
-    H_func(x) = H0 + amp*cos(2*π*x/L)
-    Hx_func(x) = -2*π/L*amp*sin(2*π*x/L)
+    H0 = 5.5e3
+    A = 3e3
+    l = 50e3
+    H_func(x) = H0 - A*exp(-x^2/2/l^2)
+    Hx_func(x) = A*x/l^2*exp(-x^2/2/l^2)
 
     # diffusivity
     κ0 = 6e-5
@@ -46,9 +47,9 @@ function run(; bl = false)
     N2_func(ξ, σ) = N2
     
     # timestepping
-    Δt = 10*secs_in_day
-    t_plot = 3*secs_in_year
-    t_save = 3*secs_in_year
+    Δt = 1*secs_in_day
+    t_plot = 1*secs_in_year
+    t_save = 20*secs_in_year
     
     # create model struct
     m = ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, H_func, Hx_func, ν_func, κ_func, N2_func, Δt)
@@ -66,7 +67,7 @@ function run(; bl = false)
     s = ModelState2D(b, χ, uξ, uη, uσ, i)
 
     # solve
-    evolve!(m, s, 15*secs_in_year, t_plot, t_save) 
+    evolve!(m, s, 100*secs_in_year, t_plot, t_save) 
 
     return m, s
 end

@@ -73,8 +73,8 @@ export
     load_state_1D,
 
     # model structs 
-    ModelSetup1DPG,
-    ModelState1DPG,
+    ModelSetup1D,
+    ModelState1D,
 
     # BL theory
     get_BL_correction,

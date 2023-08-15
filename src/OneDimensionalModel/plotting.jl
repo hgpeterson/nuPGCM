@@ -5,7 +5,7 @@ pc = 1/6 # a pica is 1/6th of an inch
 
 Plot profiles of b, χ, u, and v from HDF5 snapshot files.
 """
-function profile_plot(setup_file::String, state_files::Vector{String})
+function profile_plot(setup_file, state_files)
     # ModelSetup 
     m = load_setup_1D(setup_file)
 
@@ -16,22 +16,17 @@ function profile_plot(setup_file::String, state_files::Vector{String})
     inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
     axins21 = inset_locator.inset_axes(ax[2, 1], width="40%", height="40%")
 
-    ax[1, 1].set_xlabel(latexstring(L"Stratification $\partial_\zeta b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
-    ax[1, 1].set_ylabel(L"Vertical coordinate $\zeta$ (km)")
+    ax[1, 1].set_xlabel(latexstring(L"Stratification $\partial_z b'$", "\n", L"($\times 10^{-6}$ s$^{-2}$)"))
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     ax[1, 2].set_xlabel(latexstring(L"Streamfunction $\chi$", "\n", L"($\times 10^{-3}$ m$^2$ s$^{-1}$)"))
 
-    ax[2, 1].set_xlabel(latexstring(L"Cross-slope velocity $u^\xi$", "\n", L"($\times 10^{-4}$ m s$^{-1}$)"))
-    ax[2, 1].set_ylabel(L"Vertical coordinate $\zeta$ (km)")
+    ax[2, 1].set_xlabel(latexstring(L"Cross-slope velocity $u^x$", "\n", L"($\times 10^{-4}$ m s$^{-1}$)"))
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
-    ax[2, 2].set_xlabel(latexstring(L"Along-slope velocity $u^\eta$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
+    ax[2, 2].set_xlabel(latexstring(L"Along-slope velocity $u^y$", "\n", L"($\times 10^{-2}$ m s$^{-1}$)"))
 
     subplots_adjust(hspace=0.5, wspace=0.3)
-
-    # for a in ax
-    #     a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
-    # end
-    # axins21.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
 
     # color map
     pl = pyimport("matplotlib.pylab")

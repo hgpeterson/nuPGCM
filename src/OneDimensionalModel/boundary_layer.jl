@@ -3,7 +3,7 @@
 
 Compute BL correction to `χI` on grid `z`.
 """
-function get_BL_correction(m::ModelSetup1DPG, χI::Vector{Float64}, z::Vector{Float64})
+function get_BL_correction(m::ModelSetup1D, χI, z)
     δ, μ, S, q = get_BL_params(m)
     return @. -χI[1]*exp(-q*z)*(cos(q*z) + sin(q*z))
 end
@@ -14,7 +14,7 @@ end
 Compute classical flat-bottom Ekman layer thickness `δ`,
 Prandtl number `μ`, slope Burger number `S`, and BL thickness `q`.
 """
-function get_BL_params(m::ModelSetup1DPG)
+function get_BL_params(m::ModelSetup1D)
     δ = sqrt(2*m.ν[1]/abs(m.f))
     μ = m.ν[1]/m.κ[1]
     S = m.N2/m.f^2*tan(m.θ)^2
@@ -28,7 +28,7 @@ end
 Construct full solutions `χ` = χI + χB and `b` = bI + bB from BL theory.
 The full solutions exist on the new grid `z`.
 """
-function get_full_soln(m::ModelSetup1DPG, s::ModelState1DPG, z::Vector{Float64})
+function get_full_soln(m::ModelSetup1D, s::ModelState1D, z)
     # interior vars
     bI = s.b
     χI = m.U .- differentiate(bI, m.z)*tan(m.θ).*m.ν/m.f^2

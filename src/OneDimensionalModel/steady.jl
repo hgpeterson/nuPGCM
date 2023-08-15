@@ -3,13 +3,13 @@
 
 Compute matrix `A` and right-hand side vector `rhs` for steady 1D equations.
 """
-function get_steady_state_matrices(m::ModelSetup1DPG)
+function get_steady_state_matrices(m::ModelSetup1D)
     n_vars = 3
     n_pts = n_vars*m.nz
 
     imap = reshape(1:n_pts, n_vars, m.nz)    
-    A = Tuple{Int64,Int64,Float64}[] # LHS matrix 
-    rhs = zeros(n_pts)                # RHS vector
+    A = Tuple{Int64,Int64,Float64}[]
+    rhs = zeros(n_pts)
 
     # Main loop, insert stencil in matrices for each node point
     for j=2:m.nz-1
@@ -94,7 +94,7 @@ end
 
 Compute canonical steady state.
 """
-function get_steady_state(m::ModelSetup1DPG)
+function get_steady_state(m::ModelSetup1D)
     # grid points
     n_vars = 3
     n_pts = n_vars*m.nz
@@ -116,7 +116,7 @@ function get_steady_state(m::ModelSetup1DPG)
     U = trapz(u, m.z)
 
     # save data
-    s = ModelState1DPG(b, χ, u, v, [-1])
+    s = ModelState1D(b, χ, u, v, [-1])
     save_state(s, -1)
 
     return s

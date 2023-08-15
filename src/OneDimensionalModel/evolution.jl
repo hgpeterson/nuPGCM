@@ -4,7 +4,7 @@
 Generate the left-hand side matrix for the evolution problem of the form `I - Δt/2*D`
 and the no flux boundary condition applied to the boundaries
 """
-function get_evolution_LHS(m::ModelSetup1DPG)
+function get_evolution_LHS(m::ModelSetup1D)
     # implicit euler
     evolution_LHS = I - m.Δt/2*m.D 
 
@@ -20,7 +20,7 @@ end
 
 Solve equation for `b` for `t_final` seconds.
 """
-function evolve!(m::ModelSetup1DPG, s::ModelState1DPG, t_final::Real, t_save::Real)
+function evolve!(m::ModelSetup1D, s::ModelState1D, t_final, t_save)
     # timestep
     n_steps = Int64(t_final/m.Δt)
     n_steps_save = Int64(t_save/m.Δt)

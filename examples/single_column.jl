@@ -7,7 +7,7 @@ pygui(false)
 
 set_out_folder("../output/")
 
-function run_single_column(; bl=false)
+function run(; bl=false)
     # parameters
     f = -5.5e-5
     N2 = 1e-6
@@ -40,17 +40,16 @@ function run_single_column(; bl=false)
     t_save = 3*secs_in_year
     
     # create model struct
-    m = ModelSetup1DPG(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transport_constraint, U)
+    m = ModelSetup1D(bl, f, nz, z, H, θ, ν_func, κ_func, κ_z_func, N2, Δt, transport_constraint, U)
 
     # save and log params
     save_setup(m)
 
     # set initial state
     b = zeros(nz)
-    χ = zeros(nz)
-    χ, u, v = invert(m, b, χ)
+    χ, u, v = invert(m, b)
     i = [1]
-    s = ModelState1DPG(b, χ, u, v, i)
+    s = ModelState1D(b, χ, u, v, i)
 
     # solve transient
     evolve!(m, s, 15*secs_in_year, t_save) 
@@ -59,8 +58,8 @@ function run_single_column(; bl=false)
 end
 
 # run
-m, s = run_single_column()
-# m, s = run_single_column(bl=true)
+m, s = run()
+# m, s = run(bl=true)
 
 # plots
 setup_file = string(out_folder, "setup.h5")

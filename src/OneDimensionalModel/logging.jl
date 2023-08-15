@@ -3,7 +3,7 @@
 
 Write `text` to `ofile` and print it.
 """
-function log_params(ofile::IOStream, text::String)
+function log_params(ofile, text)
     write(ofile, string(text, "\n"))
     println(text)
 end
@@ -13,7 +13,7 @@ end
 
 Save .h5 file for parameters.
 """
-function save_setup(m::ModelSetup1DPG)
+function save_setup(m::ModelSetup1D)
     save_file = string(out_folder, "setup.h5")
     file = h5open(save_file, "w")
     write(file, "bl", m.bl)
@@ -56,7 +56,7 @@ end
 
 Load .h5 setup file given by `filename`.
 """
-function load_setup_1D(filename::String)
+function load_setup_1D(filename)
     file = h5open(filename, "r")
     bl = read(file, "bl")
     f = read(file, "f")
@@ -72,7 +72,7 @@ function load_setup_1D(filename::String)
     transport_constraint = read(file, "transport_constraint")
     U = read(file, "U")
     close(file)
-    return ModelSetup1DPG(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transport_constraint, U)
+    return ModelSetup1D(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transport_constraint, U)
 end
 
 """
@@ -80,7 +80,7 @@ end
 
 Save .h5 checkpoint file for state.
 """
-function save_state(s::ModelState1DPG, i_save::Int64)
+function save_state(s::ModelState1D, i_save)
     save_file = @sprintf("%sstate%d.h5", out_folder, i_save)
     file = h5open(save_file, "w")
     write(file, "b", s.b)
@@ -97,7 +97,7 @@ end
 
 Load .h5 state file given by `filename`.
 """
-function load_state_1D(filename::String)
+function load_state_1D(filename)
     file = h5open(filename, "r")
     b = read(file, "b")
     χ = read(file, "χ")
@@ -105,5 +105,5 @@ function load_state_1D(filename::String)
     v = read(file, "v")
     i = read(file, "i")
     close(file)
-    return ModelState1DPG(b, χ, u, v, i)
+    return ModelState1D(b, χ, u, v, i)
 end

@@ -3,9 +3,9 @@
 ################################################################################
 
 """
-    inversion_LHS = getInversionLHS(ν, f, H, σ)
+    inversion_LHS = get_inversion_LHS(ν, f, H, σ)
 
-Setup left hand side of linear system for problem.
+Setup left hand side of linear system for 2D inversion problem.
 """
 function get_inversion_LHS(ν, f, H, σ)
     nσ = size(σ, 1)
@@ -82,7 +82,7 @@ end
 """
     inversionRHS = getInversionRHS(rhs, U)
 
-Setup right hand side of linear system for problem.
+Setup right hand side of linear system for 2D inversion problem.
 """
 function get_inversion_RHS(rhs, U)
     # boundary conditions

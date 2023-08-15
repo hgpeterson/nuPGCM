@@ -3,9 +3,9 @@
 
 Compute the diffusion matrix needed for evolution equation integration.
 """
-function get_D(z::Array{Float64,1}, κ::Array{Float64,1})
-    nz = size(z, 1)
-    D = Tuple{Int64,Int64,Float64}[]         # diffusion operator matrix 
+function get_D(z, κ)
+    nz = length(z)
+    D = Tuple{Int64,Int64,Float64}[] 
 
     # interior nodes 
     for j=2:nz-1
