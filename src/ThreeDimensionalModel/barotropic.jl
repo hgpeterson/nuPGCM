@@ -164,8 +164,8 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
 
     # unpack
     ε² = m.ε²
-    # g = m.g_sfc1
-    g = m.g_sfc2
+    g = m.g_sfc1
+    # g = m.g_sfc2
     bdy = g.e["bdy"]
     el = g.el
     H = m.H

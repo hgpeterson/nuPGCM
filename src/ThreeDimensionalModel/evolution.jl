@@ -145,7 +145,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # timestep
     n_steps = 500
-    n_steps_plot = 50
+    n_steps_plot = 10
     Δt = t_final/500
     # Δt = 1e-2
     # ε² = 1e-6
@@ -199,15 +199,17 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # b_prev = copy(s.b.values)
     t0 = time()
     for i=1:n_steps
-        # println("\nstep $i")
+        println("\nstep $i")
         if m.advection
             # Δt/2 advection step
             # @time "invert!" invert!(m, s)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
 
@@ -230,8 +232,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
 

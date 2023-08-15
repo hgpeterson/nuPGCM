@@ -126,8 +126,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # derivative matrices
     Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
-    # Dxs = [0;;]
-    # Dys = [0;;]
     
     # baroclinc LHS for each node column on first order grid
     baroclinic_LHSs = [get_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
@@ -139,9 +137,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # barotropic LHS
     # barotropic_LHS = get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
-    # barotropic_LHS = get_barotropic_LHS(g_sfc1, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
-    barotropic_LHS = get_barotropic_LHS(g_sfc2, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
-    # barotropic_LHS = lu(I(10))
+    barotropic_LHS = get_barotropic_LHS(g_sfc1, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+    # barotropic_LHS = get_barotropic_LHS(g_sfc2, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
 
     # get ω_τ's
     ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε², showplots=true)
@@ -154,8 +151,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # barotropic RHS due to wind stress
     # barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
-    # barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc1, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
-    barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc2, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc1, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    # barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc2, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
 
     # HM and advection arrays for evolution
     if advection
