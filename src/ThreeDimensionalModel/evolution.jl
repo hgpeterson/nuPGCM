@@ -144,17 +144,17 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    # n_steps = 500
-    # n_steps_plot = 10
-    # Δt = t_final/500
-    Δt = 1e-2
-    ε² = 1e-6
-    n_steps = Int64(t_final/Δt)
-    n_steps_plot = Int64(t_plot/Δt)
+    n_steps = 500
+    n_steps_plot = 50
+    Δt = t_final/500
+    # Δt = 1e-2
+    # ε² = 1e-6
+    # n_steps = Int64(t_final/Δt)
+    # n_steps_plot = Int64(t_plot/Δt)
 
-    # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
-    s.χx.values[:] .= 0.0
-    s.χy.values[:] = [-g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
+    # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
+    # s.χx.values[:] .= 0.0
+    # s.χy.values[:] = [-g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
 
     # diffusion matrices
     α = ε²/μ/ϱ
@@ -189,14 +189,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
     dσ = 1/(nσ-1) # !! only for evenly spaced nodes
-    ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+    # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
-    b_prev = copy(s.b.values)
+    # b_prev = copy(s.b.values)
     t0 = time()
     for i=1:n_steps
         # println("\nstep $i")
@@ -206,7 +206,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
-            s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt/2)
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values + Δt/4*adv
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values + Δt/2*adv
 
             # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
             # b_prev[:] = s.b.values
@@ -227,7 +230,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
-            s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt/2)
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values + Δt/4*adv
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            s.b.values[:] = s.b.values + Δt/2*adv
 
             # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
             # b_prev[:] = s.b.values
@@ -244,31 +250,32 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         end
 
         if mod(i, n_steps_plot) == 0 || i == n_steps
-            # advection solution
-            ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
+            # # advection solution
+            # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
             # # diffusion solution
             # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
             # info
-            @info @sprintf("%d steps in %d s", i, time()-t0) max_err=maximum(abs.(s.b.values - ba)) ∫b=sum(HM*s.b.values)
-            # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            # @info @sprintf("%d steps in %d s", i, time()-t0) max_err=maximum(abs.(s.b.values - ba)) ∫b=sum(HM*s.b.values)
+            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            @info @sprintf("%d steps in %d s", i, time()-t0) ∫b=sum(HM*s.b.values)
+            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
-            # # show state
-            # invert!(m, s, showplots=true)
+            # show state
+            invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
             vtk_grid("$out_folder/state$i", pz', cells) do vtk
                 vtk["b"] = s.b.values[1:g1.np]
-                vtk["ba"] = ba[1:g1.np]
-                vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np])
-                # vtk["ωξ"] = FEField(s.ωx).values
-                # vtk["ωη"] = FEField(s.ωy).values
-                # vtk["χξ"] = FEField(s.χx).values
-                # vtk["χη"] = FEField(s.χy).values
+                # vtk["ba"] = ba[1:g1.np]
+                # vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np])
+                vtk["ωx"] = FEField(s.ωx).values
+                vtk["ωy"] = FEField(s.ωy).values
+                vtk["χx"] = FEField(s.χx).values
+                vtk["χy"] = FEField(s.χy).values
                 pvd[i*Δt] = vtk
             end
             println("$out_folder/state$i.vtu")

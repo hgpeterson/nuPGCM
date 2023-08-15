@@ -8,13 +8,13 @@ pygui(false)
 set_out_folder("../output")
 
 # depth
-# H(x) = 1 - x[1]^2 - x[2]^2
-H(x) = 1 + 0*x[1]
+H(x) = 1 - x[1]^2 - x[2]^2
+# H(x) = 1 + 0*x[1]
 
 function setup()
     ε² = 1e-2
     μ = 1e0
-    ϱ = 1e-4
+    ϱ = 1e0
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
     β = 0.
@@ -30,21 +30,22 @@ end
 
 function run(m)
     # b = FEField(x -> H(x)^3*(x[3]^2 + 2/3*x[3]^3), m.g2)
-    # b = FEField(x -> H(x)*x[3], m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
-    b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + 0.5)^2)/0.02), m.g2)
+    # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + 0.5)^2)/0.02), m.g2)
 
-    # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
-    ωx = DGField(0, m.g1)
-    ωy = DGField(0, m.g1)
-    χx = DGField(0, m.g1)
-    χy = DGField(0, m.g1)
-    Ψ = FEField(0, m.g_sfc1)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    # ωx = DGField(0, m.g1)
+    # ωy = DGField(0, m.g1)
+    # χx = DGField(0, m.g1)
+    # χy = DGField(0, m.g1)
+    # Ψ = FEField(0, m.g_sfc1)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
 
-    # t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
-    t_final = 0.2
-    t_plot = t_final/10
+    t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
+    t_plot = t_final/5
+    # t_final = 0.2
+    # t_plot = t_final/10
     evolve!(m, s, t_final, t_plot)
     return s
 end
