@@ -12,12 +12,12 @@ H(x) = 1 - x[1]^2 - x[2]^2
 # H(x) = 1 + 0*x[1]
 
 function setup()
-    ε² = 1e-3
+    ε² = 1e-2
     μ = 1e0
-    ϱ = 2e-1
+    ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
-    β = 0.
+    β = 1.
     τx(x) = 0.
     τy(x) = 0.
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
@@ -50,7 +50,7 @@ function run(m)
     return s
 end
 
-m = setup()
+# m = setup()
 s = run(m)
 
 function test_baroclinic()

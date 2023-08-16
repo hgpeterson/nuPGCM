@@ -25,7 +25,7 @@ end
 
 struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:AbstractField,GS<:Grid,G<:Grid,GC<:Grid,
                     V<:AbstractVector,IN<:AbstractVector,I<:Integer,DV<:AbstractMatrix,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
-                    FTV<:AbstractVector,HM<:SparseMatrixCSC,A<:AbstractArray}
+                    FTV<:AbstractVector,HM<:SparseMatrixCSC,A<:AbstractArray,A1<:AbstractArray}
     ε²::FT
     μ::FT
     ϱ::FT
@@ -72,6 +72,9 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     Aσξ::A
     Aση::A
     advection::Bool
+    A1::A1
+    A2::A
+    A3::A1
 end
 
 ################################################################################
@@ -163,7 +166,10 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
         Aξ = Aη = Aσξ = Aση = zeros(Float64, 1, 1, 1, 1)
     end
 
+    # for get_barotropic_RHS_b (need better names for these)
+    A1, A2, A3 = get_A1_A2_A3(g_sfc1.el, g_sfc2.el)
+
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
-                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση, advection)
+                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση, advection, A1, A2, A3)
 end

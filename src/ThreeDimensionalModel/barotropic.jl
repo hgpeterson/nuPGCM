@@ -165,31 +165,28 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
     # unpack
     ε² = m.ε²
     g = m.g_sfc1
-    # g = m.g_sfc2
     bdy = g.e["bdy"]
     el = g.el
     H = m.H
     Hx = m.Hx
     Hy = m.Hy
+    g2 = H.g
+    el2 = g2.el
+    A1 = m.A1
+    A2 = m.A2
+    A3 = m.A3
 
     # stamp
     rhs = zeros(g.np)
-    for k=1:g.nt
-        # transformation from reference triangle
-        T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
-
-        # rhs
-        function func_r(ξ, i)
-            x = T(ξ)
-            # νω_b_bot_div = (∂x(νωx_b_bot, x, k) + ∂y(νωy_b_bot, x, k))/H(x, k) - (νωx_b_bot(x, k)*Hx(x, k) + νωy_b_bot(x, k)*Hy(x, k))/H(x, k)^2
-            νω_b_bot_div = (∂x(νωx_b_bot, x, k) + ∂y(νωy_b_bot, x, k))*H(x, k)^2 - (νωx_b_bot(x, k)*Hx(x, k) + νωy_b_bot(x, k)*Hy(x, k))*H(x, k)
-            φ_i = φ(el, ξ, i)
-            # return (-JEBAR(x, k) + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
-            return (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
-        end
-        r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
-
-        rhs[g.t[k, :]] += r
+    for k_sfc=1:g.nt, i=1:g.nn
+        jac = g.J.Js[k_sfc, :, :]
+        Δ = g.J.dets[k_sfc]
+        # (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*Δ
+        rhs[g.t[k_sfc, i]] += sum(ε²*A1[i, j, k, l, d1]*νωx_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 1]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) +
+                                sum(ε²*A1[i, j, k, l, d1]*νωy_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 2]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) -
+                                sum(ε²*A2[i, j, k, l]*νωx_b_bot[k_sfc, l]*Hx[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
+                                sum(ε²*A2[i, j, k, l]*νωy_b_bot[k_sfc, l]*Hy[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
+                                sum(A3[i, j, k, l, m]*JEBAR[k_sfc, m]*H[g2.t[k_sfc, l]]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n, m=1:el.n)
     end
 
     # boundary nodes 
@@ -199,6 +196,19 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
 
     return rhs
 end
+
+# for function above
+# TODO: needs better name
+function get_A1_A2_A3(el, el2)
+    f1(ξ, i, j, k, l, d1) = ∂φ(el, ξ, l, d1)*φ(el2, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
+    A1 = [ref_el_quad(ξ -> f1(ξ, i, j, k, l, d1), el) for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2]
+    f2(ξ, i, j, k, l) = φ(el, ξ, l)*φ(el, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
+    A2 = [ref_el_quad(ξ -> f2(ξ, i, j, k, l), el) for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n]
+    f3(ξ, i, j, k, l, m) = φ(el, ξ, m)*φ(el2, ξ, l)*φ(el2, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
+    A3 = [ref_el_quad(ξ -> f3(ξ, i, j, k, l, m), el) for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el2.n, m=1:el.n]
+    return A1, A2, A3
+end
+
 
 function get_JEBAR(m::ModelSetup3D, b; showplots=false)
     # unpack

@@ -144,11 +144,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    n_steps = 500
+    n_steps = 10
     n_steps_plot = 10
-    Δt = t_final/500
-    # Δt = 1e-2
-    # ε² = 1e-6
+    Δt = t_final/50
     # n_steps = Int64(t_final/Δt)
     # n_steps_plot = Int64(t_plot/Δt)
 
@@ -199,7 +197,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # b_prev = copy(s.b.values)
     t0 = time()
     for i=1:n_steps
-        println("\nstep $i")
+        println("step $i")
         if m.advection
             # Δt/2 advection step
             # @time "invert!" invert!(m, s)
@@ -219,7 +217,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         end
 
         # Δt diffusion step
-        # @time "diffusion" for j ∈ eachindex(in_nodes2)
         for j ∈ eachindex(in_nodes2)
             ig = in_nodes2[j]
             inds = get_col_inds(ig, nσ)
