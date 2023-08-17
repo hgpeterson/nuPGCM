@@ -33,14 +33,6 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
                 ωy.values[k_w, i+3] = ωy_b[k, i, j+1] + Ux[k]*m.ωy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k]*m.ωx_Ux[ig, j+1]/m.H[ig]^2
                 χx.values[k_w, i+3] = χx_b[k, i, j+1] + Ux[k]*m.χx_Ux[ig, j+1]/m.H[ig]^2 - Uy[k]*m.χy_Ux[ig, j+1]/m.H[ig]^2
                 χy.values[k_w, i+3] = χy_b[k, i, j+1] + Ux[k]*m.χy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k]*m.χx_Ux[ig, j+1]/m.H[ig]^2
-                # ωx.values[k_w, i]   = ωx_b[k, i, j]   + Ux[k, i]*m.ωx_Ux[ig, j]/m.H[ig]^2   - Uy[k, i]*m.ωy_Ux[ig, j]/m.H[ig]^2 #FIXME: add τ's
-                # ωy.values[k_w, i]   = ωy_b[k, i, j]   + Ux[k, i]*m.ωy_Ux[ig, j]/m.H[ig]^2   + Uy[k, i]*m.ωx_Ux[ig, j]/m.H[ig]^2
-                # χx.values[k_w, i]   = χx_b[k, i, j]   + Ux[k, i]*m.χx_Ux[ig, j]/m.H[ig]^2   - Uy[k, i]*m.χy_Ux[ig, j]/m.H[ig]^2
-                # χy.values[k_w, i]   = χy_b[k, i, j]   + Ux[k, i]*m.χy_Ux[ig, j]/m.H[ig]^2   + Uy[k, i]*m.χx_Ux[ig, j]/m.H[ig]^2
-                # ωx.values[k_w, i+3] = ωx_b[k, i, j+1] + Ux[k, i]*m.ωx_Ux[ig, j+1]/m.H[ig]^2 - Uy[k, i]*m.ωy_Ux[ig, j+1]/m.H[ig]^2 
-                # ωy.values[k_w, i+3] = ωy_b[k, i, j+1] + Ux[k, i]*m.ωy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k, i]*m.ωx_Ux[ig, j+1]/m.H[ig]^2
-                # χx.values[k_w, i+3] = χx_b[k, i, j+1] + Ux[k, i]*m.χx_Ux[ig, j+1]/m.H[ig]^2 - Uy[k, i]*m.χy_Ux[ig, j+1]/m.H[ig]^2
-                # χy.values[k_w, i+3] = χy_b[k, i, j+1] + Ux[k, i]*m.χy_Ux[ig, j+1]/m.H[ig]^2 + Uy[k, i]*m.χx_Ux[ig, j+1]/m.H[ig]^2
             end
         end
     end
@@ -65,7 +57,6 @@ function invert(m::ModelSetup3D, b; kwargs...)
     χx = DGField(0, m.g1)
     χy = DGField(0, m.g1)
     Ψ = FEField(0, m.g_sfc1)
-    # Ψ = FEField(0, m.g_sfc2)
     return invert!(m, b, ωx, ωy, χx, χy, Ψ; kwargs...)
 end
 function invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
@@ -77,8 +68,13 @@ function get_Ux_Uy(Ψ; showplots=false)
     g = Ψ.g
     Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
     Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)
-    # Ux = DGField([g.t[k, i] ∈ g.e["bdy"] ? 0 : -∂y(Ψ, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:g.nn], g)
-    # Uy = DGField([g.t[k, i] ∈ g.e["bdy"] ? 0 : +∂x(Ψ, g.p[g.t[k, i], :], k) for k=1:g.nt, i=1:g.nn], g)
+    # set to zero on bdy
+    for i ∈ g.e["bdy"]
+        for I ∈ g.p_to_t[i]
+            Ux.values[I[1]] = 0
+            Uy.values[I[1]] = 0
+        end
+    end
     if showplots
         quick_plot(Ux, L"U^x", "$out_folder/Ux.png")
         quick_plot(Uy, L"U^y", "$out_folder/Uy.png")

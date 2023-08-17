@@ -139,9 +139,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     νωy_Ux_bot = ν_bot*FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
 
     # barotropic LHS
-    # barotropic_LHS = get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
-    barotropic_LHS = get_barotropic_LHS(g_sfc1, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
-    # barotropic_LHS = get_barotropic_LHS(g_sfc2, νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+    barotropic_LHS = get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
 
     # get ω_τ's
     ωx_τx, ωy_τx, χx_τx, χy_τx = get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε², showplots=true)
@@ -153,9 +151,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     quick_plot(νωy_τ_bot, L"\nu\omega^y_\tau|_{-H}", "$out_folder/nu_omegay_tau_bot.png")
 
     # barotropic RHS due to wind stress
-    # barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
-    barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc1, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
-    # barotropic_RHS_τ = get_barotropic_RHS_τ(g_sfc2, H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    barotropic_RHS_τ = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
 
     # HM and advection arrays for evolution
     if advection

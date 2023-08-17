@@ -248,12 +248,13 @@ function plot_xslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, y; fname="$out_fol
         a.set_ylabel(L"Vertical coordinate $z$")
     end
     subplots_adjust(hspace=0.3, wspace=0.5)
+    ax[1, 1].set_title(latexstring(@sprintf("Slice at \$y = %1.1f\$", y)), x=1.3, y=0.95)
     savefig(fname)
     println(fname)
     plt.close()
 end
-function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
-    plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
+function plot_xslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
+    plot_xslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
 function plot_yslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, x; fname="$out_folder/yslices.png")
@@ -303,12 +304,13 @@ function plot_yslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, x; fname="$out_fol
         a.set_ylabel(L"Vertical coordinate $z$")
     end
     subplots_adjust(hspace=0.3, wspace=0.5)
+    ax[1, 1].set_title(latexstring(@sprintf("Slice at \$x = %1.1f\$", x)), x=1.3, y=0.95)
     savefig(fname)
     println(fname)
     plt.close()
 end
-function plot_xslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
-    plot_xslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
+function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
+    plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
 function plot_slice(ax, xx, zz, u, b, cb_label)

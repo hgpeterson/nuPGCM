@@ -1,5 +1,6 @@
 using nuPGCM
 using PyPlot
+using Printf
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -17,14 +18,14 @@ function setup()
     ϱ = 1e-4
     Δt = 1e-3*μ*ϱ/ε²
     f = 1.
-    β = 1.
+    β = 0.
     τx(x) = 0.
     τy(x) = 0.
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=true)
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=false)
     return m
 end
 
@@ -34,7 +35,7 @@ function run(m)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + 0.5)^2)/0.02), m.g2)
 
-    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     # ωx = DGField(0, m.g1)
     # ωy = DGField(0, m.g1)
     # χx = DGField(0, m.g1)
@@ -43,15 +44,82 @@ function run(m)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
 
     t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
-    t_plot = t_final/5
+    t_plot = t_final
     # t_final = 0.2
     # t_plot = t_final/10
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
-# m = setup()
+m = setup()
 s = run(m)
+
+function compare_profiles(m, s, m2D, s2D, x, y)
+    k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
+
+    σ = m.σ
+    nσ = m.nσ
+    H = m.H([x, y])
+    z = σ*H
+    k_ws = nuPGCM.get_k_ws(k_sfc, nσ)
+    k_ws = [k_ws; k_ws[end]]
+
+    ωx_fe = FEField(s.ωx)
+    ωy_fe = FEField(s.ωy)
+    χx_fe = FEField(s.χx)
+    χy_fe = FEField(s.χy)
+    ωxs = [ωx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    ωys = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χxs = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    χys = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    bs = [s.b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    bzs = differentiate(bs, z)
+
+    fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
+
+    ax[1, 1].set_xlabel(L"\omega^x")
+    ax[1, 2].set_xlabel(L"\omega^y")
+    ax[1, 3].set_xlabel(L"b")
+    ax[2, 1].set_xlabel(L"\chi^x")
+    ax[2, 2].set_xlabel(L"\chi^y")
+    ax[2, 3].set_xlabel(L"\partial_z b")
+    ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f \\quad y = %1.1f\$", x, y)))
+    ax[1, 1].set_ylim(-H, 0)
+    ax[2, 1].set_ylim(-H, 0)
+    for a ∈ ax
+        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    end
+
+    ax[1, 1].plot(ωxs, z, label="3D")
+    ax[1, 2].plot(ωys, z)
+    ax[1, 3].plot(bs,  z)
+    ax[2, 1].plot(χxs, z)
+    ax[2, 2].plot(χys, z)
+    ax[2, 3].plot(bzs, z)
+    ix = argmin(abs.(m2D.ξ .- 0.5))
+    H = m2D.H[ix]
+    z = m2D.z[ix, :]
+    ωx = -1/H*differentiate(s2D.uη[ix, :], m2D.σ)
+    ωy =  1/H*differentiate(s2D.uξ[ix, :], m2D.σ)
+    χx =  H*cumtrapz(s2D.uη[ix, :], m2D.σ)
+    χy = -H*cumtrapz(s2D.uξ[ix, :], m2D.σ)
+    b = s2D.b[ix, :]
+    bz = 1/H*differentiate(s2D.b[ix, :], m2D.σ)
+    ax[1, 1].plot(ωx, z, "k--", lw=0.5, label="2D")
+    ax[1, 2].plot(ωy, z, "k--", lw=0.5)
+    ax[1, 3].plot(b,  z, "k--", lw=0.5)
+    ax[2, 1].plot(χx, z, "k--", lw=0.5)
+    ax[2, 2].plot(χy, z, "k--", lw=0.5)
+    ax[2, 3].plot(bz, z, "k--", lw=0.5)
+    ax[1, 1].legend()
+    savefig("$out_folder/profiles2Dvs3D.png")
+    println("$out_folder/profiles2Dvs3D.png")
+    plt.close()
+end
+
+# compare_profiles(m, s, m2D, s2D, 0.5, 0)
 
 function test_baroclinic()
     ε² = 1e-4

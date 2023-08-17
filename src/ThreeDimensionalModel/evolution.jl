@@ -144,11 +144,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    n_steps = 10
-    n_steps_plot = 10
-    Δt = t_final/50
-    # n_steps = Int64(t_final/Δt)
-    # n_steps_plot = Int64(t_plot/Δt)
+    # n_steps = 10
+    # n_steps_plot = 10
+    # Δt = t_final/50
+    n_steps = Int64(t_final/Δt)
+    n_steps_plot = Int64(t_plot/Δt)
 
     # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
     # s.χx.values[:] .= 0.0

@@ -1,4 +1,5 @@
 using nuPGCM
+using Printf
 using PyPlot
 
 plt.style.use("../plots.mplstyle")
@@ -9,12 +10,12 @@ set_out_folder("../output/bowl2D/")
 
 function run()
     # parameters
-    ε² = 1e-3
+    ε² = 1e-2
     μ = 1e0
-    ϱ = 5e-1
+    ϱ = 1e-4
     α = ε²/μ/ϱ
     T = 5e-2/α
-    n_steps = 500
+    n_steps = 50
     Δt = T/n_steps
     f = 1.
     L = 1.
@@ -141,6 +142,7 @@ function run()
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
+    ax[1, 2].set_title(latexstring(@sprintf("2D Profiles at \$x = %1.1f\$", 0.5)))
     for a ∈ ax
         a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     end
@@ -157,8 +159,10 @@ function run()
     savefig("$(out_folder)psi_bowl2D.png")
     println("$(out_folder)psi_bowl2D.png")
     plt.close()
+
+    return m, s
 end
 
-run()
+m2D, s2D = run()
 
 println("Done.")
