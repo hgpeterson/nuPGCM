@@ -144,9 +144,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    # n_steps = 10
-    # n_steps_plot = 10
-    # Δt = t_final/50
+    Δt = 0.04
     n_steps = Int64(t_final/Δt)
     n_steps_plot = Int64(t_plot/Δt)
 
@@ -155,7 +153,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # s.χy.values[:] = [-g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
 
     # diffusion matrices
-    α = ε²/μ/ϱ
+    # α = ε²/μ/ϱ
+    α = 1e-2
     M_col = mass_matrix(g_col)
     K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
@@ -163,7 +162,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
-    # rm("$out_folder/state*.vtu", force=true) # * doesn't work?
+    cmd = "rm -f $out_folder/state*.vtu"
+    run(`bash -c $cmd`)
     pvd = paraview_collection("$out_folder/state", append=true)
 
     # for plotting
@@ -179,6 +179,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         vtk["b"] = s.b.values[1:g1.np]
         vtk["ba"] = s.b.values[1:g1.np]
         vtk["err"] = zeros(g1.np)
+        vtk["ωx"] = FEField(s.ωx).values
+        vtk["ωy"] = FEField(s.ωy).values
+        vtk["χx"] = FEField(s.χx).values
+        vtk["χy"] = FEField(s.χy).values
         pvd[0] = vtk
     end
     println("$out_folder/state0.vtu")
@@ -187,10 +191,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
     dσ = 1/(nσ-1) # !! only for evenly spaced nodes
-    # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+    ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
@@ -198,16 +202,22 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     t0 = time()
     for i=1:n_steps
         println("step $i")
+
+        # @time "step $i" cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+        # s.b.values[:] = s.b.values + Δt/2*adv
+        # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+        # s.b.values[:] = s.b.values + Δt*adv
+
         if m.advection
             # Δt/2 advection step
             # @time "invert!" invert!(m, s)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
 
@@ -222,6 +232,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             inds = get_col_inds(ig, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        for j ∈ g_sfc2.e["bdy"]
+            inds = get_col_inds(j, nσ)
+            s.b.values[inds] .= 0
+        end
 
         if m.advection
             # Δt/2 advection step
@@ -229,10 +243,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
             # s.b.values[:] = s.b.values - Δt/2*adv
 
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
 
@@ -258,14 +272,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
             # info
             # @info @sprintf("%d steps in %d s", i, time()-t0) max_err=maximum(abs.(s.b.values - ba)) ∫b=sum(HM*s.b.values)
-            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             @info @sprintf("%d steps in %d s", i, time()-t0) ∫b=sum(HM*s.b.values)
-            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # show state
-            invert!(m, s, showplots=true)
+            # invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]

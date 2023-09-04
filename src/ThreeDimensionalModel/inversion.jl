@@ -68,13 +68,13 @@ function get_Ux_Uy(Ψ; showplots=false)
     g = Ψ.g
     Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
     Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)
-    # set to zero on bdy
-    for i ∈ g.e["bdy"]
-        for I ∈ g.p_to_t[i]
-            Ux.values[I[1]] = 0
-            Uy.values[I[1]] = 0
-        end
-    end
+    # # set to zero on bdy
+    # for i ∈ g.e["bdy"]
+    #     for I ∈ g.p_to_t[i]
+    #         Ux.values[I[1]] = 0
+    #         Uy.values[I[1]] = 0
+    #     end
+    # end
     if showplots
         quick_plot(Ux, L"U^x", "$out_folder/Ux.png")
         quick_plot(Uy, L"U^y", "$out_folder/Uy.png")

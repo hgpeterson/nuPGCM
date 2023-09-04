@@ -24,34 +24,29 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=false)
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, nσ=0, chebyshev=false, advection=true)
     return m
 end
 
 function run(m)
     # b = FEField(x -> H(x)^3*(x[3]^2 + 2/3*x[3]^3), m.g2)
-    b = FEField(x -> H(x)*x[3], m.g2)
-    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    # b = FEField(x -> H(x)*x[3], m.g2)
+    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + 0.5)^2)/0.02), m.g2)
 
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
-    # ωx = DGField(0, m.g1)
-    # ωy = DGField(0, m.g1)
-    # χx = DGField(0, m.g1)
-    # χy = DGField(0, m.g1)
-    # Ψ = FEField(0, m.g_sfc1)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
+    s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
 
-    t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
-    t_plot = t_final
-    # t_final = 0.2
-    # t_plot = t_final/10
+    # t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
+    t_final = 40
+    t_plot = t_final/40
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
-m = setup()
+# m = setup()
 s = run(m)
 
 function compare_profiles(m, s, m2D, s2D, x, y)
