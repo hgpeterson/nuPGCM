@@ -4,7 +4,7 @@
 Compute the coefficients `c` in a finite difference approximation of a function
 defined at the grid points `x`, evaluated at `xbar`, of order `k`.
 """
-function mkfdstencil(x::AbstractVector{<:Real}, xbar::Real, k::Integer)
+function mkfdstencil(x, xbar, k)
 	n = length(x)
 	A = @. (x[:]' - xbar) ^ (0:n-1) / factorial(0:n-1)
 	b = zeros(n)
@@ -17,7 +17,7 @@ end
 
 Compute `n`th order derivative of `f` at `z0` given grid `z`.
 """
-function differentiate_pointwise(f::AbstractVector{<:Real}, z::AbstractVector{<:Real}, z0::Real, n::Integer)
+function differentiate_pointwise(f, z, z0, n)
     fd_z = mkfdstencil(z, z0, n)
     return dot(fd_z, f)
 end
@@ -27,7 +27,7 @@ end
 
 Compute second order first derivative of `f` on grid `z`.
 """
-function differentiate(f::AbstractVector{<:Real}, z::AbstractVector{<:Real})
+function differentiate(f, z::AbstractVector)
     # allocate derivative array, fz
     nz = size(z, 1)
     fz = zeros(nz)
@@ -49,7 +49,7 @@ end
 
 Compute second order first derivative of `f` on uniformly spaced grid with spacing `dz`.
 """
-function differentiate(f::AbstractVector{<:Real}, dz::Real)
+function differentiate(f, dz::Real)
     # allocate derivative array, fz
     nz = size(f, 1)
     fz = zeros(nz)
@@ -65,8 +65,8 @@ function differentiate(f::AbstractVector{<:Real}, dz::Real)
 
     return fz
 end
-function differentiate(f::AbstractVector{<:Real}, z::StepRangeLen{Real})
-    dz = convert(Real, z.step)
+function differentiate(f, z::AbstractRange)
+    dz = z[2] - z[1]
     fz = differentiate(f, dz)
     return fz
 end

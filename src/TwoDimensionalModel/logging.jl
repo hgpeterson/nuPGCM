@@ -66,8 +66,10 @@ Load .h5 setup file given by `filename`.
 function load_setup_2D(filename)
     file = h5open(filename, "r")
     bl = read(file, "bl")
+    # bl = false # for some old files
     f = read(file, "f")
     no_net_transport = read(file, "no_net_transport")
+    # no_net_transport = true # for some old files
     L = read(file, "L")
     nξ = read(file, "nξ")
     nσ = read(file, "nσ")

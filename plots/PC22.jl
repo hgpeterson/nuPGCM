@@ -60,7 +60,7 @@ function spinup_ridge(folder)
     # plot
     fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
     ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; ax=ax[1], vext=1.5)
-    ridge_plot(m, s, 1e2*s.uη, "", L"Along-ridge flow $v$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
+    ridge_plot(m, s, 1e2*s.uη, "", L"Along-slope flow $u^y$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     # ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")

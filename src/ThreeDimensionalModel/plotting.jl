@@ -68,8 +68,8 @@ function tplot(g::Grid; kwargs...)
 end
 
 function quick_plot_save(fname, ax)
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"y")
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Zonal coordinate $y$")
     ax.axis("equal")
     ax.set_yticks(-1:0.5:1)
     savefig(fname)
@@ -313,13 +313,57 @@ function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
     plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
+function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
+    # params
+    nx = 2^8
+    nσ = m.nσ
+    σ = m.σ
+
+    # get x slice
+    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- 0)), 1][1:4])
+    x = range(neary[2], neary[3], length=nx)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x[i], 0], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+
+    # get indices of wedges
+    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
+    k_ws = hcat(k_ws, k_ws[:, end])
+
+    # nσ × nx coords
+    Hs = [m.H([x[i], 0], k_sfcs[i]) for i=1:nx] 
+    xx = repeat(x', nσ, 1)
+    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
+
+    # evaluate
+    χx_fe = FEField(s.χx)
+    χxs = [χx_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    uys = zeros(nσ, nx)
+    for i=1:nx
+        uys[:, i] = differentiate(χxs[:, i], σ*Hs[i])
+    end
+    bs = [s.b([x[j], 0, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
+
+    # plot
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, uys, bs, L"Meridional flow $u^y$")
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
 function plot_slice(ax, xx, zz, u, b, cb_label)
     vmax = maximum(abs.(u))
     img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
-    levels = range(-vmax, vmax, length=8)
-    ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    # levels = range(-vmax, vmax, length=8)
+    # ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
     cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     levels = range(-1, 0, length=20)
     ax.contour(xx, zz, b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
     ax.fill_between(xx[1, :], zz[1, :], minimum(zz), color="k", alpha=0.3, lw=0.0)

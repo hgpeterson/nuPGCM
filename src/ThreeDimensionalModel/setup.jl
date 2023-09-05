@@ -92,6 +92,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
+    println(σ[2] - σ[1])
 
     # 1D grid
     nσ = length(σ)

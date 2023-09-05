@@ -18,7 +18,7 @@ pc = 1/6 # a pica is 1/6th of an inch
 
 Compute BL tranport from 2D BL theory.
 """
-function BLtransport2D(m::ModelSetup2DPG, s::ModelState2DPG)
+function BLtransport2D(m::ModelSetup2D, s::ModelState2D)
     dbdξ = ∂ξ(m, s.b[:, 1])
     μ = m.ν[1, 1] / m.κ[1, 1]
     return @. m.κ[:, 1]/m.Hx * μ*m.Hx/m.f^2 * dbdξ / (1 - μ*m.Hx/m.f^2 * dbdξ)
@@ -29,7 +29,7 @@ end
 
 Compute exchange velocity in 2D given BL transport (i.e. interior streamfunction at σ = -1).
 """ 
-function exchangeVel2D(m::ModelSetup2DPG, χ::Vector{Float64})
+function exchangeVel2D(m::ModelSetup2D, χ)
     if m.coords == "cartesian"
         # uσ = -dξ(χ)/H
         uσ = -∂ξ(m, χ)./m.H
@@ -370,8 +370,8 @@ function spinup_profiles_tc(folder; μ=1)
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     ax[1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"Along-ridge flow $v$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
-    ax[3].set_xlabel(string(L"Stratification $\partial_z B$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
+    ax[2].set_xlabel(string(L"Along-slope flow $u^y$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[3].set_xlabel(string(L"Stratification $\partial_z b$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
     colors = pl.cm.viridis(range(1, 0, length=size(ii, 1)))
@@ -419,7 +419,7 @@ function spinup_profiles_tc(folder; μ=1)
     ax[3].legend(loc="upper left")
     custom_handles = [lines.Line2D([0], [0], c="k", ls="--", lw=0.5)]
     custom_labels = ["2D"]
-    ax[2].legend(custom_handles, custom_labels)
+    ax[2].legend(custom_handles, custom_labels, loc=(0.6, 0.8))
 
     subplots_adjust(hspace=0.4)
     # savefig(string("spinup_profiles_tc.pdf"))
@@ -503,4 +503,4 @@ path = "../../sims/"
 # transportAndExchange(string(path, "sim037"))
 # ridgeAnimation(string(path, "sim041/"))
 spinup_profiles_tc(string(path, "sim039/"))
-spinup_profiles_v(string(path, "sim039/"))
+# spinup_profiles_v(string(path, "sim039/"))

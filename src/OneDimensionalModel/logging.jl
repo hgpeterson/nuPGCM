@@ -70,6 +70,7 @@ function load_setup_1D(filename)
     N2 = read(file, "N2")
     Δt = read(file, "Δt")
     transport_constraint = read(file, "transport_constraint")
+    # transport_constraint = true # for some old files
     U = read(file, "U")
     close(file)
     return ModelSetup1D(bl, f, nz, z, H, θ, ν, κ, κ_z, N2, Δt, transport_constraint, U)

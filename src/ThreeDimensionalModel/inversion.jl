@@ -13,7 +13,7 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     barotropic_RHS_b = get_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
     Ψ.values[:] = m.barotropic_LHS\(m.barotropic_RHS_τ + barotropic_RHS_b)
     if showplots
-        quick_plot(Ψ, L"\Psi", "$out_folder/psi.png")
+        quick_plot(Ψ, L"Barotropic streamfunction $\Psi$", "$out_folder/psi.png")
     end
 
     # take gradients to get Uˣ and Uʸ

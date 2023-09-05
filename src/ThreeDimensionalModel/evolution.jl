@@ -144,7 +144,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    Δt = 0.04
+    # Δt = 0.04
     n_steps = Int64(t_final/Δt)
     n_steps_plot = Int64(t_plot/Δt)
 
@@ -153,8 +153,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # s.χy.values[:] = [-g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
 
     # diffusion matrices
-    # α = ε²/μ/ϱ
-    α = 1e-2
+    α = ε²/μ/ϱ
+    # α = 1e-2
     M_col = mass_matrix(g_col)
     K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
@@ -279,7 +279,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # show state
-            # invert!(m, s, showplots=true)
+            invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
