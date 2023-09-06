@@ -1,18 +1,3 @@
-# function get_K_col(g, κ)
-#     κ = FEField(κ, g)
-#     J = g.J
-#     el = g.el
-#     K = Tuple{Int64, Int64, Float64}[]
-#     for k=1:g.nt
-#         # ∫ κ ∂φᵢ∂φⱼ
-#         σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
-#         κK = [ref_el_quad(ξ -> κ(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
-#         for i=1:el.n, j=1:el.n
-#             push!(K, (g.t[k, i], g.t[k, j], κK[i, j]))
-#         end
-#     end
-#     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
-# end
 function get_K_col(σ, κ)
     nσ = length(σ)
     K = Tuple{Int64,Int64,Float64}[]
@@ -150,9 +135,6 @@ function advection(m::ModelSetup3D, χx, χy, b)
     return [sum(adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
 end
 
-RK2(f, u, Δt) = u + Δt*f(u + Δt/2*f(u))
-AB2(f, u, u_prev, Δt) = u + Δt/2*(3*f(u) - f(u_prev))
-
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # unpack
     μ = m.μ
@@ -166,23 +148,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     H = m.H
     HM = m.HM
     g_sfc2 = m.g_sfc2
-    g_col = m.g_col
-    in_nodes2 = m.in_nodes2
 
     # timestep
     n_steps = Int64(round(t_final/Δt))
     n_steps_plot = Int64(round(t_plot/Δt))
 
-    # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
-    # s.χx.values[:] .= 0.0
-    # s.χy.values[:] = [-g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
-
     # diffusion matrices
     α = ε²/μ/ϱ
-    # M_col = mass_matrix(g_col)
-    # K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
-    # LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
-    # RHS_diffs = [M_col - α/H[i]^2*Δt/2*K_cols[i] for i ∈ in_nodes2]
     K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs = Vector{Any}(undef, g_sfc2.np)
     RHS_diffs = Vector{Any}(undef, g_sfc2.np)
@@ -233,51 +205,29 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
     dσ = 1/(nσ-1) # !! only for evenly spaced nodes
-    ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+    # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
-    # b_prev = copy(s.b.values)
     t0 = time()
     for i=1:n_steps
         println("step $i")
 
-        # @time "step $i" cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
-        # s.b.values[:] = s.b.values + Δt/2*adv
-        # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
-        # s.b.values[:] = s.b.values + Δt*adv
-
         if m.advection
             # Δt/2 advection step
-            # @time "invert!" invert!(m, s)
-            # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
-            # s.b.values[:] = s.b.values - Δt/2*adv
-
-            # invert!(m, s)
-            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            @time invert!(m, s)
+            @time rhs = advection(m, s.χx, s.χy, s.b)
+            @time cg!(adv, HM, -rhs)
             s.b.values[:] = s.b.values + Δt/4*adv
-            # invert!(m, s)
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
-
-            # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
-            # b_prev[:] = s.b.values
-            # s.b.values[:] = bnew
         end
 
         # Δt diffusion step
-        # for j ∈ eachindex(in_nodes2)
-        #     ig = in_nodes2[j]
-        #     inds = get_col_inds(ig, nσ)
-        #     s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
-        # end
-        # for j ∈ g_sfc2.e["bdy"]
-        #     inds = get_col_inds(j, nσ)
-        #     s.b.values[inds] .= 0
-        # end
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
@@ -285,26 +235,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
         if m.advection
             # Δt/2 advection step
-            # @time "invert!" invert!(m, s)
-            # @time "cg! and advection" cg!(adv, HM, advection(m, s.χx, s.χy, s.b), maxiter=1000)
-            # s.b.values[:] = s.b.values - Δt/2*adv
-
-            # invert!(m, s)
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
-            # invert!(m, s)
+            invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
-
-            # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt/2)
-            # b_prev[:] = s.b.values
-            # s.b.values[:] = bnew
         end
-
-        # s.b.values[:] = RK2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, Δt)
-        # bnew = AB2(u->cg!(adv, HM, -advection(m, s.χx, s.χy, u)), s.b.values, b_prev, Δt)
-        # b_prev[:] = s.b.values
-        # s.b.values[:] = bnew
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
@@ -318,11 +255,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
             # info
             # @info @sprintf("%d steps in %d s", i, time()-t0) max_err=maximum(abs.(s.b.values - ba)) ∫b=sum(HM*s.b.values)
-            # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             @info @sprintf("%d steps in %d s", i, time()-t0) ∫b=sum(HM*s.b.values)
-            # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # show state
             invert!(m, s, showplots=true)
@@ -359,10 +296,6 @@ function ba_diff(σ, t, α, H; N=1000)
     # b0 = H*σ
     A(n) = 2*H*(1 + (-1)^(n+1))/(n^2*π^2)
     return -H/2 + sum(A(n)*cos(n*π*σ)*exp(-α*(n*π)^2*t) for n=1:2:N)
-
-    # # b0 = H^3*(σ^2 + 2/3*σ^3), nuemann
-    # A(n) = 8*H^3*(-1 + (-1)^n)/(n^4*π^4)
-    # return H^3/6 + sum(A(n)*cos(n*π*z/H)*exp(-α*(n*π/H)^2*t) for n=1:2:N)
 end
 
 """
@@ -373,23 +306,3 @@ Analytical solution to ∂t(b) + ∂x(b) = 0 for gaussian initial condition.
 function ba_adv(x, t, H)
     return exp(-((x[1] - t)^2 + x[2]^2 + (H*x[3] + 0.5)^2)/0.02)
 end
-
-## advection convergence tests with H = 2 - x^2 - y^2
-
-# Δt = 1e-3, n_steps = 11
-# mesh  error
-# 0     6.7e-3
-# 1     2.7e-3
-# 2     4.7e-3
-# 3     1.7e-3
-
-# mesh 2, T = 1e-2
-# nsteps  error
-# 2       2.4e-3
-# 16      4.4e-3
-# 128     4.6e-3
-
-# mesh 3, T = 1e-2
-# nsteps  error
-# 2       8.8e-4 
-# 16      1.6e-3

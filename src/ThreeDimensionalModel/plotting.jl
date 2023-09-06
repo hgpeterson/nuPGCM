@@ -313,52 +313,7 @@ function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
     plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
-function plot_ux(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/ux.png")
-    # params
-    nx = 2^8
-    nσ = m.nσ
-    σ = m.σ
-
-    # get x slice
-    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
-    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- 0)), 1][1:4])
-    x = range(neary[2], neary[3], length=nx)
-    
-    # get indices of surface tris
-    k_sfcs = [get_k([x[i], 0], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
-
-    # get indices of wedges
-    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
-    k_ws = hcat(k_ws, k_ws[:, end])
-
-    # nσ × nx coords
-    Hs = [m.H([x[i], 0], k_sfcs[i]) for i=1:nx] 
-    xx = repeat(x', nσ, 1)
-    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
-
-    # evaluate
-    χy_fe = FEField(s.χy)
-    χys = [χy_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    uxs = zeros(nσ, nx)
-    for i=1:nx
-        uxs[:, i] = -differentiate(χys[:, i], σ*Hs[i])
-    end
-    bs = [s.b([x[j], 0, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
-
-    # plot
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uxs, bs, L"Zonal flow $u^x$"; vmax=0.005)
-    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig(fname)
-    println(fname)
-    plt.close()
-end
-
-function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
+function plot_u(m::ModelSetup3D, s::ModelState3D)
     # params
     nx = 2^8
     nσ = m.nσ
@@ -383,76 +338,40 @@ function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
 
     # evaluate
     χx_fe = FEField(s.χx)
-    χxs = [χx_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    uys = zeros(nσ, nx)
-    for i=1:nx
-        uys[:, i] = differentiate(χxs[:, i], σ*Hs[i])
-    end
-    bs = [s.b([x[j], 0, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
-
-    # plot
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uys, bs, L"Meridional flow $u^y$")
-    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig(fname)
-    println(fname)
-    plt.close()
-end
-
-function plot_uz(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uz.png")
-    # params
-    nx = 2^8
-    nσ = m.nσ
-    σ = m.σ
-
-    # get x slice
-    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
-    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- 0)), 1][1:4])
-    x = range(neary[2], neary[3], length=nx)
-    
-    # get indices of surface tris
-    k_sfcs = [get_k([x[i], 0], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
-
-    # get indices of wedges
-    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
-    k_ws = hcat(k_ws, k_ws[:, end])
-
-    # nσ × nx coords
-    Hs = [m.H([x[i], 0], k_sfcs[i]) for i=1:nx] 
-    Hxs = [m.Hx([x[i], 0], k_sfcs[i]) for i=1:nx] 
-    Hys = [m.Hy([x[i], 0], k_sfcs[i]) for i=1:nx] 
-    xx = repeat(x', nσ, 1)
-    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
-
-    # evaluate
-    χx_fe = FEField(s.χx)
     χy_fe = FEField(s.χy)
-    χxs = [χx_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    χys = [χy_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    uxs = zeros(nσ, nx)
-    uys = zeros(nσ, nx)
+    χx = [χx_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χy = [χy_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    ux = zeros(nσ, nx)
+    uy = zeros(nσ, nx)
     for i=1:nx
-        uxs[:, i] = -differentiate(χys[:, i], σ*Hs[i])
-        uys[:, i] = +differentiate(χxs[:, i], σ*Hs[i])
+        ux[:, i] = -differentiate(χy[:, i], σ*Hs[i])
+        uy[:, i] = +differentiate(χx[:, i], σ*Hs[i])
     end
-    Huσs = [∂x(χy_fe, [x[j], 0, σ[i]], k_ws[j, i]) - ∂y(χx_fe, [x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
-    uzs = [Huσs[i, j] + σ[i]*Hxs[j]*uxs[i, j] + σ[i]*Hys[j]*uys[i, j] for i=1:nσ, j=1:nx]
+    Huσ = [∂x(χy_fe, [x[j], 0, σ[i]], k_ws[j, i]) - ∂y(χx_fe, [x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    uz = [Huσ[i, j] + σ[i]*Hxs[j]*ux[i, j] + σ[i]*Hys[j]*uy[i, j] for i=1:nσ, j=1:nx]
     bs = [s.b([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
 
     # plot
     fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uzs, bs, L"Vertical flow $u^z$", vmax=0.04)
-    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
+    plot_slice(ax, xx, zz, ux, bs, L"Zonal flow $u^x$")
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig(fname)
-    println(fname)
+    savefig("$out_folder/ux.png")
+    println("$out_folder/ux.png")
+    plt.close()
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, uy, bs, L"Meridional flow $u^y$")
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    savefig("$out_folder/uy.png")
+    println("$out_folder/uy.png")
+    plt.close()
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, uz, bs, L"Vertical flow $u^z$")
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    savefig("$out_folder/uz.png")
+    println("$out_folder/uz.png")
     plt.close()
 end
 
@@ -494,7 +413,6 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y; fname="$out
     χxs = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
     χys = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
     bs = [b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    # bzs = [∂z(b, [x, y, σ[i]], k_ws[i])/H for i=1:nσ]
     bzs = differentiate(bs, z)
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
@@ -524,37 +442,4 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y; fname="$out
 end
 function plot_profiles(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
     plot_profiles(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
-end
-
-function plot_U_xslice(m::ModelSetup3D, s::ModelState3D, y; fname="$out_folder/U_xslice.png")
-    # params
-    nx = 2^8
-
-    # # get x slice
-    # bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
-    # neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
-    # x = range(neary[2], neary[3], length=nx)
-    x = range(0.95, 0.99, length=nx)
-    
-    # get indices of surface tris
-    k_sfcs = [get_k([x[i], y], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
-
-    Ux, Uy = get_Ux_Uy(s.Ψ)
-    Uxs = [Ux([x[i], y], k_sfcs[i]) for i=1:nx]
-    Uys = [Uy([x[i], y], k_sfcs[i]) for i=1:nx]
-    fig, ax = plt.subplots(1, 2, figsize=(6.4, 2))
-    ax[1].plot(x, Uxs)
-    ax[2].plot(x, Uys)
-    ax[1].set_xlabel(L"Zonal coordinate $x$")
-    ax[2].set_xlabel(L"Zonal coordinate $x$")
-    ax[1].set_ylabel(L"$U^x$")
-    ax[2].set_ylabel(L"$U^y$")
-    ax[1].set_title(latexstring(@sprintf("y = %1.1f", y)), x=1.1, y=1.1)
-    for a ∈ ax
-        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    end
-    subplots_adjust(wspace=0.2)
-    savefig(fname)
-    println(fname)
-    plt.close()
 end

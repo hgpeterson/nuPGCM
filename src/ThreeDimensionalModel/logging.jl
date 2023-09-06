@@ -52,7 +52,7 @@ function save_setup(m::ModelSetup3D, save_file)
     log_params(ofile, @sprintf("np = %d", m.g_sfc1.np))
     log_params(ofile, @sprintf("nσ = %d (σ[2] - σ[1] = %1.1e)", m.nσ, m.σ[2] - m.σ[1]))
     log_params(ofile, "\nKeywords:")
-    if m.σ[2] - m.σ[1] == m.σ[3] - m.σ[2]
+    if m.σ[2] - m.σ[1] ≈ m.σ[3] - m.σ[2]
         log_params(ofile, "chebyshev = false")
     else
         log_params(ofile, "chebyshev = true")

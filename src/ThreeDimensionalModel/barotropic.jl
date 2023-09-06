@@ -173,10 +173,10 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
     #     Δ = g.J.dets[k_sfc]
     #     # (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*Δ
     #     rhs[g.t[k_sfc, i]] += sum(ε²*A1[i, j, k, l, d1]*νωx_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 1]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) +
-    #                             sum(ε²*A1[i, j, k, l, d1]*νωy_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 2]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) -
-    #                             sum(ε²*A2[i, j, k, l]*νωx_b_bot[k_sfc, l]*Hx[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
-    #                             sum(ε²*A2[i, j, k, l]*νωy_b_bot[k_sfc, l]*Hy[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
-    #                             sum(A3[i, j, k, l, m]*JEBAR[k_sfc, m]*H[g2.t[k_sfc, l]]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n, m=1:el.n)
+    #                           sum(ε²*A1[i, j, k, l, d1]*νωy_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 2]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) -
+    #                           sum(ε²*A2[i, j, k, l]*νωx_b_bot[k_sfc, l]*Hx[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
+    #                           sum(ε²*A2[i, j, k, l]*νωy_b_bot[k_sfc, l]*Hy[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
+    #                           sum(A3[i, j, k, l, m]*JEBAR[k_sfc, m]*H[g2.t[k_sfc, l]]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el2.n, m=1:el.n)
     # end
     for k=1:g.nt
         # transformation from reference triangle
@@ -185,10 +185,8 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
         # rhs
         function func_r(ξ, i)
             x = T(ξ)
-            # νω_b_bot_div = (∂x(νωx_b_bot, x, k) + ∂y(νωy_b_bot, x, k))/H(x, k) - (νωx_b_bot(x, k)*Hx(x, k) + νωy_b_bot(x, k)*Hy(x, k))/H(x, k)^2
             νω_b_bot_div = (∂x(νωx_b_bot, x, k) + ∂y(νωy_b_bot, x, k))*H(x, k)^2 - (νωx_b_bot(x, k)*Hx(x, k) + νωy_b_bot(x, k)*Hy(x, k))*H(x, k)
             φ_i = φ(el, ξ, i)
-            # return (-JEBAR(x, k) + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
             return (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
         end
         r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
