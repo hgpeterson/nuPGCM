@@ -25,8 +25,9 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh0.h5")
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh4.h5")
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=true, advection=false)
+    save_setup(m)
     return m
 end
 
@@ -50,6 +51,8 @@ end
 
 # m = setup()
 # s = run(m)
+# m = load_setup_3D("$out_folder/setup.h5")
+# s = load_state_3D("$out_folder/state.h5")
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
@@ -159,6 +162,18 @@ function plot_u_b(m, s, x, y)
     ax[4].set_xlim(0, 1.3)
     ax[1].set_ylim(-H, 0)
     axins1.set_ylim(-H, -H + 0.05)
+    # ax[1].spines["left"].set_visible(false)
+    # axins1.spines["left"].set_visible(false)
+    # ax[2].spines["left"].set_visible(false)
+    # ax[3].spines["left"].set_visible(false)
+    # ax[1].axvline(0,  c="k", ls="-", lw=0.5)
+    # ax[2].axvline(0,  c="k", ls="-", lw=0.5)
+    # ax[3].axvline(0,  c="k", ls="-", lw=0.5)
+    # axins1.axvline(0, c="k", ls="-", lw=0.5)
+    ax[1].axvline(0,  c="k", ls="--", lw=0.25)
+    ax[2].axvline(0,  c="k", ls="--", lw=0.25)
+    ax[3].axvline(0,  c="k", ls="--", lw=0.25)
+    axins1.axvline(0, c="k", ls="--", lw=0.25)
     for a ∈ ax
         a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     end
