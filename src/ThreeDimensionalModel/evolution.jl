@@ -1,17 +1,43 @@
-function get_K_col(g, κ)
-    κ = FEField(κ, g)
-    J = g.J
-    el = g.el
-    K = Tuple{Int64, Int64, Float64}[]
-    for k=1:g.nt
-        # ∫ κ ∂φᵢ∂φⱼ
-        σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
-        κK = [ref_el_quad(ξ -> κ(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
-        for i=1:el.n, j=1:el.n
-            push!(K, (g.t[k, i], g.t[k, j], κK[i, j]))
-        end
+# function get_K_col(g, κ)
+#     κ = FEField(κ, g)
+#     J = g.J
+#     el = g.el
+#     K = Tuple{Int64, Int64, Float64}[]
+#     for k=1:g.nt
+#         # ∫ κ ∂φᵢ∂φⱼ
+#         σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
+#         κK = [ref_el_quad(ξ -> κ(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n]
+#         for i=1:el.n, j=1:el.n
+#             push!(K, (g.t[k, i], g.t[k, j], κK[i, j]))
+#         end
+#     end
+#     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+# end
+function get_K_col(σ, κ)
+    nσ = length(σ)
+    K = Tuple{Int64,Int64,Float64}[]
+    for j=2:nσ-1
+        fd_σ  = mkfdstencil(σ[j-1:j+1], σ[j], 1)
+        fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
+        κ_σ = fd_σ'*κ[j-1:j+1]
+        # κ ∂σσ(b)
+        push!(K, (j, j-1, κ[j]*fd_σσ[1]))
+        push!(K, (j, j,   κ[j]*fd_σσ[2]))
+        push!(K, (j, j+1, κ[j]*fd_σσ[3]))
+        # ∂σ(κ) ∂σ(b)
+        push!(K, (j, j-1, κ_σ*fd_σ[1]))
+        push!(K, (j, j,   κ_σ*fd_σ[2]))
+        push!(K, (j, j+1, κ_σ*fd_σ[3]))
     end
-    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+    fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
+    push!(K, (1, 1, fd_σ[1]))
+    push!(K, (1, 2, fd_σ[2]))
+    push!(K, (1, 3, fd_σ[3]))
+    fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+    push!(K, (nσ, nσ-2, fd_σ[1]))
+    push!(K, (nσ, nσ-1, fd_σ[2]))
+    push!(K, (nσ, nσ  , fd_σ[3]))
+    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
 """
@@ -144,9 +170,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     in_nodes2 = m.in_nodes2
 
     # timestep
-    # Δt = 0.04
-    n_steps = Int64(t_final/Δt)
-    n_steps_plot = Int64(t_plot/Δt)
+    n_steps = Int64(round(t_final/Δt))
+    n_steps_plot = Int64(round(t_plot/Δt))
 
     # # constant vel. (ux = 1, uy = 0, uz = 0, or uξ = 1, uη = 0, uσ = -σHₓ/H)
     # s.χx.values[:] .= 0.0
@@ -154,11 +179,28 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # diffusion matrices
     α = ε²/μ/ϱ
-    # α = 1e-2
-    M_col = mass_matrix(g_col)
-    K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
-    LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
-    RHS_diffs = [M_col - α/H[i]^2*Δt/2*K_cols[i] for i ∈ in_nodes2]
+    # M_col = mass_matrix(g_col)
+    # K_cols = [get_K_col(g_col, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
+    # LHS_diffs = [lu(M_col + α/H[i]^2*Δt/2*K_cols[i]) for i ∈ in_nodes2]
+    # RHS_diffs = [M_col - α/H[i]^2*Δt/2*K_cols[i] for i ∈ in_nodes2]
+    K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
+    LHS_diffs = Vector{Any}(undef, g_sfc2.np)
+    RHS_diffs = Vector{Any}(undef, g_sfc2.np)
+    for i=1:g_sfc2.np
+        if i ∈ g_sfc2.e["bdy"]
+            LHS_diffs[i] = I
+            RHS_diffs[i] = zeros(nσ, nσ)
+        else
+            LHS = I - α/H[i]^2*Δt/2*K_cols[i]
+            LHS[1, :] = K_cols[i][1, :]
+            LHS[nσ, :] = K_cols[i][nσ, :]
+            LHS_diffs[i] = lu(LHS)
+            RHS = I + α/H[i]^2*Δt/2*K_cols[i]
+            RHS[1, :] .= 0
+            RHS[nσ, :] .= 0
+            RHS_diffs[i] = RHS
+        end
+    end
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
@@ -227,14 +269,18 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         end
 
         # Δt diffusion step
-        for j ∈ eachindex(in_nodes2)
-            ig = in_nodes2[j]
-            inds = get_col_inds(ig, nσ)
-            s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
-        end
-        for j ∈ g_sfc2.e["bdy"]
+        # for j ∈ eachindex(in_nodes2)
+        #     ig = in_nodes2[j]
+        #     inds = get_col_inds(ig, nσ)
+        #     s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
+        # end
+        # for j ∈ g_sfc2.e["bdy"]
+        #     inds = get_col_inds(j, nσ)
+        #     s.b.values[inds] .= 0
+        # end
+        for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
-            s.b.values[inds] .= 0
+            s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
 
         if m.advection

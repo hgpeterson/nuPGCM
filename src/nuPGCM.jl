@@ -117,7 +117,11 @@ export
     # plotting
     plot_profiles,
     plot_xslices,
-    plot_yslices
+    plot_yslices,
+
+    # loading
+    load_setup_3D,
+    load_state_3D
 
 # packages
 using PyPlot
@@ -176,6 +180,7 @@ include("TwoDimensionalModel/plotting.jl")
 include("TwoDimensionalModel/boundary_layer.jl")
 
 include("ThreeDimensionalModel/setup.jl")
+include("ThreeDimensionalModel/logging.jl")
 include("ThreeDimensionalModel/mesh_utils.jl")
 include("ThreeDimensionalModel/baroclinic.jl")
 include("ThreeDimensionalModel/barotropic.jl")

@@ -313,6 +313,51 @@ function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
     plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
+function plot_ux(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/ux.png")
+    # params
+    nx = 2^8
+    nσ = m.nσ
+    σ = m.σ
+
+    # get x slice
+    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- 0)), 1][1:4])
+    x = range(neary[2], neary[3], length=nx)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x[i], 0], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+
+    # get indices of wedges
+    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
+    k_ws = hcat(k_ws, k_ws[:, end])
+
+    # nσ × nx coords
+    Hs = [m.H([x[i], 0], k_sfcs[i]) for i=1:nx] 
+    xx = repeat(x', nσ, 1)
+    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
+
+    # evaluate
+    χy_fe = FEField(s.χy)
+    χys = [χy_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    uxs = zeros(nσ, nx)
+    for i=1:nx
+        uxs[:, i] = -differentiate(χys[:, i], σ*Hs[i])
+    end
+    bs = [s.b([x[j], 0, σ[i]], k_ws[j, i])   for i=1:nσ, j=1:nx]
+
+    # plot
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, uxs, bs, L"Zonal flow $u^x$"; vmax=0.005)
+    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
 function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
     # params
     nx = 2^8
@@ -348,6 +393,7 @@ function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
     # plot
     fig, ax = plt.subplots(1)
     plot_slice(ax, xx, zz, uys, bs, L"Meridional flow $u^y$")
+    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
     ax.set_xticks(-1:0.5:1)
     ax.set_yticks(-1:0.5:0)
     ax.set_xlabel(L"Zonal coordinate $x$")
@@ -357,12 +403,69 @@ function plot_uy(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uy.png")
     plt.close()
 end
 
-function plot_slice(ax, xx, zz, u, b, cb_label)
-    vmax = maximum(abs.(u))
+function plot_uz(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/uz.png")
+    # params
+    nx = 2^8
+    nσ = m.nσ
+    σ = m.σ
+
+    # get x slice
+    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- 0)), 1][1:4])
+    x = range(neary[2], neary[3], length=nx)
+    
+    # get indices of surface tris
+    k_sfcs = [get_k([x[i], 0], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+
+    # get indices of wedges
+    k_ws = [get_k_w(k_sfcs[i], nσ, j) for i=1:nx, j=1:nσ-1]
+    k_ws = hcat(k_ws, k_ws[:, end])
+
+    # nσ × nx coords
+    Hs = [m.H([x[i], 0], k_sfcs[i]) for i=1:nx] 
+    Hxs = [m.Hx([x[i], 0], k_sfcs[i]) for i=1:nx] 
+    Hys = [m.Hy([x[i], 0], k_sfcs[i]) for i=1:nx] 
+    xx = repeat(x', nσ, 1)
+    zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
+
+    # evaluate
+    χx_fe = FEField(s.χx)
+    χy_fe = FEField(s.χy)
+    χxs = [χx_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    χys = [χy_fe([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    uxs = zeros(nσ, nx)
+    uys = zeros(nσ, nx)
+    for i=1:nx
+        uxs[:, i] = -differentiate(χys[:, i], σ*Hs[i])
+        uys[:, i] = +differentiate(χxs[:, i], σ*Hs[i])
+    end
+    Huσs = [∂x(χy_fe, [x[j], 0, σ[i]], k_ws[j, i]) - ∂y(χx_fe, [x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+    uzs = [Huσs[i, j] + σ[i]*Hxs[j]*uxs[i, j] + σ[i]*Hys[j]*uys[i, j] for i=1:nσ, j=1:nx]
+    bs = [s.b([x[j], 0, σ[i]], k_ws[j, i]) for i=1:nσ, j=1:nx]
+
+    # plot
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, uzs, bs, L"Vertical flow $u^z$", vmax=0.04)
+    ax.plot([0.5, 0.5], [-m.H([0.5, 0]), 0], "r-", alpha=0.5)
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
+function plot_slice(ax, xx, zz, u, b, cb_label; vmax=0)
+    extend = "both"
+    if vmax == 0
+        vmax = maximum(abs.(u))
+        extend = "neither"
+    end
     img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
-    # levels = range(-vmax, vmax, length=8)
+    # levels = range(-vmax, vmax, length=20)
     # ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-    cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235)
+    cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235, extend=extend)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     levels = range(-1, 0, length=20)
     ax.contour(xx, zz, b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)

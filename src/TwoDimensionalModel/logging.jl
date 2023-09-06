@@ -85,6 +85,7 @@ function load_setup_2D(filename)
     κ = read(file, "κ")
     N2 = read(file, "N2")
     Δt = read(file, "Δt")
+    close(file)
     return ModelSetup2D(bl, f, no_net_transport, L, nξ, nσ, coords, periodic, ξ, σ, x, z, H, Hx, ν, κ, N2, Δt)
 end
 

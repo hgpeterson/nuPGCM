@@ -86,13 +86,9 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     # second order surface mesh
     g_sfc2 = add_midpoints(g_sfc1)
 
-    # indices of nodes in interior
-    in_nodes1 = findall(i -> i ∉ g_sfc1.e["bdy"], 1:g_sfc1.np)
-    in_nodes2 = findall(i -> i ∉ g_sfc2.e["bdy"], 1:g_sfc2.np)
-
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
-    println(σ[2] - σ[1])
+    println("Bottom resolution: ", σ[2] - σ[1])
 
     # 1D grid
     nσ = length(σ)
@@ -105,13 +101,26 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     H = FEField(H_func, g_sfc2)
     τx = FEField(τx_func, g_sfc2)
     τy = FEField(τy_func, g_sfc2)
-    τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
-    τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
     ν = FEField([ν_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
     κ = FEField([κ_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
+
+    # pass to next constuctor
+    return ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, g_sfc2, g1, g2, g_col, advection=advection)
+end
+
+function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractField, τy::AbstractField, ν::AbstractField, κ::AbstractField, 
+                      g_sfc1, g_sfc2, g1, g2, g_col; advection=true)
+
+    # unpack
+    σ = g_col.p
+    nσ = g_col.np
+
+    # fields for later
+    τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
+    τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
     ν_bot = FEField([ν[get_i_bot(i, nσ)] for i=1:g_sfc1.np], g_sfc1)
 
-    # store their gradients as DG fields
+    # store gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     Hy = DGField([∂y(H, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     τx_x = DGField([∂x(τx, g_sfc1.p[g_sfc1.t[k, i], :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -127,6 +136,10 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
     quick_plot(f_over_H, L"f/H", "$out_folder/f_over_H.png", vmax=6)
     curl = (τy_x - τx_y)*H - (τy*Hx - τx*Hy)
     quick_plot(curl, L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", "$out_folder/curl.png")
+
+    # indices of nodes in interior
+    in_nodes1 = findall(i -> i ∉ g_sfc1.e["bdy"], 1:g_sfc1.np)
+    in_nodes2 = findall(i -> i ∉ g_sfc2.e["bdy"], 1:g_sfc2.np)
 
     # derivative matrices
     Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
