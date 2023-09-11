@@ -234,27 +234,24 @@ function (u::AbstractField)(x)
         # find element x is in
         k = get_k(x, u.g)
 
+        # transform to reference element
+        ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
+
         # evaluate there
-        return u(x, k)
+        return u(ξ, k)
     catch
         return NaN
     end
 end
-function (u::FEField)(x, k)
-    # transform to reference element
-    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
-
+function (u::FEField)(ξ, k)
     # sum weighted combinations of element k's basis functions at x
     return sum(u[u.g.t[k, i]]*φ(u.g.el, ξ, i) for i=1:u.g.nn)
 end
-function (u::DGField)(x, k)
-    # transform to reference element
-    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
-
+function (u::DGField)(ξ, k)
     # sum weighted combinations of element k's basis functions at x
     return sum(u[k, i]*φ(u.g.el, ξ, i) for i=1:u.g.nn)
 end
-function (u::FVField)(x, k)
+function (u::FVField)(ξ, k)
     return u[k]
 end
 
@@ -268,27 +265,24 @@ function ∂(u::AbstractField, x, j)
         # find element x is in
         k = get_k(x, u.g)
 
+        # transform to reference element
+        ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
+
         # evaluate there
-        return ∂(u, x, k, j)
+        return ∂(u, ξ, k, j)
     catch
         return NaN
     end
 end
-function ∂(u::FEField, x, k, j)
-    # transform to reference element
-    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
-
+function ∂(u::FEField, ξ, k, j)
     # sum weighted combinations of element k's basis functions at x
     return sum(u[u.g.t[k, i]]*∂φ(u.g.el, ξ, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
-function ∂(u::DGField, x, k, j)
-    # transform to reference element
-    ξ = transform_to_ref_el(u.g.el, x, u.g.p[u.g.t[k, :], :])
-
+function ∂(u::DGField, ξ, k, j)
     # sum weighted combinations of element k's basis functions at x
     return sum(u[k, i]*∂φ(u.g.el, ξ, i, l)*u.g.J.Js[k, l, j] for i=1:u.g.nn, l=1:u.g.el.dim)
 end
-function ∂(u::FVField, x, k, j)
+function ∂(u::FVField, ξ, k, j)
     return 0
 end
 

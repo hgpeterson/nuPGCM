@@ -39,9 +39,8 @@ function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
         M = M_el*J.dets[k]
 
         # ∫ ν ∂φⱼ∂φᵢ + ∫ ∂(ν) φⱼ∂φᵢ
-        σ(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, :]])
-        νK = [ref_el_quad(ξ -> ν(σ(ξ), k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n] + 
-             [ref_el_quad(ξ -> ∂(ν, σ(ξ), k, 1)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
+        νK = [ref_el_quad(ξ -> ν(ξ, k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n] + 
+             [ref_el_quad(ξ -> ∂x(ν, ξ, k)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]

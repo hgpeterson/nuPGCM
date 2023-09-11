@@ -12,10 +12,10 @@ function run()
     # parameters
     ε² = 1e-2
     μ = 1e0
-    ϱ = 1e0
+    ϱ = 1e-4
     α = ε²/μ/ϱ
     T = 5e-2/α
-    n_steps = 500
+    n_steps = 50
     Δt = T/n_steps
     f = 1.
     L = 1.
@@ -99,8 +99,8 @@ function run()
     vmax = maximum(abs.(field))
     vmin = -vmax
     img = ax.pcolormesh(m.x, m.z, field, cmap="RdBu_r", vmin=vmin, vmax=vmax, rasterized=true, shading="auto")
-    levels = range(-vmax, vmax, length=8)
-    ax.contour(m.x, m.z, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    # levels = range(-vmax, vmax, length=8)
+    # ax.contour(m.x, m.z, field, levels=levels, colors="k", linestyles="-", linewidths=0.25)
     cb = colorbar(img, ax=ax, label=L"Along-slope flow $u^y$")
     n_levels = 20
     iξ = argmax(m.H)

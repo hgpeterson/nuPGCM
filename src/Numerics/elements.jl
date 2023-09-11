@@ -47,18 +47,26 @@ end
 
 function φ(el::Line, ξ, i)
     if el.order == 1
-        return ([1 ξ[1]]*el.C[:, i])[1]
+        # this code looks ugly but it has zero memory allocations
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        return c1 + c2*ξ[1]
     else el.order == 2
-        return ([1 ξ[1] ξ[1]^2]*el.C[:, i])[1]
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        c3 = el.C[3, i]
+        return c1 + c2*ξ[1] + c3*ξ[1]^2
     end
 end
 function ∂φ(el::Line, ξ, i, j)
     if j == 1
         # ∂ξ
         if el.order == 1
-            return ([0 1]*el.C[:, i])[1]
+            return el.C[2, i]
         else el.order == 2
-            return ([0 1 2ξ[1]]*el.C[:, i])[1]
+            c2 = el.C[2, i]
+            c3 = el.C[3, i]
+            return c2 + 2*c3*ξ[1]
         end
     else
         error("Invalid dimension of differentiation: `$j`.")
@@ -144,25 +152,40 @@ end
 
 function φ(el::Triangle, ξ, i)
     if el.order == 1
-        return ([1 ξ[1] ξ[2]]*el.C[:, i])[1]
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        c3 = el.C[3, i]
+        return c1 + ξ[1]*c2 + ξ[2]*c3
     else el.order == 2
-        return ([1 ξ[1] ξ[2] ξ[1]^2 ξ[1]*ξ[2] ξ[2]^2]*el.C[:, i])[1]
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        c3 = el.C[3, i]
+        c4 = el.C[4, i]
+        c5 = el.C[5, i]
+        c6 = el.C[6, i]
+        return c1 + c2*ξ[1] + c3*ξ[2] + c4*ξ[1]^2 + c5*ξ[1]*ξ[2] + c6*ξ[2]^2
     end
 end
 function ∂φ(el::Triangle, ξ, i, j)
     if j == 1
         # ∂ξ
         if el.order == 1
-            return ([0 1 0]*el.C[:, i])[1]
+            return el.C[2, i]
         else el.order == 2
-            return ([0 1 0 2ξ[1] ξ[2] 0]*el.C[:, i])[1]
+            c2 = el.C[2, i]
+            c4 = el.C[4, i]
+            c5 = el.C[5, i]
+            return c2 + 2*c4*ξ[1] + c5*ξ[2]
         end
     elseif j == 2
         # ∂η
         if el.order == 1
-            return ([0 0 1]*el.C[:, i])[1]
+            return el.C[3, i]
         else el.order == 2
-            return ([0 0 1 0 ξ[1] 2ξ[2]]*el.C[:, i])[1]
+            c3 = el.C[3, i]
+            c5 = el.C[5, i]
+            c6 = el.C[6, i]
+            return c3 + c5*ξ[1] + 2*c6*ξ[2]
         end
     else
         error("Invalid dimension of differentiation: `$j`.")
@@ -270,32 +293,76 @@ end
 
 function φ(el::Wedge, ξ, i)
     if el.order == 1
-        return ([1 ξ[1] ξ[2] ξ[3] ξ[1]*ξ[3] ξ[2]*ξ[3]]*el.C[:, i])[1]
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        c3 = el.C[3, i]
+        c4 = el.C[4, i]
+        c5 = el.C[5, i]
+        c6 = el.C[6, i]
+        return c1 + c2*ξ[1] + c3*ξ[2] + c4*ξ[3] + c5*ξ[1]*ξ[3] + c6*ξ[2]*ξ[3]
     else el.order == 2
-        return ([1 ξ[1] ξ[2] ξ[3] ξ[1]*ξ[3] ξ[1]*ξ[2] ξ[2]*ξ[3] ξ[1]*ξ[2]*ξ[3] ξ[1]^2 ξ[2]^2 ξ[1]^2*ξ[3] ξ[2]^2*ξ[3]]*el.C[:, i])[1]
+        c1 = el.C[1, i]
+        c2 = el.C[2, i]
+        c3 = el.C[3, i]
+        c4 = el.C[4, i]
+        c5 = el.C[5, i]
+        c6 = el.C[6, i]
+        c7 = el.C[7, i]
+        c8 = el.C[8, i]
+        c9 = el.C[9, i]
+        c10 = el.C[10, i]
+        c11 = el.C[11, i]
+        c12 = el.C[12, i]
+        return c1 + c2*ξ[1] + c3*ξ[2] + c4*ξ[3] + c5*ξ[1]*ξ[3] + c6*ξ[1]*ξ[2] + c7*ξ[2]*ξ[3] + c8*ξ[1]*ξ[2]*ξ[3] + 
+               c9*ξ[1]^2 + c10*ξ[2]^2 + c11*ξ[1]^2*ξ[3] + c12*ξ[2]^2*ξ[3]
     end
 end
 function ∂φ(el::Wedge, ξ, i, j)
     if j == 1
         # ∂ξ
         if el.order == 1
-            return ([0 1 0 0 ξ[3] 0]*el.C[:, i])[1]
+            c2 = el.C[2, i]
+            c5 = el.C[5, i]
+            return c2 + c5*ξ[3]
         else el.order == 2
-            return ([0 1 0 0 ξ[3] ξ[2] 0 ξ[2]*ξ[3] 2*ξ[1] 0 2*ξ[1]*ξ[3] 0]*el.C[:, i])[1]
+            c2 = el.C[2, i]
+            c5 = el.C[5, i]
+            c6 = el.C[6, i]
+            c8 = el.C[8, i]
+            c9 = el.C[9, i]
+            c11 = el.C[11, i]
+            return c2 + c5*ξ[3] + c6*ξ[2] + c8*ξ[2]*ξ[3] + c9*2*ξ[1] + c11*2*ξ[1]*ξ[3]
         end
     elseif j == 2
         # ∂η
         if el.order == 1
-            return ([0 0 1 0 0 ξ[3]]*el.C[:, i])[1]
+            c3 = el.C[3, i]
+            c6 = el.C[6, i]
+            return c3 + c6*ξ[3]
         else el.order == 2
-            return ([0 0 1 0 0 ξ[1] ξ[3] ξ[1]*ξ[3] 0 2*ξ[2] 0 2*ξ[2]*ξ[3]]*el.C[:, i])[1]
+            c3 = el.C[3, i]
+            c6 = el.C[6, i]
+            c7 = el.C[7, i]
+            c8 = el.C[8, i]
+            c10 = el.C[10, i]
+            c12 = el.C[12, i]
+            return c3 + c6*ξ[1] + c7*ξ[3] + c8*ξ[1]*ξ[3] + c10*2*ξ[2] + c12*2*ξ[2]*ξ[3]
         end
     elseif j == 3
         # ∂ζ
         if el.order == 1
-            return ([0 0 0 1 ξ[1] ξ[2]]*el.C[:, i])[1]
+            c4 = el.C[4, i]
+            c5 = el.C[5, i]
+            c6 = el.C[6, i]
+            return c4 + c5*ξ[1] + c6*ξ[2]
         else el.order == 2
-            return ([0 0 0 1 ξ[1] 0 ξ[2] ξ[1]*ξ[2] 0 0 ξ[1]^2 ξ[2]^2]*el.C[:, i])[1]
+            c4 = el.C[4, i]
+            c5 = el.C[5, i]
+            c7 = el.C[7, i]
+            c8 = el.C[8, i]
+            c11 = el.C[11, i]
+            c12 = el.C[12, i]
+            return c4 + c5*ξ[1] + c7*ξ[2] + c8*ξ[1]*ξ[2] + c11*ξ[1]^2 + c12*ξ[2]^2
         end
     else
         error("Invalid dimension of differentiation: `$j`.")
@@ -330,9 +397,7 @@ function transformation_matrix(el::Triangle, p)
     return [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
 end
 function transformation_matrix(el::Wedge, p)
-    return [p[2, 1]-p[1, 1]  p[3, 1]-p[1, 1]  0
-            p[2, 2]-p[1, 2]  p[3, 2]-p[1, 2]  0
-            0                0                p[4, 3]-p[1, 3]]
+    return [max(i, j) ≤ 2 || i == j ? p[j+1, i] - p[1, i] : 0. for i=1:3, j=1:3]
 end
 
 """

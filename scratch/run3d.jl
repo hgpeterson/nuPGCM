@@ -12,14 +12,14 @@ set_out_folder("../output")
 H(x) = 1 - x[1]^2 - x[2]^2
 
 function setup()
-    # ε² = 4e-6
-    # μ = 1e0
-    # ϱ = 7e-4
-    # Δt = 1e-3*μ*ϱ/ε²
-    ε² = 1e-2
     μ = 1e0
-    ϱ = 1e0
-    Δt = 1e-4*μ*ϱ/ε²
+    # ε² = 4e-6
+    ε² = 1e-2
+    # ϱ = 7e-4
+    # ϱ = 1e0
+    ϱ = 1e-4
+    Δt = 1e-3*μ*ϱ/ε²
+    # Δt = 1e-4*μ*ϱ/ε²
     println("BL thickness: ", √(2*ε²))
     f = 1.
     β = 0.
@@ -28,25 +28,23 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=true)
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=false)
     save_setup(m)
     return m
 end
 
 function run(m)
-    # b = FEField(x -> H(x)*x[3], m.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
 
-    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
 
-    # t_final = 5e-2/(m.ε²/m.μ/m.ϱ)
-    # t_plot = t_final/50
-    t_final = 1e-3/(m.ε²/m.μ/m.ϱ)
+    t_final = 10*m.Δt
     t_plot = t_final
-    # evolve!(m, s, t_final, t_plot)
+    evolve!(m, s, t_final, t_plot)
     return s
 end
 
@@ -57,23 +55,25 @@ s = run(m)
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
+    ξ_sfc = nuPGCM.transform_to_ref_el(m.g_sfc1.el, [x, y], m.g_sfc1.p[m.g_sfc1.t[k_sfc, :], :])
 
     σ = m.σ
     nσ = m.nσ
-    H = m.H([x, y])
+    H = m.H(ξ_sfc, k_sfc)
     z = σ*H
     k_ws = nuPGCM.get_k_ws(k_sfc, nσ)
     k_ws = [k_ws; k_ws[end]]
+    ξ_ws = [nuPGCM.transform_to_ref_el(m.g1.el, [x, y, σ[i]], m.g1.p[m.g1.t[k_ws[i], :], :]) for i=1:nσ]
 
     ωx_fe = FEField(s.ωx)
     ωy_fe = FEField(s.ωy)
     χx_fe = FEField(s.χx)
     χy_fe = FEField(s.χy)
-    ωxs = [ωx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    ωys = [ωy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    χxs = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    χys = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    bs = [s.b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
+    ωxs = [ωx_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
+    ωys = [ωy_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
+    χxs = [χx_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
+    χys = [χy_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
+    bs = [s.b(ξ_ws[i], k_ws[i]) for i=1:nσ]
     bzs = differentiate(bs, z)
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
@@ -96,8 +96,8 @@ function compare_profiles(m, s, m2D, s2D, x, y)
     ax[1, 1].plot(ωxs, z, label="3D")
     ax[1, 2].plot(ωys, z)
     ax[1, 3].plot(bs,  z)
-    ax[2, 1].plot(χys, z)
-    ax[2, 2].plot(-χxs, z)
+    ax[2, 1].plot(χxs, z)
+    ax[2, 2].plot(χys, z)
     ax[2, 3].plot(bzs, z)
     ix = argmin(abs.(m2D.ξ .- 0.5))
     H = m2D.H[ix]
@@ -121,75 +121,5 @@ function compare_profiles(m, s, m2D, s2D, x, y)
 end
 
 # compare_profiles(m, s, m2D, s2D, 0.5, 0)
-
-using PyCall
-inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
-pc = 1/6
-function plot_u_b(m, s, x, y)
-    H = m.H([x, y])
-    Hx = m.Hx([x, y])
-    Hy = m.Hy([x, y])
-    k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
-
-    σ = m.σ
-    nσ = m.nσ
-    z = σ*H
-    k_ws = nuPGCM.get_k_ws(k_sfc, nσ)
-    k_ws = [k_ws; k_ws[end]]
-
-    χx_fe = FEField(s.χx)
-    χy_fe = FEField(s.χy)
-    χx = [χx_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    χy = [χy_fe([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    Huσ = [∂x(χy_fe, [x, y, σ[i]], k_ws[i]) - ∂y(χx_fe, [x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    b = [s.b([x, y, σ[i]], k_ws[i]) for i=1:nσ]
-    ux = -differentiate(χy, z)
-    uy = +differentiate(χx, z)
-    uz = @. Huσ + σ*Hx*ux + σ*Hy*uy
-    bz = differentiate(b, z)
-
-    fig, ax = plt.subplots(1, 4, figsize=(36*pc, 11.5*pc), sharey=true)
-
-    axins1 = inset_locator.inset_axes(ax[1], width="50%", height="50%")
-    ax[1].set_xlabel(L"Zonal flow $u^x$ $(\times 10^{-2})$")
-    ax[2].set_xlabel(L"Meridional flow $u^y$")
-    ax[3].set_xlabel(L"Vertical flow $u^z$ $(\times 10^{-2})$")
-    ax[4].set_xlabel(L"Stratification $\partial_z b$")
-    ax[1].set_ylabel(L"Vertical coordinate $z$")
-    ax[1].set_xlim(-0.3, 4)
-    ax[2].set_xlim(-0.15, 0.15)
-    ax[3].set_xlim(-1, 3)
-    ax[3].set_xticks(-1:3)
-    ax[4].set_xlim(0, 1.3)
-    ax[1].set_ylim(-H, 0)
-    axins1.set_ylim(-H, -H + 0.05)
-    # ax[1].spines["left"].set_visible(false)
-    # axins1.spines["left"].set_visible(false)
-    # ax[2].spines["left"].set_visible(false)
-    # ax[3].spines["left"].set_visible(false)
-    # ax[1].axvline(0,  c="k", ls="-", lw=0.5)
-    # ax[2].axvline(0,  c="k", ls="-", lw=0.5)
-    # ax[3].axvline(0,  c="k", ls="-", lw=0.5)
-    # axins1.axvline(0, c="k", ls="-", lw=0.5)
-    ax[1].axvline(0,  c="k", ls="--", lw=0.25)
-    ax[2].axvline(0,  c="k", ls="--", lw=0.25)
-    ax[3].axvline(0,  c="k", ls="--", lw=0.25)
-    axins1.axvline(0, c="k", ls="--", lw=0.25)
-    for a ∈ ax
-        a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    end
-    axins1.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-
-    ax[1].plot(1e2*ux, z)
-    axins1.plot(ux, z)
-    ax[2].plot(uy, z)
-    ax[3].plot(1e2*uz, z)
-    ax[4].plot(bz, z)
-    savefig("$out_folder/profiles_betaplane.png")
-    println("$out_folder/profiles_betaplane.png")
-    plt.close()
-end
-
-# plot_u_b(m, s, 0.5, 0.0)
 
 println("Done.")

@@ -5,14 +5,10 @@ function get_K_col(σ, κ)
         fd_σ  = mkfdstencil(σ[j-1:j+1], σ[j], 1)
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
         κ_σ = fd_σ'*κ[j-1:j+1]
-        # κ ∂σσ(b)
-        push!(K, (j, j-1, κ[j]*fd_σσ[1]))
-        push!(K, (j, j,   κ[j]*fd_σσ[2]))
-        push!(K, (j, j+1, κ[j]*fd_σσ[3]))
-        # ∂σ(κ) ∂σ(b)
-        push!(K, (j, j-1, κ_σ*fd_σ[1]))
-        push!(K, (j, j,   κ_σ*fd_σ[2]))
-        push!(K, (j, j+1, κ_σ*fd_σ[3]))
+        # ∂σ(κ ∂σ(b))
+        push!(K, (j, j-1, κ[j]*fd_σσ[1] + κ_σ*fd_σ[1]))
+        push!(K, (j, j,   κ[j]*fd_σσ[2] + κ_σ*fd_σ[2]))
+        push!(K, (j, j+1, κ[j]*fd_σσ[3] + κ_σ*fd_σ[3]))
     end
     fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
     push!(K, (1, 1, fd_σ[1]))
@@ -53,6 +49,7 @@ function get_HM(g2, H::FEField, nσ)
         n += 1
     end
     return dropzeros!(sparse(I, J, V, g2.np, g2.np))
+    # return Tridiagonal(dropzeros!(sparse(I, J, V, g2.np, g2.np)))
 end
 
 """
@@ -146,7 +143,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     g2 = m.g2
     nσ = m.nσ
     H = m.H
-    HM = m.HM
+    # HM = m.HM
+    HM = get_HM(g2, H, nσ)
     g_sfc2 = m.g_sfc2
 
     # timestep
@@ -156,23 +154,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # diffusion matrices
     α = ε²/μ/ϱ
     K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
-    LHS_diffs = Vector{Any}(undef, g_sfc2.np)
-    RHS_diffs = Vector{Any}(undef, g_sfc2.np)
+    LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
+    RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
     for i=1:g_sfc2.np
-        if i ∈ g_sfc2.e["bdy"]
-            LHS_diffs[i] = I
-            RHS_diffs[i] = zeros(nσ, nσ)
-        else
-            LHS = I - α/H[i]^2*Δt/2*K_cols[i]
-            LHS[1, :] = K_cols[i][1, :]
-            LHS[nσ, :] = K_cols[i][nσ, :]
-            LHS_diffs[i] = lu(LHS)
-            RHS = I + α/H[i]^2*Δt/2*K_cols[i]
-            RHS[1, :] .= 0
-            RHS[nσ, :] .= 0
-            RHS_diffs[i] = RHS
+        if i ∉ g_sfc2.e["bdy"]
+            LHS_diffs_sp[i] = I - α/H[i]^2*Δt/2*K_cols[i]
+            LHS_diffs_sp[i][1, :] = K_cols[i][1, :]
+            LHS_diffs_sp[i][nσ, :] = K_cols[i][nσ, :]
+            RHS_diffs[i] = I + α/H[i]^2*Δt/2*K_cols[i]
+            RHS_diffs[i][1, :] .= 0
+            RHS_diffs[i][nσ, :] .= 0
         end
     end
+    LHS_diffs = [lu(LHS) for LHS ∈ LHS_diffs_sp]
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
@@ -218,12 +212,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
         if m.advection
             # Δt/2 advection step
-            @time invert!(m, s)
-            @time rhs = advection(m, s.χx, s.χy, s.b)
-            @time cg!(adv, HM, -rhs)
+            @time "invert!" invert!(m, s)
+            @time "rhs" rhs = advection(m, s.χx, s.χy, s.b)
+            @time "cg!" cg!(adv, HM, -rhs)
+            # @time "HM\\rhs" adv[:] = -(HM\rhs)
             s.b.values[:] = s.b.values + Δt/4*adv
             invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
         end
 
@@ -237,9 +233,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # Δt/2 advection step
             invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
             invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
         end
 

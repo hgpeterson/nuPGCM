@@ -13,6 +13,9 @@ function get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
     J = g.J
     el = g.el
 
+    # FEField for f
+    f_fe = FEField(x->f + β*x[2], g)
+
     # indices
     N = g.np
 
@@ -31,42 +34,36 @@ function get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
         ηy = J.Js[k, 2, 2]
         ∂x∂ξ = J.dets[k]
 
-        # transformation from reference triangle
-        T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
-
         # K
         function func_K(ξ, i, j)
-            x = T(ξ)
             φx_i = φξ(el, ξ, i)*ξx + φη(el, ξ, i)*ηx
             φy_i = φξ(el, ξ, i)*ξy + φη(el, ξ, i)*ηy
             φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
             φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
             φ_i = φ(g.el, ξ, i)
-            return -ε²*3*νωy_Ux_bot(x, k)/H(x, k)*(φx_j*Hx(x, k) + φy_j*Hy(x, k))*φ_i*∂x∂ξ +
-                   -ε²*νωy_Ux_bot(x, k)*(φx_i*φx_j + φy_i*φy_j)*∂x∂ξ
+            return -ε²*3*νωy_Ux_bot(ξ, k)/H(ξ, k)*(φx_j*Hx(ξ, k) + φy_j*Hy(ξ, k))*φ_i*∂x∂ξ +
+                   -ε²*νωy_Ux_bot(ξ, k)*(φx_i*φx_j + φy_i*φy_j)*∂x∂ξ
         end
         K = [ref_el_quad(ξ -> func_K(ξ, i, j), el) for i=1:el.n, j=1:el.n]
 
         # K′
         function func_K′(ξ, i, j)
-            x = T(ξ)
             φx_i = φξ(el, ξ, i)*ξx + φη(el, ξ, i)*ηx
             φy_i = φξ(el, ξ, i)*ξy + φη(el, ξ, i)*ηy
             φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
             φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
             φ_i = φ(g.el, ξ, i)
-            return -ε²*3*νωx_Ux_bot(x, k)/H(x, k)*(φy_j*Hx(x, k) - φx_j*Hy(x, k))*φ_i*∂x∂ξ +
-                   -ε²*νωx_Ux_bot(x, k)*(φx_i*φy_j - φy_i*φx_j)*∂x∂ξ
+            return -ε²*3*νωx_Ux_bot(ξ, k)/H(ξ, k)*(φy_j*Hx(ξ, k) - φx_j*Hy(ξ, k))*φ_i*∂x∂ξ +
+                   -ε²*νωx_Ux_bot(ξ, k)*(φx_i*φy_j - φy_i*φx_j)*∂x∂ξ
         end
         K′ = [ref_el_quad(ξ -> func_K′(ξ, i, j), el) for i=1:el.n, j=1:el.n]
 
         # J(f/H, Ψ) term
         function func_C(ξ, i, j)
-            x = T(ξ)
             φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
             φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
             φ_i = φ(g.el, ξ, i)
-            return ((H(x, k)*β - (f + β*x[2])*Hy(x, k))*φx_j + (f + β*x[2])*Hx(x, k)*φy_j)*φ_i*H(x, k)*∂x∂ξ
+            return ((H(ξ, k)*β - f_fe(ξ, k)*Hy(ξ, k))*φx_j + f_fe(ξ, k)*Hx(ξ, k)*φy_j)*φ_i*H(ξ, k)*∂x∂ξ
         end
         C = [ref_el_quad(ξ -> func_C(ξ, i, j), el) for i=1:el.n, j=1:el.n]
 
@@ -113,19 +110,12 @@ function get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, 
     # stamp
     rhs = zeros(N)
     for k=1:g.nt
-        # Jacobian
-        ∂x∂ξ = J.dets[k]
-
-        # transformation from reference triangle
-        T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
-
         # rhs
         function func_r(ξ, i)
-            x = T(ξ)
-            τ_curl = (τy_x(x, k) - τx_y(x, k))/H(x, k) - (τy(x, k)*Hx(x, k) - τx(x, k)*Hy(x, k))/H(x, k)^2
-            νω_τ_bot_div = (∂x(νωx_τ_bot, x, k) + ∂y(νωy_τ_bot, x, k))/H(x, k) - (νωx_τ_bot(x, k)*Hx(x, k) + νωy_τ_bot(x, k)*Hy(x, k))/H(x, k)^2
+            τ_curl = (τy_x(ξ, k) - τx_y(ξ, k))*H(ξ, k)^2 - (τy(ξ, k)*Hx(ξ, k) - τx(ξ, k)*Hy(ξ, k))*H(ξ, k)
+            νω_τ_bot_div = (∂x(νωx_τ_bot, ξ, k) + ∂y(νωy_τ_bot, ξ, k))*H(ξ, k)^2 - (νωx_τ_bot(ξ, k)*Hx(ξ, k) + νωy_τ_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
             φ_i = φ(el, ξ, i)
-            return (τ_curl + ε²*νω_τ_bot_div)*φ_i*∂x∂ξ
+            return (τ_curl + ε²*νω_τ_bot_div)*φ_i*J.dets[k]
         end
         r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
 
@@ -162,32 +152,15 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
     Hy = m.Hy
     g2 = H.g
     el2 = g2.el
-    A1 = m.A1
-    A2 = m.A2
-    A3 = m.A3
 
     # stamp
     rhs = zeros(g.np)
-    # for k_sfc=1:g.nt, i=1:g.nn
-    #     jac = g.J.Js[k_sfc, :, :]
-    #     Δ = g.J.dets[k_sfc]
-    #     # (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*Δ
-    #     rhs[g.t[k_sfc, i]] += sum(ε²*A1[i, j, k, l, d1]*νωx_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 1]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) +
-    #                           sum(ε²*A1[i, j, k, l, d1]*νωy_b_bot[k_sfc, l]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*jac[d1, 2]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2) -
-    #                           sum(ε²*A2[i, j, k, l]*νωx_b_bot[k_sfc, l]*Hx[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
-    #                           sum(ε²*A2[i, j, k, l]*νωy_b_bot[k_sfc, l]*Hy[k_sfc, k]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n) -
-    #                           sum(A3[i, j, k, l, m]*JEBAR[k_sfc, m]*H[g2.t[k_sfc, l]]*H[g2.t[k_sfc, k]]*H[g2.t[k_sfc, j]]*Δ for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el2.n, m=1:el.n)
-    # end
     for k=1:g.nt
-        # transformation from reference triangle
-        T(ξ) = transform_from_ref_el(el, ξ, g.p[g.t[k, 1:3], :])
-
         # rhs
         function func_r(ξ, i)
-            x = T(ξ)
-            νω_b_bot_div = (∂x(νωx_b_bot, x, k) + ∂y(νωy_b_bot, x, k))*H(x, k)^2 - (νωx_b_bot(x, k)*Hx(x, k) + νωy_b_bot(x, k)*Hy(x, k))*H(x, k)
+            νω_b_bot_div = (∂x(νωx_b_bot, ξ, k) + ∂y(νωy_b_bot, ξ, k))*H(ξ, k)^2 - (νωx_b_bot(ξ, k)*Hx(ξ, k) + νωy_b_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
             φ_i = φ(el, ξ, i)
-            return (-JEBAR(x, k)*H(x, k)^3 + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
+            return (-JEBAR(ξ, k)*H(ξ, k)^3 + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
         end
         r = [ref_el_quad(ξ -> func_r(ξ, i), el) for i=1:el.n]
 
@@ -200,18 +173,6 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
     end
 
     return rhs
-end
-
-# for function above
-# TODO: needs better name
-function get_A1_A2_A3(el, el2)
-    f1(ξ, i, j, k, l, d1) = ∂φ(el, ξ, l, d1)*φ(el2, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
-    A1 = [ref_el_quad(ξ -> f1(ξ, i, j, k, l, d1), el) for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el.n, d1=1:2]
-    f2(ξ, i, j, k, l) = φ(el, ξ, l)*φ(el, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
-    A2 = [ref_el_quad(ξ -> f2(ξ, i, j, k, l), el) for i=1:el.n, j=1:el2.n, k=1:el.n, l=1:el.n]
-    f3(ξ, i, j, k, l, m) = φ(el, ξ, m)*φ(el2, ξ, l)*φ(el2, ξ, k)*φ(el2, ξ, j)*φ(el, ξ, i)
-    A3 = [ref_el_quad(ξ -> f3(ξ, i, j, k, l, m), el) for i=1:el.n, j=1:el2.n, k=1:el2.n, l=1:el2.n, m=1:el.n]
-    return A1, A2, A3
 end
 
 function get_JEBAR(m::ModelSetup3D, b; showplots=false)
