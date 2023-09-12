@@ -143,16 +143,20 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     g2 = m.g2
     nσ = m.nσ
     H = m.H
-    # HM = m.HM
-    HM = get_HM(g2, H, nσ)
+    HM = m.HM
+    # HM = get_HM(g2, H, nσ)
     g_sfc2 = m.g_sfc2
 
     # timestep
-    n_steps = Int64(round(t_final/Δt))
-    n_steps_plot = Int64(round(t_plot/Δt))
+    Δt = 0.04
+    n_steps = 1000
+    n_steps_plot = 20
+    # n_steps = Int64(round(t_final/Δt))
+    # n_steps_plot = Int64(round(t_plot/Δt))
 
     # diffusion matrices
-    α = ε²/μ/ϱ
+    # α = ε²/μ/ϱ
+    α = 1e-2
     K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
@@ -181,7 +185,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     end
 
     # initial condition
-    println(@sprintf("∫b₀ = %1.5e", sum(HM*s.b.values)))
+    @info ∫Hb₀=sum(HM*s.b.values)
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
     vtk_grid("$out_folder/state0", pz', cells) do vtk
         vtk["b"] = s.b.values[1:g1.np]
@@ -208,16 +212,17 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     adv = zeros(g2.np) # pre-allocate for cg!
     t0 = time()
     for i=1:n_steps
-        println("step $i")
+        # println("step $i")
 
         if m.advection
             # Δt/2 advection step
-            @time "invert!" invert!(m, s)
-            @time "rhs" rhs = advection(m, s.χx, s.χy, s.b)
-            @time "cg!" cg!(adv, HM, -rhs)
+            # @time "invert!" invert!(m, s)
+            # @time "rhs" rhs = advection(m, s.χx, s.χy, s.b)
+            # @time "cg!" cg!(adv, HM, -rhs)
             # @time "HM\\rhs" adv[:] = -(HM\rhs)
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
@@ -231,11 +236,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
         if m.advection
             # Δt/2 advection step
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/4*adv
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
@@ -256,11 +261,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            @info @sprintf("%d steps in %d s", i, time()-t0) ∫b=sum(HM*s.b.values)
+            @info @sprintf("%d steps in %d s", i, time()-t0) ∫Hb=sum(HM*s.b.values)
             @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # show state
-            invert!(m, s, showplots=true)
+            # invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
