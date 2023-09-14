@@ -16,11 +16,10 @@ function setup()
     # ε² = 4e-6
     ε² = 1e-2
     # ϱ = 7e-4
-    # ϱ = 1e0
-    ϱ = 1e-4
-    Δt = 1e-3*μ*ϱ/ε²
-    # Δt = 1e-4*μ*ϱ/ε²
-    println("BL thickness: ", √(2*ε²))
+    ϱ = 1e0
+    # ϱ = 1e-4
+    # Δt = 1e-3*μ*ϱ/ε²
+    Δt = 1e-4*μ*ϱ/ε²
     f = 1.
     β = 0.
     τx(x) = 0.
@@ -35,20 +34,21 @@ function setup()
 end
 
 function run(m)
-    # b = FEField(x -> H(x)*x[3], m.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
 
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
-    s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
+    # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
+    # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
-    t_final = 10*m.Δt
-    t_plot = t_final
+    t_final = 500*m.Δt
+    t_plot = t_final/50
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
-# m = setup()
+m = setup()
 s = run(m)
 # m = load_setup_3D("$out_folder/setup.h5")
 # s = load_state_3D("$out_folder/state.h5")

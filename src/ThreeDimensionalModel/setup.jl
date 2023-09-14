@@ -85,7 +85,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H_func::Function, τx_func::Func
 
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
-    println("Bottom resolution: ", σ[2] - σ[1])
 
     # 1D grid
     nσ = length(σ)
@@ -111,6 +110,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     # unpack
     σ = g_col.p
     nσ = g_col.np
+    println("BL thickness: ", √(2*ε²))
+    println("Bottom resolution: ", σ[2] - σ[1])
 
     # fields for later
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
