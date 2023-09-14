@@ -1,3 +1,8 @@
+"""
+    K_col = get_K_col(σ, κ)
+
+Compute finite difference matrix `K_col` for diffusion RHS of buoyancy equation.
+"""
 function get_K_col(σ, κ)
     nσ = length(σ)
     K = Tuple{Int64,Int64,Float64}[]
@@ -5,15 +10,17 @@ function get_K_col(σ, κ)
         fd_σ  = mkfdstencil(σ[j-1:j+1], σ[j], 1)
         fd_σσ = mkfdstencil(σ[j-1:j+1], σ[j], 2)
         κ_σ = fd_σ'*κ[j-1:j+1]
-        # ∂σ(κ ∂σ(b))
+        # ∂σ(κ ∂σ(b)) = κ ∂σσ(b) + ∂σ(κ) ∂σ(b)
         push!(K, (j, j-1, κ[j]*fd_σσ[1] + κ_σ*fd_σ[1]))
         push!(K, (j, j,   κ[j]*fd_σσ[2] + κ_σ*fd_σ[2]))
         push!(K, (j, j+1, κ[j]*fd_σσ[3] + κ_σ*fd_σ[3]))
     end
+    # ∂σ(b) = 0 at z = -H
     fd_σ = mkfdstencil(σ[1:3], σ[1], 1)
     push!(K, (1, 1, fd_σ[1]))
     push!(K, (1, 2, fd_σ[2]))
     push!(K, (1, 3, fd_σ[3]))
+    # ∂σ(b) = 0 at z = 0
     fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
     push!(K, (nσ, nσ-2, fd_σ[1]))
     push!(K, (nσ, nσ-1, fd_σ[2]))
@@ -144,19 +151,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     HM = m.HM
     g_sfc2 = m.g_sfc2
 
-    # mass matrix 
+    # mass matrix for computing ∫b
     M = mass_matrix(g2)
 
     # timestep
-    # Δt = 0.04
-    # n_steps = 20
-    # n_steps_plot = 20
-    n_steps = Int64(round(t_final/Δt))
-    n_steps_plot = Int64(round(t_plot/Δt))
+    Δt = 0.04
+    n_steps = 20
+    n_steps_plot = 1
+    # n_steps = Int64(round(t_final/Δt))
+    # n_steps_plot = Int64(round(t_plot/Δt))
 
     # diffusion matrices
-    α = ε²/μ/ϱ
-    # α = 1e-2
+    # α = ε²/μ/ϱ
+    α = 1e-2
     K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
@@ -203,7 +210,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # for CFL
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
-    dσ = 1/(nσ-1) # !! only for evenly spaced nodes
+    dσ = [abs(g1.p[g1.t[k, 1], 3] - g1.p[g1.t[k, 4], 3]) for k=1:g1.nt]
+    ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
     adv = zeros(g2.np) # pre-allocate for cg!
@@ -219,7 +230,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
         # Δt advection step
         if m.advection
-            invert!(m, s)
+            # invert!(m, s)
             cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
@@ -251,13 +262,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
             @info @sprintf("%d steps in %d s (ETR: %.1f m)", i, t_elapsed, (n_steps-i)*t_elapsed/i/60) ∫b Δb Δb_pct
-            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            # ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            # @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # show state
-            invert!(m, s, showplots=true)
+            # invert!(m, s, showplots=true)
 
             # save state
             cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
