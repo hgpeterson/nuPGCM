@@ -154,16 +154,20 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # mass matrix for computing ∫b
     M = mass_matrix(g2)
 
+    # stiffness matrix for stabilizing diffusion
+    K_stab = stiffness_matrix(g2)
+    LHS_stab = lu(I + 2e1*Δt*K_stab)
+
     # timestep
     Δt = 0.04
-    n_steps = 20
-    n_steps_plot = 1
+    n_steps = 300
+    n_steps_plot = 20
     # n_steps = Int64(round(t_final/Δt))
     # n_steps_plot = Int64(round(t_plot/Δt))
 
     # diffusion matrices
     # α = ε²/μ/ϱ
-    α = 1e-2
+    α = 1e-3
     K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
@@ -217,10 +221,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
-    adv = zeros(g2.np) # pre-allocate for cg!
+    adv = zeros(g2.np) # pre-allocate for `cg!`
     t0 = time()
     for i=1:n_steps
-        println("step $i")
+        # println("step $i")
 
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
@@ -239,6 +243,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt*adv
         end
+
+        # stabilizing diffusion
+        s.b.values[:] = LHS_stab\s.b.values
 
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
@@ -283,6 +290,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
                 pvd[i*Δt] = vtk
             end
             println("$out_folder/state$i.vtu")
+            cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
+            vtk_grid("$out_folder/stateTF$i", g1.p', cells) do vtk
+                vtk["b"] = s.b.values[1:g1.np]
+            end
+            println("$out_folder/stateTF$i.vtu")
         end
     end
 
