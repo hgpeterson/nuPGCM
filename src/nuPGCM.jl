@@ -137,6 +137,7 @@ using ProgressMeter
 using WriteVTK
 using Delaunay
 using IterativeSolvers
+using CUDA
 
 # global constants
 const secs_in_day = 86400.

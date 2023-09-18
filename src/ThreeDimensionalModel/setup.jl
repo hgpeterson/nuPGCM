@@ -67,10 +67,8 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     χy_τx::M
     barotropic_RHS_τ::FTV
     HM::HM
-    Aξ::A
-    Aη::A
-    Aσξ::A
-    Aση::A
+    Ax::A
+    Ay::A
     advection::Bool
 end
 
@@ -172,13 +170,13 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     # HM and advection arrays for evolution
     if advection
         HM = get_HM(g2, H, nσ)
-        Aξ, Aη, Aσξ, Aση = get_advection_arrays(g1, g2)
+        Ax, Ay = get_advection_arrays(g1, g2)
     else
         HM = spzeros(g2.np, g2.np)
-        Aξ = Aη = Aσξ = Aση = zeros(Float64, 1, 1, 1, 1)
+        Ax = Ay = zeros(1, 1, 1, 1)
     end
 
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
-                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Aξ, Aη, Aσξ, Aση, advection)
+                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Ax, Ay, advection)
 end
