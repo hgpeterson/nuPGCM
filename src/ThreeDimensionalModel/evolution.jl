@@ -1,9 +1,9 @@
 """
-    K_col = get_K_col(σ, κ)
+    K_col = build_K_col(σ, κ)
 
 Compute finite difference matrix `K_col` for diffusion RHS of buoyancy equation.
 """
-function get_K_col(σ, κ)
+function build_K_col(σ, κ)
     nσ = length(σ)
     K = Tuple{Int64,Int64,Float64}[]
     for j=2:nσ-1
@@ -28,12 +28,48 @@ function get_K_col(σ, κ)
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
+function build_K_damp(m::ModelSetup3D)
+    # unpack
+    H = m.H
+    Hx = m.Hx
+    Hy = m.Hy
+    g = m.g2
+    el = g.el
+    nσ = m.nσ
+
+    # σ FE
+    σ = FEField(g.p[:, 3], g)
+
+    # stamp
+    N = g.nt*el.n^2
+    println(N)
+    I = zeros(Int64, N)
+    J = zeros(Int64, N)
+    V = zeros(Float64, N)
+    n = 1
+    for k=1:g.nt
+        k_sfc = get_k_sfc(k, nσ)
+        f(ξ, i, j) = g.J.dets[k]*(φξ(el, ξ, i)*(φξ(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
+                                  φη(el, ξ, i)*(φη(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
+                                  φζ(el, ξ, i)*((1 + σ(ξ, k)^2*(Hx(ξ[1:2], k_sfc)^2 + Hy(ξ[1:2], k_sfc)^2))/H(ξ[1:2], k_sfc)*φζ(el, ξ, j) - 
+                                  σ(ξ, k)*Hx(ξ[1:2], k_sfc)*φξ(el, ξ, j) - 
+                                  σ(ξ, k)*Hy(ξ[1:2], k_sfc)*φη(el, ξ, j)))
+        for i=1:el.n, j=1:el.n
+            I[n] = g.t[k, i]
+            J[n] = g.t[k, j]
+            V[n] = ref_el_quad(ξ -> f(ξ, i, j), el)
+            n += 1
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+end
+
 """
-    HM = get_HM(g2, H, nσ)
+    HM = build_HM(g2, H, nσ)
 
 Compute `HM` = ∫ `H` φᵢ φⱼ for second order 3D grid `g2` with `nσ` vertical nodes.
 """
-function get_HM(g2, H::FEField, nσ)
+function build_HM(g2, H::FEField, nσ)
     # unpack
     g_sfc2 = H.g
     tri2 = g_sfc2.el
@@ -60,7 +96,7 @@ function get_HM(g2, H::FEField, nσ)
 end
 
 """
-    Ax, Ay = get_advection_arrays(g1, g2)
+    Ax, Ay = build_advection_arrays(g1, g2)
 
 Compute advection arrays of the form ∫ φᵢ∂φⱼ∂φₖ where φᵢ and φⱼ are defined on the 
 second order grid `g2` and φₖ is defined on the first order grid `g1`. These are then
@@ -68,7 +104,7 @@ multiplied by the proper Jacobian terms to get the arrays:
     • `Ax` for the  ∂σ(χx)*∂η(b) and -∂η(χx)*∂σ(b) terms,
     • `Ay` for the -∂σ(χy)*∂ξ(b) and  ∂ξ(χy)*∂σ(b) terms.
 """
-function get_advection_arrays(g1, g2)
+function build_advection_arrays(g1, g2)
     # unpack
     J = g1.J
     w1 = g1.el
@@ -82,7 +118,7 @@ function get_advection_arrays(g1, g2)
     Ax  = zeros(Float32, g1.nt, w2.n, w2.n, w1.n)
     Ay  = zeros(Float32, g1.nt, w2.n, w2.n, w1.n)
 
-    @showprogress "Setting up advection arrays..." for k=1:g1.nt
+    @showprogress "Building advection arrays..." for k=1:g1.nt
         # unpack
         jac = J.Js[k, :, :]
         Δ = J.dets[k]
@@ -200,7 +236,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # diffusion matrices
     # α = ε²/μ/ϱ
     α = 1e-3
-    K_cols = [get_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
+    K_cols = [build_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
     for i=1:g_sfc2.np

@@ -15,7 +15,7 @@ function test_1d()
 
     # numerical sol
 
-    A = get_baroclinic_LHS(z, ε², y)
+    A = build_baroclinic_LHS(z, ε², y)
     r = get_baroclinic_RHS(z, bx, by, Ux, Uy, τx, τy, ε²)
     sol = A\r
     ωx = sol[1:nz]

@@ -1,12 +1,12 @@
 """
-    A = get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+    A = build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
 
 Generate LU-factored LHS matrix for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+function build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
     # unpack
     g = νωx_Ux_bot.g
     bdy = g.e["bdy"]
@@ -90,14 +90,14 @@ function get_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
 end
 
 """
-    r = get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    r = build_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
 
 Generate wind component of RHS vector for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+function build_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
     # unpack
     g = νωx_τ_bot.g
     bdy = g.e["bdy"]
@@ -131,16 +131,16 @@ function get_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, 
 end
 
 """
-    r = get_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot)
+    r = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot)
 
 Generate buoyancy component of RHS vector for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; showplots=false)
+function build_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; showplots=false)
     # compute JEBAR
-    JEBAR = get_JEBAR(m, b, showplots=showplots)
+    JEBAR = build_JEBAR(m, b, showplots=showplots)
 
     # unpack
     ε² = m.ε²
@@ -175,7 +175,7 @@ function get_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; show
     return rhs
 end
 
-function get_JEBAR(m::ModelSetup3D, b; showplots=false)
+function build_JEBAR(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
     σ = m.σ

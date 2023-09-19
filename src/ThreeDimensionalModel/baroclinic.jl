@@ -1,5 +1,5 @@
 """
-    A = get_baroclinic_LHS(g, ν, H, ε², f)
+    A = build_baroclinic_LHS(g, ν, H, ε², f)
 
 Create LU-factored matrix for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
@@ -10,7 +10,7 @@ with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
+function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
     # unpack
     J = g.J
     el = g.el
@@ -91,7 +91,7 @@ function get_baroclinic_LHS(g::Grid, ν, H, ε², f)
 end
 
 """
-    r = get_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
+    r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
@@ -102,7 +102,7 @@ with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
+function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
     # unpack
     J = g.J
     el = g.el
@@ -155,7 +155,7 @@ function get_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
     return r
 end
 
-function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; showplots=false)
+function solve_baroclinic_transport(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; showplots=false)
     # pre-allocate 
     nσ = g_col.np
     ωx_Ux = zeros(g_sfc1.np, nσ)
@@ -168,7 +168,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; s
         ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0)
+        r = build_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -196,7 +196,7 @@ function get_transport_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; s
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; showplots=false)
+function solve_baroclinic_wind(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; showplots=false)
     # pre-allocate 
     nσ = g_col.np
     ωx_τx = zeros(g_sfc1.np, nσ)
@@ -209,7 +209,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; sho
         ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = get_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0)
+        r = build_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -237,7 +237,7 @@ function get_wind_ω_and_χ(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; sho
     return ωx_τx, ωy_τx, χx_τx, χy_τx
 end
 
-function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
+function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
     g_col = m.g_col
@@ -268,7 +268,7 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 
             # solve baroclinic problem with bx and by from element column
             j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = get_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0)
+            r = build_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0)
             sol = baroclinic_LHSs[j]\r
 
             # store
@@ -291,7 +291,7 @@ function get_buoyancy_ω_and_χ(m::ModelSetup3D, b; showplots=false)
 end
 
 """
-    Dxs, Dys = get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
+    Dxs, Dys = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
 
 Compute gradient matrices for element column in the 3D mesh `g1` (second order `g2`).
 Store the sparse transpose to save memory so that `Dxs[k, i]` is a (g2.np) × (2*nσ-2) matrix
@@ -302,7 +302,7 @@ that gives
 
 for node column i in surface element k when transposed and multiplied by b.
 """
-function get_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
+function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     # unpack
     w1 = g1.el
     w2 = g2.el
