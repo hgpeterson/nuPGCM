@@ -87,23 +87,20 @@ function get_advection_arrays(g1, g2)
         jac = J.Js[k, :, :]
         Δ = J.dets[k]
 
-        # -∂σ(χy)*∂ξ(b)
-        Ay[k, :, :, :] -= sum(A[:, :, :, d1, d2]*jac[d1, 3]*jac[d2, 1]*Δ for d1=1:3, d2=1:3)
+        for d1=1:3, d2=1:3
+            # ∂σ(χx)*∂η(b) - ∂η(χx)*∂σ(b)
+            Ax[k, :, :, :] += A[:, :, :, d1, d2]*(jac[d1, 3]*jac[d2, 2] - jac[d1, 2]*jac[d2, 3])*Δ
 
-        # ∂σ(χx)*∂η(b)
-        Ax[k, :, :, :] += sum(A[:, :, :, d1, d2]*jac[d1, 3]*jac[d2, 2]*Δ for d1=1:3, d2=1:3)
-
-        # ∂ξ(χy)*∂σ(b)
-        Ay[k, :, :, :] += sum(A[:, :, :, d1, d2]*jac[d1, 1]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
-
-        # -∂η(χx)*∂σ(b)
-        Ax[k, :, :, :] -= sum(A[:, :, :, d1, d2]*jac[d1, 2]*jac[d2, 3]*Δ for d1=1:3, d2=1:3)
+            # ∂ξ(χy)*∂σ(b) - ∂σ(χy)*∂ξ(b)
+            Ay[k, :, :, :] += A[:, :, :, d1, d2]*(jac[d1, 1]*jac[d2, 3] - jac[d1, 3]*jac[d2, 1])*Δ
+        end
     end
 
     Ax_gpu = CuArray(Ax)
     Ay_gpu = CuArray(Ay)
 
     return Ax_gpu, Ay_gpu
+    # return Ax, Ay
 end
 
 # function advection(m::ModelSetup3D, χx, χy, b)
