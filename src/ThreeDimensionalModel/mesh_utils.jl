@@ -29,14 +29,18 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
     end
 
     # boundaries on second order grid
-    e2 = Dict("sfc"=>collect(nσ:nσ:np2), "bot"=>collect(1:nσ:np2-nσ+1))
+    e2 = Dict("sfc"=>collect(nσ:nσ:np2), 
+              "bot"=>collect(1:nσ:np2-nσ+1),
+              "coast"=>flatten(collect.(get_col_inds.(g_sfc2.e["bdy"], nσ))))
 
     # second order grid
     g2 = Grid(Wedge(order=2), p2, t2, e2)
 
     # first order grid
     np1 = g_sfc1.np*nσ
-    e1 = Dict("sfc"=>collect(nσ:nσ:np1), "bot"=>collect(1:nσ:np1-nσ+1))
+    e1 = Dict("sfc"=>collect(nσ:nσ:np1), 
+              "bot"=>collect(1:nσ:np1-nσ+1),
+              "coast"=>flatten(collect.(get_col_inds.(g_sfc1.e["bdy"], nσ))))
     g1 = Grid(Wedge(order=1), p2[1:np1, :], t2[:, 1:6], e1)
 
     vtk_grid("$out_folder/mesh.vtu", g1.p', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk 
@@ -105,3 +109,15 @@ Returns the index `i` for the top node in the `i_sfc`th column of a mesh with `n
 vertical nodes.
 """
 get_i_top(i_sfc, nσ) = i_sfc*nσ
+
+# quick hack...
+function flatten(A)
+    n = sum(length(A[i]) for i ∈ eachindex(A))
+    Af = zeros(typeof(A[1][1]), n)
+    i = 1
+    for j ∈ eachindex(A)
+        Af[i:i+length(A[j])-1] = A[j]
+        i += length(A[j])
+    end
+    return Af
+end

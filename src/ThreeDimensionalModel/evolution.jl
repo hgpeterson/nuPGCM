@@ -42,12 +42,11 @@ function build_K_damp(m::ModelSetup3D)
 
     # stamp
     N = g.nt*el.n^2
-    println(N)
     I = zeros(Int64, N)
     J = zeros(Int64, N)
     V = zeros(Float64, N)
     n = 1
-    for k=1:g.nt
+    @showprogress "Building diffusion matrix..." for k=1:g.nt
         k_sfc = get_k_sfc(k, nσ)
         f(ξ, i, j) = g.J.dets[k]*(φξ(el, ξ, i)*(φξ(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
                                   φη(el, ξ, i)*(φη(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
@@ -61,7 +60,7 @@ function build_K_damp(m::ModelSetup3D)
             n += 1
         end
     end
-    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+    return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
 """

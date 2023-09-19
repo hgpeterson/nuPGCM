@@ -2,11 +2,11 @@ using nuPGCM
 using PyPlot
 using Printf
 
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-set_out_folder("output")
+set_out_folder("../output")
 
 # depth
 H(x) = 1 - x[1]^2 - x[2]^2
@@ -27,7 +27,7 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "meshes/circle/mesh2.h5")
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=true)
     save_setup(m)
     return m
@@ -49,10 +49,14 @@ function run(m)
     return s
 end
 
-# m = setup()
-m = load_setup_3D("$out_folder/setup.h5")
+m = setup()
+# m = load_setup_3D("$out_folder/setup.h5")
 # s = run(m)
 # s = load_state_3D("$out_folder/state.h5")
+
+# K_damp = nuPGCM.build_K_damp(m)
+# u = [exp(m.g2.p[i, 1] + m.g2.p[i, 2] + m.g2.p[i, 3]*m.H[nuPGCM.get_i_sfc(i, m.nσ)]) for i=1:m.g2.np] 
+
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
