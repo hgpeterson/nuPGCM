@@ -100,7 +100,6 @@ function get_advection_arrays(g1, g2)
     Ay_gpu = CuArray(Ay)
 
     return Ax_gpu, Ay_gpu
-    # return Ax, Ay
 end
 
 # function advection(m::ModelSetup3D, χx, χy, b)
@@ -152,15 +151,18 @@ function advection(m::ModelSetup3D, χx, χy, b)
     b_gpu = CuArray(b.values)
     t2 = CuArray(m.g2.t)
 
-    # setup advection kernel
-    kernel = @cuda launch=false gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
-    config = launch_configuration(kernel.fun)
-    N = m.g2.nt*m.g2.nn
-    threads = min(N, config.threads)
-    blocks = cld(N, threads)
+    # # setup advection kernel
+    # kernel = @cuda launch=false gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
+    # config = launch_configuration(kernel.fun)
+    # N = m.g2.nt*m.g2.nn
+    # threads = min(N, config.threads)
+    # blocks = cld(N, threads)
+    # println(threads)
+    # println(blocks)
 
     CUDA.@sync begin
-        kernel(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
+        # kernel(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
+        @cuda threads=512 blocks=cld(length(t2), 512) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
     end
 
     # copy result to CPU
@@ -186,12 +188,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # stiffness matrix for stabilizing diffusion
     K_stab = stiffness_matrix(g2)
-    LHS_stab = lu(I + 2e1*Δt*K_stab)
+    LHS_stab = lu(I + 4e1*Δt/2*K_stab)
 
     # timestep
     Δt = 0.04
-    n_steps = 1
-    n_steps_plot = 1
+    n_steps = 200
+    n_steps_plot = 20
     # n_steps = Int64(round(t_final/Δt))
     # n_steps_plot = Int64(round(t_plot/Δt))
 
@@ -261,11 +263,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        s.b.values[:] = LHS_stab\s.b.values
 
         # Δt advection step
         if m.advection
             # invert!(m, s)
-            @time cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
             # invert!(m, s)
@@ -274,14 +277,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             s.b.values[:] = s.b.values + Δt*adv
         end
 
-        # stabilizing diffusion
-        s.b.values[:] = LHS_stab\s.b.values
 
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        s.b.values[:] = LHS_stab\s.b.values
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
