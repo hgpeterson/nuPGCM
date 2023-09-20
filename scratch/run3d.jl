@@ -49,14 +49,38 @@ function run(m)
     return s
 end
 
-m = setup()
+# m = setup()
 # m = load_setup_3D("$out_folder/setup.h5")
-# s = run(m)
+s = run(m)
 # s = load_state_3D("$out_folder/state.h5")
 
+# M = nuPGCM.mass_matrix(m.g2)
 # K_damp = nuPGCM.build_K_damp(m)
-# u = [exp(m.g2.p[i, 1] + m.g2.p[i, 2] + m.g2.p[i, 3]*m.H[nuPGCM.get_i_sfc(i, m.nσ)]) for i=1:m.g2.np] 
-
+# # K_damp = nuPGCM.stiffness_matrix(m.g2)
+# for bdy ∈ keys(m.g2.e)
+#     for i ∈ m.g2.e[bdy]
+#         K_damp[i, :] .= 0
+#         K_damp[i, i] = 1
+#     end
+# end
+# u = [exp((m.g2.p[i, 1] + m.g2.p[i, 2] + m.g2.p[i, 3]*m.H[nuPGCM.get_i_sfc(i, m.nσ)])√3) for i=1:m.g2.np] 
+# # u = [exp((m.g2.p[i, 1] + m.g2.p[i, 2] + m.g2.p[i, 3])/√3) for i=1:m.g2.np] 
+# # rhs = -(M*u)
+# rhs = -(m.HM*u)
+# for bdy ∈ keys(m.g2.e)
+#     for i ∈ m.g2.e[bdy]
+#         rhs[i] = u[i]
+#     end
+# end
+# u0 = K_damp\rhs
+# println(maximum(abs.(u - u0)))
+# cells = [MeshCell(VTKCellTypes.VTK_WEDGE, m.g1.t[i, :]) for i ∈ axes(m.g1.t, 1)]
+# vtk_grid("$out_folder/u", m.g1.p', cells) do vtk
+#     vtk["u"] = u[1:m.g1.np]
+#     vtk["u0"] = u0[1:m.g1.np]
+#     vtk["err"] = abs.(u[1:m.g1.np] - u0[1:m.g1.np])
+# end
+# println("$out_folder/u.vtu")
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)

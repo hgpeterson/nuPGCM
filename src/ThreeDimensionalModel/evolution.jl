@@ -137,18 +137,15 @@ function build_advection_arrays(g1, g2)
     return Ax_gpu, Ay_gpu
 end
 
-# function advection(m::ModelSetup3D, χx, χy, b)
-#     g1 = m.g1
-#     g2 = m.g2
-#     adv = zeros(g2.np)
-#     for k=1:g2.nt, i=1:g2.nn
-#         adv[g2.t[k, i]] += sum(m.Aξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aη[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aσξ[k, i, ib, iχ]*b[g2.t[k, ib]]*χy[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn) +
-#                            sum(m.Aση[k, i, ib, iχ]*b[g2.t[k, ib]]*χx[k, iχ] for ib=1:g2.nn, iχ=1:g1.nn)
-#     end
-#     return adv
-# end
+function advection(m::ModelSetup3D, Ax, Ay, χx, χy, b)
+    t2 = m.g2.t
+    adv = zeros(m.g2.np)
+    Is = CartesianIndices((axes(Ax, 1), axes(Ax, 2)))
+    for i ∈ eachindex(Is), ib ∈ axes(Ax, 3), iχ ∈ axes(Ax, 4)
+        adv[t2[Is[i]]] += (Ax[Is[i], ib, iχ]*χx[Is[i][1], iχ] + Ay[Is[i], ib, iχ]*χy[Is[i][1], iχ])*b[t2[Is[i][1], ib]]
+    end                                                
+    return adv
+end
 
 # function advection_chunk!(adv, k_chunk, m::ModelSetup3D, χx, χy, b)
 #     g1 = m.g1
@@ -173,14 +170,16 @@ function gpu_adv!(adv, Ax, Ay, χx, χy, b, t2)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
     Is = CartesianIndices((axes(Ax, 1), axes(Ax, 2)))
-    for i=index:stride:length(Is), ib ∈ axes(Ax, 3), iχ ∈ axes(Ax, 4)
-        adv[t2[Is[i]]] += (Ax[Is[i], ib, iχ]*χx[Is[i][1], iχ] + Ay[Is[i], ib, iχ]*χy[Is[i][1], iχ])*b[t2[Is[i][1], ib]]
+    for i = index:stride:length(Is)
+        for ib ∈ axes(Ax, 3), iχ ∈ axes(Ax, 4)
+            adv[Is[i]] += (Ax[Is[i], ib, iχ]*χx[Is[i][1], iχ] + Ay[Is[i], ib, iχ]*χy[Is[i][1], iχ])*b[t2[Is[i][1], ib]]
+        end
     end
     return 
 end
 function advection(m::ModelSetup3D, χx, χy, b)
     # load arrays on GPU
-    adv = CUDA.zeros(m.g2.np) 
+    adv = CUDA.zeros(m.g2.nt, m.g2.nn) 
     χx_gpu = CuArray(χx.values)
     χy_gpu = CuArray(χy.values)
     b_gpu = CuArray(b.values)
@@ -201,7 +200,22 @@ function advection(m::ModelSetup3D, χx, χy, b)
     end
 
     # copy result to CPU
-    return Array(adv)
+    cpu_adv = Array(adv)
+    return cpu_adv
+
+    # sum 
+    # return [sum(cpu_adv[I] for I ∈ m.g2.p_to_t[i]) for i=1:m.g2.np] 
+end
+
+function build_element_map(g)
+    imap = reshape(1:length(g.t), g.nt, g.nn)
+    A = Tuple{Int64,Int64,Int64}[]
+    for i=1:g.np
+        for I ∈ g.p_to_t[i]
+            push!(A, (i, imap[I], 1))
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, length(g.t)))
 end
 
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
@@ -218,15 +232,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     HM = m.HM
     g_sfc2 = m.g_sfc2
 
+    # element map
+    el_map = build_element_map(g2)
+
     # mass matrix for computing ∫b
     M = mass_matrix(g2)
 
     # stiffness matrix for stabilizing diffusion
     K_stab = stiffness_matrix(g2)
-    LHS_stab = lu(I + 4e1*Δt/2*K_stab)
+    LHS_stab = M + 1e4*Δt/2*K_stab
+    #2.373119353165119
 
     # timestep
-    Δt = 0.04
+    Δt = 0.1
     n_steps = 200
     n_steps_plot = 20
     # n_steps = Int64(round(t_final/Δt))
@@ -263,7 +281,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     end
 
     # initial condition
-    ∫b₀ = sum(M*s.b.values)
+    ∫b₀ = sum(HM*s.b.values)
     @info "Initial condition" ∫b₀
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
     vtk_grid("$out_folder/state0", pz', cells) do vtk
@@ -298,27 +316,32 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        s.b.values[:] = LHS_stab\s.b.values
+        # cg!(s.b.values[:], LHS_stab, M*s.b.values)
 
         # Δt advection step
         if m.advection
             # invert!(m, s)
-            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
-            # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
+            adv_el = advection(m, s.χx, s.χy, s.b)
+            adv_node = el_map*adv_el[:]
+            cg!(adv, HM, -adv_node)
+            # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            # cg!(adv, HM, -advection(m, Ax, Ay, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt/2*adv
             # invert!(m, s)
-            cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
-            # adv[:] = -(HM\advection(m, s.χx, s.χy, s.b))
+            adv_el = advection(m, s.χx, s.χy, s.b)
+            adv_node = el_map*adv_el[:]
+            cg!(adv, HM, -adv_node)
+            # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
+            # cg!(adv, HM, -advection(m, Ax, Ay, s.χx, s.χy, s.b))
             s.b.values[:] = s.b.values + Δt*adv
         end
-
 
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        s.b.values[:] = LHS_stab\s.b.values
+        # cg!(s.b.values[:], LHS_stab, M*s.b.values)
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
@@ -332,7 +355,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
             # info
             t_elapsed = time() - t0
-            ∫b = sum(M*s.b.values) 
+            ∫b = sum(HM*s.b.values) 
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
             @info @sprintf("%d steps in %d s (ETR: %.1f m)", i, t_elapsed, (n_steps-i)*t_elapsed/i/60) ∫b Δb Δb_pct

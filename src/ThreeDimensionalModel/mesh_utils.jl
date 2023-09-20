@@ -110,7 +110,28 @@ vertical nodes.
 """
 get_i_top(i_sfc, nσ) = i_sfc*nσ
 
-# quick hack...
+"""
+    Af = flatten(A)
+
+Quick and dirty utility function to flatten a vector of vectors into a single vector.
+
+# Examples
+
+```
+julia> A = [[1, 2], [3, 4]]
+2-element Vector{Vector{Int64}}:
+ [1, 2]
+ [3, 4, 5]
+
+julia> flatten(A)
+5-element Vector{Int64}:
+ 1
+ 2
+ 3
+ 4
+ 5
+```
+"""
 function flatten(A)
     n = sum(length(A[i]) for i ∈ eachindex(A))
     Af = zeros(typeof(A[1][1]), n)
