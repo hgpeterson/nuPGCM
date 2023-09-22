@@ -28,14 +28,9 @@ function build_K_col(σ, κ)
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
-function build_K_damp(m::ModelSetup3D)
+function build_K_damp(g, H, Hx, Hy, nσ)
     # unpack
-    H = m.H
-    Hx = m.Hx
-    Hy = m.Hy
-    g = m.g2
     el = g.el
-    nσ = m.nσ
 
     # σ FE
     σ = FEField(g.p[:, 3], g)
