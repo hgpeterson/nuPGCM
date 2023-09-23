@@ -35,26 +35,37 @@ function build_K_damp(g, H, Hx, Hy, nσ)
     # σ FE
     σ = FEField(g.p[:, 3], g)
 
+    # integrand function
+    function f(ξ, i, j, k, k_sfc, jac)
+        ∇φi_ref = [∂φ(el, ξ, i, d) for d=1:3]
+        ∇φj_ref = [∂φ(el, ξ, j, d) for d=1:3]
+        ∇φi = jac'*∇φi_ref
+        ∇φj = jac'*∇φj_ref
+        return g.J.dets[k]*(∇φi[1]*(∇φj[1]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[3]) + 
+                            ∇φi[2]*(∇φj[2]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[3]) + 
+                            ∇φi[3]*((1 + σ(ξ, k)^2*(Hx(ξ[1:2], k_sfc)^2 + Hy(ξ[1:2], k_sfc)^2))/H(ξ[1:2], k_sfc)*∇φj[3] - 
+                            σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[1] - 
+                            σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[2]))
+    end
+
     # stamp
     N = g.nt*el.n^2
     I = zeros(Int64, N)
     J = zeros(Int64, N)
     V = zeros(Float64, N)
     n = 1
+    t_0 = time()
     @showprogress "Building diffusion matrix..." for k=1:g.nt
         k_sfc = get_k_sfc(k, nσ)
-        f(ξ, i, j) = g.J.dets[k]*(φξ(el, ξ, i)*(φξ(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
-                                  φη(el, ξ, i)*(φη(el, ξ, j)*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*φζ(el, ξ, j)) + 
-                                  φζ(el, ξ, i)*((1 + σ(ξ, k)^2*(Hx(ξ[1:2], k_sfc)^2 + Hy(ξ[1:2], k_sfc)^2))/H(ξ[1:2], k_sfc)*φζ(el, ξ, j) - 
-                                  σ(ξ, k)*Hx(ξ[1:2], k_sfc)*φξ(el, ξ, j) - 
-                                  σ(ξ, k)*Hy(ξ[1:2], k_sfc)*φη(el, ξ, j)))
+        jac = g.J.Js[k, :, :]
         for i=1:el.n, j=1:el.n
             I[n] = g.t[k, i]
             J[n] = g.t[k, j]
-            V[n] = ref_el_quad(ξ -> f(ξ, i, j), el)
+            V[n] = ref_el_quad(ξ -> f(ξ, i, j, k, k_sfc, jac), el)
             n += 1
         end
     end
+    println(time() - t_0)
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
