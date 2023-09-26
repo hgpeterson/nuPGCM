@@ -51,7 +51,7 @@ end
 
 # m = setup()
 # m = load_setup_3D("$out_folder/setup.h5")
-# s = run(m)
+s = run(m)
 # s = load_state_3D("$out_folder/state.h5")
 
 function compare_profiles(m, s, m2D, s2D, x, y)

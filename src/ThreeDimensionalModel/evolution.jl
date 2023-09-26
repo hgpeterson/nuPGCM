@@ -28,7 +28,7 @@ function build_K_col(σ, κ)
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
-function build_K_damp(g, H, Hx, Hy, nσ)
+function build_K_stab(g, H, Hx, Hy, nσ)
     # unpack
     el = g.el
 
@@ -54,7 +54,6 @@ function build_K_damp(g, H, Hx, Hy, nσ)
     J = zeros(Int64, N)
     V = zeros(Float64, N)
     n = 1
-    t_0 = time()
     @showprogress "Building diffusion matrix..." for k=1:g.nt
         k_sfc = get_k_sfc(k, nσ)
         jac = g.J.Js[k, :, :]
@@ -65,7 +64,6 @@ function build_K_damp(g, H, Hx, Hy, nσ)
             n += 1
         end
     end
-    println(time() - t_0)
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
@@ -236,22 +234,21 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     nσ = m.nσ
     H = m.H
     HM = m.HM
+    K_stab = m.K_stab
     g_sfc2 = m.g_sfc2
 
     # element map
     el_map = build_element_map(g2)
 
-    # mass matrix for computing ∫b
-    M = mass_matrix(g2)
-
     # stiffness matrix for stabilizing diffusion
-    K_stab = stiffness_matrix(g2)
-    LHS_stab = M + 1e4*Δt/2*K_stab
-    #2.373119353165119
+    LHS_stab = HM + 1e4*Δt/2*K_stab
+
+    # Ax = Array(m.Ax)
+    # Ay = Array(m.Ay)
 
     # timestep
     Δt = 0.1
-    n_steps = 200
+    n_steps = 100
     n_steps_plot = 20
     # n_steps = Int64(round(t_final/Δt))
     # n_steps_plot = Int64(round(t_plot/Δt))
@@ -318,17 +315,18 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         # println("step $i")
 
         # Δt/2 diffusion step
+        # cg!(s.b.values[:], LHS_stab, HM*s.b.values)
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        # cg!(s.b.values[:], LHS_stab, M*s.b.values)
 
         # Δt advection step
         if m.advection
             # invert!(m, s)
             adv_el = advection(m, s.χx, s.χy, s.b)
             adv_node = el_map*adv_el[:]
+            # adv_node = advection(m, Ax, Ay, s.χx, s.χy, s.b)
             cg!(adv, HM, -adv_node)
             # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # cg!(adv, HM, -advection(m, Ax, Ay, s.χx, s.χy, s.b))
@@ -336,6 +334,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # invert!(m, s)
             adv_el = advection(m, s.χx, s.χy, s.b)
             adv_node = el_map*adv_el[:]
+            # adv_node = advection(m, Ax, Ay, s.χx, s.χy, s.b)
             cg!(adv, HM, -adv_node)
             # cg!(adv, HM, -advection(m, s.χx, s.χy, s.b))
             # cg!(adv, HM, -advection(m, Ax, Ay, s.χx, s.χy, s.b))
@@ -347,7 +346,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        # cg!(s.b.values[:], LHS_stab, M*s.b.values)
+        cg!(s.b.values[:], LHS_stab, HM*s.b.values)
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
