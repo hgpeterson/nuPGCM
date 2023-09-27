@@ -34,25 +34,38 @@ function setup()
 end
 
 function run(m)
-    # b = FEField(x -> H(x)*x[3], m.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
 
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     # nuPGCM.plot_u(m, s, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
-    s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
+    # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
     t_final = 500*m.Δt
     t_plot = t_final/50
+    # t_final = m.Δt
+    # t_plot = t_final
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
 # m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
-s = run(m)
+m = load_setup_3D("$out_folder/setup.h5")
+# s = run(m)
 # s = load_state_3D("$out_folder/state.h5")
+
+for i=10:10:310
+    global m
+    s = load_state_3D("../output/state$i.h5")
+    nuPGCM.quick_plot(s.Ψ, L"Barotropic streamfunction $\Psi$", @sprintf("%s/psi%03d.png", out_folder, i))
+    Ux, Uy = nuPGCM.compute_U(s.Ψ)
+    nuPGCM.quick_plot(Ux, L"Zonal transport $U^x$", @sprintf("%s/Ux%03d.png", out_folder, i))
+    nuPGCM.quick_plot(Uy, L"Meridional transport $U^y$", @sprintf("%s/Uy%03d.png", out_folder, i))
+    nuPGCM.plot_xslice(m, s.b, s.χx, 0, cb_label=L"Streamfunction $\chi^x$", fname=@sprintf("%s/chix%03d.png", out_folder, i))
+    nuPGCM.plot_xslice(m, s.b, s.χy, 0, cb_label=L"Streamfunction $\chi^y$", fname=@sprintf("%s/chiy%03d.png", out_folder, i))
+end
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)

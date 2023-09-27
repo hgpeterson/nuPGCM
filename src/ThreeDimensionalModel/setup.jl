@@ -109,8 +109,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     # unpack
     σ = g_col.p
     nσ = g_col.np
-    println("BL thickness: ", √(2*ε²))
-    println("Bottom resolution: ", σ[2] - σ[1])
+    @printf("BL thickness: %1.1e\n", √(2*ε²))
+    @printf("Bottom res:   %1.1e\n", σ[2] - σ[1])
 
     # fields for later
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
@@ -172,7 +172,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     if advection
         HM = build_HM(g2, H, nσ)
         Ax, Ay = build_advection_arrays(g1, g2)
-        K_stab = build_K_stab(g2, H, Hx, Hy, nσ)
+        # K_stab = build_K_stab(g2, H, Hx, Hy, nσ)
+        K_stab = spzeros(g2.np, g2.np)
     else
         HM = spzeros(g2.np, g2.np)
         Ax = Ay = zeros(1, 1, 1, 1)

@@ -17,7 +17,7 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     end
 
     # take gradients to get Uˣ and Uʸ
-    Ux, Uy = get_Ux_Uy(Ψ, showplots=showplots)
+    Ux, Uy = compute_U(Ψ, showplots=showplots)
 
     # put them all together to get full ω's and χ's
     for k=1:g_sfc1.nt
@@ -45,8 +45,10 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
         plot_profiles(m, b, ωx, ωy, χx, χy, -0.5, 0.0, fname="$out_folder/profiles_x=-0.5_y=0.0.png")
         plot_profiles(m, b, ωx, ωy, χx, χy, 0.0,  0.5, fname="$out_folder/profiles_x=0.0_y=+0.5.png")
         plot_profiles(m, b, ωx, ωy, χx, χy, 0.0, -0.5, fname="$out_folder/profiles_x=0.0_y=-0.5.png")
-        plot_xslices(m, b, ωx, ωy, χx, χy, 0.0, fname="$out_folder/xslices_y=0.0.png")
-        plot_yslices(m, b, ωx, ωy, χx, χy, 0.0, fname="$out_folder/yslices_x=0.0.png")
+        plot_xslice(m, b, χx, 0.0, fname="$out_folder/xslice_chix.png", cb_label=L"Streamfunction $\chi^x$")
+        plot_xslice(m, b, χy, 0.0, fname="$out_folder/xslice_chiy.png", cb_label=L"Streamfunction $\chi^y$")
+        plot_yslice(m, b, χx, 0.0, fname="$out_folder/yslice_chix.png", cb_label=L"Streamfunction $\chi^x$")
+        plot_yslice(m, b, χy, 0.0, fname="$out_folder/yslice_chiy.png", cb_label=L"Streamfunction $\chi^y$")
     end
 
     return ωx, ωy, χx, χy, Ψ
@@ -64,7 +66,7 @@ function invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
     return s
 end
 
-function get_Ux_Uy(Ψ; showplots=false)
+function compute_U(Ψ; showplots=false)
     g = Ψ.g
     Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
     Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)

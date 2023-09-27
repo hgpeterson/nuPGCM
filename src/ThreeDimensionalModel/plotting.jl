@@ -201,7 +201,7 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     println(fname)
 end
 
-function plot_xslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, y; fname="$out_folder/xslices.png")
+function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y; cb_label, fname)
     # params
     nx = 2^8
     nσ = m.nσ
@@ -231,39 +231,24 @@ function plot_xslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, y; fname="$out_fol
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
 
     # evaluate
-    ωx_fe = FEField(ωx)
-    ωy_fe = FEField(ωy)
-    χx_fe = FEField(χx)
-    χy_fe = FEField(χy)
-    ωxs = [ωx_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
-    ωys = [ωy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
-    χxs = [χx_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
-    χys = [χy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
+    u_fe = FEField(u)
+    us = [u_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
     bs = [b(ξ_ws[i, j], k_ws[i, j])   for i=1:nσ, j=1:nx]
 
     # plot
-    fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
-    plot_slice(ax[1, 1], xx, zz, ωxs, bs, L"Vorticity $\omega^x$")
-    plot_slice(ax[1, 2], xx, zz, ωys, bs, L"Vorticity $\omega^y$")
-    plot_slice(ax[2, 1], xx, zz, χxs, bs, L"Streamfunction $\chi^x$")
-    plot_slice(ax[2, 2], xx, zz, χys, bs, L"Streamfunction $\chi^y$")
-    for a in ax
-        a.set_xticks(-1:0.5:1)
-        a.set_yticks(-1:0.5:0)
-        a.set_xlabel(L"Zonal coordinate $x$")
-        a.set_ylabel(L"Vertical coordinate $z$")
-    end
-    subplots_adjust(hspace=0.3, wspace=0.5)
-    ax[1, 1].set_title(latexstring(@sprintf("Slice at \$y = %1.1f\$", y)), x=1.3, y=0.95)
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, xx, zz, us, bs, cb_label)
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_title(latexstring(@sprintf("Slice at \$y = %1.1f\$", y)))
     savefig(fname)
     println(fname)
     plt.close()
 end
-function plot_xslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
-    plot_xslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
-end
 
-function plot_yslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, x; fname="$out_folder/yslices.png")
+function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x; fname, cb_label)
     # params
     ny = 2^8
     nσ = m.nσ
@@ -293,36 +278,21 @@ function plot_yslices(m::ModelSetup3D, b, ωx, ωy, χx, χy, x; fname="$out_fol
     zz = repeat(σ, 1, ny).*repeat(Hs', nσ, 1)
 
     # evaluate
-    ωx_fe = FEField(ωx)
-    ωy_fe = FEField(ωy)
-    χx_fe = FEField(χx)
-    χy_fe = FEField(χy)
-    ωxs = [ωx_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
-    ωys = [ωy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
-    χxs = [χx_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
-    χys = [χy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
+    u_fe = FEField(u)
+    us = [u_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
     bs = [b(ξ_ws[i, j], k_ws[i, j])   for i=1:nσ, j=1:ny]
 
     # plot
-    fig, ax = plt.subplots(2, 2, figsize=(6.4, 4))
-    plot_slice(ax[1, 1], yy, zz, ωxs, bs, L"Vorticity $\omega^x$")
-    plot_slice(ax[1, 2], yy, zz, ωys, bs, L"Vorticity $\omega^y$")
-    plot_slice(ax[2, 1], yy, zz, χxs, bs, L"Streamfunction $\chi^x$")
-    plot_slice(ax[2, 2], yy, zz, χys, bs, L"Streamfunction $\chi^y$")
-    for a in ax
-        a.set_xticks(-1:0.5:1)
-        a.set_yticks(-1:0.5:0)
-        a.set_xlabel(L"Meridional coordinate $y$")
-        a.set_ylabel(L"Vertical coordinate $z$")
-    end
-    subplots_adjust(hspace=0.3, wspace=0.5)
-    ax[1, 1].set_title(latexstring(@sprintf("Slice at \$x = %1.1f\$", x)), x=1.3, y=0.95)
+    fig, ax = plt.subplots(1)
+    plot_slice(ax, yy, zz, us, bs, cb_label)
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    ax.set_xlabel(L"Meridional coordinate $x$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_title(latexstring(@sprintf("Slice at \$x = %1.1f\$", x)))
     savefig(fname)
     println(fname)
     plt.close()
-end
-function plot_yslices(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
-    plot_yslices(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
 end
 
 function plot_u(m::ModelSetup3D, s::ModelState3D, y)
