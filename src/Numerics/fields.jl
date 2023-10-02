@@ -98,6 +98,7 @@ function FEField(u::DGField)
     u_cg ./= count
     return FEField(u_cg, g)
 end
+FEField(u::FEField) = u
 
 struct FVField{V<:AbstractVector, G<:Grid} <: AbstractField{V, G}
     # values of FV field on the elements of the grid
