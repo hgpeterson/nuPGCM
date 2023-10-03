@@ -20,9 +20,7 @@ function setup()
     ϱ = 1e0
     # ϱ = 1e-4
     # Δt = 1e-3*μ*ϱ/ε²
-    # Δt = 1e-4*μ*ϱ/ε²
-    # Δt = 5e-5*μ*ϱ/ε²
-    Δt = 1e-3
+    Δt = 1e-4*μ*ϱ/ε²
     f = 1.
     β = 0.
     τx(x) = 0.
@@ -37,36 +35,28 @@ function setup()
 end
 
 function run(m)
-    # b = FEField(x -> H(x)*x[3], m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
-    b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + H([0, 0])/2)^2)/0.02), m.g2)
+    # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + H([0, 0])/2)^2)/0.02), m.g2)
 
-    # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
-    ωx = DGField(0, m.g1)
-    ωy = DGField(0, m.g1)
-    χx = DGField(0, m.g1)
-    χy = DGField(0, m.g1)
-    Ψ = FEField(0, m.g_sfc1)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
-    # nuPGCM.plot_u(m, s, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
-    # t_final = 5e-2*m.μ*m.ϱ/m.ε²
-    # t_plot = t_final/500
-    t_final = m.Δt
-    t_plot = t_final
+    t_final = 5e-2*m.μ*m.ϱ/m.ε²
+    t_plot = t_final/50
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
-m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
-s = run(m)
-# s = load_state_3D("$out_folder/state.h5")
+# m = setup()
+# # m = load_setup_3D("$out_folder/setup.h5")
+# s = run(m)
+# # s = load_state_3D("$out_folder/state.h5")
 
 function animate(m)
-    for i=2:2:792
+    for i=10:10:500
         s = load_state_3D("../output/state$i.h5")
         nuPGCM.quick_plot(s.Ψ, L"Barotropic streamfunction $\Psi$", @sprintf("%s/psi%03d.png", out_folder, i))
         # Ux, Uy = nuPGCM.compute_U(s.Ψ)
@@ -77,7 +67,7 @@ function animate(m)
     end
 end
 
-# animate(m)
+animate(m)
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)
