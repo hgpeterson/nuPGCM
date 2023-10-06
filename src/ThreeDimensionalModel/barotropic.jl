@@ -19,61 +19,39 @@ function build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²
     # indices
     N = g.np
 
+    # integrands
+    function ∫K(ξ, i, j, k)
+        φx_i = φξ(el, ξ, i)*J.Js[k, 1, 1] + φη(el, ξ, i)*J.Js[k, 2, 1]
+        φy_i = φξ(el, ξ, i)*J.Js[k, 1, 2] + φη(el, ξ, i)*J.Js[k, 2, 2]
+        φx_j = φξ(el, ξ, j)*J.Js[k, 1, 1] + φη(el, ξ, j)*J.Js[k, 2, 1]
+        φy_j = φξ(el, ξ, j)*J.Js[k, 1, 2] + φη(el, ξ, j)*J.Js[k, 2, 2]
+        φ_i = φ(g.el, ξ, i)
+        return -ε²*(3*νωy_Ux_bot(ξ, k)/H(ξ, k)*(φx_j*Hx(ξ, k) + φy_j*Hy(ξ, k))*φ_i +
+                      νωy_Ux_bot(ξ, k)*(φx_i*φx_j + φy_i*φy_j))*J.dets[k]
+    end
+    function ∫K′(ξ, i, j, k)
+        φx_i = φξ(el, ξ, i)*J.Js[k, 1, 1] + φη(el, ξ, i)*J.Js[k, 2, 1]
+        φy_i = φξ(el, ξ, i)*J.Js[k, 1, 2] + φη(el, ξ, i)*J.Js[k, 2, 2]
+        φx_j = φξ(el, ξ, j)*J.Js[k, 1, 1] + φη(el, ξ, j)*J.Js[k, 2, 1]
+        φy_j = φξ(el, ξ, j)*J.Js[k, 1, 2] + φη(el, ξ, j)*J.Js[k, 2, 2]
+        φ_i = φ(g.el, ξ, i)
+        return -ε²*(3*νωx_Ux_bot(ξ, k)/H(ξ, k)*(φy_j*Hx(ξ, k) - φx_j*Hy(ξ, k))*φ_i +
+                      νωx_Ux_bot(ξ, k)*(φx_i*φy_j - φy_i*φx_j))*J.dets[k]
+    end
+    function ∫C(ξ, i, j, k)
+        φx_j = φξ(el, ξ, j)*J.Js[k, 1, 1] + φη(el, ξ, j)*J.Js[k, 2, 1]
+        φy_j = φξ(el, ξ, j)*J.Js[k, 1, 2] + φη(el, ξ, j)*J.Js[k, 2, 2]
+        φ_i = φ(g.el, ξ, i)
+        return ((H(ξ, k)*β - f_fe(ξ, k)*Hy(ξ, k))*φx_j + f_fe(ξ, k)*Hx(ξ, k)*φy_j)*φ_i*H(ξ, k)*J.dets[k]
+    end
+
     # stamp
     A = Tuple{Int64,Int64,Float64}[]
-    print("Building barotropic LHS matrix")
-    t₀ = time()
-    for k=1:g.nt
-        if mod(k, Int64(round(0.25*g.nt))) == 0
-            print(".")
-        end
-        # Jacobian terms
-        ξx = J.Js[k, 1, 1]
-        ξy = J.Js[k, 1, 2]
-        ηx = J.Js[k, 2, 1]
-        ηy = J.Js[k, 2, 2]
-        ∂x∂ξ = J.dets[k]
-
-        # K
-        function func_K(ξ, i, j)
-            φx_i = φξ(el, ξ, i)*ξx + φη(el, ξ, i)*ηx
-            φy_i = φξ(el, ξ, i)*ξy + φη(el, ξ, i)*ηy
-            φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
-            φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
-            φ_i = φ(g.el, ξ, i)
-            return -ε²*3*νωy_Ux_bot(ξ, k)/H(ξ, k)*(φx_j*Hx(ξ, k) + φy_j*Hy(ξ, k))*φ_i*∂x∂ξ +
-                   -ε²*νωy_Ux_bot(ξ, k)*(φx_i*φx_j + φy_i*φy_j)*∂x∂ξ
-        end
-        K = [ref_el_quad(ξ -> func_K(ξ, i, j), el) for i=1:el.n, j=1:el.n]
-
-        # K′
-        function func_K′(ξ, i, j)
-            φx_i = φξ(el, ξ, i)*ξx + φη(el, ξ, i)*ηx
-            φy_i = φξ(el, ξ, i)*ξy + φη(el, ξ, i)*ηy
-            φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
-            φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
-            φ_i = φ(g.el, ξ, i)
-            return -ε²*3*νωx_Ux_bot(ξ, k)/H(ξ, k)*(φy_j*Hx(ξ, k) - φx_j*Hy(ξ, k))*φ_i*∂x∂ξ +
-                   -ε²*νωx_Ux_bot(ξ, k)*(φx_i*φy_j - φy_i*φx_j)*∂x∂ξ
-        end
-        K′ = [ref_el_quad(ξ -> func_K′(ξ, i, j), el) for i=1:el.n, j=1:el.n]
-
-        # J(f/H, Ψ) term
-        function func_C(ξ, i, j)
-            φx_j = φξ(el, ξ, j)*ξx + φη(el, ξ, j)*ηx
-            φy_j = φξ(el, ξ, j)*ξy + φη(el, ξ, j)*ηy
-            φ_i = φ(g.el, ξ, i)
-            return ((H(ξ, k)*β - f_fe(ξ, k)*Hy(ξ, k))*φx_j + f_fe(ξ, k)*Hx(ξ, k)*φy_j)*φ_i*H(ξ, k)*∂x∂ξ
-        end
-        C = [ref_el_quad(ξ -> func_C(ξ, i, j), el) for i=1:el.n, j=1:el.n]
-
-        # interior terms
-        for i=1:el.n, j=1:el.n
-            if g.t[k, i] ∉ bdy 
-                push!(A, (g.t[k, i], g.t[k, j], K[i, j]))
-                push!(A, (g.t[k, i], g.t[k, j], K′[i, j]))
-                push!(A, (g.t[k, i], g.t[k, j], C[i, j]))
-            end
+    @showprogress "Building barotropic LHS matrix..." for k=1:g.nt, i=1:el.n, j=1:el.n
+        if g.t[k, i] ∉ bdy 
+            push!(A, (g.t[k, i], g.t[k, j], ref_el_quad(ξ -> ∫K(ξ, i, j, k), el) +
+                                            ref_el_quad(ξ -> ∫K′(ξ, i, j, k), el) +
+                                            ref_el_quad(ξ -> ∫C(ξ, i, j, k), el)))
         end
     end
 
@@ -84,7 +62,6 @@ function build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²
 
     # sparse matrix
     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
-    println(@sprintf(" (%.1f s)", time() - t₀))
 
     return lu(A)
 end

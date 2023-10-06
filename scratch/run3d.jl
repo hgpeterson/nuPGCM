@@ -47,8 +47,8 @@ function run(m)
 
     # t_final = 5e-2*m.μ*m.ϱ/m.ε²
     # t_plot = t_final/50
-    t_final = 100*m.Δt
-    t_plot = 10*m.Δt
+    t_final = 10*m.Δt
+    t_plot = t_final
     evolve!(m, s, t_final, t_plot)
     return s
 end

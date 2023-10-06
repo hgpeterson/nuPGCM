@@ -245,7 +245,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
     # initial condition
     ∫b₀ = sum(HM*s.b.values)
-    @info "Initial condition" ∫b₀
+    pe₀ = potential_energy(m, s)
+    @info "Initial condition" ∫b₀ pe₀
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
     vtk_grid("$out_folder/state0", pz', cells) do vtk
         vtk["b"] = s.b.values[1:g1.np]
@@ -332,7 +333,18 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
             # energy 
-            @info "Energy" b_prod=buoyancy_production(m, s) ke_diss=KE_dissipation(m, s)
+            b_prod = buoyancy_production(m, s) 
+            ke_diss = KE_dissipation(m, s)
+            println("KE:")
+            @printf("    b_prod  = %1.1e\n", b_prod)
+            @printf("    ke_diss = %1.1e\n", ke_diss)
+            @printf("    ke_loss = %1.1e\n", abs(ke_diss-b_prod))
+            pe = potential_energy(m, s)
+            pe_prod = PE_production(m, s)
+            println("PE:")
+            @printf("    pe      = %1.1e\n", pe)
+            @printf("    Δpe     = %1.1e\n", pe - pe₀)
+            @printf("    pe_prod = %1.1e\n", pe_prod)
 
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
