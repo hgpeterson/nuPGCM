@@ -28,7 +28,7 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=true)
     save_setup(m)
     return m
@@ -46,9 +46,9 @@ function run(m)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
     # t_final = 5e-2*m.μ*m.ϱ/m.ε²
-    # t_plot = t_final/50
-    t_final = 10*m.Δt
-    t_plot = t_final
+    # t_plot = t_final/100
+    t_final = 2*m.Δt
+    t_plot = m.Δt
     evolve!(m, s, t_final, t_plot)
     return s
 end

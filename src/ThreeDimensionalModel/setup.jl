@@ -70,7 +70,6 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     Ax::A
     Ay::A
     advection::Bool
-    K_stab::HM
 end
 
 ################################################################################
@@ -172,15 +171,18 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     if advection
         HM = build_HM(g2, H, nσ)
         Ax, Ay = build_advection_arrays(g1, g2)
-        # K_stab = build_K_stab(g2, H, Hx, Hy, nσ)
-        K_stab = spzeros(g2.np, g2.np)
     else
         HM = spzeros(g2.np, g2.np)
         Ax = Ay = zeros(1, 1, 1, 1)
-        K_stab = spzeros(g2.np, g2.np)
     end
+
+    println()
+    CUDA.memory_status()
+
+    flush(stdout)
+    flush(stderr)
 
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
-                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Ax, Ay, advection, K_stab)
+                        ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Ax, Ay, advection)
 end
