@@ -25,8 +25,8 @@ function setup()
     β = 0.
     τx(x) = 0.
     τy(x) = 0.
-    # κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
-    κ(σ, H) = 1 + 0*σ*H
+    κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
+    # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
     g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
     m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=true)
@@ -40,20 +40,57 @@ function run(m)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + H([0, 0])/2)^2)/0.02), m.g2)
 
     ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
+    # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
-    t_final = 5e-2*m.μ*m.ϱ/m.ε²
-    t_plot = t_final/50
+    # t_final = 5e-2*m.μ*m.ϱ/m.ε²
+    # t_plot = t_final/50
+    t_final = 100*m.Δt
+    t_plot = 10*m.Δt
     evolve!(m, s, t_final, t_plot)
     return s
 end
 
-# m = setup()
-# # m = load_setup_3D("$out_folder/setup.h5")
-# s = run(m)
-# # s = load_state_3D("$out_folder/state.h5")
+m = setup()
+# m = load_setup_3D("$out_folder/setup.h5")
+s = run(m)
+# s = load_state_3D("$out_folder/state.h5")
+
+# fig, ax = plt.subplots(1)
+# x = -1:0.001:1
+# ωx_fe = FEField(m.ωx_Ux[:, 1], m.g_sfc1)
+# ωy_fe = FEField(m.ωy_Ux[:, 1], m.g_sfc1)
+# ωx = [ωx_fe([x, 0]) for x ∈ x]
+# ωy = [ωy_fe([x, 0]) for x ∈ x]
+# ax.plot(x, ωx, label=L"\omega^x")
+# ax.plot(x, ωy, label=L"\omega^y")
+# ωx_B = @. -(1 - x^2)*√(1/(2*1.01*m.ε²))
+# ωy_B = @.  (1 - x^2)*√(1/(2*1.01*m.ε²))
+# # ωx_B = @. -(1 - x^2)/√(2*m.ε²)
+# # ωy_B = @.  (1 - x^2)/√(2*m.ε²)
+# ax.plot(x, ωx_B, "k--", lw=0.5, label="BL theory")
+# ax.plot(x, ωy_B, "k--", lw=0.5)
+# ax.legend()
+# ax.set_xlabel(L"x")
+# ax.set_ylabel(L"\omega(-H)")
+# savefig("images/omega_bot_BL.png")
+# println("images/omega_bot_BL.png")
+# plt.close()
+
+# fig, ax = plt.subplots(1, figsize=(2, 3.2))
+# i = argmin(m.g_sfc1.p[i, 1]^2 + m.g_sfc1.p[i, 2]^2 for i=1:m.g_sfc1.np)
+# ωx = m.ωx_Ux[i, :]
+# ωy = m.ωy_Ux[i, :]
+# ax.plot(ωx, m.σ, label=L"\omega^x")
+# ax.plot(ωy, m.σ, label=L"\omega^y")
+# ax.legend()
+# ax.set_xlabel(L"\omega")
+# ax.set_ylabel(L"\sigma")
+# savefig("images/omega.png")
+# println("images/omega.png")
+# plt.close()
 
 function animate(m)
     for i=10:10:500
@@ -67,7 +104,7 @@ function animate(m)
     end
 end
 
-animate(m)
+# animate(m)
 
 function compare_profiles(m, s, m2D, s2D, x, y)
     k_sfc = nuPGCM.get_k([x, y], m.g_sfc1, m.g_sfc1.el)

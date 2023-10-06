@@ -3,6 +3,7 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     g_sfc1 = m.g_sfc1
     nσ = m.nσ
     ν_bot = m.ν_bot
+    in_nodes1 = m.in_nodes1
 
     # get buoyancy ω and χ
     ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
@@ -20,11 +21,12 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     Ux, Uy = compute_U(Ψ, showplots=showplots)
 
     # put them all together to get full ω's and χ's
-    for k=1:g_sfc1.nt
-        for i=1:g_sfc1.nn
-            ig = g_sfc1.t[k, i]
+    for ig ∈ in_nodes1
+        for I ∈ g_sfc1.p_to_t[ig]
+            k = I[1]
+            i = I[2]
             for j=1:nσ-1
-                k_w = (k - 1)*(nσ - 1) + j
+                k_w = get_k_w(k, nσ, j)
                 ωx.values[k_w, i] = ωx_b[k, i, j] + Ux[k]*m.ωx_Ux[ig, j]/m.H[ig]^2 - Uy[k]*m.ωy_Ux[ig, j]/m.H[ig]^2 #FIXME: add τ's
                 ωy.values[k_w, i] = ωy_b[k, i, j] + Ux[k]*m.ωy_Ux[ig, j]/m.H[ig]^2 + Uy[k]*m.ωx_Ux[ig, j]/m.H[ig]^2
                 χx.values[k_w, i] = χx_b[k, i, j] + Ux[k]*m.χx_Ux[ig, j]/m.H[ig]^2 - Uy[k]*m.χy_Ux[ig, j]/m.H[ig]^2
@@ -49,6 +51,10 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
         plot_xslice(m, b, χy, 0.0, fname="$out_folder/xslice_chiy.png", cb_label=L"Streamfunction $\chi^y$")
         plot_yslice(m, b, χx, 0.0, fname="$out_folder/yslice_chix.png", cb_label=L"Streamfunction $\chi^x$")
         plot_yslice(m, b, χy, 0.0, fname="$out_folder/yslice_chiy.png", cb_label=L"Streamfunction $\chi^y$")
+        plot_xslice(m, b, ωx, 0.0, fname="$out_folder/xslice_omegax.png", cb_label=L"Vorticity $\omega^x$")
+        plot_xslice(m, b, ωy, 0.0, fname="$out_folder/xslice_omegay.png", cb_label=L"Vorticity $\omega^y$")
+        plot_yslice(m, b, ωx, 0.0, fname="$out_folder/yslice_omegax.png", cb_label=L"Vorticity $\omega^x$")
+        plot_yslice(m, b, ωy, 0.0, fname="$out_folder/yslice_omegay.png", cb_label=L"Vorticity $\omega^y$")
     end
 
     return ωx, ωy, χx, χy, Ψ

@@ -2,8 +2,8 @@
     A = build_baroclinic_LHS(g, ν, H, ε², f)
 
 Create LU-factored matrix for 1D baroclinc problem:
-    -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
-    -ε²∂zz(νωʸ) + ωˣ = -∂x(b),
+    -ε²∂zz(νωˣ) - fωʸ =  ∂y(b),
+    -ε²∂zz(νωʸ) + fωˣ = -∂x(b),
       -∂zz(χˣ) - ωˣ = 0,
       -∂zz(χʸ) - ωʸ = 0,
 with bc
@@ -94,8 +94,8 @@ end
     r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
 
 Create RHS vector for 1D baroclinc problem:
-    -ε²∂zz(νωˣ) - ωʸ =  ∂y(b),
-    -ε²∂zz(νωʸ) + ωˣ = -∂x(b),
+    -ε²∂zz(νωˣ) - fωʸ =  ∂y(b),
+    -ε²∂zz(νωʸ) + fωˣ = -∂x(b),
       -∂zz(χˣ) - ωˣ = 0,
       -∂zz(χʸ) - ωʸ = 0,
 with bc
@@ -186,8 +186,8 @@ function solve_baroclinic_transport(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H
     end
 
     if showplots
-        ωx_Ux_bot = FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
-        ωy_Ux_bot = FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
+        ωx_Ux_bot = FEField(ωx_Ux[:, 1], g_sfc1)
+        ωy_Ux_bot = FEField(ωy_Ux[:, 1], g_sfc1)
         quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "$out_folder/omegax_Ux_bot.png")
         quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "$out_folder/omegay_Ux_bot.png")
         # write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
@@ -227,8 +227,8 @@ function solve_baroclinic_wind(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; 
     end
 
     if showplots
-        ωx_τx_bot = FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
-        ωy_τx_bot = FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
+        ωx_τx_bot = FEField(ωx_τx[:, 1], g_sfc1)
+        ωy_τx_bot = FEField(ωy_τx[:, 1], g_sfc1)
         quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "$out_folder/omegax_taux_bot.png")
         quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "$out_folder/omegay_taux_bot.png")
         # write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
@@ -280,8 +280,8 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     end
 
     if showplots
-        ωx_b_bot = DGField([ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-        ωy_b_bot = DGField([ωy_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+        ωx_b_bot = DGField(ωx_b[:, :, 1], g_sfc1)
+        ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
         quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "$out_folder/omegax_b_bot.png")
         quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "$out_folder/omegay_b_bot.png")
         # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
@@ -326,7 +326,7 @@ function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
             Dx = Tuple{Int64,Int64,Float64}[]
             Dy = Tuple{Int64,Int64,Float64}[]
             for j=1:nσ-1
-                k_w = (nσ - 1)*(k - 1) + j
+                k_w = get_k_w(k, nσ, j)
                 jac = g1.J.Js[k_w, :, :]
                 for l=1:w2.n
                     # I[(j-1)*w2.n*2+2l-1] = 2j - 1 

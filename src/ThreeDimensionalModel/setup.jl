@@ -115,7 +115,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     # fields for later
     τx1 = FEField(τx[1:g_sfc1.np], g_sfc1)
     τy1 = FEField(τy[1:g_sfc1.np], g_sfc1)
-    ν_bot = FEField([ν[get_i_bot(i, nσ)] for i=1:g_sfc1.np], g_sfc1)
+    ν_bot = FEField(ν[get_i_bot.(1:g_sfc1.np, nσ)], g_sfc1)
 
     # store gradients as DG fields
     Hx = DGField([∂x(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -148,8 +148,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
 
     # get transport ω and χ
     ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = solve_baroclinic_transport(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H, showplots=true)
-    νωx_Ux_bot = ν_bot*FEField([ωx_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
-    νωy_Ux_bot = ν_bot*FEField([ωy_Ux[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    νωx_Ux_bot = ν_bot*FEField(ωx_Ux[:, 1], g_sfc1)
+    νωy_Ux_bot = ν_bot*FEField(ωy_Ux[:, 1], g_sfc1)
 
     # barotropic LHS
     barotropic_LHS = build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
@@ -157,8 +157,8 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
 
     # get ω_τ's
     ωx_τx, ωy_τx, χx_τx, χy_τx = solve_baroclinic_wind(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε², showplots=true)
-    νωx_τx_bot = ν_bot*FEField([ωx_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
-    νωy_τx_bot = ν_bot*FEField([ωy_τx[i, 1] for i=1:g_sfc1.np], g_sfc1)
+    νωx_τx_bot = ν_bot*FEField(ωx_τx[:, 1], g_sfc1)
+    νωy_τx_bot = ν_bot*FEField(ωy_τx[:, 1], g_sfc1)
     νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
     νωy_τ_bot = τx1*νωy_τx_bot + τy1*νωx_τx_bot
     quick_plot(νωx_τ_bot, L"\nu\omega^x_\tau|_{-H}", "$out_folder/nu_omegax_tau_bot.png")
@@ -179,7 +179,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
         Ax = Ay = zeros(1, 1, 1, 1)
         K_stab = spzeros(g2.np, g2.np)
     end
-
 
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
                         in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 

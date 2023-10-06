@@ -331,6 +331,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
+            # energy 
+            @info "Energy" b_prod=buoyancy_production(m, s) ke_diss=KE_dissipation(m, s)
+
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
             # @printf "Max Err = %1.1e\n" maximum(abs.(s.b.values - ba))

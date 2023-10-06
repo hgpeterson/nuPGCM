@@ -76,12 +76,12 @@ function quick_plot_save(fname, ax)
     println(fname)
     plt.close()
 end
-function quick_plot(u::FEField, cb_label, fname; vmax=0.)
-    fig, ax, im = tplot(u, contour=true, vmax=vmax, cb_label=cb_label)
+function quick_plot(u::FEField, cb_label, fname; vmax=0., contour=true)
+    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
     quick_plot_save(fname, ax)
 end
-function quick_plot(u::FVField, cb_label, fname; vmax=0.)
-    fig, ax, im = tplot(u, contour=false, vmax=vmax, cb_label=cb_label)
+function quick_plot(u::FVField, cb_label, fname; vmax=0., contour=false)
+    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
     quick_plot_save(fname, ax)
 end
 function quick_plot(u::DGField, args...; kwargs...)

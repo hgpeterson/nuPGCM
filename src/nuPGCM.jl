@@ -189,5 +189,6 @@ include("ThreeDimensionalModel/inversion.jl")
 include("ThreeDimensionalModel/evolution.jl")
 include("ThreeDimensionalModel/plotting.jl")
 include("ThreeDimensionalModel/boundary_layer.jl")
+include("ThreeDimensionalModel/energy.jl")
 
 end # module
