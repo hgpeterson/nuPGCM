@@ -28,45 +28,6 @@ function build_K_col(σ, κ)
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
-function build_K_stab(g, H, Hx, Hy, nσ)
-    # unpack
-    el = g.el
-
-    # σ FE
-    σ = FEField(g.p[:, 3], g)
-
-    # integrand function
-    function f(ξ, i, j, k, k_sfc, jac)
-        ∇φi_ref = [∂φ(el, ξ, i, d) for d=1:3]
-        ∇φj_ref = [∂φ(el, ξ, j, d) for d=1:3]
-        ∇φi = jac'*∇φi_ref
-        ∇φj = jac'*∇φj_ref
-        return g.J.dets[k]*(∇φi[1]*(∇φj[1]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[3]) + 
-                            ∇φi[2]*(∇φj[2]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[3]) + 
-                            ∇φi[3]*((1 + σ(ξ, k)^2*(Hx(ξ[1:2], k_sfc)^2 + Hy(ξ[1:2], k_sfc)^2))/H(ξ[1:2], k_sfc)*∇φj[3] - 
-                            σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[1] - 
-                            σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[2]))
-    end
-
-    # stamp
-    N = g.nt*el.n^2
-    I = zeros(Int64, N)
-    J = zeros(Int64, N)
-    V = zeros(Float64, N)
-    n = 1
-    @showprogress "Building diffusion matrix..." for k=1:g.nt
-        k_sfc = get_k_sfc(k, nσ)
-        jac = g.J.Js[k, :, :]
-        for i=1:el.n, j=1:el.n
-            I[n] = g.t[k, i]
-            J[n] = g.t[k, j]
-            V[n] = ref_el_quad(ξ -> f(ξ, i, j, k, k_sfc, jac), el)
-            n += 1
-        end
-    end
-    return dropzeros!(sparse(I, J, V, g.np, g.np))
-end
-
 """
     HM = build_HM(g2, H, nσ)
 
@@ -170,7 +131,8 @@ function advection(m::ModelSetup3D, χx, χy, b)
 
     CUDA.@sync begin
         # kernel(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
-        @cuda threads=512 blocks=cld(length(t2), 512) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
+        # @cuda threads=512 blocks=cld(length(t2), 512) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
+        @cuda threads=288 blocks=cld(length(t2), 288) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
     end
 
     # copy result to CPU
@@ -201,20 +163,16 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     nσ = m.nσ
     H = m.H
     HM = m.HM
-    K_stab = m.K_stab
     g_sfc2 = m.g_sfc2
 
     # element map
     el_map = build_element_map(g2)
 
-    # # stiffness matrix for stabilizing diffusion
-    # LHS_stab = HM + 1e4*Δt/2*K_stab
-
     # timestep
     n_steps = Int64(round(t_final/Δt))
     n_steps_plot = Int64(round(t_plot/Δt))
 
-    # # diffusion matrices
+    # diffusion matrices
     α = ε²/μ/ϱ
     K_cols = [build_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
     LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
@@ -260,14 +218,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     end
     println("$out_folder/state0.vtu")
 
-    # constant flow
-    # s.χx.values[:] .= 0
-    # s.χy.values[:] = -[g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
-    # s.χx.values[:] = [g1.p[g1.t[k, i], 3]*H[get_i_sfc(g1.t[k, i], nσ)] for k=1:g1.nt, i=1:g1.nn]
-    # s.χy.values[:] .= 0
-    # s.χx.values[:] .= 0
-    # s.χy.values[:] = g1.p[g1.t, 1]
-
     # for CFL
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
@@ -282,11 +232,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     t0 = time()
     t1 = time()
     for i=1:n_steps
-        # println("step $i")
-
-        # # Δt/2 stabilizing diffusion step
-        # cg!(s.b.values[:], LHS_stab, HM*s.b.values)
-
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
@@ -298,10 +243,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             invert!(m, s)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node = el_map*adv_el[:]
-            cg!(adv, HM, -adv_node)
+            @time cg!(adv, HM, -adv_node)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
             adv_node = el_map*adv_el[:]
-            cg!(adv, HM, -adv_node)
+            @time cg!(adv, HM, -adv_node)
             s.b.values[:] = s.b.values + Δt*adv
         end
 
@@ -310,9 +255,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-
-        # # Δt/2 stabilizing diffusion step
-        # cg!(s.b.values[:], LHS_stab, HM*s.b.values)
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
@@ -332,19 +274,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
-            # energy 
-            b_prod = buoyancy_production(m, s) 
-            ke_diss = KE_dissipation(m, s)
-            println("KE:")
-            @printf("    b_prod  = %1.1e\n", b_prod)
-            @printf("    ke_diss = %1.1e\n", ke_diss)
-            @printf("    ke_loss = %1.1e\n", abs(ke_diss-b_prod))
-            pe = potential_energy(m, s)
-            pe_prod = PE_production(m, s)
-            println("PE:")
-            @printf("    pe      = %1.1e\n", pe)
-            @printf("    Δpe     = %1.1e\n", pe - pe₀)
-            @printf("    pe_prod = %1.1e\n", pe_prod)
+            # # energy 
+            # b_prod = buoyancy_production(m, s) 
+            # ke_diss = KE_dissipation(m, s)
+            # println("KE:")
+            # @printf("    b_prod  = %1.1e\n", b_prod)
+            # @printf("    ke_diss = %1.1e\n", ke_diss)
+            # @printf("    ke_loss = %1.1e\n", abs(ke_diss-b_prod))
+            # pe = potential_energy(m, s)
+            # pe_prod = PE_production(m, s)
+            # println("PE:")
+            # @printf("    pe      = %1.1e\n", pe)
+            # @printf("    Δpe     = %1.1e\n", pe - pe₀)
+            # @printf("    pe_prod = %1.1e\n", pe_prod)
 
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
@@ -355,27 +297,30 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # # show state
             # invert!(m, s, showplots=true)
 
-            # save state
-            cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
-            vtk_grid("$out_folder/state$i", pz', cells) do vtk
-                vtk["b"] = s.b.values[1:g1.np]
-                # vtk["ba"] = ba[1:g1.np]
-                # vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np])
-                vtk["ωx"] = FEField(s.ωx).values
-                vtk["ωy"] = FEField(s.ωy).values
-                vtk["χx"] = FEField(s.χx).values
-                vtk["χy"] = FEField(s.χy).values
-                pvd[i*Δt] = vtk
-            end
-            println("$out_folder/state$i.vtu")
-            cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
-            vtk_grid("$out_folder/stateTF$i", g1.p', cells) do vtk
-                vtk["b"] = s.b.values[1:g1.np]
-            end
-            println("$out_folder/stateTF$i.vtu")
+            # # save state 
+            # cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)] 
+            # vtk_grid("$out_folder/state$i", pz', cells) do vtk 
+            #     vtk["b"] = s.b.values[1:g1.np] 
+            #     # vtk["ba"] = ba[1:g1.np] 
+            #     # vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np]) 
+            #     vtk["ωx"] = FEField(s.ωx).values 
+            #     vtk["ωy"] = FEField(s.ωy).values 
+            #     vtk["χx"] = FEField(s.χx).values 
+            #     vtk["χy"] = FEField(s.χy).values 
+            #     pvd[i*Δt] = vtk 
+            # end 
+            # println("$out_folder/state$i.vtu") 
+            # cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)] 
+            # vtk_grid("$out_folder/stateTF$i", g1.p', cells) do vtk 
+            #     vtk["b"] = s.b.values[1:g1.np] 
+            # end 
+            # println("$out_folder/stateTF$i.vtu") 
 
             # HDF5
             save_state(s, "$out_folder/state$i.h5")
+
+            flush(stdout)
+            flush(stderr)
         end
     end
 
