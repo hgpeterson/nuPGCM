@@ -4,6 +4,7 @@ using SparseArrays
 using PyPlot
 using Printf
 using ProgressMeter
+using CUDA
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -83,15 +84,15 @@ function basic_state(z, μ, ε²)
 end
 
 function growth_rate(eigenvals)
-    σ = sort(imag(eigenvals), rev=true)
-    for i ∈ eachindex(σ)
-        if !isnan(σ[i])
-            return σ[i+1] # take second biggest one because the first is constant mode
+    isort = sortperm(imag(eigenvals), rev=true)
+    for i ∈ eachindex(isort)
+        if !isnan(eigenvals[isort[i]])
+            return isort[i+1], eigenvals[isort[i+1]] # take second biggest one because the first is constant mode
         end
     end
 end
 
-function build_A_B!(A, B, k, l, z, μ, ε², U, V, Bz, Uz, Vz; primitive=false)
+function build_A_B(k, l, z, μ, ε², U, V, Bz, Uz, Vz; primitive=false)
     nz = length(z)
     N = 5*nz # u, v, w, p, b
     imap = reshape(1:N, (5, nz)) 
@@ -100,8 +101,12 @@ function build_A_B!(A, B, k, l, z, μ, ε², U, V, Bz, Uz, Vz; primitive=false)
     wmap = imap[3, :]
     pmap = imap[4, :]
     bmap = imap[5, :]
-    A[:] .= 0
-    B[:] .= 0
+    # A[:] .= 0
+    # B[:] .= 0
+    # A = CUDA.zeros(ComplexF32, N, N)
+    # B = CUDA.zeros(ComplexF32, N, N)
+    A = zeros(ComplexF64, N, N)
+    B = zeros(ComplexF64, N, N)
     for i=2:nz-1
         fd_z  = mkfdstencil(z[i-1:i+1], z[i], 1)
         fd_zz = mkfdstencil(z[i-1:i+1], z[i], 2)
@@ -233,19 +238,21 @@ end
 function compute_omega(z, μ, ε²; primitive=false)
     U, V, Bz, Uz, Vz = basic_state(z, μ, ε²)
     n = 2^5
-    kmax = 3
+    kmax = 10
     lmax = 10
     k = 0:kmax/(n-1):kmax
     l = -lmax:2lmax/(n-1):lmax
     ω = zeros(length(l), length(k))
     N = 5*length(z)
-    A = zeros(ComplexF64, N, N)
-    B = zeros(ComplexF64, N, N)
+    # A = zeros(ComplexF64, N, N)
+    # B = zeros(ComplexF64, N, N)
+    # A = CUDA.zeros(ComplexF32, N, N)
+    # B = CUDA.zeros(ComplexF32, N, N)
     @showprogress for i ∈ eachindex(k)
         for j ∈ eachindex(l)
-            A, B = build_A_B!(A, B, k[i], l[j], z, μ, ε², U, V, Bz, Uz, Vz, primitive=primitive)
+            A, B = build_A_B(k[i], l[j], z, μ, ε², U, V, Bz, Uz, Vz, primitive=primitive)
             F = eigen(A, B)
-            ω[j, i] = growth_rate(F.values)
+            idx, ω[j, i] = growth_rate(F.values)
         end
     end
     return k, l, ω
@@ -273,8 +280,87 @@ function plot_omega(k, l, ω)
     plt.close()
 end
 
+function plot_unstable_mode(k, l, z, μ, ε²; primitive=false)
+    U, V, Bz, Uz, Vz = basic_state(z, μ, ε²)
+    A, B = build_A_B(k, l, z, μ, ε², U, V, Bz, Uz, Vz, primitive=primitive)
+    F = eigen(A, B)
+    idx, ω = growth_rate(F.values)
+    vec = F.vectors[:, idx]
+    nz = length(z)
+    N = 5*nz # u, v, w, p, b
+    imap = reshape(1:N, (5, nz)) 
+    umap = imap[1, :]
+    vmap = imap[2, :]
+    wmap = imap[3, :]
+    pmap = imap[4, :]
+    bmap = imap[5, :]
+    u = vec[umap]
+    v = vec[vmap]
+    w = vec[wmap]
+    p = vec[pmap]
+    b = vec[bmap]
+    fig, ax = plt.subplots(1, 5, figsize=(10, 3.2), sharey=true)
+    ax[1].plot(real(u), z)
+    ax[2].plot(real(v), z)
+    ax[3].plot(real(w), z)
+    ax[4].plot(real(p), z)
+    ax[5].plot(real(b), z)
+    ax[1].set_ylabel(L"z")
+    ax[1].set_xlabel(L"Re$[\hat u]$")
+    ax[2].set_xlabel(L"Re$[\hat v]$")
+    ax[3].set_xlabel(L"Re$[\hat w]$")
+    ax[4].set_xlabel(L"Re$[\hat p]$")
+    ax[5].set_xlabel(L"Re$[\hat b]$")
+    ax[3].set_title(string(L"\varepsilon^2 = ", @sprintf("%1.1e", ε²), L", \quad k = ", k, L", \quad l = ", l, L", $\quad$ Im$[\omega] = $", @sprintf("%1.1e", imag(ω))))
+    ax[1].set_yticks(-0.5:0.25:0.5)
+    savefig("images/mum1D.png")
+    println("images/mum1D.png")
+    plt.close()
+
+    fig, ax = plt.subplots(1, 5, figsize=(10, 2.5), sharey=true)
+    nx = 2^8
+    x = -π/k:2π/k/(nx-1):π/k
+    xx = repeat(x, 1, nz)
+    zz = repeat(z', nx, 1)
+    uu = repeat(u', nx, 1)
+    vv = repeat(v', nx, 1)
+    ww = repeat(w', nx, 1)
+    pp = repeat(p', nx, 1)
+    bb = repeat(b', nx, 1)
+    uu = @. uu*exp(im*k*xx)
+    vv = @. vv*exp(im*k*xx)
+    ww = @. ww*exp(im*k*xx)
+    pp = @. pp*exp(im*k*xx)
+    bb = @. bb*exp(im*k*xx)
+    ax[1].set_ylabel(L"z")
+    xz_plot(xx, zz, real(uu), ax[1], L"Re[$\hat u$]")
+    xz_plot(xx, zz, real(vv), ax[2], L"Re[$\hat v$]")
+    xz_plot(xx, zz, real(ww), ax[3], L"Re[$\hat w$]")
+    xz_plot(xx, zz, real(pp), ax[4], L"Re[$\hat p$]")
+    xz_plot(xx, zz, real(bb), ax[5], L"Re[$\hat b$]")
+    ax[3].set_title(string(L"\varepsilon^2 = ", @sprintf("%1.1e", ε²), L", \quad k = ", k, L", \quad l = ", l, L", $\quad$ Im$[\omega] = $", @sprintf("%1.1e", imag(ω))))
+    savefig("images/mum2D.png")
+    println("images/mum2D.png")
+    plt.close()
+end
+
+function xz_plot(xx, zz, uu, ax, label)
+    vmax = maximum(abs.(uu))
+    img = ax.pcolormesh(xx, zz, uu, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud", rasterized=true)
+    levels = range(-vmax, vmax, 8)
+    ax.contour(xx, zz, uu, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    plt.colorbar(img, ax=ax, label=label, orientation="horizontal", pad=0.22)
+    ax.set_xlabel(L"x")
+    # ax.set_ylabel(L"z")
+    ax.set_xticks([minimum(xx), 0, maximum(xx)])
+    ax.set_xticklabels([L"-\pi/k", L"0", L"\pi/k"])
+    ax.set_yticks(-0.5:0.25:0.5)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+end
+
 function main()
-    nz = 2^5
+    nz = 2^7
     # z = -0.5:1/(nz-1):0.5
     z = -cos.(π*(0:nz-1)/(nz-1))/2
     μ = 1
@@ -282,8 +368,10 @@ function main()
 
     plot_basic_state(z, μ)
 
-    k, l, ω = compute_omega(z, μ, ε², primitive=false)
-    plot_omega(k, l, ω)
+    # k, l, ω = compute_omega(z, μ, ε², primitive=false)
+    # plot_omega(k, l, ω)
+
+    plot_unstable_mode(3, 0, z, μ, ε², primitive=false)
 
     # U, V, dUdz, dVdz, dBdz = basic_state(z, μ, ε²)
     # A, B = build_A_B(2, -2, z, μ, ε², U, V, dUdz, dVdz, dBdz)
