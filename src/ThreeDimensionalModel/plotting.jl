@@ -44,10 +44,7 @@ function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, cb_label="", cb_o
     ax.spines["bottom"].set_visible(false)
     return fig, ax, im
 end
-function tplot(u::FEField; kwargs...)
-    return tplot(u.g.p, u.g.t, u.values; kwargs...)
-end
-function tplot(u::FVField; kwargs...)
+function tplot(u::AbstractField; kwargs...)
     return tplot(u.g.p, u.g.t, u.values; kwargs...)
 end
 
@@ -67,15 +64,6 @@ function tplot(g::Grid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 
-function quick_plot_save(fname, ax)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Zonal coordinate $y$")
-    ax.axis("equal")
-    ax.set_yticks(-1:0.5:1)
-    savefig(fname)
-    println(fname)
-    plt.close()
-end
 function quick_plot(u::FEField, cb_label, fname; vmax=0., contour=true)
     fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
     quick_plot_save(fname, ax)
@@ -87,42 +75,17 @@ end
 function quick_plot(u::DGField, args...; kwargs...)
     quick_plot(FEField(u), args..., kwargs...)
 end
-# function quick_plot(u::DGField, cb_label, fname)
-#     fig, ax = plt.subplots(1, 2, gridspec_kw=Dict("width_ratios"=>[20, 1]))
-#     vmax = maximum(abs(u))
-#     g = u.g
-#     for k=1:g.nt
-#         ax[1].tripcolor(g.p[g.t[k, :], 1], g.p[g.t[k, :], 2], [0 1 2], u[k, 1:3], cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="gouraud", rasterized=true)
-#     end
-#     norm = mpl.colors.Normalize(vmin=-vmax, vmax=vmax)
-#     cmap = mpl.cm.RdBu_r
-#     cb = mpl.colorbar.ColorbarBase(ax[2], norm=norm, cmap=cmap, label=cb_label)
-#     cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
-#     ax[1].spines["left"].set_visible(false)
-#     ax[1].spines["bottom"].set_visible(false)
-#     ax[1].set_xlabel(L"x")
-#     ax[1].set_ylabel(L"y")
-#     ax[1].axis("equal")
-#     ax[1].set_yticks(-1:0.5:1)
-#     savefig(fname)
-#     println(fname)
-#     plt.close()
-# end
 function quick_plot(f::Function, g::Grid, args...; kwargs...)
     quick_plot(FEField(f, g), args...; kwargs...)
 end
-
-function plot_profile(u::FEField, x, z, xlabel, ylabel, ofile)
-    u_profile = zeros(size(z))
-    for i in eachindex(z)
-        u_profile[i] = evaluate(u, [x, z[i]])
-    end
-    fig, ax = subplots(1, figsize=(2, 3.2))
-    ax.plot(u_profile, z)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    savefig(ofile)
-    println(ofile)
+function quick_plot_save(fname, ax)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Meridional coordinate $y$")
+    ax.axis("equal")
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:1)
+    savefig(fname)
+    println(fname)
     plt.close()
 end
 
@@ -201,7 +164,7 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     println(fname)
 end
 
-function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y; cb_label, fname)
+function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y, cb_label, fname)
     # params
     nx = 2^8
     nσ = m.nσ
@@ -236,19 +199,11 @@ function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y; cb_
     bs = [b(ξ_ws[i, j], k_ws[i, j])   for i=1:nσ, j=1:nx]
 
     # plot
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, us, bs, cb_label)
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    ax.set_title(latexstring(@sprintf("Slice at \$y = %1.1f\$", y)))
-    savefig(fname)
-    println(fname)
-    plt.close()
+    title = latexstring(@sprintf("Slice at \$y = %1.1f\$", y))
+    plot_vertical_slice(xx, zz, us, bs, cb_label, fname, title, slice_dir="x")
 end
 
-function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x; fname, cb_label)
+function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x, cb_label, fname)
     # params
     ny = 2^8
     nσ = m.nσ
@@ -280,16 +235,44 @@ function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x; fna
     # evaluate
     u_fe = FEField(u)
     us = [u_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
-    bs = [b(ξ_ws[i, j], k_ws[i, j])   for i=1:nσ, j=1:ny]
+    bs = [b(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:ny]
 
     # plot
+    title = latexstring(@sprintf("Slice at \$x = %1.1f\$", x))
+    plot_vertical_slice(yy, zz, us, bs, cb_label, fname, title, slice_dir="y")
+end
+
+function plot_zslice(m::ModelSetup3D, u::AbstractField, z, cb_label, fname)
+    g = m.g_sfc1
+    H = m.H
+
+    u_fe = FEField(u)
+    u_slice = zeros(g.np)
+    for i=1:g.np
+        if H[i] < abs(z)
+            u_slice[i] = NaN
+        else
+            u_slice[i] = u_fe([g.p[i, 1], g.p[i, 2], z/H[i]])
+        end
+    end
+
+    mask = [any(isnan.(u_slice[g.t[k, :]])) for k=1:g.nt]
+    vmax = maximum(i-> isnan(u_slice[i]) ? -Inf : u_slice[i], 1:g.np)
+
+    # plot
+    title = latexstring(@sprintf("Slice at \$z = %1.1f\$", z))
     fig, ax = plt.subplots(1)
-    plot_slice(ax, yy, zz, us, bs, cb_label)
+    img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u_slice, mask=mask, cmap="rdbu_r", vmin=-vmax, vmax=vmax, shading="gouraud", rasterized=true)
+    cb = plt.colorbar(img, ax=ax, label=cb_label)
+    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), usemathtext=true)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xlabel(l"zonal coordinate $x$")
+    ax.set_ylabel(l"meridional coordinate $y$")
+    ax.axis("equal")
     ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.set_xlabel(L"Meridional coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    ax.set_title(latexstring(@sprintf("Slice at \$x = %1.1f\$", x)))
+    ax.set_yticks(-1:0.5:1)
+    ax.set_title(title)
     savefig(fname)
     println(fname)
     plt.close()
@@ -342,63 +325,42 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y)
     bs = [s.b(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
 
     # plot
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, ux, bs, L"Zonal flow $u^x$")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig("$out_folder/ux.png")
-    println("$out_folder/ux.png")
-    plt.close()
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uy, bs, L"Meridional flow $u^y$")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig("$out_folder/uy.png")
-    println("$out_folder/uy.png")
-    plt.close()
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uz, bs, L"Vertical flow $u^z$")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig("$out_folder/uz.png")
-    println("$out_folder/uz.png")
-    plt.close()
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, bs .- zz, bs, L"Buoyancy anamoly $b'$")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig("$out_folder/b.png")
-    println("$out_folder/b.png")
-    plt.close()
-    fig, ax = plt.subplots(1)
-    plot_slice(ax, xx, zz, uz.*(bs .- zz), bs, L"Vertical buoyancy transport $u^z b'$")
-    ax.set_xlabel(L"Zonal coordinate $x$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    savefig("$out_folder/uzb.png")
-    println("$out_folder/uzb.png")
-    plt.close()
+    title = latexstring(@sprintf("Slice at \$y = %1.1f\$", y))
+    plot_vertical_slice(xx, zz, ux, bs, L"Zonal flow $u^x$",      "$out_folder/ux.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uy, bs, L"Meridional flow $u^y$", "$out_folder/uy.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz, bs, L"Vertical flow $u^z$",   "$out_folder/uz.png", title, contour=false, slice_dir="x")
 end
 
-function plot_slice(ax, xx, zz, u, b, cb_label; vmax=0)
-    extend = "both"
-    if vmax == 0
-        vmax = maximum(abs.(u))
-        extend = "neither"
-    end
+function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir)
+    fig, ax = plt.subplots(1)
+    vmax = maximum(abs.(u))
     img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
-    # levels = range(-vmax, vmax, length=20)
-    # ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-    cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235, extend=extend)
+    if contour
+        levels = range(-vmax, vmax, length=8)
+        ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    end
+    cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     levels = range(-1, 0, length=20)
     ax.contour(xx, zz, b, levels=levels, colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
-    ax.fill_between(xx[1, :], zz[1, :], minimum(zz), color="k", alpha=0.3, lw=0.0)
     ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    if slice_dir == "x"
+        ax.set_xlabel(L"Zonal coordinate $x$")
+    elseif slice_dir == "y"
+        ax.set_xlabel(L"Meridional coordinate $y$")
+    end
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_title(title)
+    savefig(fname)
+    println(fname)
+    plt.close()
 end
 
-function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y; fname="$out_folder/profiles.png")
+function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y, fname)
     k_sfc = get_k([x, y], m.g_sfc1, m.g_sfc1.el)
     ξ_sfc = transform_to_ref_el(m.g_sfc1.el, [x, y], m.g_sfc1.p[m.g_sfc1.t[k_sfc, :], :])
 
