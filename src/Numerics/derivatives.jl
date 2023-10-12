@@ -27,10 +27,10 @@ end
 
 Compute second order first derivative of `f` on grid `z`.
 """
-function differentiate(f, z::AbstractVector)
+function differentiate(f::AbstractVector{T}, z::AbstractVector) where T
     # allocate derivative array, fz
     nz = size(z, 1)
-    fz = zeros(nz)
+    fz = zeros(T, nz)
 
     # 2nd order centered difference
     for j=2:nz-1
@@ -49,10 +49,10 @@ end
 
 Compute second order first derivative of `f` on uniformly spaced grid with spacing `dz`.
 """
-function differentiate(f, dz::Real)
+function differentiate(f::AbstractVector{T}, dz::Real) where T
     # allocate derivative array, fz
     nz = size(f, 1)
-    fz = zeros(nz)
+    fz = zeros(T, nz)
 
     # 2nd order centered difference
     for j=2:nz-1
