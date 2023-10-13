@@ -200,3 +200,31 @@ function load_state_3D(filename)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, i)
     return s
 end
+function load_state_3D(m::ModelSetup3D, filename)
+    file = h5open(filename, "r")
+
+    # b
+    bvals = read(file, "b")
+    b = FEField(bvals, m.g2)
+
+    # ω, χ
+    ωxvals = read(file, "ωx")
+    ωyvals = read(file, "ωy")
+    χxvals = read(file, "χx")
+    χyvals = read(file, "χy")
+    ωx = DGField(ωxvals, m.g1)
+    ωy = DGField(ωyvals, m.g1)
+    χx = DGField(χxvals, m.g1)
+    χy = DGField(χyvals, m.g1)
+
+    # Ψ
+    Ψvals = read(file, "Ψ")
+    Ψ = FEField(Ψvals, m.g_sfc1)
+
+    i = read(file, "i")
+
+    close(file)
+
+    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, i)
+    return s
+end
