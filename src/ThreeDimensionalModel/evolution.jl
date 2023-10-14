@@ -165,6 +165,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     HM = m.HM
     g_sfc2 = m.g_sfc2
 
+    HM_gpu = CuSparseMatrixCSC(HM)
+    # Pl = factorize(CuSparseMatrixCSC(Diagonal(HM)))
+
     # element map
     el_map = build_element_map(g2)
 
@@ -228,7 +231,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
-    adv = zeros(g2.np) # pre-allocate for `cg!`
+    # adv_gpu = CUDA.zeros(g2.np) # pre-allocate for `cg!`
     t0 = time()
     t1 = time()
     for i=1:n_steps
@@ -242,11 +245,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
         if m.advection
             invert!(m, s)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
-            adv_node = el_map*adv_el[:]
-            @time cg!(adv, HM, -adv_node)
+            adv_node_gpu = CuArray(el_map*adv_el[:])
+            @time adv = Array(cg(HM_gpu, -adv_node_gpu))
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
-            adv_node = el_map*adv_el[:]
-            @time cg!(adv, HM, -adv_node)
+            adv_node_gpu = CuArray(el_map*adv_el[:])
+            @time adv = Array(cg(HM_gpu, -adv_node_gpu))
             s.b.values[:] = s.b.values + Δt*adv
         end
 

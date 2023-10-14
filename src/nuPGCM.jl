@@ -138,6 +138,7 @@ using WriteVTK
 using Delaunay
 using IterativeSolvers
 using CUDA
+using CUDA.CUSPARSE
 
 # global constants
 const secs_in_day = 86400.

@@ -278,7 +278,13 @@ function plot_zslice(m::ModelSetup3D, u::AbstractField, z, cb_label, fname)
     plt.close()
 end
 
-function plot_u(m::ModelSetup3D, s::ModelState3D, y)
+function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
+    if i == 0
+        i_str = ""
+    else
+        i_str = @sprintf("%03d", i)
+    end
+
     # params
     nx = 2^8
     nσ = m.nσ
@@ -326,9 +332,9 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y)
 
     # plot
     title = latexstring(@sprintf("Slice at \$y = %1.1f\$", y))
-    plot_vertical_slice(xx, zz, ux, bs, L"Zonal flow $u^x$",      "$out_folder/ux.png", title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uy, bs, L"Meridional flow $u^y$", "$out_folder/uy.png", title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uz, bs, L"Vertical flow $u^z$",   "$out_folder/uz.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, ux, bs, L"Zonal flow $u^x$",      "$out_folder/ux$i_str.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uy, bs, L"Meridional flow $u^y$", "$out_folder/uy$i_str.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz, bs, L"Vertical flow $u^z$",   "$out_folder/uz$i_str.png", title, contour=false, slice_dir="x")
 end
 
 function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir)
