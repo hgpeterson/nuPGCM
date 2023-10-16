@@ -291,16 +291,20 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
 end
 
 """
-    Dxs, Dys = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
+    Dx, Dy = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
 
 Compute gradient matrices for element column in the 3D mesh `g1` (second order `g2`).
-Store the sparse transpose to save memory so that `Dxs[k, i]` is a (g2.np) × (2*nσ-2) matrix
-that gives 
+`Dx` and `Dy` are (g_sfc.nt)*(g_sfc.nn)*(2*nσ-2) × (g2.np) matrices
+that give
 
     ∂x(b) = ∂ξ(b) - σ*Hx/H ∂σ(b) 
     ∂y(b) = ∂η(b) - σ*Hy/H ∂σ(b) 
 
-for node column i in surface element k when transposed and multiplied by b.
+for each node column in each surface triangle when multiplied by b. The result should be 
+reshaped afterwards, e.g.,
+
+    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
 """
 function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     # unpack
@@ -315,7 +319,7 @@ function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     imap = reshape(1:g_sfc2.nt*3*(2nσ-2), (g_sfc2.nt, 3, 2nσ-2))
     Dx = Tuple{Int64,Int64,Float64}[]
     Dy = Tuple{Int64,Int64,Float64}[]
-    @showprogress "Computing buoyancy gradient matrices..." for k=1:g_sfc2.nt
+    @showprogress "Building buoyancy gradient matrices..." for k=1:g_sfc2.nt
         for i=1:3
             i1 = i 
             i2 = i + 3
@@ -336,8 +340,10 @@ function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
             end
         end
     end
+    print("Storing buoyancy gradient matrices... ")
     Dx = dropzeros!(sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), g_sfc2.nt*3*(2nσ-2), g2.np))
     Dy = dropzeros!(sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), g_sfc2.nt*3*(2nσ-2), g2.np))
+    println("Done.")
 
     return Dx, Dy
 end

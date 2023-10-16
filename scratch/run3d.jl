@@ -28,34 +28,43 @@ function setup()
     κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
     # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
-    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh3.h5")
-    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=false, advection=true)
+    g_sfc1 = Grid(Triangle(order=1), "../meshes/circle/mesh2.h5")
+    m = ModelSetup3D(ε², μ, ϱ, Δt, f, β, H, τx, τy, ν, κ, g_sfc1, chebyshev=true, advection=true)
     save_setup(m)
     return m
 end
 
 function run(m)
-    # b = FEField(x -> H(x)*x[3], m.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    b = FEField(x -> H(x)*x[3], m.g2)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + H([0, 0])/2)^2)/0.02), m.g2)
 
-    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
     # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
-    # t_final = 5e-2*m.μ*m.ϱ/m.ε²
-    # t_plot = t_final/100
+    t_final = 5e-2*m.μ*m.ϱ/m.ε²
+    t_plot = t_final/5
+    t_save = t_final/50
     # t_final = 5*m.Δt
-    # t_plot = m.Δt
-    # evolve!(m, s, t_final, t_plot)
+    # t_plot = t_final
+    # t_save = m.Δt
+    evolve!(m, s, t_final, t_plot, t_save)
     return s
 end
 
-# m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
+function postprocess()
+    for i=1:50
+        s = load_state_3D(m, "$out_folder/state$i.h5")
+        nuPGCM.quick_plot(s.Ψ, L"Barotropic streamfunction $\Psi$", @sprintf("%s/psi%03d.png", out_folder, i))
+        nuPGCM.plot_u(m, s, 0, i=i)
+    end
+end
+
+m = setup()
 s = run(m)
-# s = load_state_3D("$out_folder/state.h5")
+# postprocess()
 
 println("Done.")

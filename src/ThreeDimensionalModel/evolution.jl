@@ -151,7 +151,7 @@ function build_element_map(g)
     return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, length(g.t)))
 end
 
-function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
+function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # unpack
     μ = m.μ
     ϱ = m.ϱ
@@ -174,6 +174,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     # timestep
     n_steps = Int64(round(t_final/Δt))
     n_steps_plot = Int64(round(t_plot/Δt))
+    n_steps_save = Int64(round(t_save/Δt))
 
     # diffusion matrices
     α = ε²/μ/ϱ
@@ -236,39 +237,41 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     t1 = time()
     i_save = 1
     for i=1:n_steps
+        @time "diffusion" begin
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        end
 
+        @time "advection" begin
         # Δt advection step
         if m.advection
             invert!(m, s)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            @time adv = Array(cg(HM_gpu, -adv_node_gpu))
-            # adv_node = el_map*adv_el[:]
-            # @time adv = cg!(adv, HM, -adv_node, Pl=Pl)
+            adv = Array(cg(HM_gpu, -adv_node_gpu))
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            @time adv = Array(cg(HM_gpu, -adv_node_gpu))
-            # adv_node = el_map*adv_el[:]
-            # @time adv = cg!(adv, HM, -adv_node, Pl=Pl)
+            adv = Array(cg(HM_gpu, -adv_node_gpu))
             s.b.values[:] = s.b.values + Δt*adv
         end
+        end
 
+        @time "diffusion" begin
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
+        end
         end
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
         end
 
-        if mod(i, n_steps_plot) == 0 || i == n_steps
+        if mod(i, n_steps_save) == 0 || i == n_steps
             # info
             t_elapsed0 = time() - t0
             t_elapsed1 = time() - t1
@@ -302,9 +305,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # # diffusion solution
             # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
-            # # show state
-            # invert!(m, s, showplots=true)
-
             # # save state 
             # cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)] 
             # vtk_grid("$out_folder/state$i", pz', cells) do vtk 
@@ -330,6 +330,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
 
             flush(stdout)
             flush(stderr)
+        end
+
+        if mod(i, n_steps_plot) == 0 || i == n_steps
+            # show state
+            invert!(m, s, showplots=true)
         end
     end
 
