@@ -136,7 +136,7 @@ function profile_plot(setup_file, state_files, iξ)
     colors = pl.cm.viridis(range(1, 0, length=size(state_files, 1)-1))
 
     # plot data from `datafiles`
-    for i=1:size(state_files, 1)
+    for i ∈ eachindex(state_files)
         # load
         s = load_state_2D(state_files[i])
         u, v, w = transform_from_TF(m, s)

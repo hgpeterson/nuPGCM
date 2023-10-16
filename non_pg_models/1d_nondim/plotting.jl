@@ -35,7 +35,7 @@ function profilePlot(datafiles; fname="profiles.png")
     ax[1].set_ylim([0, 10])
 
     # plot data from `datafiles`
-    for i=1:size(datafiles, 1)
+    for i ∈ eachindex(datafiles)
         # load
         c = loadCheckpoint1DTCNondim(datafiles[i])
 
@@ -61,5 +61,5 @@ function profilePlot(datafiles; fname="profiles.png")
 
     savefig(fname)
     println(fname)
-    close()
+    plt.close()
 end

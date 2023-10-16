@@ -1,12 +1,11 @@
 # This file is just to compute errors between canonical and TC solutions
 
-using PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx
+using nuPGCM, PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx
 
 plt.style.use("../../plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../../myJuliaLib.jl")
 include("params.jl")
 include("evolution.jl")
 include("plotting.jl")
@@ -82,7 +81,7 @@ ṽ_0 = read(file, "ṽ_0")
 times = read(file, "times")
 close(file)
 
-for k=1:size(times, 1)
+for k ∈ eachindex(times)
     aspect = log(τ_As[end]/τ_As[1])/log(τ_Ss[end]/τ_Ss[1])
     fig, ax = subplots(1, figsize=(3.404, 3.404))
     ax.set_box_aspect(aspect)
@@ -100,6 +99,6 @@ for k=1:size(times, 1)
 
     println(@sprintf("errors%d.png", k))
     savefig(@sprintf("errors%d.png", k))
-    close()
+    plt.close()
 end
 

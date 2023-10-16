@@ -41,8 +41,10 @@ function profile_plot(setup_file, state_files)
     ax[2, 1].set_ylim([m.z[1]/1e3, 0])
     axins21.set_ylim([m.z[1]/1e3, (m.z[1] + 1e2)/1e3]) # zoomed
 
-    # plot data from `stateFiles`
-    for i=2:size(state_files, 1) # don't plot init cond
+    # plot data from `state_files`
+    for i ∈ eachindex(state_files) 
+        if i == 1 continue end # don't plot init cond
+
         # load
         s = load_state_1D(state_files[i])
 

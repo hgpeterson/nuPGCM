@@ -1,10 +1,9 @@
-using PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx
+using nuPGCM, PyPlot, PyCall, Printf, SparseArrays, LinearAlgebra, HDF5, Dierckx
 
 plt.style.use("../../plots.mplstyle")
 close("all")
 pygui(false)
 
-include("../../myJuliaLib.jl")
 include("params.jl")
 include("evolution.jl")
 include("plotting.jl")

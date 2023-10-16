@@ -1,7 +1,6 @@
-using PyPlot, PyCall, SpecialFunctions, HDF5, Printf
+using nuPGCM, PyPlot, PyCall, SpecialFunctions, HDF5, Printf
 
 # libraries
-include("../myJuliaLib.jl")
 include("structs.jl")
 include("plotting.jl")
 include("utils.jl")

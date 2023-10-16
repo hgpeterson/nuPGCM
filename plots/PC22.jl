@@ -396,7 +396,7 @@ function spinup_profiles_PGvsFull(folder)
     axins1.set_yticklabels(["−1", "−0.95", "−0.9"], size=6)
 
     # plot data from folder
-    for i=1:size(tDays, 1)
+    for i ∈ eachindex(tDays)
         tDay = tDays[i]
         label = string(Int64(tDay), " days")
 

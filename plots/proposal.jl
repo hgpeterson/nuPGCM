@@ -1,21 +1,8 @@
-using PyPlot, PyCall, Printf, HDF5, Dierckx
+using nuPGCM, PyPlot, PyCall, Printf, HDF5, Dierckx
 
 plt.style.use("plots.mplstyle")
 plt.close("all")
 pygui(false)
-
-include("my_julia_lib.jl")
-
-# for loading data
-include("1dtc/utils.jl")
-include("1dtc_pg/setup.jl")
-include("1dtc_nondim/utils.jl")
-include("2dpg/setup.jl")
-include("rayleigh/2dpg/utils.jl")
-include("rayleigh/1dtc_pg/utils.jl")
-
-# for ridgePlot
-include("2dpg/plotting.jl")
 
 # matplotlib
 pl = pyimport("matplotlib.pylab")
@@ -221,7 +208,7 @@ function full2DvsBL1D(datafilesFull2D, datafilesBL1D)
     colors = pl.cm.viridis(range(1, 0, length=size(datafilesFull2D, 1)))
 
     # plot data
-    for i=1:size(datafilesFull2D, 1)
+    for i ∈ eachindex(datafilesFull2D)
         # load
         c = loadCheckpoint2DPG(datafilesFull2D[i])
         cBL = loadCheckpoint1DTCPG(datafilesBL1D[i])
