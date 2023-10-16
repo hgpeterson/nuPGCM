@@ -242,14 +242,14 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     g_sfc1 = m.g_sfc1
     g_col = m.g_col
     nσ = m.nσ
-    Dxs = m.Dxs
-    Dys = m.Dys
+    Dx = m.Dx
+    Dy = m.Dy
     baroclinic_LHSs = m.baroclinic_LHSs
     in_nodes1 = m.in_nodes1
 
-    # setup arrays
-    bx = [Dxs[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
-    by = [Dys[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    # compute gradients
+    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
 
     # pre-allocate
     ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
@@ -268,7 +268,7 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
 
             # solve baroclinic problem with bx and by from element column
             j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = build_baroclinic_RHS(g_col, bx[k, i], by[k, i], 0, 0, 0, 0)
+            r = build_baroclinic_RHS(g_col, bx[k, i, :], by[k, i, :], 0, 0, 0, 0)
             sol = baroclinic_LHSs[j]\r
 
             # store
@@ -306,61 +306,38 @@ function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
     # unpack
     w1 = g1.el
     w2 = g2.el
-    # J = g1.J
     nσ = length(σ)
     g_sfc2 = H.g
 
     Dξ = [φξ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dη = [φη(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dζ = [φζ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
-    Dxs = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
-    Dys = Matrix{SparseMatrixCSC}(undef, g_sfc2.nt, 3)
-    # I = zeros(Int64, (nσ-1)*w2.n*2)
-    # J = zeros(Int64, (nσ-1)*w2.n*2)
-    # Vx = zeros(Float64, (nσ-1)*w2.n*2)
-    # Vy = zeros(Float64, (nσ-1)*w2.n*2)
+    imap = reshape(1:g_sfc2.nt*3*(2nσ-2), (g_sfc2.nt, 3, 2nσ-2))
+    Dx = Tuple{Int64,Int64,Float64}[]
+    Dy = Tuple{Int64,Int64,Float64}[]
     @showprogress "Computing buoyancy gradient matrices..." for k=1:g_sfc2.nt
         for i=1:3
             i1 = i 
             i2 = i + 3
-            Dx = Tuple{Int64,Int64,Float64}[]
-            Dy = Tuple{Int64,Int64,Float64}[]
             for j=1:nσ-1
                 k_w = get_k_w(k, nσ, j)
                 jac = g1.J.Js[k_w, :, :]
                 for l=1:w2.n
-                    # I[(j-1)*w2.n*2+2l-1] = 2j - 1 
-                    # J[(j-1)*w2.n*2+2l-1] = g2.t[k_w, l] 
-                    # Vx[(j-1)*w2.n*2+2l-1] = Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1] 
-                    #                        -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])
-                    # Vy[(j-1)*w2.n*2+2l-1] = Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]
-                    #                        -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])
+                    push!(Dx, (imap[k, i, 2j-1], g2.t[k_w, l], Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]))
+                    push!(Dy, (imap[k, i, 2j-1], g2.t[k_w, l], Dξ[i1, l]*jac[1, 2] + Dη[i1, l]*jac[2, 2] + Dζ[i1, l]*jac[3, 2]))
+                    push!(Dx, (imap[k, i, 2j-1], g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
+                    push!(Dy, (imap[k, i, 2j-1], g2.t[k_w, l], -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
 
-                    # I[(j-1)*w2.n*2+2l] = 2j
-                    # J[(j-1)*w2.n*2+2l] = g2.t[k_w, l] 
-                    # Vx[(j-1)*w2.n*2+2l] = Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1] 
-                    #                        -σ[j+1]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])
-                    # Vy[(j-1)*w2.n*2+2l] = Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]
-                    #                        -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])
-
-                    push!(Dx, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 1] + Dη[i1, l]*jac[2, 1] + Dζ[i1, l]*jac[3, 1]))
-                    push!(Dy, (2j-1, g2.t[k_w, l], Dξ[i1, l]*jac[1, 2] + Dη[i1, l]*jac[2, 2] + Dζ[i1, l]*jac[3, 2]))
-                    push!(Dx, (2j-1, g2.t[k_w, l], -σ[j]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
-                    push!(Dy, (2j-1, g2.t[k_w, l], -σ[j]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i1, l]*jac[1, 3] + Dη[i1, l]*jac[2, 3] + Dζ[i1, l]*jac[3, 3])))
-
-                    push!(Dx, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]))
-                    push!(Dy, (2j, g2.t[k_w, l], Dξ[i2, l]*jac[1, 2] + Dη[i2, l]*jac[2, 2] + Dζ[i2, l]*jac[3, 2]))
-                    push!(Dx, (2j, g2.t[k_w, l], -σ[j+1]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
-                    push!(Dy, (2j, g2.t[k_w, l], -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
+                    push!(Dx, (imap[k, i, 2j], g2.t[k_w, l], Dξ[i2, l]*jac[1, 1] + Dη[i2, l]*jac[2, 1] + Dζ[i2, l]*jac[3, 1]))
+                    push!(Dy, (imap[k, i, 2j], g2.t[k_w, l], Dξ[i2, l]*jac[1, 2] + Dη[i2, l]*jac[2, 2] + Dζ[i2, l]*jac[3, 2]))
+                    push!(Dx, (imap[k, i, 2j], g2.t[k_w, l], -σ[j+1]*Hx[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
+                    push!(Dy, (imap[k, i, 2j], g2.t[k_w, l], -σ[j+1]*Hy[k, i]/H[g_sfc2.t[k, i]]*(Dξ[i2, l]*jac[1, 3] + Dη[i2, l]*jac[2, 3] + Dζ[i2, l]*jac[3, 3])))
                 end
             end
-            # store the transpose to save memory
-            Dxs[k, i] = dropzeros!(sparse((x -> x[2]).(Dx), (x -> x[1]).(Dx), (x -> x[3]).(Dx), g2.np, 2nσ-2))
-            Dys[k, i] = dropzeros!(sparse((x -> x[2]).(Dy), (x -> x[1]).(Dy), (x -> x[3]).(Dy), g2.np, 2nσ-2))
-            # Dxs[k, i] = dropzeros!(sparse(J, I, Vx, g2.np, 2nσ-2))
-            # Dys[k, i] = dropzeros!(sparse(J, I, Vy, g2.np, 2nσ-2))
         end
     end
+    Dx = dropzeros!(sparse((x -> x[1]).(Dx), (x -> x[2]).(Dx), (x -> x[3]).(Dx), g_sfc2.nt*3*(2nσ-2), g2.np))
+    Dy = dropzeros!(sparse((x -> x[1]).(Dy), (x -> x[2]).(Dy), (x -> x[3]).(Dy), g_sfc2.nt*3*(2nσ-2), g2.np))
 
-    return Dxs, Dys
+    return Dx, Dy
 end

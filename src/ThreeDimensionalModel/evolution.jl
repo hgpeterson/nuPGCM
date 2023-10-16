@@ -166,7 +166,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     g_sfc2 = m.g_sfc2
 
     HM_gpu = CuSparseMatrixCSC(HM)
-    # Pl = factorize(CuSparseMatrixCSC(Diagonal(HM)))
+    # Pl = factorize(Diagonal(HM))
 
     # element map
     el_map = build_element_map(g2)
@@ -231,9 +231,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
     @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
 
     # solve
-    # adv_gpu = CUDA.zeros(g2.np) # pre-allocate for `cg!`
+    # adv = zeros(g2.np) # pre-allocate for `cg!`
     t0 = time()
     t1 = time()
+    i_save = 1
     for i=1:n_steps
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
@@ -247,9 +248,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
             @time adv = Array(cg(HM_gpu, -adv_node_gpu))
+            # adv_node = el_map*adv_el[:]
+            # @time adv = cg!(adv, HM, -adv_node, Pl=Pl)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
             adv_node_gpu = CuArray(el_map*adv_el[:])
             @time adv = Array(cg(HM_gpu, -adv_node_gpu))
+            # adv_node = el_map*adv_el[:]
+            # @time adv = cg!(adv, HM, -adv_node, Pl=Pl)
             s.b.values[:] = s.b.values + Δt*adv
         end
 
@@ -320,7 +325,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot)
             # println("$out_folder/stateTF$i.vtu") 
 
             # HDF5
-            save_state(s, "$out_folder/state$i.h5")
+            save_state(s, "$out_folder/state$i_save.h5")
+            i_save += 1
 
             flush(stdout)
             flush(stderr)
@@ -355,3 +361,7 @@ function ba_adv(x, t, H)
     # return exp(-(x[1]^2 + (x[2] - t)^2 + (H*x[3] + 0.5)^2)/0.02)
     return exp(-(x[1]^2 + x[2]^2 + (H*x[3] + 0.5 - t)^2)/0.02)
 end
+
+#       default  lower_rtol   Pl  lower_rtol+Pl  GPU
+# step1     0.5         0.5  0.2            0.2  0.1
+# step2     3.0         3.0  0.4            0.4  0.1

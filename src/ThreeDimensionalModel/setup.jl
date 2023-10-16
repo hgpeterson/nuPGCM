@@ -24,7 +24,7 @@ struct ModelState3D{I<:Integer,F1<:AbstractField,F2<:AbstractField,FS1<:Abstract
 end
 
 struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:AbstractField,GS<:Grid,G<:Grid,GC<:Grid,
-                    V<:AbstractVector,IN<:AbstractVector,I<:Integer,DV<:AbstractMatrix,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
+                    V<:AbstractVector,IN<:AbstractVector,I<:Integer,D<:SparseMatrixCSC,FV<:AbstractVector,M<:AbstractMatrix,FA<:Factorization,
                     FTV<:AbstractVector,HM<:SparseMatrixCSC,A<:AbstractArray}
     ε²::FT
     μ::FT
@@ -53,8 +53,8 @@ struct ModelSetup3D{FT<:AbstractFloat,F1<:AbstractField,F2<:AbstractField,F3<:Ab
     in_nodes2::IN
     σ::V
     nσ::I
-    Dxs::DV
-    Dys::DV
+    Dx::D
+    Dy::D
     baroclinic_LHSs::FV
     ωx_Ux::M
     ωy_Ux::M
@@ -138,9 +138,7 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     in_nodes2 = findall(i -> i ∉ g_sfc2.e["bdy"], 1:g_sfc2.np)
 
     # derivative matrices
-    Dxs, Dys = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
-    # Dxs = [1;;]
-    # Dys = [1;;]
+    Dx, Dy = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy) 
     
     # baroclinc LHS for each node column on first order grid
     baroclinic_LHSs = [build_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
@@ -183,6 +181,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
     flush(stderr)
 
     return ModelSetup3D(ε², μ, ϱ, Δt, H, Hx, Hy, f, β, τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ, g_sfc1, g_sfc2, g1, g2, g_col,
-                        in_nodes1, in_nodes2, σ, nσ, Dxs, Dys, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
+                        in_nodes1, in_nodes2, σ, nσ, Dx, Dy, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, 
                         ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ, HM, Ax, Ay, advection)
 end

@@ -35,11 +35,11 @@ function setup()
 end
 
 function run(m)
-    b = FEField(x -> H(x)*x[3], m.g2)
-    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
+    # b = FEField(x -> H(x)*x[3], m.g2)
+    b = FEField(x -> H(x)*x[3] + 0.1*exp(-H(x)*(x[3] + 1)/0.1), m.g2)
     # b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (H(x)*x[3] + H([0, 0])/2)^2)/0.02), m.g2)
 
-    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=false)
+    ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     # ωx, ωy, χx, χy, Ψ = invert(m, b, showplots=true)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, 0)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
@@ -47,13 +47,13 @@ function run(m)
 
     # t_final = 5e-2*m.μ*m.ϱ/m.ε²
     # t_plot = t_final/100
-    t_final = 5*m.Δt
-    t_plot = m.Δt
-    evolve!(m, s, t_final, t_plot)
+    # t_final = 5*m.Δt
+    # t_plot = m.Δt
+    # evolve!(m, s, t_final, t_plot)
     return s
 end
 
-m = setup()
+# m = setup()
 # m = load_setup_3D("$out_folder/setup.h5")
 s = run(m)
 # s = load_state_3D("$out_folder/state.h5")

@@ -156,21 +156,21 @@ function build_JEBAR(m::ModelSetup3D, b; showplots=false)
     # unpack
     g_sfc1 = m.g_sfc1
     σ = m.σ
-    Dxs = m.Dxs
-    Dys = m.Dys
+    Dx = m.Dx
+    Dy = m.Dy
     Hx = m.Hx
     Hy = m.Hy
 
-    # compute b gradients
-    bx = [Dxs[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
-    by = [Dys[k, i]'*b.values for k=1:g_sfc1.nt, i=1:g_sfc1.nn]
+    # compute gradients
+    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, :))
+    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, :))
 
     # compute and store
     JEBAR = zeros(g_sfc1.nt, g_sfc1.nn)
     for k=1:g_sfc1.nt
         for i=1:g_sfc1.nn
-            γx = integrate_γ(bx[k, i], σ) 
-            γy = integrate_γ(by[k, i], σ) 
+            γx = integrate_γ(bx[k, i, :], σ) 
+            γy = integrate_γ(by[k, i, :], σ) 
             JEBAR[k, i] = Hy[k, i]*γx - Hx[k, i]*γy
         end
     end
