@@ -279,7 +279,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             ∫b = sum(HM*s.b.values) 
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
-            @info @sprintf("%d steps in %d s (ETR: %.1f m)", i, t_elapsed0, (n_steps-i)*t_elapsed1/n_steps_save/60) ∫b Δb Δb_pct
+            ETR = (n_steps-i)*t_elapsed1/n_steps_save
+            ETR_h = ETR ÷ 3600
+            ETR_m = (ETR % 3600) ÷ 60
+            ETR_s = ETR % 60
+            @info @sprintf("%d steps in %d s (ETR: %d:%d:%d)", i, t_elapsed0, ETR_h, ETR_m, ETR_s) ∫b Δb Δb_pct
             ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]

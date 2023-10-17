@@ -200,7 +200,7 @@ Determine index `k` of element on grid `g` in which the point `x` lies.
 """
 function get_k(x, g, pt_check::Function)
     # get index of nearest node on mesh
-    i_nearest = argmin(norm(g.p[i, :] - x) for i=1:g.np)
+    i_nearest = argmin(norm(g.p[i, :] .- x) for i=1:g.np)
 
     # loop over elements that contain this node
     for I ∈ g.p_to_t[i_nearest]

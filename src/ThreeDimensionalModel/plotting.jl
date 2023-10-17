@@ -245,14 +245,16 @@ end
 function plot_zslice(m::ModelSetup3D, u::AbstractField, z, cb_label, fname)
     g = m.g_sfc1
     H = m.H
+    nσ = m.nσ
+    g_col = m.g_col
 
-    u_fe = FEField(u)
     u_slice = zeros(g.np)
     for i=1:g.np
         if H[i] < abs(z)
             u_slice[i] = NaN
         else
-            u_slice[i] = u_fe([g.p[i, 1], g.p[i, 2], z/H[i]])
+            u_col = FEField(u[get_col_inds(i, nσ)], g_col)
+            u_slice[i] = u_col(z/H[i])
         end
     end
 

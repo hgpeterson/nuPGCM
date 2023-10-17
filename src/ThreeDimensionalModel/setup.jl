@@ -174,7 +174,6 @@ function ModelSetup3D(ε², μ, ϱ, Δt, f, β, H::AbstractField, τx::AbstractF
         Ax = Ay = zeros(1, 1, 1, 1)
     end
 
-    println()
     CUDA.memory_status()
 
     flush(stdout)
