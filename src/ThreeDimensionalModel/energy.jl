@@ -3,9 +3,9 @@
 """
 function potential_energy(m::ModelSetup3D, s::ModelState3D)
     # unpack
-    H = m.H
-    nσ = m.nσ
-    g2 = m.g2
+    H = m.geom.H
+    nσ = m.geom.nσ
+    g2 = m.geom.g2
     b = s.b
 
     # sigma fe field
@@ -25,12 +25,11 @@ end
 """
 function buoyancy_production(m::ModelSetup3D, s::ModelState3D)
     # unpack
-    g2 = m.g2
-    # σ = m.σ
-    nσ = m.nσ
-    H = m.H
-    Hx = m.Hx
-    Hy = m.Hy
+    g2 = m.geom.g2
+    nσ = m.geom.nσ
+    H = m.geom.H
+    Hx = m.geom.Hx
+    Hy = m.geom.Hy
     χx = s.χx
     χy = s.χy
     b = s.b
@@ -80,11 +79,11 @@ end
 """
 function KE_dissipation(m::ModelSetup3D, s::ModelState3D)
     # unpack
-    ε² = m.ε²
-    g2 = m.g2
-    nσ = m.nσ
-    ν = m.ν
-    H = m.H
+    ε² = m.params.ε²
+    g2 = m.geom.g2
+    nσ = m.geom.nσ
+    H = m.geom.H
+    ν = m.forcing.ν
     ωx = s.ωx
     ωy = s.ωy
 
@@ -102,11 +101,11 @@ end
 """
 function PE_production(m::ModelSetup3D, s::ModelState3D)
     # unpack
-    ε² = m.ε²
-    μ = m.μ
-    ϱ = m.ϱ
-    κ = m.κ
-    g2 = m.g2
+    ε² = m.params.ε²
+    μ = m.params.μ
+    ϱ = m.params.ϱ
+    g2 = m.geom.g2
+    κ = m.forcing.κ
     b = s.b
 
     # integrand

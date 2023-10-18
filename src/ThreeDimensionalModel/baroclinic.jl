@@ -91,6 +91,24 @@ function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
 end
 
 """
+    baroclinic_LHSs = build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
+
+Build baroclinc LHS for each node column on first order grid.
+"""
+function build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
+    g_col = geom.g_col
+    ν = forcing.ν
+    nσ = geom.nσ
+    H = geom.H
+    ε² = params.ε²
+    f = params.f
+    β = params.β
+    g_sfc1 = geom.g_sfc1
+    in_nodes1 = geom.in_nodes1
+    return [build_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
+end
+
+"""
     r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
 
 Create RHS vector for 1D baroclinc problem:
@@ -155,9 +173,15 @@ function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
     return r
 end
 
-function solve_baroclinic_transport(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H; showplots=false)
+function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs; showplots=false)
+    # unpack
+    g_col = geom.g_col
+    nσ = geom.nσ
+    in_nodes1 = geom.in_nodes1
+    H = geom.H
+    g_sfc1 = geom.g_sfc1
+
     # pre-allocate 
-    nσ = g_col.np
     ωx_Ux = zeros(g_sfc1.np, nσ)
     ωy_Ux = zeros(g_sfc1.np, nσ)
     χx_Ux = zeros(g_sfc1.np, nσ)
@@ -190,15 +214,20 @@ function solve_baroclinic_transport(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, H
         ωy_Ux_bot = FEField(ωy_Ux[:, 1], g_sfc1)
         quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "$out_folder/omegax_Ux_bot.png")
         quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "$out_folder/omegay_Ux_bot.png")
-        # write_vtk(g, "output/baroclinic_Ux.vtu", Dict("ωx_Ux"=>ωx_Ux, "ωy_Ux"=>ωy_Ux, "χx_Ux"=>χx_Ux, "χy_Ux"=>χy_Ux))
     end
 
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function solve_baroclinic_wind(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; showplots=false)
+function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs; showplots=false)
+    # unpack
+    g_col = geom.g_col
+    nσ = geom.nσ
+    in_nodes1 = geom.in_nodes1
+    g_sfc1 = geom.g_sfc1
+    ε² = params.ε²
+
     # pre-allocate 
-    nσ = g_col.np
     ωx_τx = zeros(g_sfc1.np, nσ)
     ωy_τx = zeros(g_sfc1.np, nσ)
     χx_τx = zeros(g_sfc1.np, nσ)
@@ -231,7 +260,6 @@ function solve_baroclinic_wind(baroclinic_LHSs, g_sfc1, g_col, in_nodes1, ε²; 
         ωy_τx_bot = FEField(ωy_τx[:, 1], g_sfc1)
         quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "$out_folder/omegax_taux_bot.png")
         quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "$out_folder/omegay_taux_bot.png")
-        # write_vtk(g, "output/baroclinic_taux.vtu", Dict("ωx_τx"=>ωx_τx, "ωy_τx"=>ωy_τx, "χx_τx"=>χx_τx, "χy_τx"=>χy_τx))
     end
 
     return ωx_τx, ωy_τx, χx_τx, χy_τx
@@ -239,13 +267,13 @@ end
 
 function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     # unpack
-    g_sfc1 = m.g_sfc1
-    g_col = m.g_col
-    nσ = m.nσ
-    Dx = m.Dx
-    Dy = m.Dy
-    baroclinic_LHSs = m.baroclinic_LHSs
-    in_nodes1 = m.in_nodes1
+    g_sfc1 = m.geom.g_sfc1
+    g_col = m.geom.g_col
+    nσ = m.geom.nσ
+    in_nodes1 = m.geom.in_nodes1
+    Dx = m.inversion.Dx
+    Dy = m.inversion.Dy
+    baroclinic_LHSs = m.inversion.baroclinic_LHSs
 
     # compute gradients
     bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
@@ -284,14 +312,13 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
         ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
         quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "$out_folder/omegax_b_bot.png")
         quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "$out_folder/omegay_b_bot.png")
-        # write_vtk(g, "output/baroclinic_b.vtu", Dict("ωx_b"=>ωx_b, "ωy_b"=>ωy_b, "χx_b"=>χx_b, "χy_b"=>χy_b))
     end
 
     return ωx_b, ωy_b, χx_b, χy_b
 end
 
 """
-    Dx, Dy = build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)    
+    Dx, Dy = build_b_gradient_matrices(geom::Geometry)
 
 Compute gradient matrices for element column in the 3D mesh `g1` (second order `g2`).
 `Dx` and `Dy` are (g_sfc.nt)*(g_sfc.nn)*(2*nσ-2) × (g2.np) matrices
@@ -306,12 +333,18 @@ reshaped afterwards, e.g.,
     bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
     by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
 """
-function build_b_gradient_matrices(g1, g2, σ, H, Hx, Hy)
+function build_b_gradient_matrices(geom::Geometry)
     # unpack
+    g1 = geom.g1
+    g2 = geom.g2
+    σ = geom.σ
+    nσ = geom.nσ
+    H = geom.H
+    g_sfc2 = H.g
+    Hx = geom.Hx
+    Hy = geom.Hy
     w1 = g1.el
     w2 = g2.el
-    nσ = length(σ)
-    g_sfc2 = H.g
 
     Dξ = [φξ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dη = [φη(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]

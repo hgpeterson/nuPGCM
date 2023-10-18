@@ -120,10 +120,10 @@ end
 
 function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
     # unpack 
-    g = m.g1
-    g_sfc2 = m.g_sfc2
-    H = m.H
-    nσ = m.nσ
+    g = m.geom.g1
+    g_sfc2 = m.geom.g_sfc2
+    H = m.geom.H
+    nσ = m.geom.nσ
 
     # DG p, t
     np = g.nt*g.nn
@@ -167,29 +167,32 @@ end
 function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y, cb_label, fname)
     # params
     nx = 2^8
-    nσ = m.nσ
-    σ = m.σ
+    nσ = m.geom.nσ
+    σ = m.geom.σ
+    g_sfc1 = m.geom.g_sfc1
+    g1 = m.geom.g1
+    H = m.geom.H
 
     # get x slice
-    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
     x = range(neary[2], neary[3], length=nx)
     
     # get indices of surface tris
-    k_sfcs = [get_k([x[i], y], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+    k_sfcs = [get_k([x[i], y], g_sfc1, g_sfc1.el) for i=1:nx]
 
     # get points in reference tri
-    ξ_sfcs = [transform_to_ref_el(m.g_sfc1.el, [x[i], y], m.g_sfc1.p[m.g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
+    ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x[i], y], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
 
     # get indices of wedges
     k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:nx]
     k_ws = vcat(k_ws, k_ws[end, :]')
 
     # get points in reference wedge
-    ξ_ws = [transform_to_ref_el(m.g1.el, [x[j], y, σ[i]], m.g1.p[m.g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
+    ξ_ws = [transform_to_ref_el(g1.el, [x[j], y, σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
 
     # nσ × nx coords
-    Hs = [m.H(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
+    Hs = [H(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
     xx = repeat(x', nσ, 1)
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
 
@@ -206,29 +209,32 @@ end
 function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x, cb_label, fname)
     # params
     ny = 2^8
-    nσ = m.nσ
-    σ = m.σ
+    nσ = m.geom.nσ
+    σ = m.geom.σ
+    g_sfc1 = m.geom.g_sfc1
+    g1 = m.geom.g1
+    H = m.geom.H
 
     # get y slice
-    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     nearx = sort(bdy[sortperm(abs.(bdy[:, 1] .- x)), 2][1:4])
     y = range(nearx[2], nearx[3], length=ny)
 
     # get indices of surface tris
-    k_sfcs = [get_k([x, y[i]], m.g_sfc1, m.g_sfc1.el) for i=1:ny]
+    k_sfcs = [get_k([x, y[i]], g_sfc1, g_sfc1.el) for i=1:ny]
 
     # get points in reference tri
-    ξ_sfcs = [transform_to_ref_el(m.g_sfc1.el, [x, y[i]], m.g_sfc1.p[m.g_sfc1.t[k_sfcs[i], :], :]) for i=1:ny]
+    ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x, y[i]], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:ny]
 
     # get indices of wedges
     k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:ny]
     k_ws = vcat(k_ws, k_ws[end, :]')
 
     # get points in reference wedge
-    ξ_ws = [transform_to_ref_el(m.g1.el, [x, y[j], σ[i]], m.g1.p[m.g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:ny]
+    ξ_ws = [transform_to_ref_el(g1.el, [x, y[j], σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:ny]
 
     # nσ × ny coords
-    Hs = [m.H(ξ_sfcs[i], k_sfcs[i]) for i=1:ny] 
+    Hs = [H(ξ_sfcs[i], k_sfcs[i]) for i=1:ny] 
     yy = repeat(y', nσ, 1)
     zz = repeat(σ, 1, ny).*repeat(Hs', nσ, 1)
 
@@ -243,10 +249,10 @@ function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x, cb_
 end
 
 function plot_zslice(m::ModelSetup3D, u::AbstractField, z, cb_label, fname)
-    g = m.g_sfc1
-    H = m.H
-    nσ = m.nσ
-    g_col = m.g_col
+    g = m.geom.g_sfc1
+    H = m.geom.H
+    nσ = m.geom.nσ
+    g_col = m.geom.g_col
 
     u_slice = zeros(g.np)
     for i=1:g.np
@@ -289,31 +295,36 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
 
     # params
     nx = 2^8
-    nσ = m.nσ
-    σ = m.σ
+    nσ = m.geom.nσ
+    σ = m.geom.σ
+    g_sfc1 = m.geom.g_sfc1
+    g1 = m.geom.g1
+    H = m.geom.H
+    Hx = m.geom.Hx
+    Hy = m.geom.Hy
 
     # get x slice
-    bdy = m.g_sfc1.p[m.g_sfc1.e["bdy"], :]
+    bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
     x = range(neary[2], neary[3], length=nx)
     
     # get indices of surface tris
-    k_sfcs = [get_k([x[i], y], m.g_sfc1, m.g_sfc1.el) for i=1:nx]
+    k_sfcs = [get_k([x[i], y], g_sfc1, g_sfc1.el) for i=1:nx]
 
     # get points in reference tri
-    ξ_sfcs = [transform_to_ref_el(m.g_sfc1.el, [x[i], y], m.g_sfc1.p[m.g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
+    ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x[i], y], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
 
     # get indices of wedges
     k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:nx]
     k_ws = vcat(k_ws, k_ws[end, :]')
 
     # get points in reference wedge
-    ξ_ws = [transform_to_ref_el(m.g1.el, [x[j], y, σ[i]], m.g1.p[m.g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
+    ξ_ws = [transform_to_ref_el(g1.el, [x[j], y, σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
 
     # nσ × nx coords
-    Hs = [m.H(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
-    Hxs = [m.Hx(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
-    Hys = [m.Hy(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
+    Hs = [H(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
+    Hxs = [Hx(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
+    Hys = [Hy(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
     xx = repeat(x', nσ, 1)
     zz = repeat(σ, 1, nx).*repeat(Hs', nσ, 1)
 
@@ -369,16 +380,18 @@ function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true,
 end
 
 function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y, fname)
-    k_sfc = get_k([x, y], m.g_sfc1, m.g_sfc1.el)
-    ξ_sfc = transform_to_ref_el(m.g_sfc1.el, [x, y], m.g_sfc1.p[m.g_sfc1.t[k_sfc, :], :])
+    σ = m.geom.σ
+    nσ = m.geom.nσ
+    g_sfc1 = m.geom.g_sfc1
+    g1 = m.geom.g1
+    k_sfc = get_k([x, y], g_sfc1, g_sfc1.el)
+    ξ_sfc = transform_to_ref_el(g_sfc1.el, [x, y], g_sfc1.p[g_sfc1.t[k_sfc, :], :])
 
-    σ = m.σ
-    nσ = m.nσ
-    H = m.H(ξ_sfc, k_sfc)
+    H = m.geom.H(ξ_sfc, k_sfc)
     z = σ*H
     k_ws = get_k_ws(k_sfc, nσ)
     k_ws = [k_ws; k_ws[end]]
-    ξ_ws = [transform_to_ref_el(m.g1.el, [x, y, σ[i]], m.g1.p[m.g1.t[k_ws[i], :], :]) for i=1:nσ]
+    ξ_ws = [transform_to_ref_el(g1.el, [x, y, σ[i]], g1.p[g1.t[k_ws[i], :], :]) for i=1:nσ]
 
     ωx_fe = FEField(ωx)
     ωy_fe = FEField(ωy)

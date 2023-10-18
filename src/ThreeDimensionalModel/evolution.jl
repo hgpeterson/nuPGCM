@@ -1,3 +1,42 @@
+struct EvolutionComponents{HM, FAV, MV, A}
+    # depth-weighted mass matrix
+    HM::HM # sparse matrix
+
+    # vectors of diffusion LHS and RHS matrices for each 1D σ-column
+    LHS_diffs::FAV # vector of factorized matrices
+    RHS_diffs::MV # vector of sparse matrices
+
+    # advection arrays
+    Ax::A # 4D array
+    Ay::A
+
+    # advection on or off?
+    advection::Bool
+end
+
+"""
+    evolution = EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, advection)
+"""
+function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, advection)
+    # unpack
+    g1 = geom.g1
+    g2 = geom.g2
+    H = geom.H
+    nσ = geom.nσ
+    
+    LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
+
+    if advection
+        HM = build_HM(g2, H, nσ)
+        Ax, Ay = build_advection_arrays(g1, g2)
+    else
+        HM = spzeros(g2.np, g2.np)
+        Ax = Ay = zeros(1, 1, 1, 1)
+    end
+
+    return EvolutionComponents(HM, LHS_diffs, RHS_diffs, Ax, Ay, advection)
+end
+
 """
     K_col = build_K_col(σ, κ)
 
@@ -26,6 +65,40 @@ function build_K_col(σ, κ)
     push!(K, (nσ, nσ-1, fd_σ[2]))
     push!(K, (nσ, nσ  , fd_σ[3]))
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
+end
+
+"""
+    LHSs, RHSs = build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forcing)
+"""
+function build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forcing)
+    # unpack
+    ε² = params.ε²
+    μ = params.μ
+    ϱ = params.ϱ
+    Δt = params.Δt
+    σ = geom.σ
+    nσ = geom.nσ
+    H = geom.H
+    κ = forcing.κ
+    g_sfc2 = geom.g_sfc2
+
+    α = ε²/μ/ϱ
+    K_cols = [build_K_col(σ, κ[get_col_inds(i, geom.nσ)]) for i=1:g_sfc2.np]
+    LHSs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
+    RHSs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
+    for i=1:g_sfc2.np
+        if i ∉ g_sfc2.e["bdy"]
+            LHSs_sp[i] = I - α/H[i]^2*Δt/4*K_cols[i] # Δt = Δt/2
+            LHSs_sp[i][1, :] = K_cols[i][1, :]
+            LHSs_sp[i][nσ, :] = K_cols[i][nσ, :]
+            RHSs[i] = I + α/H[i]^2*Δt/4*K_cols[i]
+            RHSs[i][1, :] .= 0
+            RHSs[i][nσ, :] .= 0
+        end
+    end
+    LHSs = [lu(LHS) for LHS ∈ LHSs_sp]
+
+    return LHSs, RHSs
 end
 
 """
@@ -113,17 +186,22 @@ function gpu_adv!(adv, Ax, Ay, χx, χy, b, t2)
     return 
 end
 function advection(m::ModelSetup3D, χx, χy, b)
+    # unpack
+    g2 = m.geom.g2
+    Ax = m.evolution.Ax
+    Ay = m.evolution.Ay
+
     # load arrays on GPU
-    adv = CUDA.zeros(m.g2.nt, m.g2.nn) 
+    adv = CUDA.zeros(g2.nt, g2.nn) 
     χx_gpu = CuArray(χx)
     χy_gpu = CuArray(χy)
     b_gpu = CuArray(b)
-    t2 = CuArray(m.g2.t)
+    t2 = CuArray(g2.t)
 
     # # setup advection kernel
-    # kernel = @cuda launch=false gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
+    # kernel = @cuda launch=false gpu_adv!(adv, Ax, Ay, χx_gpu, χy_gpu, b_gpu, t2)
     # config = launch_configuration(kernel.fun)
-    # N = m.g2.nt*m.g2.nn
+    # N = g2.nt*g2.nn
     # threads = min(N, config.threads)
     # blocks = cld(N, threads)
     # println(threads)
@@ -131,8 +209,8 @@ function advection(m::ModelSetup3D, χx, χy, b)
 
     CUDA.@sync begin
         # kernel(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
-        # @cuda threads=512 blocks=cld(length(t2), 512) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
-        @cuda threads=288 blocks=cld(length(t2), 288) gpu_adv!(adv, m.Ax, m.Ay, χx_gpu, χy_gpu, b_gpu, t2)
+        @cuda threads=512 blocks=cld(length(t2), 512) gpu_adv!(adv, Ax, Ay, χx_gpu, χy_gpu, b_gpu, t2)
+        # @cuda threads=288 blocks=cld(length(t2), 288) gpu_adv!(adv, Ax, Ay, χx_gpu, χy_gpu, b_gpu, t2)
     end
 
     # copy result to CPU
@@ -153,45 +231,26 @@ end
 
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # unpack
-    μ = m.μ
-    ϱ = m.ϱ
-    ε² = m.ε²
-    κ = m.κ
-    Δt = m.Δt
-    g1 = m.g1
-    g2 = m.g2
-    nσ = m.nσ
-    H = m.H
-    HM = m.HM
-    g_sfc2 = m.g_sfc2
+    Δt = m.params.Δt
+    g1 = m.geom.g1
+    g2 = m.geom.g2
+    nσ = m.geom.nσ
+    H = m.geom.H
+    g_sfc2 = m.geom.g_sfc2
+    LHS_diffs = m.evolution.LHS_diffs
+    RHS_diffs = m.evolution.RHS_diffs
+    HM = m.evolution.HM
 
+    # put on GPU
     HM_gpu = CuSparseMatrixCSC(HM)
-    # Pl = factorize(Diagonal(HM))
 
-    # element map
+    # element map TODO: add this to `Grid`?
     el_map = build_element_map(g2)
 
     # timestep
     n_steps = Int64(round(t_final/Δt))
     n_steps_plot = Int64(round(t_plot/Δt))
     n_steps_save = Int64(round(t_save/Δt))
-
-    # diffusion matrices
-    α = ε²/μ/ϱ
-    K_cols = [build_K_col(m.σ, κ[get_col_inds(i, nσ)]) for i=1:g_sfc2.np]
-    LHS_diffs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
-    RHS_diffs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
-    for i=1:g_sfc2.np
-        if i ∉ g_sfc2.e["bdy"]
-            LHS_diffs_sp[i] = I - α/H[i]^2*Δt/4*K_cols[i] # Δt = Δt/2
-            LHS_diffs_sp[i][1, :] = K_cols[i][1, :]
-            LHS_diffs_sp[i][nσ, :] = K_cols[i][nσ, :]
-            RHS_diffs[i] = I + α/H[i]^2*Δt/4*K_cols[i]
-            RHS_diffs[i][1, :] .= 0
-            RHS_diffs[i][nσ, :] .= 0
-        end
-    end
-    LHS_diffs = [lu(LHS) for LHS ∈ LHS_diffs_sp]
 
     # pvd file
     rm("$out_folder/state.pvd", force=true)
@@ -247,7 +306,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
         @time "advection" begin
         # Δt advection step
-        if m.advection
+        if m.evolution.advection
             invert!(m, s)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
@@ -283,7 +342,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             ETR_h = ETR ÷ 3600
             ETR_m = (ETR % 3600) ÷ 60
             ETR_s = ETR % 60
-            @info @sprintf("%d steps in %d s (ETR: %d:%d:%d)", i, t_elapsed0, ETR_h, ETR_m, ETR_s) ∫b Δb Δb_pct
+            @info @sprintf("%d steps in %d s (ETR: %02d:%02d:%02d)", i, t_elapsed0, ETR_h, ETR_m, ETR_s) ∫b Δb Δb_pct
             ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
@@ -370,7 +429,3 @@ function ba_adv(x, t, H)
     # return exp(-(x[1]^2 + (x[2] - t)^2 + (H*x[3] + 0.5)^2)/0.02)
     return exp(-(x[1]^2 + x[2]^2 + (H*x[3] + 0.5 - t)^2)/0.02)
 end
-
-#       default  lower_rtol   Pl  lower_rtol+Pl  GPU
-# step1     0.5         0.5  0.2            0.2  0.1
-# step2     3.0         3.0  0.4            0.4  0.1

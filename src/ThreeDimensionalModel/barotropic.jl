@@ -1,13 +1,19 @@
 """
-    A = build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+    A = build_barotropic_LHS(params::Params, geom::Geometry, νωx_Ux_bot, νωy_Ux_bot)
 
 Generate LU-factored LHS matrix for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²)
+function build_barotropic_LHS(params::Params, geom::Geometry, νωx_Ux_bot, νωy_Ux_bot)
     # unpack
+    f = params.f
+    β = params.β
+    ε² = params.ε²
+    H = geom.H
+    Hx = geom.Hx
+    Hy = geom.Hy
     g = νωx_Ux_bot.g
     bdy = g.e["bdy"]
     J = g.J
@@ -67,21 +73,27 @@ function build_barotropic_LHS(νωx_Ux_bot, νωy_Ux_bot, f, β, H, Hx, Hy, ε²
 end
 
 """
-    r = build_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+    r = build_barotropic_RHS_τ(params::Params, geom::Geometry, forcing::Forcing, νωx_τ_bot, νωy_τ_bot)
 
 Generate wind component of RHS vector for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
         = -J(1/H, γ) + z⋅(∇×τ/H) + ε² ∇⋅(ν*ω_bot/H)
 with Ψ = 0 on boundary.
 """
-function build_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot, νωy_τ_bot, ε²)
+function build_barotropic_RHS_τ(params::Params, geom::Geometry, forcing::Forcing, νωx_τ_bot, νωy_τ_bot)
     # unpack
+    ε² = params.ε²
+    H = geom.H
+    Hx = geom.Hx
+    Hy = geom.Hy
+    τx = forcing.τx
+    τy = forcing.τy
+    τx_y = forcing.τx_y
+    τy_x = forcing.τy_x
     g = νωx_τ_bot.g
     bdy = g.e["bdy"]
     J = g.J
     el = g.el
-
-    # indices
     N = g.np
 
     # stamp
@@ -108,7 +120,7 @@ function build_barotropic_RHS_τ(H, Hx, Hy, τx, τy, τx_y, τy_x, νωx_τ_bot
 end
 
 """
-    r = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot)
+    r = build_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; showplots=false)
 
 Generate buoyancy component of RHS vector for the problem
     ε²[ ∂x(r_sym ∂x(Ψ)) + ∂y(r_sym ∂y(Ψ)) + ∂x(r_asym ∂y(Ψ)) - ∂y(r_asym ∂x(Ψ)) ] - J(f/H, Ψ)
@@ -120,15 +132,13 @@ function build_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; sh
     JEBAR = build_JEBAR(m, b, showplots=showplots)
 
     # unpack
-    ε² = m.ε²
-    g = m.g_sfc1
+    ε² = m.params.ε²
+    g = m.geom.g_sfc1
     bdy = g.e["bdy"]
     el = g.el
-    H = m.H
-    Hx = m.Hx
-    Hy = m.Hy
-    g2 = H.g
-    el2 = g2.el
+    H = m.geom.H
+    Hx = m.geom.Hx
+    Hy = m.geom.Hy
 
     # stamp
     rhs = zeros(g.np)
@@ -152,14 +162,17 @@ function build_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; sh
     return rhs
 end
 
+"""
+    JEBAR = build_JEBAR(m::ModelSetup3D, b; showplots=false)
+"""
 function build_JEBAR(m::ModelSetup3D, b; showplots=false)
     # unpack
-    g_sfc1 = m.g_sfc1
-    σ = m.σ
-    Dx = m.Dx
-    Dy = m.Dy
-    Hx = m.Hx
-    Hy = m.Hy
+    g_sfc1 = m.geom.g_sfc1
+    σ = m.geom.σ
+    Hx = m.geom.Hx
+    Hy = m.geom.Hy
+    Dx = m.inversion.Dx
+    Dy = m.inversion.Dy
 
     # compute gradients
     bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, :))

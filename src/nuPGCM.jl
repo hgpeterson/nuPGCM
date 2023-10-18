@@ -111,6 +111,9 @@ export
     ### 3D Model ###
 
     # model structs
+    Params,
+    Geometry,
+    Forcing,
     ModelSetup3D,
     ModelState3D,
 
