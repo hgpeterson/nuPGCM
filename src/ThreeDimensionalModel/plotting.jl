@@ -335,7 +335,7 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     χy = [χy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
     ux = zeros(nσ, nx)
     uy = zeros(nσ, nx)
-    for i=1:nx
+    for i=2:nx-1
         ux[:, i] = -differentiate(χy[:, i], σ*Hs[i])
         uy[:, i] = +differentiate(χx[:, i], σ*Hs[i])
     end

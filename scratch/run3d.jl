@@ -1,6 +1,7 @@
 using nuPGCM
 using PyPlot
 using Printf
+import Base: run
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -9,8 +10,8 @@ pygui(false)
 set_out_folder("../output")
 
 # depth
-# H(x) = 1 - x[1]^2 - x[2]^2
-H(x) = (1 - x[1]^2)*(1 - x[2]^2)
+H(x) = 1 - x[1]^2 - x[2]^2
+# H(x) = 4*x[1]*(1 - x[1])*(1 - x[2]^2)
 # H(x) = 1 + 0*x[1]
 
 function setup()
@@ -19,9 +20,9 @@ function setup()
     # ε² = 4e-6
     ε² = 1e-2
     # ϱ = 7e-4
-    # ϱ = 1e0
-    ϱ = 1e-4
-    Δt = 1e-3*μ*ϱ/ε²
+    ϱ = 1e0
+    # ϱ = 1e-4
+    Δt = 1e-4*μ*ϱ/ε²
     # Δt = 1e-4
     f = 1.
     # β = 0.
@@ -29,7 +30,7 @@ function setup()
     params = Params(; ε², μ, ϱ, Δt, f, β)
 
     # geometry
-    geom = Geometry(:square, H, res=2, nσ=0, chebyshev=false)
+    geom = Geometry(:circle, H, res=2, nσ=0, chebyshev=false)
 
     # forcing
     τx(x) = 0.
@@ -67,16 +68,18 @@ function run(m::ModelSetup3D)
 end
 
 function postprocess()
-    for i=1:50
-        s = load_state_3D(m, "$out_folder/state$i.h5")
-        nuPGCM.quick_plot(s.Ψ, L"Barotropic streamfunction $\Psi$", @sprintf("%s/psi%03d.png", out_folder, i))
-        # nuPGCM.plot_u(m, s, 0, i=i)
-    end
+    # i = 1
+    # while isfile("$out_folder/state$i.h5")
+    #     s = load_state_3D(m, "$out_folder/state$i.h5")
+    #     nuPGCM.quick_plot(s.Ψ, L"Barotropic streamfunction $\Psi$", @sprintf("%s/psi%03d.png", out_folder, i))
+    #     # nuPGCM.plot_u(m, s, 0, i=i)
+    #     i += 1
+    # end
     run(`bash -c "make_movie 20 psi"`)
 end
 
-m = setup()
-s = run(m)
-# postprocess()
+# m = setup()
+# s = run(m)
+postprocess()
 
 println("Done.")

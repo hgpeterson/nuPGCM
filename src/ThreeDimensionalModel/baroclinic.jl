@@ -339,8 +339,9 @@ function build_b_gradient_matrices(geom::Geometry)
     g2 = geom.g2
     σ = geom.σ
     nσ = geom.nσ
+    g_sfc1 = geom.g_sfc1
+    g_sfc2 = geom.g_sfc2
     H = geom.H
-    g_sfc2 = H.g
     Hx = geom.Hx
     Hy = geom.Hy
     w1 = g1.el
@@ -349,11 +350,14 @@ function build_b_gradient_matrices(geom::Geometry)
     Dξ = [φξ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dη = [φη(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
     Dζ = [φζ(w2, w1.p[i, :], j) for i=1:w1.n, j=1:w2.n]
-    imap = reshape(1:g_sfc2.nt*3*(2nσ-2), (g_sfc2.nt, 3, 2nσ-2))
+    imap = reshape(1:g_sfc1.nt*3*(2nσ-2), (g_sfc1.nt, 3, 2nσ-2))
     Dx = Tuple{Int64,Int64,Float64}[]
     Dy = Tuple{Int64,Int64,Float64}[]
-    @showprogress "Building buoyancy gradient matrices..." for k=1:g_sfc2.nt
-        for i=1:3
+    @showprogress "Building buoyancy gradient matrices..." for k=1:g_sfc1.nt
+        for i=1:g_sfc1.nn
+            if g_sfc1.t[k, i] ∈ g_sfc1.e["bdy"]  
+                continue
+            end
             i1 = i 
             i2 = i + 3
             for j=1:nσ-1

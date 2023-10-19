@@ -2,6 +2,8 @@ struct EvolutionComponents{HM, FAV, MV, A}
     # depth-weighted mass matrix
     HM::HM # sparse matrix
 
+    K_stab::HM
+
     # vectors of diffusion LHS and RHS matrices for each 1D σ-column
     LHS_diffs::FAV # vector of factorized matrices
     RHS_diffs::MV # vector of sparse matrices
@@ -23,7 +25,9 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
     g2 = geom.g2
     H = geom.H
     nσ = geom.nσ
-    
+
+    K_stab = build_K_stab(geom)
+
     LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
 
     if advection
@@ -34,8 +38,53 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
         Ax = Ay = zeros(1, 1, 1, 1)
     end
 
-    return EvolutionComponents(HM, LHS_diffs, RHS_diffs, Ax, Ay, advection)
+    return EvolutionComponents(HM, K_stab, LHS_diffs, RHS_diffs, Ax, Ay, advection)
 end
+
+function build_K_stab(geom::Geometry)
+    # unpack
+    g = geom.g2
+    el = g.el
+    nσ = geom.nσ
+    H = geom.H
+    Hx = geom.Hx
+    Hy = geom.Hy
+
+    # σ FE
+    σ = FEField(g.p[:, 3], g)
+
+    # integrand function
+    function f(ξ, i, j, k, k_sfc, jac)
+        ∇φi_ref = [∂φ(el, ξ, i, d) for d=1:3]
+        ∇φj_ref = [∂φ(el, ξ, j, d) for d=1:3]
+        ∇φi = jac'*∇φi_ref
+        ∇φj = jac'*∇φj_ref
+        return g.J.dets[k]*(∇φi[1]*(∇φj[1]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[3]) + 
+                            ∇φi[2]*(∇φj[2]*H(ξ[1:2], k_sfc) - σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[3]) + 
+                            ∇φi[3]*((1 + σ(ξ, k)^2*(Hx(ξ[1:2], k_sfc)^2 + Hy(ξ[1:2], k_sfc)^2))/H(ξ[1:2], k_sfc)*∇φj[3] - 
+                            σ(ξ, k)*Hx(ξ[1:2], k_sfc)*∇φj[1] - 
+                            σ(ξ, k)*Hy(ξ[1:2], k_sfc)*∇φj[2]))
+    end
+
+    # stamp
+    N = g.nt*el.n^2
+    I = zeros(Int64, N)
+    J = zeros(Int64, N)
+    V = zeros(Float64, N)
+    n = 1
+    @showprogress "Building diffusion matrix..." for k=1:g.nt
+        k_sfc = get_k_sfc(k, nσ)
+        jac = g.J.Js[k, :, :]
+        for i=1:el.n, j=1:el.n
+            I[n] = g.t[k, i]
+            J[n] = g.t[k, j]
+            V[n] = ref_el_quad(ξ -> f(ξ, i, j, k, k_sfc, jac), el)
+            n += 1
+        end
+    end
+    return dropzeros!(sparse(I, J, V, g.np, g.np))
+end
+
 
 """
     K_col = build_K_col(σ, κ)
@@ -240,9 +289,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     LHS_diffs = m.evolution.LHS_diffs
     RHS_diffs = m.evolution.RHS_diffs
     HM = m.evolution.HM
+    K_stab = m.evolution.K_stab
 
     # put on GPU
     HM_gpu = CuSparseMatrixCSC(HM)
+
+    # stiffness matrix for stabilizing diffusion
+    # LHS_stab = CuSparseMatrixCSC(HM + 2e-5*Δt/2*K_stab)
+    LHS_stab = CuSparseMatrixCSC(HM + 1e-4*Δt/2*K_stab)
 
     # element map TODO: add this to `Grid`?
     el_map = build_element_map(g2)
@@ -296,6 +350,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     t1 = time()
     i_save = 1
     for i=1:n_steps
+        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+
         # @time "diffusion" begin
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
@@ -326,6 +382,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         end
         # end
 
+        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
         end
@@ -338,7 +396,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             ∫b = sum(HM*s.b.values) 
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
-            ETR = (n_steps-i)*t_elapsed1/n_steps_save
+            # ETR = (n_steps - i)*t_elapsed1/n_steps_save
+            ETR = (n_steps - i)*t_elapsed0/i
             ETR_h = ETR ÷ 3600
             ETR_m = (ETR % 3600) ÷ 60
             ETR_s = ETR % 60
