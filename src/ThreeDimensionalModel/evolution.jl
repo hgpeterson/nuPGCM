@@ -296,15 +296,15 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     t1 = time()
     i_save = 1
     for i=1:n_steps
-        @time "diffusion" begin
+        # @time "diffusion" begin
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        end
+        # end
 
-        @time "advection" begin
+        # @time "advection" begin
         # Δt advection step
         if m.evolution.advection
             invert!(m, s)
@@ -316,15 +316,15 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             adv = Array(cg(HM_gpu, -adv_node_gpu))
             s.b.values[:] = s.b.values + Δt*adv
         end
-        end
+        # end
 
-        @time "diffusion" begin
+        # @time "diffusion" begin
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        end
+        # end
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")

@@ -1,16 +1,14 @@
 include("mesh_making_utils.jl")
 
-function generate_circle_mesh(h)
+function generate_rect_mesh(h)
     # init
     gmsh.initialize()
     
     # model
-    gmsh.model.add("circle")
+    gmsh.model.add("rect")
 
     # volumes
-    gmsh.model.occ.addCircle(0, 0, 0, 1, 1) 
-    gmsh.model.occ.addCurveLoop([1], 1)
-    gmsh.model.occ.addPlaneSurface([1], 1)
+    gmsh.model.occ.addRectangle(0, -1, 0, 1, 2, 1) 
 
     # sync 
     gmsh.model.occ.synchronize()
@@ -30,4 +28,4 @@ function generate_circle_mesh(h)
     gmsh.finalize()
 end
 
-make_meshes(generate_circle_mesh, :circle)
+make_meshes(generate_rect_mesh, :rectangle)

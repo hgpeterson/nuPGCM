@@ -9,7 +9,8 @@ pygui(false)
 set_out_folder("../output")
 
 # depth
-H(x) = 1 - x[1]^2 - x[2]^2
+# H(x) = 1 - x[1]^2 - x[2]^2
+H(x) = (1 - x[1]^2)*(1 - x[2]^2)
 # H(x) = 1 + 0*x[1]
 
 function setup()
@@ -18,16 +19,17 @@ function setup()
     # ε² = 4e-6
     ε² = 1e-2
     # ϱ = 7e-4
-    ϱ = 1e0
-    # ϱ = 1e-4
-    # Δt = 1e-3*μ*ϱ/ε²
-    Δt = 1e-2
+    # ϱ = 1e0
+    ϱ = 1e-4
+    Δt = 1e-3*μ*ϱ/ε²
+    # Δt = 1e-4
     f = 1.
-    β = 0.
+    # β = 0.
+    β = 1.
     params = Params(; ε², μ, ϱ, Δt, f, β)
 
     # geometry
-    geom = Geometry(:circle, H; res=2, nσ=0, chebyshev=false)
+    geom = Geometry(:square, H, res=2, nσ=0, chebyshev=false)
 
     # forcing
     τx(x) = 0.
@@ -55,7 +57,9 @@ function run(m::ModelSetup3D)
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.5)^2 + x[2]^2 + (H(x)*x[3] + 0.75)^2)/0.02), m.g2).values
     # s.b.values[:] = FEField(x -> exp(-((x[1] - 0.8)^2 + x[2]^2 + (H(x)*x[3] + H([0, 0.8]))^2)/0.02), m.g2).values
 
-    t_final = 5.0
+    # t_final = 5.0
+    # t_final = 5e-2
+    t_final = 5e-2*m.params.μ*m.params.ϱ/m.params.ε²
     t_plot = t_final/5
     t_save = t_final/50
     evolve!(m, s, t_final, t_plot, t_save)
@@ -71,8 +75,8 @@ function postprocess()
     run(`bash -c "make_movie 20 psi"`)
 end
 
-# m = setup()
-# s = run(m)
-postprocess()
+m = setup()
+s = run(m)
+# postprocess()
 
 println("Done.")

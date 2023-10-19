@@ -89,11 +89,10 @@ end
     geom = Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
 """
 function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
-    if basin_shape == :circle 
-        g_sfc1 = Grid(Triangle(order=1), "$(@__DIR__)/../../meshes/circle/mesh$res.h5")
-    else
+    if basin_shape ∉ [:circle, :square]
         error("Unsupported basin shape: $basin_shape.")
     end
+    g_sfc1 = Grid(Triangle(order=1), "$(@__DIR__)/../../meshes/$(string(basin_shape))/mesh$res.h5")
     
     # second order surface mesh
     g_sfc2 = add_midpoints(g_sfc1)
