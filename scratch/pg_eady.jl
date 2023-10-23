@@ -9,84 +9,84 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-# function basic_state(z, μ, ε²)
-#     nz = length(z)
-#     N = 3*nz # U, V, Bz
-#     imap = reshape(1:N, (3, nz)) 
-#     Umap = imap[1, :]
-#     Vmap = imap[2, :]
-#     Bzmap = imap[3, :]
-#     A = Tuple{Int64,Int64,Float64}[]
-#     r = zeros(N)
-#     for i=2:nz-1
-#         fd_z  = mkfdstencil(z[i-1:i+1], z[i], 1)
-#         fd_zz = mkfdstencil(z[i-1:i+1], z[i], 2)
+function basic_state(z, μ, ε²)
+    nz = length(z)
+    N = 3*nz # U, V, Bz
+    imap = reshape(1:N, (3, nz)) 
+    Umap = imap[1, :]
+    Vmap = imap[2, :]
+    Bzmap = imap[3, :]
+    A = Tuple{Int64,Int64,Float64}[]
+    r = zeros(N)
+    for i=2:nz-1
+        fd_z  = mkfdstencil(z[i-1:i+1], z[i], 1)
+        fd_zz = mkfdstencil(z[i-1:i+1], z[i], 2)
 
-#         eq = imap[1, i]
-#         push!(A, (eq, Umap[i-1], -ε²*fd_zz[1]))
-#         push!(A, (eq, Umap[i],   -ε²*fd_zz[2]))
-#         push!(A, (eq, Umap[i+1], -ε²*fd_zz[3]))
-#         push!(A, (eq, Vmap[i],   -1))
+        eq = imap[1, i]
+        push!(A, (eq, Umap[i-1], -ε²*fd_zz[1]))
+        push!(A, (eq, Umap[i],   -ε²*fd_zz[2]))
+        push!(A, (eq, Umap[i+1], -ε²*fd_zz[3]))
+        push!(A, (eq, Vmap[i],   -1))
         
-#         eq = imap[2, i]
-#         push!(A, (eq, Vmap[i-1], -ε²*fd_zz[1]))
-#         push!(A, (eq, Vmap[i],   -ε²*fd_zz[2]))
-#         push!(A, (eq, Vmap[i+1], -ε²*fd_zz[3]))
-#         push!(A, (eq, Umap[i],    1))
-#         r[eq] = z[i]
+        eq = imap[2, i]
+        push!(A, (eq, Vmap[i-1], -ε²*fd_zz[1]))
+        push!(A, (eq, Vmap[i],   -ε²*fd_zz[2]))
+        push!(A, (eq, Vmap[i+1], -ε²*fd_zz[3]))
+        push!(A, (eq, Umap[i],    1))
+        r[eq] = z[i]
 
-#         eq = imap[3, i]
-#         push!(A, (eq, Bzmap[i-1], -ε²/μ*fd_z[1]))
-#         push!(A, (eq, Bzmap[i],   -ε²/μ*fd_z[2]))
-#         push!(A, (eq, Bzmap[i+1], -ε²/μ*fd_z[3]))
-#         push!(A, (eq, Vmap[i],    -1))
-#     end
+        eq = imap[3, i]
+        push!(A, (eq, Bzmap[i-1], -ε²/μ*fd_z[1]))
+        push!(A, (eq, Bzmap[i],   -ε²/μ*fd_z[2]))
+        push!(A, (eq, Bzmap[i+1], -ε²/μ*fd_z[3]))
+        push!(A, (eq, Vmap[i],    -1))
+    end
 
-#     fd_z = mkfdstencil(z[1:3], z[1], 1)
+    fd_z = mkfdstencil(z[1:3], z[1], 1)
 
-#     eq = imap[1, 1]
-#     push!(A, (eq, Umap[1], fd_z[1]))
-#     push!(A, (eq, Umap[2], fd_z[2]))
-#     push!(A, (eq, Umap[3], fd_z[3]))
+    eq = imap[1, 1]
+    push!(A, (eq, Umap[1], fd_z[1]))
+    push!(A, (eq, Umap[2], fd_z[2]))
+    push!(A, (eq, Umap[3], fd_z[3]))
 
-#     eq = imap[2, 1]
-#     push!(A, (eq, Vmap[1], fd_z[1]))
-#     push!(A, (eq, Vmap[2], fd_z[2]))
-#     push!(A, (eq, Vmap[3], fd_z[3]))
+    eq = imap[2, 1]
+    push!(A, (eq, Vmap[1], fd_z[1]))
+    push!(A, (eq, Vmap[2], fd_z[2]))
+    push!(A, (eq, Vmap[3], fd_z[3]))
 
-#     eq = imap[3, 1]
-#     push!(A, (eq, Bzmap[1], 1))
+    eq = imap[3, 1]
+    push!(A, (eq, Bzmap[1], 1))
 
-#     fd_z  = mkfdstencil(z[nz-2:nz], z[nz], 1)
+    fd_z  = mkfdstencil(z[nz-2:nz], z[nz], 1)
 
-#     eq = imap[1, nz]
-#     push!(A, (eq, Umap[nz-2], fd_z[1]))
-#     push!(A, (eq, Umap[nz-1], fd_z[2]))
-#     push!(A, (eq, Umap[nz],   fd_z[3]))
+    eq = imap[1, nz]
+    push!(A, (eq, Umap[nz-2], fd_z[1]))
+    push!(A, (eq, Umap[nz-1], fd_z[2]))
+    push!(A, (eq, Umap[nz],   fd_z[3]))
 
-#     eq = imap[2, nz]
-#     push!(A, (eq, Vmap[nz-2], fd_z[1]))
-#     push!(A, (eq, Vmap[nz-1], fd_z[2]))
-#     push!(A, (eq, Vmap[nz],   fd_z[3]))
+    eq = imap[2, nz]
+    push!(A, (eq, Vmap[nz-2], fd_z[1]))
+    push!(A, (eq, Vmap[nz-1], fd_z[2]))
+    push!(A, (eq, Vmap[nz],   fd_z[3]))
 
-#     eq = imap[3, nz]
-#     push!(A, (eq, Bzmap[nz], 1))
+    eq = imap[3, nz]
+    push!(A, (eq, Bzmap[nz], 1))
 
-#     A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
-#     sol = A\r
-#     U = sol[Umap]
-#     V = sol[Vmap]
-#     Bz = sol[Bzmap]
-#     Uz = differentiate(U, z)
-#     Vz = differentiate(V, z)
-#     return U, V, Bz, Uz, Vz
-# end
+    A = sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), N, N)
+    sol = A\r
+    U = sol[Umap]
+    V = sol[Vmap]
+    Bz = sol[Bzmap]
+    Uz = differentiate(U, z)
+    Vz = differentiate(V, z)
+    return U, V, Bz, Uz, Vz
+end
 
 function basic_state(z, Ri)
     nz = length(z)
     U = copy(z)
     V = zeros(nz)
-    Bz = Ri*ones(nz)
+    Bz = sqrt(Ri)*ones(nz)
     Uz = ones(nz)
     Vz = zeros(nz)
     return U, V, Bz, Uz, Vz
@@ -96,8 +96,8 @@ function growth_rate(eigenvals)
     isort = sortperm(imag(eigenvals), rev=true)
     for i ∈ eachindex(isort)
         if !isnan(eigenvals[isort[i]])
-            # return isort[i+1], imag(eigenvals[isort[i+1]]) # take second biggest one because the first is constant mode
-            return isort[i], imag(eigenvals[isort[i]])
+            return isort[i+1], imag(eigenvals[isort[i+1]]) # take second biggest one because the first is constant mode
+            # return isort[i], imag(eigenvals[isort[i]])
         end
     end
 end
@@ -168,51 +168,41 @@ function build_A_B!(A, B, k, l, z, μ, ε², U, V, Bz, Uz, Vz; primitive=false)
 
     eq = imap[1, 1]
     A[eq, umap[1]] += 1
+    # A[eq, umap[1:3]] .+= fd_z
 
     eq = imap[2, 1]
-    # A[eq, vmap[1]] += 1
-    A[eq, vmap[1]] += fd_z[1]
-    A[eq, vmap[2]] += fd_z[2]
-    A[eq, vmap[3]] += fd_z[3]
+    A[eq, vmap[1]] += 1
+    # A[eq, vmap[1:3]] .+= fd_z
 
     eq = imap[3, 1]
-    A[eq, pmap[1]] += -fd_z[1]
-    A[eq, pmap[2]] += -fd_z[2]
-    A[eq, pmap[3]] += -fd_z[3]
+    A[eq, pmap[1:3]] .+= -fd_z
     A[eq, bmap[1]] += 1
 
     eq = imap[4, 1]
     A[eq, wmap[1]] += 1
 
     eq = imap[5, 1]
-    A[eq, bmap[1]] += fd_z[1]
-    A[eq, bmap[2]] += fd_z[2]
-    A[eq, bmap[3]] += fd_z[3]
+    A[eq, bmap[1:3]] .+= fd_z
 
     fd_z  = mkfdstencil(z[nz-2:nz], z[nz], 1)
 
     eq = imap[1, nz]
     A[eq, umap[nz]] += 1
+    # A[eq, umap[nz-2:nz]] .+= fd_z
 
     eq = imap[2, nz]
-    # A[eq, vmap[nz]] += 1
-    A[eq, vmap[nz-2]] += fd_z[1]
-    A[eq, vmap[nz-1]] += fd_z[2]
-    A[eq, vmap[nz]]   += fd_z[3]
+    A[eq, vmap[nz]] += 1
+    # A[eq, vmap[nz-2:nz]] .+= fd_z
 
     eq = imap[3, nz]
-    A[eq, pmap[nz-2]] += -fd_z[1]
-    A[eq, pmap[nz-1]] += -fd_z[2]
-    A[eq, pmap[nz]]   += -fd_z[3]
+    A[eq, pmap[nz-2:nz]] .+= -fd_z
     A[eq, bmap[nz]] += 1
 
     eq = imap[4, nz]
     A[eq, wmap[nz]] += 1
 
     eq = imap[5, nz]
-    A[eq, bmap[nz-2]] += fd_z[1]
-    A[eq, bmap[nz-1]] += fd_z[2]
-    A[eq, bmap[nz]]   += fd_z[3]
+    A[eq, bmap[nz-2:nz]] .+= fd_z
 
     return A, B
 end
@@ -247,6 +237,7 @@ end
 
 function compute_σ_grid(z, μ, ε², Ri; primitive=false)
     U, V, Bz, Uz, Vz = basic_state(z, Ri)
+    # U, V, Bz, Uz, Vz = basic_state(z, μ, ε²)
     n = 2^4
     kmax = 3
     lmax = 10
@@ -288,8 +279,7 @@ function plot_unstable_mode(k, l, z, μ, ε², Ri; primitive=false)
     # compute 
     U, V, Bz, Uz, Vz = basic_state(z, Ri)
     A, B = build_A_B(k, l, z, μ, ε², U, V, Bz, Uz, Vz, primitive=primitive)
-    println(cond(A))
-    println(cond(B))
+    println("Cond(A) = ", cond(A))
     F = eigen(A, B)
     idx, σ = growth_rate(F.values)
     vec = F.vectors[:, idx]
@@ -389,18 +379,18 @@ function xz_plot(xx, zz, uu, ax, label)
 end
 
 function main()
-    nz = 2^6
-    # z = -0.5:1/(nz-1):0.5
-    z = -cos.(π*(0:nz-1)/(nz-1))/2
+    nz = 2^7
+    z = collect(-0.5:1/(nz-1):0.5)
+    # z = -cos.(π*(0:nz-1)/(nz-1))/2
     μ = 1
     ε² = 1e-2
     Ri = 1
 
     # plot_basic_state(z, Ri)
 
-    # k, l, σ = compute_σ_grid(z, μ, ε², Ri, primitive=false)
+    # k, l, σ = compute_σ_grid(z, μ, ε², Ri, primitive=true)
 
-    plot_unstable_mode(4.1, 0, z, μ, ε², Ri, primitive=false)
+    plot_unstable_mode(1.5, 2, z, μ, ε², Ri, primitive=true)
 
     return
 end
