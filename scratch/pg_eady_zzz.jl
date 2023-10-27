@@ -93,10 +93,12 @@ function basic_state(z, μ, ε²)
 end
 
 function growth_rate(eigenvals)
+    j = 0
     isort = sortperm(imag(eigenvals), rev=true)
     for i ∈ eachindex(isort)
         if !isnan(eigenvals[isort[i]])
-            return isort[i], imag(eigenvals[isort[i]])
+            # return isort[i], imag(eigenvals[isort[i]])
+            return isort[i+j], imag(eigenvals[isort[i+j]])
         end
     end
 end
@@ -124,25 +126,11 @@ function build_A_B!(A, B, k, l, z, μ, ε², U, V, Bz, Uz, Vz; bc="no slip")
         fd_zzz = mkfdstencil(z[zzz_idxs], z[i], 3)
 
         eq = imap[1, i]
-        if primitive 
-            A[eq, umap[i]] += im*k*Uz[i] + im*l*Vz[i]
-            A[eq, umap[i-1:i+1]] .+= (im*k*U[i] + im*l*V[i])*fd_z
-            A[eq, wmap[i]] += Uzz[i]
-            A[eq, wmap[i-1:i+1]] .+= Uz[i]*fd_z
-            B[eq, umap[i-1:i+1]] .+= im*fd_z
-        end
         A[eq, vmap[i-1:i+1]] .+= -fd_z
         A[eq, bmap[i]] += im*k
         A[eq, umap[zzz_idxs]] .+= -ε²*fd_zzz
         
         eq = imap[2, i]
-        if primitive 
-            A[eq, vmap[i]] += im*k*Uz[i] + im*l*Vz[i]
-            A[eq, vmap[i-1:i+1]] .+= (im*k*U[i] + im*l*V[i])*fd_z
-            A[eq, wmap[i]] += Vzz[i]
-            A[eq, wmap[i-1:i+1]] .+= Vz[i]*fd_z
-            B[eq, vmap[i-1:i+1]] .+= im*fd_z
-        end
         A[eq, umap[i-1:i+1]] .+= fd_z
         A[eq, bmap[i]] += im*l
         A[eq, vmap[zzz_idxs]] .+= -ε²*fd_zzz
@@ -201,9 +189,9 @@ function compute_σ_grid(z, μ, ε², Ri; bc="no slip")
     else
         error()
     end
-    n = 2^4
-    kmax = 1.5
-    lmax = 5
+    n = 2^5
+    kmax = 1
+    lmax = 8
     k = 0:kmax/(n-1):kmax
     l = -lmax:2lmax/(n-1):lmax
     σ = zeros(length(l), length(k))
@@ -363,11 +351,11 @@ function plot_basic_state(z, μ)
 end
 
 function main()
-    nz = 2^5
+    nz = 2^8
     z = collect(-0.5:1/(nz-1):0.5)
     # z = -cos.(π*(0:nz-1)/(nz-1))/2
     μ = 1
-    ε² = 1e-2
+    ε² = 1e-4
     Ri = 1
     bc = "no slip"
     # bc = "free slip"
@@ -376,7 +364,8 @@ function main()
 
     # k, l, σ = compute_σ_grid(z, μ, ε², Ri; bc)
 
-    plot_unstable_mode(0.5, -2, z, μ, ε², Ri; bc)
+    # plot_unstable_mode(0.5, -2, z, μ, ε², Ri; bc)
+    plot_unstable_mode(0.7, -8, z, μ, ε², Ri; bc)
 
     return
 end
