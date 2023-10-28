@@ -26,7 +26,8 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
     H = geom.H
     nσ = geom.nσ
 
-    K_stab = build_K_stab(geom)
+    # K_stab = build_K_stab(geom)
+    K_stab = spzeros(g2.np, g2.np)
 
     LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
 
@@ -53,21 +54,17 @@ function build_K_stab(geom::Geometry)
     # σ FE
     σ = FEField(g.p[:, 3], g)
 
-    # integrand function
-    function f(ξ, i, j, k, k_sfc, jac)
-        ∇φi_ref = [∂φ(el, ξ, i, d) for d=1:3]
-        ∇φj_ref = [∂φ(el, ξ, j, d) for d=1:3]
-        ∇φi = jac'*∇φi_ref
-        ∇φj = jac'*∇φj_ref
-        h = H(ξ[1:2], k_sfc)
-        hx = Hx(ξ[1:2], k_sfc)
-        hy = Hy(ξ[1:2], k_sfc)
-        s = σ(ξ, k)
-        return g.J.dets[k]*(∇φi[1]*(∇φj[1]*h - s*hx*∇φj[3]) + 
-                            ∇φi[2]*(∇φj[2]*h - s*hy*∇φj[3]) + 
-                            ∇φi[3]*((1 + s^2*(hx^2 + hy^2))/h*∇φj[3] - 
-                            s*hx*∇φj[1] -
-                            s*hy*∇φj[2]))
+    # integration function
+    ∇φ_refs = [∂φ(el, el.quad_pts[i_quad, :], i, d) for d=1:3, i_quad ∈ eachindex(el.quad_wts), i=1:g.nn]
+    function ∫f(i, j, k, jacs, Hs, Hxs, Hys, σs)
+        ∇φi = jacs'*∇φ_refs[:, :, i]
+        ∇φj = jacs'*∇φ_refs[:, :, j]
+        fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
+                             ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
+                             ∇φi[3, :]*((1 + σs^2*(Hxs^2 + Hys^2))/Hs*∇φj[3, :] - 
+                             σs*Hxs*∇φj[1, :] -
+                             σs*Hys*∇φj[2, :]))
+        return dot(el.quad_wts, fi)
     end
 
     # stamp
@@ -77,15 +74,20 @@ function build_K_stab(geom::Geometry)
     V = zeros(Float64, N)
     n = 1
     @showprogress "Building diffusion matrix..." for k=1:g.nt
+        jacs = g.J.Js[k, :, :]
         k_sfc = get_k_sfc(k, nσ)
-        jac = g.J.Js[k, :, :]
+        Hs = [H(el.quad_pts[i, 1:2], k_sfc) for i ∈ eachindex(el.quad_wts)]
+        Hxs = [Hx(el.quad_pts[i, 1:2], k_sfc) for i ∈ eachindex(el.quad_wts)]
+        Hys = [Hy(el.quad_pts[i, 1:2], k_sfc) for i ∈ eachindex(el.quad_wts)]
+        σs = [σ(el.quad_pts[i, :], k) for i ∈ eachindex(el.quad_wts)]
         for i=1:el.n, j=1:el.n
             I[n] = g.t[k, i]
             J[n] = g.t[k, j]
-            V[n] = ref_el_quad(ξ -> f(ξ, i, j, k, k_sfc, jac), el)
+            V[n] = ∫f(i, j, k, jacs, Hs, Hxs, Hys, σs)
             n += 1
         end
     end
+
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
@@ -351,10 +353,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # solve
     # adv = zeros(g2.np) # pre-allocate for `cg!`
     t0 = time()
-    t1 = time()
     i_save = 1
     for i=1:n_steps
-        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
 
         # @time "diffusion" begin
         # Δt/2 vertical diffusion step
@@ -386,7 +387,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         end
         # end
 
-        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
@@ -395,12 +396,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         if mod(i, n_steps_save) == 0 || i == n_steps
             # info
             t_elapsed0 = time() - t0
-            t_elapsed1 = time() - t1
-            t1 = time()
             ∫b = sum(HM*s.b.values) 
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
-            # ETR = (n_steps - i)*t_elapsed1/n_steps_save
             ETR = (n_steps - i)*t_elapsed0/i
             ETR_h = ETR ÷ 3600
             ETR_m = (ETR % 3600) ÷ 60

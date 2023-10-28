@@ -20,13 +20,13 @@ function setup()
     # ε² = 4e-6
     ε² = 1e-2
     # ϱ = 7e-4
-    ϱ = 1e0
-    # ϱ = 1e-4
+    # ϱ = 1e0
+    ϱ = 1e-2
     Δt = 1e-4*μ*ϱ/ε²
     # Δt = 1e-4
     f = 1.
-    # β = 0.
-    β = 1.
+    β = 0.
+    # β = 1.
     params = Params(; ε², μ, ϱ, Δt, f, β)
 
     # geometry
@@ -78,8 +78,8 @@ function postprocess()
     run(`bash -c "make_movie 20 psi"`)
 end
 
-# m = setup()
-# s = run(m)
-postprocess()
+m = setup()
+s = run(m)
+# postprocess()
 
 println("Done.")
