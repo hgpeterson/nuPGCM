@@ -26,8 +26,8 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
     H = geom.H
     nσ = geom.nσ
 
-    # K_stab = build_K_stab(geom)
-    K_stab = spzeros(g2.np, g2.np)
+    K_stab = build_K_stab(geom)
+    # K_stab = spzeros(g2.np, g2.np)
 
     LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
 
@@ -299,13 +299,15 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
     # put on GPU
     HM_gpu = CuSparseMatrixCSC(HM)
+    # CUDA.memory_status()
 
     # stiffness matrix for stabilizing diffusion
     # LHS_stab = CuSparseMatrixCSC(HM + 2e-5*Δt/2*K_stab)
-    LHS_stab = CuSparseMatrixCSC(HM + 1e-4*Δt/2*K_stab)
+    LHS_stab = CuSparseMatrixCSC(HM + 1e-3*Δt/2*K_stab)
+    CUDA.memory_status()
 
     # element map TODO: add this to `Grid`?
-    el_map = build_element_map(g2)
+    @time "el_map" el_map = build_element_map(g2)
 
     # timestep
     n_steps = Int64(round(t_final/Δt))
@@ -327,7 +329,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # initial condition
     ∫b₀ = sum(HM*s.b.values)
     pe₀ = potential_energy(m, s)
-    @info "Initial condition" ∫b₀ pe₀
+    println("\nInitial condition:") 
+    @printf("    ∫b₀ = %.5e\n    pe₀ = %.5e\n", ∫b₀, pe₀)
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
     vtk_grid("$out_folder/state0", pz', cells) do vtk
         vtk["b"] = s.b.values[1:g1.np]
@@ -345,17 +348,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
     dy = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 2] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 2]) for i=1:3)/3 for k=1:g1.nt]
     dσ = [abs(g1.p[g1.t[k, 1], 3] - g1.p[g1.t[k, 4], 3]) for k=1:g1.nt]
-    ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-    @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+    ux = [-∂z(s.χy, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uy = [+∂z(s.χx, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    uσ = [(∂x(s.χy, [0.25, 0.25, 0.5], k) - ∂y(s.χx, [0.25, 0.25, 0.5], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+    println("CFL:") 
+    @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
 
     # solve
     # adv = zeros(g2.np) # pre-allocate for `cg!`
     t0 = time()
     i_save = 1
     for i=1:n_steps
-        # s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # stabilizing diffusion
+        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
 
         # @time "diffusion" begin
         # Δt/2 vertical diffusion step
@@ -368,6 +373,13 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         # @time "advection" begin
         # Δt advection step
         if m.evolution.advection
+            # @time "invert!" invert!(m, s)
+            # @time "adv_el" adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
+            # @time "adv_node_gpu" adv_node_gpu = CuArray(el_map*adv_el[:])
+            # @time "adv" adv = Array(cg(HM_gpu, -adv_node_gpu))
+            # @time "adv_el" adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
+            # @time "adv_node_gpu" adv_node_gpu = CuArray(el_map*adv_el[:])
+            # @time "adv" adv = Array(cg(HM_gpu, -adv_node_gpu))
             invert!(m, s)
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
@@ -387,27 +399,39 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         end
         # end
 
-        # s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # stabilizing diffusion
+        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+
+        # i++
+        s.i[1] = i
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
         end
 
         if mod(i, n_steps_save) == 0 || i == n_steps
-            # info
-            t_elapsed0 = time() - t0
+            # timing
+            elapsed = time() - t0
+            elapsed_h, elapsed_m, elapsed_s = hrs_mins_secs(elapsed)
+            ETR = (n_steps - i)*elapsed/i
+            ETR_h, ETR_m, ETR_s = hrs_mins_secs(ETR)
+            @printf("\nt = %.2e (%d steps)\n", i*Δt, i)
+            @printf("    time elapsed:   %02d:%02d:%02d\n", elapsed_h, elapsed_m, elapsed_s)
+            @printf("    time remaining: %02d:%02d:%02d\n", ETR_h, ETR_m, ETR_s) 
+
+            # buoyancy
             ∫b = sum(HM*s.b.values) 
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
-            ETR = (n_steps - i)*t_elapsed0/i
-            ETR_h = ETR ÷ 3600
-            ETR_m = (ETR % 3600) ÷ 60
-            ETR_s = ETR % 60
-            @info @sprintf("%d steps in %d s (ETR: %02d:%02d:%02d)", i, t_elapsed0, ETR_h, ETR_m, ETR_s) ∫b Δb Δb_pct
-            ux = [-∂z(s.χy, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uy = [+∂z(s.χx, [0, 0, 0], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            uσ = [(∂x(s.χy, [0, 0, 0], k) - ∂y(s.χx, [0, 0, 0], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
-            @info "CFL" Δt_x=minimum(dx./abs.(ux)) Δt_y=minimum(dy./abs.(uy)) Δt_σ=minimum(dσ./abs.(uσ)) Δt
+            println("Buoyancy conservation:") 
+            @printf("    ∫b     = %.5e\n    Δb     = %.5e\n    Δb_pct = %.5e\n", ∫b, Δb, Δb_pct)
+            ux = [-∂z(s.χy, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uy = [+∂z(s.χx, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+            uσ = [(∂x(s.χy, [0.25, 0.25, 0.5], k) - ∂y(s.χx, [0.25, 0.25, 0.5], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
+
+            # CFL
+            println("CFL:") 
+            @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
 
             # # energy 
             # b_prod = buoyancy_production(m, s) 
@@ -466,6 +490,15 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     println("$out_folder/state.pvd")
 
     return s
+end
+
+"""
+    h, m, s = hrs_mins_secs(seconds)
+
+Returns hours `h`, minutes `m`, and seconds `s` equivalent to total number of `seconds`.
+"""
+function hrs_mins_secs(seconds)
+    return seconds ÷ 3600, (seconds % 3600) ÷ 60, seconds % 60
 end
 
 """

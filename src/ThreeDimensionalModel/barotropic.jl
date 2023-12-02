@@ -190,7 +190,7 @@ function build_JEBAR(m::ModelSetup3D, b; showplots=false)
     JEBAR = DGField(JEBAR, g_sfc1)
 
     if showplots
-        quick_plot(JEBAR, L"J(1/H, \gamma)", "$out_folder/JEBAR.png")
+        quick_plot(JEBAR, cb_label=L"J(1/H, \gamma)", filename="$out_folder/JEBAR.png")
     end
     return JEBAR
 end

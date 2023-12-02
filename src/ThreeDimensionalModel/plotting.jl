@@ -64,28 +64,29 @@ function tplot(g::Grid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 
-function quick_plot(u::FEField, cb_label, fname; vmax=0., contour=true)
-    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
-    quick_plot_save(fname, ax)
+function quick_plot(u::FEField; cb_label="", title="", filename="$out_folder/quick_plot.png", vmax=0.)
+    fig, ax, im = tplot(u, contour=true; cb_label, vmax)
+    quick_plot_save(filename, ax, title)
 end
-function quick_plot(u::FVField, cb_label, fname; vmax=0., contour=false)
-    fig, ax, im = tplot(u, contour=contour, vmax=vmax, cb_label=cb_label)
-    quick_plot_save(fname, ax)
+function quick_plot(u::FVField; cb_label="", title="", filename="$out_folder/quick_plot.png", vmax=0.)
+    fig, ax, im = tplot(u, contour=false; cb_label, vmax)
+    quick_plot_save(filename, ax, title)
 end
-function quick_plot(u::DGField, args...; kwargs...)
-    quick_plot(FEField(u), args..., kwargs...)
+function quick_plot(u::DGField; kwargs...)
+    quick_plot(FEField(u); kwargs...)
 end
-function quick_plot(f::Function, g::Grid, args...; kwargs...)
-    quick_plot(FEField(f, g), args...; kwargs...)
+function quick_plot(f::Function, g::Grid; kwargs...)
+    quick_plot(FEField(f, g); kwargs...)
 end
-function quick_plot_save(fname, ax)
+function quick_plot_save(filename, ax, title)
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Meridional coordinate $y$")
     ax.axis("equal")
     ax.set_xticks(-1:0.5:1)
     ax.set_yticks(-1:0.5:1)
-    savefig(fname)
-    println(fname)
+    ax.set_title(title)
+    savefig(filename)
+    println(filename)
     plt.close()
 end
 

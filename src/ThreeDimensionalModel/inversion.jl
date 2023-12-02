@@ -46,8 +46,8 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     νωy_τx_bot = ν_bot*FEField(ωy_τx[:, 1], g_sfc1)
     νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
     νωy_τ_bot = τx1*νωy_τx_bot + τy1*νωx_τx_bot
-    quick_plot(νωx_τ_bot, L"\nu\omega^x_\tau|_{-H}", "$out_folder/nu_omegax_tau_bot.png")
-    quick_plot(νωy_τ_bot, L"\nu\omega^y_\tau|_{-H}", "$out_folder/nu_omegay_tau_bot.png")
+    quick_plot(νωx_τ_bot, cb_label=L"\nu\omega^x_\tau|_{-H}", filename="$out_folder/nu_omegax_tau_bot.png")
+    quick_plot(νωy_τ_bot, cb_label=L"\nu\omega^y_\tau|_{-H}", filename="$out_folder/nu_omegay_tau_bot.png")
 
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = build_barotropic_RHS_τ(params, geom, forcing, νωx_τ_bot, νωy_τ_bot)
@@ -56,11 +56,9 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
 end
 
 """
-    ωx, ωy, χx, χy, Ψ = invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
-    s = invert(m::ModelSetup3D, b; kwargs...)
-    s = invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
+    s = invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
 """
-function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
+function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     # unpack
     g_sfc1 = m.geom.g_sfc1
     nσ = m.geom.nσ
@@ -73,24 +71,31 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
     ωy_Ux = m.inversion.ωy_Ux
     χx_Ux = m.inversion.χx_Ux
     χy_Ux = m.inversion.χy_Ux
-
+    b = s.b
+    ωx = s.ωx
+    ωy = s.ωy
+    χx = s.χx
+    χy = s.χy
+    Ψ = s.Ψ
 
     # get buoyancy ω and χ
+    # @time "\tsolve_baroclinic_buoyancy" ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
     ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
     νωx_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     νωy_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωy_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     # solve barotropic
+    # @time "\tbuild_barotropic_RHS_b" barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
+    # @time "\tinvert" Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
     barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
     Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
-    if showplots
-        quick_plot(Ψ, L"Barotropic streamfunction $\Psi$", "$out_folder/psi.png")
-    end
 
     # take gradients to get Uˣ and Uʸ
-    Ux, Uy = compute_U(Ψ, showplots=showplots)
+    # @time "\tcompute_U" Ux, Uy = compute_U(Ψ, showplots=showplots)
+    Ux, Uy = compute_U(Ψ)
 
     # put them all together to get full ω's and χ's
+    # @time "\tsum" begin
     for ig ∈ in_nodes1
         for I ∈ g_sfc1.p_to_t[ig]
             k = I[1]
@@ -108,7 +113,14 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
             end
         end
     end
+    # end
+
     if showplots
+        title = latexstring(L"$t = $", @sprintf("%.3f", m.params.Δt*s.i[1]))
+        quick_plot(Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename="$out_folder/psi.png")
+        quick_plot(Ux, cb_label=L"U^x", title=title, filename="$out_folder/Ux.png")
+        quick_plot(Uy, cb_label=L"U^y", title=title, filename="$out_folder/Uy.png")
+
         # save .vtu
         plot_ω_χ(m, ωx, ωy, χx, χy)
 
@@ -127,31 +139,15 @@ function invert!(m::ModelSetup3D, b, ωx, ωy, χx, χy, Ψ; showplots=false)
         plot_yslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/yslice_omegay.png")
     end
 
-    return ωx, ωy, χx, χy, Ψ
-end
-function invert(m::ModelSetup3D, b; kwargs...)
-    ωx = DGField(0, m.geom.g1)
-    ωy = DGField(0, m.geom.g1)
-    χx = DGField(0, m.geom.g1)
-    χy = DGField(0, m.geom.g1)
-    Ψ = FEField(0, m.geom.g_sfc1)
-    return invert!(m, b, ωx, ωy, χx, χy, Ψ; kwargs...)
-end
-function invert!(m::ModelSetup3D, s::ModelState3D; kwargs...)
-    invert!(m, s.b, s.ωx, s.ωy, s.χx, s.χy, s.Ψ; kwargs...)
     return s
 end
 
 """
-    Ux, Uy = compute_U(Ψ; showplots=false)
+    Ux, Uy = compute_U(Ψ)
 """
-function compute_U(Ψ; showplots=false)
+function compute_U(Ψ)
     g = Ψ.g
     Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
     Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)
-    if showplots
-        quick_plot(Ux, L"U^x", "$out_folder/Ux.png")
-        quick_plot(Uy, L"U^y", "$out_folder/Uy.png")
-    end
     return Ux, Uy
 end

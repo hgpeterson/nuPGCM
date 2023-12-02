@@ -212,8 +212,8 @@ function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs; showplots=f
     if showplots
         ωx_Ux_bot = FEField(ωx_Ux[:, 1], g_sfc1)
         ωy_Ux_bot = FEField(ωy_Ux[:, 1], g_sfc1)
-        quick_plot(ωx_Ux_bot, L"\omega^x_{U^x}(-H)", "$out_folder/omegax_Ux_bot.png")
-        quick_plot(ωy_Ux_bot, L"\omega^y_{U^x}(-H)}", "$out_folder/omegay_Ux_bot.png")
+        quick_plot(ωx_Ux_bot, cb_label=L"\omega^x_{U^x}(-H)",  filename="$out_folder/omegax_Ux_bot.png")
+        quick_plot(ωy_Ux_bot, cb_label=L"\omega^y_{U^x}(-H)}", filename="$out_folder/omegay_Ux_bot.png")
     end
 
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
@@ -258,8 +258,8 @@ function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs; 
     if showplots
         ωx_τx_bot = FEField(ωx_τx[:, 1], g_sfc1)
         ωy_τx_bot = FEField(ωy_τx[:, 1], g_sfc1)
-        quick_plot(ωx_τx_bot, L"\omega^x_{\tau^x}(-H)", "$out_folder/omegax_taux_bot.png")
-        quick_plot(ωy_τx_bot, L"\omega^y_{\tau^x}(-H)}", "$out_folder/omegay_taux_bot.png")
+        quick_plot(ωx_τx_bot, cb_label=L"\omega^x_{\tau^x}(-H)",  filename="$out_folder/omegax_taux_bot.png")
+        quick_plot(ωy_τx_bot, cb_label=L"\omega^y_{\tau^x}(-H)}", filename="$out_folder/omegay_taux_bot.png")
     end
 
     return ωx_τx, ωy_τx, χx_τx, χy_τx
@@ -286,32 +286,26 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     χy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
 
     # compute and store
-    for k=1:g_sfc1.nt
-        for i=1:g_sfc1.nn
-            ig = g_sfc1.t[k, i]
-            # H = 0 solution: all zeros
-            if ig ∈ g_sfc1.e["bdy"]
-                continue
-            end
-
+    for i ∈ eachindex(in_nodes1) # H = 0 solution: all zeros
+        ig = in_nodes1[i]
+        for I ∈ g_sfc1.p_to_t[ig]
             # solve baroclinic problem with bx and by from element column
-            j = findfirst(i -> in_nodes1[i] == ig, 1:g_sfc1.np)
-            r = build_baroclinic_RHS(g_col, bx[k, i, :], by[k, i, :], 0, 0, 0, 0)
-            sol = baroclinic_LHSs[j]\r
+            r = build_baroclinic_RHS(g_col, bx[I, :], by[I, :], 0, 0, 0, 0)
+            sol = baroclinic_LHSs[i]\r
 
             # store
-            ωx_b[k, i, :] = sol[0*nσ+1:1*nσ]
-            ωy_b[k, i, :] = sol[1*nσ+1:2*nσ]
-            χx_b[k, i, :] = sol[2*nσ+1:3*nσ]
-            χy_b[k, i, :] = sol[3*nσ+1:4*nσ]
+            ωx_b[I, :] = sol[0*nσ+1:1*nσ]
+            ωy_b[I, :] = sol[1*nσ+1:2*nσ]
+            χx_b[I, :] = sol[2*nσ+1:3*nσ]
+            χy_b[I, :] = sol[3*nσ+1:4*nσ]
         end
     end
 
     if showplots
         ωx_b_bot = DGField(ωx_b[:, :, 1], g_sfc1)
         ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
-        quick_plot(ωx_b_bot, L"\omega^x_b(-H)", "$out_folder/omegax_b_bot.png")
-        quick_plot(ωy_b_bot, L"\omega^y_b(-H)", "$out_folder/omegay_b_bot.png")
+        quick_plot(ωx_b_bot, cb_label=L"\omega^x_b(-H)", filename="$out_folder/omegax_b_bot.png")
+        quick_plot(ωy_b_bot, cb_label=L"\omega^y_b(-H)", filename="$out_folder/omegay_b_bot.png")
     end
 
     return ωx_b, ωy_b, χx_b, χy_b
