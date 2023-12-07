@@ -139,7 +139,6 @@ using HDF5
 using ProgressMeter
 using WriteVTK
 using Delaunay
-using IterativeSolvers
 using CUDA
 using CUDA.CUSPARSE
 
@@ -166,6 +165,7 @@ include("Numerics/elements.jl")
 include("Numerics/integrals.jl")
 include("Numerics/grids.jl")
 include("Numerics/fields.jl")
+include("Numerics/iter_solve.jl")
 
 include("OneDimensionalModel/setup.jl")
 include("OneDimensionalModel/logging.jl")

@@ -75,7 +75,7 @@ function buoyancy_production(m::ModelSetup3D, s::ModelState3D)
 end
 
 """
-ε² ∫ ν [ ∂z(ux)^2 + ∂z(uy)^2] dx dy dz = ε² ∫ ν/H [ ωx^2 + ωy^2 ] dx dy dσ
+ε² ∫ ν [ ∂z(ux)^2 + ∂z(uy)^2] dx dy dz = ε² ∫ Hν [ ωx^2 + ωy^2 ] dx dy dσ
 """
 function KE_dissipation(m::ModelSetup3D, s::ModelState3D)
     # unpack
@@ -90,7 +90,7 @@ function KE_dissipation(m::ModelSetup3D, s::ModelState3D)
     # integrand
     function f(ξ, k)
         k_sfc = get_k_sfc(k, nσ)
-        return ε²*ν(ξ, k)/H(ξ, k_sfc)*(ωx(ξ, k)^2 + ωy(ξ, k)^2)*g2.J.dets[k]
+        return ε²*ν(ξ, k)*H(ξ, k_sfc)*(ωx(ξ, k)^2 + ωy(ξ, k)^2)*g2.J.dets[k]
     end
 
     return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)

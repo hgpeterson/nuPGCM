@@ -53,7 +53,7 @@ function run3d(m::ModelSetup3D)
     # t_final = 5e-2*m.params.μ*m.params.ϱ/m.params.ε²
     # t_plot = t_final/5
     # t_save = t_final/50
-    t_final = 5
+    t_final = 10
     t_plot = 1
     t_save = 0.1
     evolve!(m, s, t_final, t_plot, t_save)
@@ -73,8 +73,9 @@ function postprocess()
     # run(`bash -c "make_movie 20 psi"`)
 end
 
-# m = setup()
-# s = run3d(m)
+m = setup()
+# m = load_setup_3D("$out_folder/setup.h5")
+s = run3d(m)
 postprocess()
 
 println("Done.")

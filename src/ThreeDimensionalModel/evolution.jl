@@ -2,7 +2,7 @@ struct EvolutionComponents{HM, FAV, MV, A}
     # depth-weighted mass matrix
     HM::HM # sparse matrix
 
-    K_stab::HM
+    K_hdiff::HM
 
     # vectors of diffusion LHS and RHS matrices for each 1D σ-column
     LHS_diffs::FAV # vector of factorized matrices
@@ -26,8 +26,8 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
     H = geom.H
     nσ = geom.nσ
 
-    K_stab = build_K_stab(geom)
-    # K_stab = spzeros(g2.np, g2.np)
+    K_hdiff = build_K_hdiff(geom)
+    # K_hdiff = spzeros(g2.np, g2.np)
 
     LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
 
@@ -39,10 +39,10 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
         Ax = Ay = zeros(1, 1, 1, 1)
     end
 
-    return EvolutionComponents(HM, K_stab, LHS_diffs, RHS_diffs, Ax, Ay, advection)
+    return EvolutionComponents(HM, K_hdiff, LHS_diffs, RHS_diffs, Ax, Ay, advection)
 end
 
-function build_K_stab(geom::Geometry)
+function build_K_hdiff(geom::Geometry)
     # unpack
     g = geom.g2
     el = g.el
@@ -64,6 +64,8 @@ function build_K_stab(geom::Geometry)
                              ∇φi[3, :]*((1 + σs^2*(Hxs^2 + Hys^2))/Hs*∇φj[3, :] - 
                              σs*Hxs*∇φj[1, :] -
                              σs*Hys*∇φj[2, :]))
+        # fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
+        #                      ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :])) 
         return dot(el.quad_wts, fi)
     end
 
@@ -73,7 +75,7 @@ function build_K_stab(geom::Geometry)
     J = zeros(Int64, N)
     V = zeros(Float64, N)
     n = 1
-    @showprogress "Building diffusion matrix..." for k=1:g.nt
+    @showprogress "Building horizontal diffusion matrix..." for k=1:g.nt
         jacs = g.J.Js[k, :, :]
         k_sfc = get_k_sfc(k, nσ)
         Hs = [H(el.quad_pts[i, 1:2], k_sfc) for i ∈ eachindex(el.quad_wts)]
@@ -90,6 +92,32 @@ function build_K_stab(geom::Geometry)
 
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
+
+# function build_LHS_RHS_diff(m::ModelSetup3D)
+#     # unpack
+#     g2 = m.geom.g2
+#     HM = m.evolution.HM
+#     K_hdiff = m.evolution.K_hdiff
+#     Δt = m.params.Δt
+#     κ_h = 1e-3 
+
+#     # nonzero entries in mass and stiffness matrices
+#     I_M, J_M, V_M = findnz(HM)
+#     I_K, J_K, V_K = findnz(K_hdiff)
+
+#     # LHS and RHS
+#     I = vcat(I_M, I_K)
+#     J = vcat(J_M, J_K)
+#     V_L = vcat(V_M, +κ_h*Δt/4*V_K)
+#     V_R = vcat(V_M, -κ_h*Δt/4*V_K)
+
+#     # # boundaries
+#     # bdy_idxs = unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
+#     # findall(i -> I[i] ∈ bdy_idxs, I)
+
+#     return CuSparseMatrixCSC(I, J, V_L), 
+#            CuSparseMatrixCSC(I, J, V_R)
+# end
 
 
 """
@@ -295,19 +323,34 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     LHS_diffs = m.evolution.LHS_diffs
     RHS_diffs = m.evolution.RHS_diffs
     HM = m.evolution.HM
-    K_stab = m.evolution.K_stab
+    K_hdiff = m.evolution.K_hdiff
 
     # put on GPU
     HM_gpu = CuSparseMatrixCSC(HM)
-    # CUDA.memory_status()
 
     # stiffness matrix for stabilizing diffusion
-    # LHS_stab = CuSparseMatrixCSC(HM + 2e-5*Δt/2*K_stab)
-    LHS_stab = CuSparseMatrixCSC(HM + 1e-3*Δt/2*K_stab)
+    κ_h = 1e-3 # res = 3
+    # κ_h = 5e-5 # res = 2
+    # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
+    # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
+    # P_hdiff = lu(Tridiagonal(LHS_hdiff))
+    LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
+    RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
+    # Pinv = CuSparseMatrixCSC(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff)))
+    # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
+    # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
+    # @showprogress "hdiff..." for i ∈ unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
+    #     LHS_hdiff[i, :] .= 0
+    #     LHS_hdiff[i, i] = 1
+    #     RHS_hdiff[i, :] .= 0
+    #     RHS_hdiff[i, i] = 1
+    # end
+    # LHS_hdiff = CuSparseMatrixCSC(LHS_hdiff)
+    # RHS_hdiff = CuSparseMatrixCSC(RHS_hdiff)
     CUDA.memory_status()
 
     # element map TODO: add this to `Grid`?
-    @time "el_map" el_map = build_element_map(g2)
+    el_map = build_element_map(g2)
 
     # timestep
     n_steps = Int64(round(t_final/Δt))
@@ -330,7 +373,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     ∫b₀ = sum(HM*s.b.values)
     pe₀ = potential_energy(m, s)
     println("\nInitial condition:") 
-    @printf("    ∫b₀ = %.5e\n    pe₀ = %.5e\n", ∫b₀, pe₀)
+    @printf("    ∫b₀ = % .5e\n    pe₀ = % .5e\n", ∫b₀, pe₀)
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
     vtk_grid("$out_folder/state0", pz', cells) do vtk
         vtk["b"] = s.b.values[1:g1.np]
@@ -355,12 +398,15 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
 
     # solve
-    # adv = zeros(g2.np) # pre-allocate for `cg!`
+    adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
     t0 = time()
     i_save = 1
     for i=1:n_steps
         # stabilizing diffusion
-        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
+        b_gpu = CuArray(s.b.values)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
+        s.b.values[:] = Array(b_gpu)
 
         # @time "diffusion" begin
         # Δt/2 vertical diffusion step
@@ -373,21 +419,21 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         # @time "advection" begin
         # Δt advection step
         if m.evolution.advection
-            # @time "invert!" invert!(m, s)
-            # @time "adv_el" adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
-            # @time "adv_node_gpu" adv_node_gpu = CuArray(el_map*adv_el[:])
-            # @time "adv" adv = Array(cg(HM_gpu, -adv_node_gpu))
-            # @time "adv_el" adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
-            # @time "adv_node_gpu" adv_node_gpu = CuArray(el_map*adv_el[:])
-            # @time "adv" adv = Array(cg(HM_gpu, -adv_node_gpu))
+            # invert
             invert!(m, s)
+
+            # advect first half-step
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            adv = Array(cg(HM_gpu, -adv_node_gpu))
-            adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*adv)
+            cg!(adv, HM_gpu, -adv_node_gpu)
+
+            # advect second half-step
+            adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*Array(adv))
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            adv = Array(cg(HM_gpu, -adv_node_gpu))
-            s.b.values[:] = s.b.values + Δt*adv
+            cg!(adv, HM_gpu, -adv_node_gpu)
+
+            # update
+            s.b.values[:] = s.b.values + Δt*Array(adv)
         end
         # end
 
@@ -400,7 +446,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         # end
 
         # stabilizing diffusion
-        s.b.values[:] = Array(cg(LHS_stab, CuArray(HM*s.b.values)))
+        # s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
+        b_gpu = CuArray(s.b.values)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
+        s.b.values[:] = Array(b_gpu)
 
         # i++
         s.i[1] = i
@@ -415,7 +464,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             elapsed_h, elapsed_m, elapsed_s = hrs_mins_secs(elapsed)
             ETR = (n_steps - i)*elapsed/i
             ETR_h, ETR_m, ETR_s = hrs_mins_secs(ETR)
-            @printf("\nt = %.2e (%d steps)\n", i*Δt, i)
+            @printf("\nt = %.2e (%d/%d steps)\n", i*Δt, i, n_steps)
             @printf("    time elapsed:   %02d:%02d:%02d\n", elapsed_h, elapsed_m, elapsed_s)
             @printf("    time remaining: %02d:%02d:%02d\n", ETR_h, ETR_m, ETR_s) 
 
@@ -433,19 +482,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             println("CFL:") 
             @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
 
-            # # energy 
-            # b_prod = buoyancy_production(m, s) 
-            # ke_diss = KE_dissipation(m, s)
-            # println("KE:")
-            # @printf("    b_prod  = %1.1e\n", b_prod)
-            # @printf("    ke_diss = %1.1e\n", ke_diss)
-            # @printf("    ke_loss = %1.1e\n", abs(ke_diss-b_prod))
-            # pe = potential_energy(m, s)
-            # pe_prod = PE_production(m, s)
-            # println("PE:")
-            # @printf("    pe      = %1.1e\n", pe)
-            # @printf("    Δpe     = %1.1e\n", pe - pe₀)
-            # @printf("    pe_prod = %1.1e\n", pe_prod)
+            # energy 
+            b_prod = buoyancy_production(m, s) 
+            ke_diss = KE_dissipation(m, s)
+            println("KE:")
+            @printf("    b_prod  = % .5e\n", b_prod)
+            @printf("    ke_diss = % .5e\n", ke_diss)
+            @printf("    ke_loss = % .5e\n", abs(ke_diss - b_prod))
+            pe = potential_energy(m, s)
+            pe_prod = PE_production(m, s)
+            println("PE:")
+            @printf("    pe      = % .5e\n", pe)
+            @printf("    Δpe     = % .5e\n", pe - pe₀)
+            @printf("    pe_prod = % .5e\n", pe_prod)
 
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
