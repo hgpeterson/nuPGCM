@@ -76,6 +76,6 @@ end
 m = setup()
 # m = load_setup_3D("$out_folder/setup.h5")
 s = run3d(m)
-postprocess()
+# postprocess()
 
 println("Done.")

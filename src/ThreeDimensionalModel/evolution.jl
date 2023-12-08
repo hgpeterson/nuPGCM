@@ -59,9 +59,14 @@ function build_K_hdiff(geom::Geometry)
     function ∫f(i, j, k, jacs, Hs, Hxs, Hys, σs)
         ∇φi = jacs'*∇φ_refs[:, :, i]
         ∇φj = jacs'*∇φ_refs[:, :, j]
+        # fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
+        #                      ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
+        #                      ∇φi[3, :]*((1 + σs^2*(Hxs^2 + Hys^2))/Hs*∇φj[3, :] - 
+        #                      σs*Hxs*∇φj[1, :] -
+        #                      σs*Hys*∇φj[2, :]))
         fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
                              ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
-                             ∇φi[3, :]*((1 + σs^2*(Hxs^2 + Hys^2))/Hs*∇φj[3, :] - 
+                             ∇φi[3, :]*(σs^2*(Hxs^2 + Hys^2)/Hs*∇φj[3, :] - 
                              σs*Hxs*∇φj[1, :] -
                              σs*Hys*∇φj[2, :]))
         # fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
@@ -93,31 +98,42 @@ function build_K_hdiff(geom::Geometry)
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
-# function build_LHS_RHS_diff(m::ModelSetup3D)
-#     # unpack
-#     g2 = m.geom.g2
-#     HM = m.evolution.HM
-#     K_hdiff = m.evolution.K_hdiff
-#     Δt = m.params.Δt
-#     κ_h = 1e-3 
+function build_LHS_RHS_diff(m::ModelSetup3D)
+    # unpack
+    g2 = m.geom.g2
+    HM = m.evolution.HM
+    K_hdiff = m.evolution.K_hdiff
+    Δt = m.params.Δt
+    κ_h = 1e-3 
 
-#     # nonzero entries in mass and stiffness matrices
-#     I_M, J_M, V_M = findnz(HM)
-#     I_K, J_K, V_K = findnz(K_hdiff)
+    # nonzero entries in mass and stiffness matrices
+    I_M, J_M, V_M = findnz(HM)
+    I_K, J_K, V_K = findnz(K_hdiff)
 
-#     # LHS and RHS
-#     I = vcat(I_M, I_K)
-#     J = vcat(J_M, J_K)
-#     V_L = vcat(V_M, +κ_h*Δt/4*V_K)
-#     V_R = vcat(V_M, -κ_h*Δt/4*V_K)
+    # LHS and RHS
+    I = vcat(I_M, I_K)
+    J = vcat(J_M, J_K)
+    V_L = vcat(V_M, +κ_h*Δt/4*V_K) # Δt = Δt/2
+    V_R = vcat(V_M, -κ_h*Δt/4*V_K)
 
-#     # # boundaries
-#     # bdy_idxs = unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
-#     # findall(i -> I[i] ∈ bdy_idxs, I)
+    # boundaries
+    bdy_idxs = unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
+    interior_entry_idxs = findall(i -> i ∉ bdy_idxs, I)
+    I = I[interior_entry_idxs]
+    J = J[interior_entry_idxs]
+    V_L = V_L[interior_entry_idxs]
+    V_R = V_R[interior_entry_idxs]
+    I = vcat(I, bdy_idxs)
+    J = vcat(J, bdy_idxs)
+    V_L = vcat(V_L, ones(length(bdy_idxs)))
+    V_R = vcat(V_R, ones(length(bdy_idxs)))
 
-#     return CuSparseMatrixCSC(I, J, V_L), 
-#            CuSparseMatrixCSC(I, J, V_R)
-# end
+    # return sparse matrices (on GPU)
+    LHS = sparse(I, J, V_L, g2.np, g2.np)
+    RHS = sparse(I, J, V_R, g2.np, g2.np)
+    return CuSparseMatrixCSC(LHS), 
+           CuSparseMatrixCSC(RHS)
+end
 
 
 """
@@ -330,12 +346,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
     # stiffness matrix for stabilizing diffusion
     κ_h = 1e-3 # res = 3
+    # K_hdiff = CuSparseMatrixCSC(K_hdiff)
+    # D = -κ_h*Δt/2*K_hdiff - κ_h^2*Δt^2/4*K_hdiff*K_hdiff
     # κ_h = 5e-5 # res = 2
     # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
     # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
     # P_hdiff = lu(Tridiagonal(LHS_hdiff))
-    LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
-    RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
+    # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
+    # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
     # Pinv = CuSparseMatrixCSC(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff)))
     # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
     # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
@@ -347,6 +365,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # end
     # LHS_hdiff = CuSparseMatrixCSC(LHS_hdiff)
     # RHS_hdiff = CuSparseMatrixCSC(RHS_hdiff)
+    @time LHS_hdiff, RHS_hdiff = build_LHS_RHS_diff(m)
     CUDA.memory_status()
 
     # element map TODO: add this to `Grid`?
@@ -407,16 +426,16 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
         s.b.values[:] = Array(b_gpu)
+        # b_gpu = CuArray(s.b.values)
+        # s.b.values[:] = Array(b_gpu + D*b_gpu)
+        # s.b.values[:] = s.b.values + D*s.b.values
 
-        # @time "diffusion" begin
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        # end
 
-        # @time "advection" begin
         # Δt advection step
         if m.evolution.advection
             # invert
@@ -435,18 +454,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # update
             s.b.values[:] = s.b.values + Δt*Array(adv)
         end
-        # end
 
-        # @time "diffusion" begin
         # Δt/2 diffusion step
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        # end
 
         # stabilizing diffusion
-        # s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
         s.b.values[:] = Array(b_gpu)
@@ -473,7 +488,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             Δb = abs(∫b - ∫b₀) 
             Δb_pct = 100*abs(Δb/∫b₀)
             println("Buoyancy conservation:") 
-            @printf("    ∫b     = %.5e\n    Δb     = %.5e\n    Δb_pct = %.5e\n", ∫b, Δb, Δb_pct)
+            @printf("    ∫b     = % .5e\n    Δb     = % .5e\n    Δb_pct = % .5e\n", ∫b, Δb, Δb_pct)
             ux = [-∂z(s.χy, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uy = [+∂z(s.χx, [0.25, 0.25, 0.5], k)/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
             uσ = [(∂x(s.χy, [0.25, 0.25, 0.5], k) - ∂y(s.χx, [0.25, 0.25, 0.5], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
@@ -482,19 +497,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             println("CFL:") 
             @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
 
-            # energy 
-            b_prod = buoyancy_production(m, s) 
-            ke_diss = KE_dissipation(m, s)
-            println("KE:")
-            @printf("    b_prod  = % .5e\n", b_prod)
-            @printf("    ke_diss = % .5e\n", ke_diss)
-            @printf("    ke_loss = % .5e\n", abs(ke_diss - b_prod))
-            pe = potential_energy(m, s)
-            pe_prod = PE_production(m, s)
-            println("PE:")
-            @printf("    pe      = % .5e\n", pe)
-            @printf("    Δpe     = % .5e\n", pe - pe₀)
-            @printf("    pe_prod = % .5e\n", pe_prod)
+            # # energy 
+            # b_prod = buoyancy_production(m, s) 
+            # ke_diss = KE_dissipation(m, s)
+            # println("KE:")
+            # @printf("    ∫uᶻb   = % .5e\n", b_prod)
+            # @printf("    ε²∫νω² = % .5e\n", ke_diss)
+            # @printf("    error  = % .5e\n", abs(ke_diss - b_prod))
+            # pe = potential_energy(m, s)
+            # pe_prod = PE_production(m, s)
+            # println("PE:")
+            # @printf("    pe      = % .5e\n", pe)
+            # @printf("    Δpe     = % .5e\n", pe - pe₀)
+            # @printf("    pe_prod = % .5e\n", pe_prod)
 
             # # advection solution
             # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
@@ -520,6 +535,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             #     vtk["b"] = s.b.values[1:g1.np] 
             # end 
             # println("$out_folder/stateTF$i.vtu") 
+
+            # debug plot
+            quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", i*Δt)), filename="$out_folder/psi.png")
+            # plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
+            # plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
 
             # HDF5
             save_state(s, "$out_folder/state$i_save.h5")

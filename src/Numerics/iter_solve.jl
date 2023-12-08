@@ -64,6 +64,11 @@ function cg!(x, A, b; tol=eps(eltype(b)))
         @. p = r + β*p
 
         k += 1
+
+        if k > 10000
+            @warn "`cg!` failed to converge within 10000 iterations."
+            break
+        end
     end
     # println("cg: converged in $k iterations")
     return x
