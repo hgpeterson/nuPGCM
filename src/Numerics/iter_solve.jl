@@ -1,45 +1,60 @@
 """
-    x = cg!(x, A, b; P=Identity(), tol=eps(eltype(b)))
+    x = cg!(x, A, b; Pinv=I, tol=eps(eltype(b)), debug=false)
 
-Solve `Ax = b` using conjugate gradient method with preconditioner `P`.
+Solve `Ax = b` using conjugate gradient method where inverse of preconditioner is `Pinv`.
 """
-# function cg!(x, A, b; P=Identity(), tol=eps(eltype(b)))
-# function con_grad!(x, A, b; Pinv=I, tol=eps(eltype(b)))
-#     # residual
-#     r = b - A*x 
+function cg!(args...; Pinv=I, kwargs...)
+    if Pinv == I
+        return cg_no_precond!(args...; kwargs...)
+    else
+        return cg_precond!(args...; Pinv, kwargs...)
+    end 
+end
 
-#     # precondition
-#     # z = P\r 
-#     z = Pinv*r 
-#     p = copy(z)
+function cg_precond!(x, A, b; Pinv, tol=eps(eltype(b)), debug=false)
+    # residual
+    r = b - A*x 
 
-#     # iterate
-#     k = 0
-#     while norm(r) > tol
-#         println("$k $(norm(r))")
-#         # save for later
-#         rz = r'z
-#         Ap = A*p
+    # precondition
+    z = Pinv*r 
+    p = copy(z)
 
-#         # step size
-#         α = rz / (p'*Ap)
+    # iterate
+    k = 0
+    while norm(r) > tol
+        # save for later
+        rz = r'z
+        Ap = A*p
 
-#         # update
-#         @. x = x + α*p
-#         @. r = r - α*Ap
-#         # z = P\r 
-#         z = Pinv*r
+        # step size
+        α = rz / (p'*Ap)
 
-#         # use rz from before
-#         β = r'*z/rz
-#         @. p = z + β*p
+        # update
+        @. x = x + α*p
+        @. r = r - α*Ap
+        z = Pinv*r
+        # println("iter=$k    resid=$(norm(r))")
 
-#         k += 1
-#     end
-#     # println("cg: converged in $k iterations")
-#     return x
-# end
-function cg!(x, A, b; tol=eps(eltype(b)))
+        # use rz from before
+        β = r'*z/rz
+        @. p = z + β*p
+
+        k += 1
+
+        if k > 10000
+            @warn "`cg!` failed to converge within 10000 iterations."
+            break
+        end
+    end
+
+    if debug
+        @info "cg: converged in $k iterations"
+    end
+
+    return x
+end
+
+function cg_no_precond!(x, A, b; tol=eps(eltype(b)), debug=false)
     # residual
     r = b - A*x
     p = copy(r)
@@ -70,6 +85,10 @@ function cg!(x, A, b; tol=eps(eltype(b)))
             break
         end
     end
-    # println("cg: converged in $k iterations")
+
+    if debug
+        @info "cg: converged in $k iterations"
+    end
+
     return x
 end

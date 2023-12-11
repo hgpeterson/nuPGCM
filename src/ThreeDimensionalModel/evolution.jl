@@ -59,18 +59,9 @@ function build_K_hdiff(geom::Geometry)
     function ∫f(i, j, k, jacs, Hs, Hxs, Hys, σs)
         ∇φi = jacs'*∇φ_refs[:, :, i]
         ∇φj = jacs'*∇φ_refs[:, :, j]
-        # fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
-        #                      ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
-        #                      ∇φi[3, :]*((1 + σs^2*(Hxs^2 + Hys^2))/Hs*∇φj[3, :] - 
-        #                      σs*Hxs*∇φj[1, :] -
-        #                      σs*Hys*∇φj[2, :]))
-        fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
-                             ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
-                             ∇φi[3, :]*(σs^2*(Hxs^2 + Hys^2)/Hs*∇φj[3, :] - 
-                             σs*Hxs*∇φj[1, :] -
-                             σs*Hys*∇φj[2, :]))
-        # fi = @. g.J.dets[k]*(∇φi[1, :]*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
-        #                      ∇φi[2, :]*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :])) 
+        fi = @. g.J.dets[k]*((∇φi[1, :]*Hs - σs*Hxs*∇φi[3, :])*(∇φj[1, :]*Hs - σs*Hxs*∇φj[3, :]) + 
+                             (∇φi[2, :]*Hs - σs*Hys*∇φi[3, :])*(∇φj[2, :]*Hs - σs*Hys*∇φj[3, :]) + 
+                              ∇φi[3, :]*∇φj[3, :]/Hs)
         return dot(el.quad_wts, fi)
     end
 
@@ -104,7 +95,7 @@ function build_LHS_RHS_diff(m::ModelSetup3D)
     HM = m.evolution.HM
     K_hdiff = m.evolution.K_hdiff
     Δt = m.params.Δt
-    κ_h = 1e-3 
+    κ_h = 1e-4 
 
     # nonzero entries in mass and stiffness matrices
     I_M, J_M, V_M = findnz(HM)
@@ -343,29 +334,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
     # put on GPU
     HM_gpu = CuSparseMatrixCSC(HM)
+    Pinv_adv = CuSparseMatrixCSC(sparse(inv(Diagonal(HM))))
 
     # stiffness matrix for stabilizing diffusion
-    κ_h = 1e-3 # res = 3
-    # K_hdiff = CuSparseMatrixCSC(K_hdiff)
-    # D = -κ_h*Δt/2*K_hdiff - κ_h^2*Δt^2/4*K_hdiff*K_hdiff
-    # κ_h = 5e-5 # res = 2
-    # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
-    # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
-    # P_hdiff = lu(Tridiagonal(LHS_hdiff))
-    # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
-    # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
-    # Pinv = CuSparseMatrixCSC(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff)))
-    # LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
-    # RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
-    # @showprogress "hdiff..." for i ∈ unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
-    #     LHS_hdiff[i, :] .= 0
-    #     LHS_hdiff[i, i] = 1
-    #     RHS_hdiff[i, :] .= 0
-    #     RHS_hdiff[i, i] = 1
-    # end
-    # LHS_hdiff = CuSparseMatrixCSC(LHS_hdiff)
-    # RHS_hdiff = CuSparseMatrixCSC(RHS_hdiff)
-    @time LHS_hdiff, RHS_hdiff = build_LHS_RHS_diff(m)
+    κ_h = 1e-4
+    LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
+    RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
+    Pinv_hdiff = CuSparseMatrixCSC(sparse(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff))))
+    # @time LHS_hdiff, RHS_hdiff = build_LHS_RHS_diff(m)
     CUDA.memory_status()
 
     # element map TODO: add this to `Grid`?
@@ -424,11 +400,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         # stabilizing diffusion
         # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
         b_gpu = CuArray(s.b.values)
-        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff, debug=true)
         s.b.values[:] = Array(b_gpu)
         # b_gpu = CuArray(s.b.values)
         # s.b.values[:] = Array(b_gpu + D*b_gpu)
         # s.b.values[:] = s.b.values + D*s.b.values
+        return s
 
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
@@ -444,12 +421,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # advect first half-step
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            cg!(adv, HM_gpu, -adv_node_gpu)
+            cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv_adv)
 
             # advect second half-step
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*Array(adv))
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            cg!(adv, HM_gpu, -adv_node_gpu)
+            cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv_adv)
 
             # update
             s.b.values[:] = s.b.values + Δt*Array(adv)
@@ -463,7 +440,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
         # stabilizing diffusion
         b_gpu = CuArray(s.b.values)
-        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff, debug=true)
         s.b.values[:] = Array(b_gpu)
 
         # i++
@@ -538,8 +515,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
             # debug plot
             quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", i*Δt)), filename="$out_folder/psi.png")
-            # plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
-            # plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
+            plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
+            plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
 
             # HDF5
             save_state(s, "$out_folder/state$i_save.h5")

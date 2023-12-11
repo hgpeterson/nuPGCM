@@ -65,7 +65,7 @@ function differentiate(f::AbstractVector{T}, dz::Real) where T
 
     return fz
 end
-function differentiate(f, z::AbstractRange)
+function differentiate(f::AbstractVector{T}, z::AbstractRange) where T
     dz = z[2] - z[1]
     fz = differentiate(f, dz)
     return fz
