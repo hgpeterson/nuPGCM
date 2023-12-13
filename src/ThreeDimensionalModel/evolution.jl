@@ -400,12 +400,11 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
         # stabilizing diffusion
         # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
         b_gpu = CuArray(s.b.values)
-        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff, debug=true)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
         # b_gpu = CuArray(s.b.values)
         # s.b.values[:] = Array(b_gpu + D*b_gpu)
         # s.b.values[:] = s.b.values + D*s.b.values
-        return s
 
         # Δt/2 vertical diffusion step
         for j=1:g_sfc2.np
@@ -440,7 +439,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
 
         # stabilizing diffusion
         b_gpu = CuArray(s.b.values)
-        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff, debug=true)
+        cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
 
         # i++
