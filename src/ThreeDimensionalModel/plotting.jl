@@ -349,6 +349,7 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     plot_vertical_slice(xx, zz, ux, bs, L"Zonal flow $u^x$",      "$out_folder/ux$i_str.png", title, contour=false, slice_dir="x")
     plot_vertical_slice(xx, zz, uy, bs, L"Meridional flow $u^y$", "$out_folder/uy$i_str.png", title, contour=false, slice_dir="x")
     plot_vertical_slice(xx, zz, uz, bs, L"Vertical flow $u^z$",   "$out_folder/uz$i_str.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $u^z b$",   "$out_folder/uzb$i_str.png", title, contour=false, slice_dir="x")
 end
 
 function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir)
@@ -380,18 +381,19 @@ function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true,
     plt.close()
 end
 
-function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y, fname)
-    σ = m.geom.σ
-    nσ = m.geom.nσ
+function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$out_folder/profiles.png", m2D=nothing, s2D=nothing)
     g_sfc1 = m.geom.g_sfc1
     g1 = m.geom.g1
     k_sfc = get_k([x, y], g_sfc1, g_sfc1.el)
     ξ_sfc = transform_to_ref_el(g_sfc1.el, [x, y], g_sfc1.p[g_sfc1.t[k_sfc, :], :])
 
+    nσ = 2^8
+    σ = collect(-(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2)
     H = m.geom.H(ξ_sfc, k_sfc)
+    Hx = m.geom.Hx(ξ_sfc, k_sfc)
+    Hy = m.geom.Hy(ξ_sfc, k_sfc)
     z = σ*H
-    k_ws = get_k_ws(k_sfc, nσ)
-    k_ws = [k_ws; k_ws[end]]
+    k_ws = [get_k_w(k_sfc, m.geom.nσ, findfirst(j -> m.geom.σ[j] ≤ σ[i] ≤ m.geom.σ[j+1], 1:m.geom.nσ)) for i=1:nσ] 
     ξ_ws = [transform_to_ref_el(g1.el, [x, y, σ[i]], g1.p[g1.t[k_ws[i], :], :]) for i=1:nσ]
 
     ωx_fe = FEField(ωx)
@@ -402,34 +404,65 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy, x, y, fname)
     ωys = [ωy_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
     χxs = [χx_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
     χys = [χy_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
-    bs = [b(ξ_ws[i], k_ws[i]) for i=1:nσ]
-    bzs = differentiate(bs, z)
+    # bs = [b(ξ_ws[i], k_ws[i]) for i=1:nσ]
+    bzs = [∂z(b, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uxs = [-∂z(χy_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uys = [+∂z(χx_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uσs = [(∂x(χy_fe, ξ_ws[i], k_ws[i]) - ∂y(χx_fe, ξ_ws[i], k_ws[i]))/H for i=1:nσ]
+    uzs = @. H*uσs + σ*Hx*uxs + σ*Hy*uys
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)
-    ax[1, 1].plot(ωxs, z)
-    ax[1, 2].plot(ωys, z)
-    ax[1, 3].plot(bs, z)
-    ax[2, 1].plot(χxs, z)
-    ax[2, 2].plot(χys, z)
-    ax[2, 3].plot(bzs, z)
-    ax[1, 1].set_xlabel(L"\omega^x")
-    ax[1, 2].set_xlabel(L"\omega^y")
-    ax[1, 3].set_xlabel(L"b")
-    ax[2, 1].set_xlabel(L"\chi^x")
-    ax[2, 2].set_xlabel(L"\chi^y")
-    ax[2, 3].set_xlabel(L"\partial_z b")
+    ax[1, 1].plot(ωxs, z, label=L"\omega^x")
+    ax[1, 1].plot(ωys, z, label=L"\omega^y")
+    ax[1, 2].plot(χxs, z, label=L"\chi^x")
+    ax[1, 2].plot(χys, z, label=L"\chi^y")
+    ax[1, 3].plot(bzs, z)
+    ax[2, 1].plot(uxs, z)
+    ax[2, 2].plot(uys, z)
+    ax[2, 3].plot(uzs, z)
+    if m2D !== nothing
+        # compare with 2D
+        ix = argmin(abs.(m2D.ξ .- x))
+        H = m2D.H[ix]
+        z = m2D.z[ix, :]
+        ωx = -1/H*differentiate(s2D.uη[ix, :], m2D.σ)
+        ωy =  1/H*differentiate(s2D.uξ[ix, :], m2D.σ)
+        χx =  H*cumtrapz(s2D.uη[ix, :], m2D.σ)
+        χy = -H*cumtrapz(s2D.uξ[ix, :], m2D.σ)
+        ux, uy, uz = transform_from_TF(m2D, s2D)
+        ux = ux[ix, :]
+        uy = uy[ix, :]
+        uz = uz[ix, :]
+        bz = 1/H*differentiate(s2D.b[ix, :], m2D.σ)
+        ax[1, 1].plot(ωx, z, "k--", lw=0.5, label="2D")
+        ax[1, 1].plot(ωy, z, "k--", lw=0.5)
+        ax[1, 2].plot(χx, z, "k--", lw=0.5)
+        ax[1, 2].plot(χy, z, "k--", lw=0.5)
+        ax[1, 3].plot(bz, z, "k--", lw=0.5)
+        ax[2, 1].plot(ux, z, "k--", lw=0.5)
+        ax[2, 2].plot(uy, z, "k--", lw=0.5)
+        ax[2, 3].plot(uz, z, "k--", lw=0.5)
+    end
+    ax[1, 1].set_xlabel("Vorticity")
+    ax[1, 2].set_xlabel("Streamfunction")
+    ax[1, 3].set_xlabel(L"Stratification $\partial_z b$")
+    ax[2, 1].set_xlabel(L"Zonal flow $u^x$")
+    ax[2, 2].set_xlabel(L"Meridional flow $u^y$")
+    ax[2, 3].set_xlabel(L"Vertical flow $u^z$")
     ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f \\quad y = %1.1f\$", x, y)))
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
+    ax[1, 1].legend()
+    ax[1, 2].legend()
     for a ∈ ax
         a.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     end
-    savefig(fname)
-    println(fname)
+    savefig(filename)
+    println(filename)
     plt.close()
 end
-function plot_profiles(m::ModelSetup3D, s::ModelState3D, args...; kwargs...)
-    plot_profiles(m, s.b, s.ωx, s.ωy, s.χx, s.χy, args...; kwargs...)
+function plot_profiles(m::ModelSetup3D, s::ModelState3D; kwargs...)
+    plot_profiles(m, s.b, s.ωx, s.ωy, s.χx, s.χy; kwargs...)
 end

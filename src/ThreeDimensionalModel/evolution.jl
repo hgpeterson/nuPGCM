@@ -391,12 +391,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     uσ = [(∂x(s.χy, [0.25, 0.25, 0.5], k) - ∂y(s.χx, [0.25, 0.25, 0.5], k))/sum(H[g_sfc2.t[get_k_sfc(k, nσ), :]]/6) for k=1:g1.nt]
     println("CFL:") 
     @printf("    Δt_x = %.5e\n    Δt_y = %.5e\n    Δt_σ = %.5e\n    Δt   = %.5e\n", minimum(dx./abs.(ux)), minimum(dy./abs.(uy)), minimum(dσ./abs.(uσ)), Δt)
+    flush(stdout)
+    flush(stderr)
 
     # solve
     adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
     t0 = time()
-    i_save = 1
-    for i=1:n_steps
+    i0 = s.i[1]
+    for i ∈ (i0 + 1):n_steps
         # stabilizing diffusion
         # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
         b_gpu = CuArray(s.b.values)
@@ -453,7 +455,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # timing
             elapsed = time() - t0
             elapsed_h, elapsed_m, elapsed_s = hrs_mins_secs(elapsed)
-            ETR = (n_steps - i)*elapsed/i
+            ETR = (n_steps - i)*elapsed/(i - i0)
             ETR_h, ETR_m, ETR_s = hrs_mins_secs(ETR)
             @printf("\nt = %.2e (%d/%d steps)\n", i*Δt, i, n_steps)
             @printf("    time elapsed:   %02d:%02d:%02d\n", elapsed_h, elapsed_m, elapsed_s)
@@ -513,13 +515,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # println("$out_folder/stateTF$i.vtu") 
 
             # debug plot
-            quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", i*Δt)), filename="$out_folder/psi.png")
+            quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", (i + 1)*Δt)), filename="$out_folder/psi.png")
             plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
             plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
 
             # HDF5
-            save_state(s, "$out_folder/state$i_save.h5")
-            i_save += 1
+            save_state(s, "$out_folder/state$(s.i[1]).h5")
 
             flush(stdout)
             flush(stderr)

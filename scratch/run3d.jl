@@ -42,7 +42,8 @@ function setup()
 end
 
 function run3d(m::ModelSetup3D)
-    b = FEField(x -> H(x)*x[3], m.geom.g2)
+    # b = FEField(x -> H(x)*x[3], m.geom.g2)
+    b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
     ωx = DGField(0, m.geom.g1)
     ωy = DGField(0, m.geom.g1)
     χx = DGField(0, m.geom.g1)
@@ -50,13 +51,12 @@ function run3d(m::ModelSetup3D)
     Ψ = FEField(0, m.geom.g_sfc1)
     s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, [0])
 
-    # t_final = 5e-2*m.params.μ*m.params.ϱ/m.params.ε²
-    # t_plot = t_final/5
-    # t_save = t_final/50
-    t_final = 10
-    t_plot = 1
-    t_save = 0.1
-    evolve!(m, s, t_final, t_plot, t_save)
+    invert!(m, s, showplots=true)
+
+    # t_final = 10
+    # t_plot = 1
+    # t_save = 0.1
+    # evolve!(m, s, t_final, t_plot, t_save)
     return s
 end
 
@@ -74,9 +74,22 @@ function postprocess()
 end
 
 # m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
-s = run3d(m)
+# m = load_setup_3D("$out_folder/setup4.h5")
+# s = run3d(m)
 # postprocess()
+
+# nuPGCM.plot_u(m, s, 0)
+
+# for x ∈ 0.1:0.1:0.9
+#     nuPGCM.plot_profiles(m, s, x=x, y=0.0, filename="$out_folder/profiles$x.png"; m2D, s2D)
+# end
+
+b_prod = nuPGCM.buoyancy_production(m, s) 
+ke_diss = nuPGCM.KE_dissipation(m, s)
+println("KE:")
+@printf("    ∫uᶻb   = % .5e\n", b_prod)
+@printf("    ε²∫νω² = % .5e\n", ke_diss)
+@printf("    error  = % .5e\n", abs(ke_diss - b_prod))
 
 function test_energy(m::ModelSetup3D)
     b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
