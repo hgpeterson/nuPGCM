@@ -80,16 +80,19 @@ end
 
 # nuPGCM.plot_u(m, s, 0)
 
-# for x ∈ 0.1:0.1:0.9
-#     nuPGCM.plot_profiles(m, s, x=x, y=0.0, filename="$out_folder/profiles$x.png"; m2D, s2D)
-# end
+for x ∈ 0.1:0.1:0.9
+    nuPGCM.plot_profiles(m, s, x=x, y=0.0, filename="$out_folder/profiles$x.png"; m2D, s2D)
+end
+for θ ∈ 0:π/4:2π
+    nuPGCM.plot_profiles(m, s, x=0.5*cos(θ), y=0.5*sin(θ), filename="$out_folder/profiles_th$θ.png"; m2D, s2D)
+end
 
-b_prod = nuPGCM.buoyancy_production(m, s) 
-ke_diss = nuPGCM.KE_dissipation(m, s)
-println("KE:")
-@printf("    ∫uᶻb   = % .5e\n", b_prod)
-@printf("    ε²∫νω² = % .5e\n", ke_diss)
-@printf("    error  = % .5e\n", abs(ke_diss - b_prod))
+# b_prod = nuPGCM.buoyancy_production(m, s) 
+# ke_diss = nuPGCM.KE_dissipation(m, s)
+# println("KE:")
+# @printf("    ∫uᶻb   = % .5e\n", b_prod)
+# @printf("    ε²∫νω² = % .5e\n", ke_diss)
+# @printf("    error  = % .5e\n", abs(ke_diss - b_prod))
 
 function test_energy(m::ModelSetup3D)
     b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)

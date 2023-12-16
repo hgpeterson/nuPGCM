@@ -422,17 +422,19 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$
     ax[2, 3].plot(uzs, z)
     if m2D !== nothing
         # compare with 2D
-        ix = argmin(abs.(m2D.ξ .- x))
+        r = √(x^2 + y^2)
+        θ = atan(y, x)
+        ix = argmin(abs.(m2D.ξ .- r))
         H = m2D.H[ix]
         z = m2D.z[ix, :]
-        ωx = -1/H*differentiate(s2D.uη[ix, :], m2D.σ)
-        ωy =  1/H*differentiate(s2D.uξ[ix, :], m2D.σ)
-        χx =  H*cumtrapz(s2D.uη[ix, :], m2D.σ)
-        χy = -H*cumtrapz(s2D.uξ[ix, :], m2D.σ)
-        ux, uy, uz = transform_from_TF(m2D, s2D)
-        ux = ux[ix, :]
-        uy = uy[ix, :]
-        uz = uz[ix, :]
+        ωx = -1/H*differentiate(s2D.uη[ix, :]*cos(θ) + s2D.uξ[ix, :]*sin(θ), m2D.σ)
+        ωy =  1/H*differentiate(s2D.uξ[ix, :]*cos(θ) - s2D.uη[ix, :]*sin(θ), m2D.σ)
+        χx =  H*cumtrapz(s2D.uη[ix, :]*cos(θ) + s2D.uξ[ix, :]*sin(θ), m2D.σ)
+        χy = -H*cumtrapz(s2D.uξ[ix, :]*cos(θ) - s2D.uη[ix, :]*sin(θ), m2D.σ)
+        ux_full, uy_full, uz_full = transform_from_TF(m2D, s2D)
+        ux = ux_full[ix, :]*cos(θ) - uy_full[ix, :]*sin(θ)
+        uy = uy_full[ix, :]*cos(θ) + ux_full[ix, :]*sin(θ)
+        uz = uz_full[ix, :]
         bz = 1/H*differentiate(s2D.b[ix, :], m2D.σ)
         ax[1, 1].plot(ωx, z, "k--", lw=0.5, label="2D")
         ax[1, 1].plot(ωy, z, "k--", lw=0.5)
@@ -451,7 +453,7 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$
     ax[2, 3].set_xlabel(L"Vertical flow $u^z$")
     ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
     ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
-    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.1f \\quad y = %1.1f\$", x, y)))
+    ax[1, 2].set_title(latexstring(@sprintf("\$x = %1.5f \\quad y = %1.5f\$", x, y)))
     ax[1, 1].set_ylim(-H, 0)
     ax[2, 1].set_ylim(-H, 0)
     ax[1, 1].legend()

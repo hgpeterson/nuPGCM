@@ -58,6 +58,10 @@ function buoyancy_production(m::ModelSetup3D, s::ModelState3D)
     # fe field for σ
     σ = FEField(g2.p[:, 3], g2)
 
+    # fe fields for flow
+    χx = FEField(χx)
+    χy = FEField(χy)
+
     # integrand
     function f(ξ, k)
         # ux, uy, uσ

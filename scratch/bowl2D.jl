@@ -72,9 +72,16 @@ function run()
 
     # cartesian
     ux, uy, uz = transform_from_TF(m, s)
+    ωx = zeros(m.nξ, m.nσ)
+    ωy = zeros(m.nξ, m.nσ)
+    for i ∈ 1:m.nξ
+        ωx[i, :] = -differentiate(uy[i, :], m.z[i, :])
+        ωy[i, :] = +differentiate(ux[i, :], m.z[i, :])
+    end
 
     # integrals
-    @printf("b_prod = % 1.5e\n", integrate2D(m, uz.*s.b))
+    @printf("b_prod  = % 1.5e\n", integrate2D(m, uz.*s.b))
+    @printf("ke_diss = % 1.5e\n", integrate2D(m, m.ν.*(ωx.^2 .+ ωy.^2)))
 
     # slices
     plot2D(m, s, ux, cb_label=L"Zonal velocity $u^x$", filename="$(out_folder)ux_bowl2D.png")
@@ -139,7 +146,7 @@ function run()
 end
 
 function integrate2D(m, field)
-    xint = [trapz(π*m.ξ[i]^2*field[i, :], m.z[i, :]) for i=1:m.nξ]
+    xint = 2π*[trapz(m.ξ[i]*field[i, :], m.z[i, :]) for i=1:m.nξ]
     return trapz(xint, m.ξ)
 end
 
@@ -166,6 +173,6 @@ function plot2D(m::ModelSetup2D, s::ModelState2D, field; cb_label, filename)
     plt.close()
 end
 
-# m2D, s2D = run()
+m2D, s2D = run()
 
 println("Done.")
