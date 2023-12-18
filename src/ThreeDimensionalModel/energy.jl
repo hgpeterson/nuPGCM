@@ -21,6 +21,33 @@ function potential_energy(m::ModelSetup3D, s::ModelState3D)
 end
 
 """
+1/2 ∫ (uˣ)² + (uʸ)² dx dy dz = 1/2 ∫  [ (Huˣ)² + (Huʸ)² ] / H dx dy dσ
+"""
+function kinetic_energy(m::ModelSetup3D, s::ModelState3D)
+    # unpack
+    H = m.geom.H
+    nσ = m.geom.nσ
+    g2 = m.geom.g2
+    χx = s.χx
+    χy = s.χy
+
+    # fe fields for flow
+    χx = FEField(χx)
+    χy = FEField(χy)
+
+    # integrand
+    function f(ξ, k)
+        # ux, uy
+        Hux = -∂z(χy, ξ, k)
+        Huy = +∂z(χx, ξ, k)
+        k_sfc = get_k_sfc(k, nσ)
+        return 0.5*(Hux^2 + Huy^2)/H(ξ, k_sfc)*g2.J.dets[k]
+    end
+
+    return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)
+end
+
+"""
 ∫ uᶻb dx dy dz = ∫ Huᶻb dx dy dσ
 """
 function buoyancy_production(m::ModelSetup3D, s::ModelState3D)
@@ -33,27 +60,6 @@ function buoyancy_production(m::ModelSetup3D, s::ModelState3D)
     χx = s.χx
     χy = s.χy
     b = s.b
-
-    # # H*uz = H*H*uσ + σ*Hx*H*ux + σ*Hy*H*uy
-    # Hux = [-∂z(χy, [0, 0, 0], k) for k=1:g2.nt]
-    # Huy = [+∂z(χx, [0, 0, 0], k) for k=1:g2.nt]
-    # Huσ = [∂x(χy, [0, 0, 0], k) - ∂y(χx, [0, 0, 0], k) for k=1:g2.nt]
-    # uzb = zeros(g2.nt, g2.nn)
-    # for k=1:g2.nt, i=1:g2.nn
-    #     ig = g2.t[k, i]
-    #     k_sfc = get_k_sfc(k, nσ)
-    #     ig_sfc = get_i_sfc(ig, nσ)
-    #     i_sfc = mod1(i, 3)
-    #     j = k - (k_sfc - 1)*(nσ - 1)
-    #     Huz = H[ig_sfc]*Huσ[k] + σ[j]*Hx[k_sfc, i_sfc]*Hux[k] + σ[j]*Hy[k_sfc, i_sfc]*Huy[k]
-    #     uzb[k, i] = Huz*b.values[g2.t[k, i]]
-    # end
-
-    # # element mass matrix
-    # M = mass_matrix(g2.el)
-
-    # # integrate
-    # return sum(M*uzb'*g2.J.dets)
 
     # fe field for σ
     σ = FEField(g2.p[:, 3], g2)

@@ -89,44 +89,6 @@ function build_K_hdiff(geom::Geometry)
     return dropzeros!(sparse(I, J, V, g.np, g.np))
 end
 
-function build_LHS_RHS_diff(m::ModelSetup3D)
-    # unpack
-    g2 = m.geom.g2
-    HM = m.evolution.HM
-    K_hdiff = m.evolution.K_hdiff
-    Δt = m.params.Δt
-    κ_h = 1e-4 
-
-    # nonzero entries in mass and stiffness matrices
-    I_M, J_M, V_M = findnz(HM)
-    I_K, J_K, V_K = findnz(K_hdiff)
-
-    # LHS and RHS
-    I = vcat(I_M, I_K)
-    J = vcat(J_M, J_K)
-    V_L = vcat(V_M, +κ_h*Δt/4*V_K) # Δt = Δt/2
-    V_R = vcat(V_M, -κ_h*Δt/4*V_K)
-
-    # boundaries
-    bdy_idxs = unique(vcat(g2.e["bot"], g2.e["sfc"], g2.e["coast"]))
-    interior_entry_idxs = findall(i -> i ∉ bdy_idxs, I)
-    I = I[interior_entry_idxs]
-    J = J[interior_entry_idxs]
-    V_L = V_L[interior_entry_idxs]
-    V_R = V_R[interior_entry_idxs]
-    I = vcat(I, bdy_idxs)
-    J = vcat(J, bdy_idxs)
-    V_L = vcat(V_L, ones(length(bdy_idxs)))
-    V_R = vcat(V_R, ones(length(bdy_idxs)))
-
-    # return sparse matrices (on GPU)
-    LHS = sparse(I, J, V_L, g2.np, g2.np)
-    RHS = sparse(I, J, V_R, g2.np, g2.np)
-    return CuSparseMatrixCSC(LHS), 
-           CuSparseMatrixCSC(RHS)
-end
-
-
 """
     K_col = build_K_col(σ, κ)
 
@@ -341,7 +303,6 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
     RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
     Pinv_hdiff = CuSparseMatrixCSC(sparse(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff))))
-    # @time LHS_hdiff, RHS_hdiff = build_LHS_RHS_diff(m)
     CUDA.memory_status()
 
     # element map TODO: add this to `Grid`?
@@ -352,35 +313,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     n_steps_plot = Int64(round(t_plot/Δt))
     n_steps_save = Int64(round(t_save/Δt))
 
-    # pvd file
-    rm("$out_folder/state.pvd", force=true)
-    cmd = "rm -f $out_folder/state*.vtu"
-    run(`bash -c $cmd`)
-    pvd = paraview_collection("$out_folder/state", append=true)
-
-    # for plotting
-    pz = copy(g1.p)
-    for i=1:g1.np
-        pz[i, 3] *= H[get_i_sfc(i, nσ)]
-    end
-
     # initial condition
     ∫b₀ = sum(HM*s.b.values)
     pe₀ = potential_energy(m, s)
     println("\nInitial condition:") 
     @printf("    ∫b₀ = % .5e\n    pe₀ = % .5e\n", ∫b₀, pe₀)
-    cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)]
-    vtk_grid("$out_folder/state0", pz', cells) do vtk
-        vtk["b"] = s.b.values[1:g1.np]
-        vtk["ba"] = s.b.values[1:g1.np]
-        vtk["err"] = zeros(g1.np)
-        vtk["ωx"] = FEField(s.ωx).values
-        vtk["ωy"] = FEField(s.ωy).values
-        vtk["χx"] = FEField(s.χx).values
-        vtk["χy"] = FEField(s.χy).values
-        pvd[0] = vtk
-    end
-    println("$out_folder/state0.vtu")
+    i_save = 0
+    save_state(s, "$out_folder/state$i_save.h5")
+    i_save += 1
 
     # for CFL
     dx = [sum(abs(g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), mod1(i+1, 3)], 1] - g_sfc2.p[g_sfc2.t[get_k_sfc(k, nσ), i], 1]) for i=1:3)/3 for k=1:g1.nt]
@@ -495,45 +435,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # # diffusion solution
             # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
-            # # save state 
-            # cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)] 
-            # vtk_grid("$out_folder/state$i", pz', cells) do vtk 
-            #     vtk["b"] = s.b.values[1:g1.np] 
-            #     # vtk["ba"] = ba[1:g1.np] 
-            #     # vtk["err"] = abs.(s.b.values[1:g1.np] - ba[1:g1.np]) 
-            #     vtk["ωx"] = FEField(s.ωx).values 
-            #     vtk["ωy"] = FEField(s.ωy).values 
-            #     vtk["χx"] = FEField(s.χx).values 
-            #     vtk["χy"] = FEField(s.χy).values 
-            #     pvd[i*Δt] = vtk 
-            # end 
-            # println("$out_folder/state$i.vtu") 
-            # cells = [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[i, :]) for i ∈ axes(g1.t, 1)] 
-            # vtk_grid("$out_folder/stateTF$i", g1.p', cells) do vtk 
-            #     vtk["b"] = s.b.values[1:g1.np] 
-            # end 
-            # println("$out_folder/stateTF$i.vtu") 
-
             # debug plot
             quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", (i + 1)*Δt)), filename="$out_folder/psi.png")
             plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
             plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
 
             # HDF5
-            save_state(s, "$out_folder/state$(s.i[1]).h5")
+            save_state(s, "$out_folder/state$i_save.h5")
+            i_save += 1
 
             flush(stdout)
             flush(stderr)
         end
-
-        if mod(i, n_steps_plot) == 0 || i == n_steps
-            # show state
-            invert!(m, s, showplots=true)
-        end
     end
-
-    vtk_save(pvd)
-    println("$out_folder/state.pvd")
 
     return s
 end

@@ -74,18 +74,18 @@ function postprocess()
 end
 
 # m = setup()
-# m = load_setup_3D("$out_folder/setup4.h5")
-# s = run3d(m)
+m = load_setup_3D("$out_folder/setup4.h5")
+s = run3d(m)
 # postprocess()
 
 # nuPGCM.plot_u(m, s, 0)
 
-for x ∈ 0.1:0.1:0.9
-    nuPGCM.plot_profiles(m, s, x=x, y=0.0, filename="$out_folder/profiles$x.png"; m2D, s2D)
-end
-for θ ∈ 0:π/4:2π
-    nuPGCM.plot_profiles(m, s, x=0.5*cos(θ), y=0.5*sin(θ), filename="$out_folder/profiles_th$θ.png"; m2D, s2D)
-end
+# for x ∈ 0.1:0.1:0.9
+#     nuPGCM.plot_profiles(m, s, x=x, y=0.0, filename="$out_folder/profiles$x.png"; m2D, s2D)
+# end
+# for θ ∈ 0:π/4:2π
+#     nuPGCM.plot_profiles(m, s, x=0.5*cos(θ), y=0.5*sin(θ), filename="$out_folder/profiles_th$θ.png"; m2D, s2D)
+# end
 
 # b_prod = nuPGCM.buoyancy_production(m, s) 
 # ke_diss = nuPGCM.KE_dissipation(m, s)
