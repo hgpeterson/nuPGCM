@@ -270,17 +270,6 @@ function advection(m::ModelSetup3D, χx, χy, b)
     return cpu_adv
 end
 
-function build_element_map(g)
-    imap = reshape(1:length(g.t), g.nt, g.nn)
-    A = Tuple{Int64,Int64,Int64}[]
-    for i=1:g.np
-        for I ∈ g.p_to_t[i]
-            push!(A, (i, imap[I], 1))
-        end
-    end
-    return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, length(g.t)))
-end
-
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # unpack
     Δt = m.params.Δt

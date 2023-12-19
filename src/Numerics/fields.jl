@@ -9,12 +9,12 @@ minimum(u::AbstractField) = minimum(u.values)
 argmax(u::AbstractField) = argmax(u.values)
 argmin(u::AbstractField) = argmin(u.values)
 
-struct FEField{V<:AbstractVector, G<:Grid} <: AbstractField{V, G}
+struct FEField{V, G} <: AbstractField{V, G}
     # values of FE field on the nodes of the grid
-    values::V
+    values::V # vector
 
     # grid field exists on
-    g::G
+    g::G # grid
 end
 
 """
@@ -44,12 +44,12 @@ abs(u::FEField) = FEField(abs.(u.values), u.g)
 /(u::FEField, v::FEField) = FEField(u.values ./ v.values, u.g)
 /(u::FEField, n::Number) = FEField(u.values / n, u.g)
 
-struct DGField{V<:AbstractMatrix, G<:Grid} <: AbstractField{V, G}
+struct DGField{V, G} <: AbstractField{V, G}
     # values of DG field on the nodes of the grid
-    values::V
+    values::V # matrix
 
     # grid field exists on
-    g::G
+    g::G # `Grid`
 end
 
 """
@@ -88,24 +88,22 @@ abs(u::DGField) = DGField(abs.(u.values), u.g)
 function FEField(u::DGField) 
     g = u.g
     u_cg = zeros(g.np)
-    count = zeros(Int64, g.np) # number of triangles per node
     for k=1:g.nt
         for i=1:g.nn
             u_cg[g.t[k, i]] += u[k, i]
-            count[g.t[k, i]] += 1
         end
     end
-    u_cg ./= count
+    u_cg ./= length.(g.p_to_t) # average
     return FEField(u_cg, g)
 end
 FEField(u::FEField) = u
 
-struct FVField{V<:AbstractVector, G<:Grid} <: AbstractField{V, G}
+struct FVField{V, G} <: AbstractField{V, G}
     # values of FV field on the elements of the grid
-    values::V
+    values::V # vector
 
     # grid field exists on
-    g::G
+    g::G # grid
 end
 
 """

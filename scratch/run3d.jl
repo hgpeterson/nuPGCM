@@ -17,7 +17,7 @@ function setup()
     ε² = 1e-3
     ϱ = 1e-4
     # Δt = 1e-4*μ*ϱ/ε²
-    Δt = 1e-2
+    Δt = 1e-3
     f = 1.
     β = 0.
     # β = 1.
@@ -75,7 +75,7 @@ end
 
 # m = setup()
 m = load_setup_3D("$out_folder/setup4.h5")
-s = run3d(m)
+# s = run3d(m)
 # postprocess()
 
 # nuPGCM.plot_u(m, s, 0)

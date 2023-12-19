@@ -1,11 +1,11 @@
 #### Jacobians ####
 
-struct Jacobians{V<:AbstractVector, A<:AbstractArray}
+struct Jacobians{V, A}
     # |∂x/∂ξ| for each element
-    dets::V
+    dets::V # vector for floats
 
     # ∂ξ/∂x for each element
-    Js::A
+    Js::A # array of floats
 end
 
 
@@ -56,21 +56,21 @@ end
 
 #### Grids ####
 
-struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractVecOrMat, T<:AbstractMatrix, V<:AbstractVector, PT<:AbstractVector}
+struct Grid{E, I, J, P, T, V, PT}
     # elements on this grid
-    el::E
+    el::E # `Element`
 
     # Jacobians
-    J::J
+    J::J # `Jacobians`
 
     # node positions
-    p::P
+    p::P # matrix (or vector in 1D) of floats
 
     # number of nodes
-    np::I
+    np::I # integer
 
     # node indices defining each element
-    t::T
+    t::T # matrix of integers
 
     # number of elements
     nt::I
@@ -79,10 +79,10 @@ struct Grid{E<:AbstractElement, I<:Integer, J<:Jacobians, P<:AbstractVecOrMat, T
     nn::I
 
     # edge node indices for different boundaries
-    e::Dict{String, V} # dictionary of vectors
+    e::Dict{String, V} # dictionary of vectors of integers
 
     # map from p to t
-    p_to_t::PT
+    p_to_t::PT # vector of vectors of integers
 end
 
 """
@@ -145,6 +145,42 @@ function get_p_to_t(t, np)
         end
     end
     return p_to_t
+end
+
+"""
+    el_map = build_element_map(g)
+
+Returns `g.np` × `length(g.t)` sparse matrix `el_map` that maps a vector defined on elements
+to one defined on the global grid. The vector has to be shaped such that `v[k, i]` gives 
+the value at node `i` of element `k`. Multiplying `v[:]` by `el_map` then sums up contributions 
+on common nodes and gives a vector of length `g.np`.
+"""
+function build_element_map(g::Grid)
+    imap = reshape(1:length(g.t), g.nt, g.nn)
+    A = Tuple{Int64,Int64,Int64}[]
+    for i ∈ 1:g.np
+        for I ∈ g.p_to_t[i]
+            push!(A, (i, imap[I], 1))
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, length(g.t)))
+end
+
+"""
+    el_map_w = build_weighted_element_map(g)
+
+Same as `build_element_map` but this time weighted such that the values at each node is an average
+of all the contributions from the connected elements.
+"""
+function build_weighted_element_map(g::Grid)
+    imap = reshape(1:length(g.t), g.nt, g.nn)
+    A = Tuple{Int64,Int64,Float64}[]
+    for i ∈ 1:g.np
+        for I ∈ g.p_to_t[i]
+            push!(A, (i, imap[I], 1/length(g.p_to_t[i])))
+        end
+    end
+    return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, length(g.t)))
 end
 
 """
