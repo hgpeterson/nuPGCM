@@ -441,19 +441,10 @@ function transform_from_ref_el(el, ξ, p)
     return A*ξ .+ b
 end
 
-#### Shape functions and their derivatives at quadrature points ####
+#### Quadrature ####
 
-# φ_quad_pts(el::AbstractElement) = [φ(el, el.quad_pts[i, :], j) for i ∈ axes(el.quad_pts, 1), j ∈ 1:el.n]
-# ∂φ_quad_pts(el::AbstractElement) = [∂φ(el, el.quad_pts[i, :], j, k) for i ∈ axes(el.quad_pts, 1), j ∈ 1:el.n, k ∈ 1:el.dim]
-
-# function φ_quad_pts(g::Grid) 
-#     φ_qp_el = φ_quad_pts(g.el)
-#     return [φ_qp_el[i, j] for k ∈ 1:g.nt, i ∈ axes(g.el.quad_pts, 1), j ∈ 1:g.el.n]
-# end
-# function ∂φ_quad_pts(g::Grid) 
-#     ∂φ_qp_el = ∂φ_quad_pts(g.el)
-#     return [sum(∂φ_qp_el[i, j, d1]*g.J.Js[k, d1, d] for d ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ axes(g.el.quad_pts, 1), j ∈ 1:g.el.n, d1 ∈ 1:g.el.dim]
-# end
+φ_quad_pts(el::AbstractElement) = [φ(el, el.quad_pts[i_quad, :], i) for i ∈ 1:el.n, i_quad ∈ eachindex(el.quad_wts)]
+∂φ_quad_pts(el::AbstractElement) = [∂φ(el, el.quad_pts[i_quad, :], i, j) for i ∈ 1:el.n, j ∈ 1:el.dim, i_quad ∈ eachindex(el.quad_wts)]
 
 #### Some useful finite element matrices ####
 

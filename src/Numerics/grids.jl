@@ -269,45 +269,60 @@ function all_edges(t)
     return emap, edges, bndix
 end
 
+#### Quadrature ####
+
+function φ_quad_pts(g::Grid) 
+    φ_qp_el = φ_quad_pts(g.el)
+    # return [φ_qp_el[i, j] for k ∈ 1:g.nt, i ∈ axes(g.el.quad_pts, 1), j ∈ 1:g.el.n]
+    return [φ_qp_el[i, i_quad] for k ∈ 1:g.nt, i ∈ 1:g.el.n, i_quad ∈ eachindex(g.el.quad_wts)]
+end
+
+function ∂φ_quad_pts(g::Grid) 
+    ∂φ_qp_el = ∂φ_quad_pts(g.el)
+    return [sum(∂φ_qp_el[i, j, i_quad]*g.J.Js[k, j, d] for j ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ 1:g.el.n, d ∈ 1:g.el.dim, i_quad ∈ eachindex(g.el.quad_wts)]
+end
+
 #### Matrices ####
 
-function mass_matrix(g::Grid)
-    J = g.J
-    el = g.el
-    M_el = mass_matrix(el)
-    M = Tuple{Int64, Int64, Float64}[]
-    for k=1:g.nt, i=1:el.n, j=1:el.n
-        push!(M, (g.t[k, i], g.t[k, j], J.dets[k]*M_el[i, j]))
+function sparse_stamp(g::Grid, A_el)
+    A = Tuple{Int64, Int64, eltype(A_el)}[]
+    for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn
+        push!(A, (g.t[k, i], g.t[k, j], A_el[k, i, j]))
     end
-    return dropzeros!(sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, g.np))
+    return dropzeros!(sparse((x->x[1]).(A), (x->x[2]).(A), (x->x[3]).(A), g.np, g.np))
+end
+
+function mass_matrix(g::Grid)
+    φ_qp = φ_quad_pts(g)
+    M_el = [sum(g.el.quad_wts[i_quad]*φ_qp[k, i, i_quad]*φ_qp[k, j, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    return sparse_stamp(g, M_el)
 end
 
 function stiffness_matrix(g::Grid)
-    J = g.J
-    el = g.el
-    K_el = stiffness_matrix(el)
-    K = Tuple{Int64, Int64, Float64}[]
-    for k=1:g.nt
-        JJ = J.Js[k, :, :]*J.Js[k, :, :]'
-        Kᵏ = J.dets[k]*sum(K_el.*JJ, dims=(1, 2))[1, 1, :, :]
-        for i=1:el.n, j=1:el.n
-            push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
-        end
-    end
-    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+    ∂φ_qp = ∂φ_quad_pts(g)
+    K_el = [sum(g.el.quad_wts[i_quad]*∂φ_qp[k, i, d, i_quad]*∂φ_qp[k, j, d, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts), d ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    return sparse_stamp(g, K_el)
 end
 
 function stiffness_matrix_zz(g::Grid)
-    J = g.J
-    el = g.el
-    K_el = stiffness_matrix(el)
-    K = Tuple{Int64, Int64, Float64}[]
-    for k=1:g.nt
-        JJ = J.Js[k, :, end]*J.Js[k, :, end]'
-        Kᵏ = J.dets[k]*sum(K_el.*JJ, dims=(1, 2))[1, 1, :, :]
-        for i=1:el.n, j=1:el.n
-            push!(K, (g.t[k, i], g.t[k, j], Kᵏ[i, j]))
-        end
-    end
-    return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), g.np, g.np))
+    ∂φ_qp = ∂φ_quad_pts(g)
+    K_el = [sum(g.el.quad_wts[i_quad]*∂φ_qp[k, i, end, i_quad]*∂φ_qp[k, j, end, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    return sparse_stamp(g, K_el)
 end
+
+function ∫(u::FVField) 
+    return u.g.J.dets'*u.values*sum(u.g.el.quad_wts)
+end
+function ∫(u::FEField) 
+    φ_qp = φ_quad_pts(u.g)
+    u_qp = sum(u[u.g.t].*φ_qp, dims=2)[:, 1, :]
+    return ∫(u_qp, u.g)
+    # return sum(reshape(u.g.J.dets.*u[u.g.t].*φ_qp, (:, length(u.g.el.quad_wts)))*u.g.el.quad_wts)
+end
+function ∫(u::DGField) 
+    φ_qp = φ_quad_pts(u.g)
+    u_qp = sum(u.values.*φ_qp, dims=2)[:, 1, :]
+    return ∫(u_qp, u.g)
+    # return sum(reshape(u.g.J.dets.*u.values.*φ_qp, (:, length(u.g.el.quad_wts)))*u.g.el.quad_wts)
+end
+∫(u_qp::AbstractArray, g::Grid) = g.J.dets'*u_qp*g.el.quad_wts
