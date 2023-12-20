@@ -24,7 +24,7 @@ function setup()
     params = Params(; ε², μ, ϱ, Δt, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=4, nσ=0, chebyshev=true)
+    geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
 
     # forcing
     τx(x) = 0.
@@ -44,14 +44,7 @@ end
 function run3d(m::ModelSetup3D)
     # b = FEField(x -> H(x)*x[3], m.geom.g2)
     b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
-    ωx = DGField(0, m.geom.g1)
-    ωy = DGField(0, m.geom.g1)
-    χx = DGField(0, m.geom.g1)
-    χy = DGField(0, m.geom.g1)
-    Ψ = FEField(0, m.geom.g_sfc1)
-    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, [0])
-
-    invert!(m, s, showplots=true)
+    s = initial_state(m, b, showplots=true)
 
     # t_final = 10
     # t_plot = 1
@@ -74,8 +67,9 @@ function postprocess()
 end
 
 # m = setup()
-m = load_setup_3D("$out_folder/setup4.h5")
-# s = run3d(m)
+# m = load_setup_3D("$out_folder/setup4.h5")
+m = load_setup_3D("$out_folder/setup.h5")
+s = run3d(m)
 # postprocess()
 
 # nuPGCM.plot_u(m, s, 0)

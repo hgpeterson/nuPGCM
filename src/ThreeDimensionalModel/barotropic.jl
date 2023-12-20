@@ -102,7 +102,7 @@ function build_barotropic_RHS_τ(params::Params, geom::Geometry, forcing::Forcin
         # rhs
         function func_r(ξ, i)
             τ_curl = (τy_x(ξ, k) - τx_y(ξ, k))*H(ξ, k)^2 - (τy(ξ, k)*Hx(ξ, k) - τx(ξ, k)*Hy(ξ, k))*H(ξ, k)
-            νω_τ_bot_div = (∂x(νωx_τ_bot, ξ, k) + ∂y(νωy_τ_bot, ξ, k))*H(ξ, k)^2 - (νωx_τ_bot(ξ, k)*Hx(ξ, k) + νωy_τ_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
+            νω_τ_bot_div = (∂ξ(νωx_τ_bot, ξ, k) + ∂η(νωy_τ_bot, ξ, k))*H(ξ, k)^2 - (νωx_τ_bot(ξ, k)*Hx(ξ, k) + νωy_τ_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
             φ_i = φ(el, ξ, i)
             return (τ_curl + ε²*νω_τ_bot_div)*φ_i*J.dets[k]
         end
@@ -145,7 +145,7 @@ function build_barotropic_RHS_b(m::ModelSetup3D, b, νωx_b_bot, νωy_b_bot; sh
     for k=1:g.nt
         # rhs
         function func_r(ξ, i)
-            νω_b_bot_div = (∂x(νωx_b_bot, ξ, k) + ∂y(νωy_b_bot, ξ, k))*H(ξ, k)^2 - (νωx_b_bot(ξ, k)*Hx(ξ, k) + νωy_b_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
+            νω_b_bot_div = (∂ξ(νωx_b_bot, ξ, k) + ∂η(νωy_b_bot, ξ, k))*H(ξ, k)^2 - (νωx_b_bot(ξ, k)*Hx(ξ, k) + νωy_b_bot(ξ, k)*Hy(ξ, k))*H(ξ, k)
             φ_i = φ(el, ξ, i)
             return (-JEBAR(ξ, k)*H(ξ, k)^3 + ε²*νω_b_bot_div)*φ_i*g.J.dets[k]
         end

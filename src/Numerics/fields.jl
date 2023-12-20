@@ -285,10 +285,14 @@ function ∂(u::FVField, ξ, k, j)
     return 0
 end
 
-# shortcuts
-∂x(u::AbstractField, x) = ∂(u, x, 1)
-∂y(u::AbstractField, x) = ∂(u, x, 2)
-∂z(u::AbstractField, x) = ∂(u, x, 3)
-∂x(u::AbstractField, x, k) = ∂(u, x, k, 1)
-∂y(u::AbstractField, x, k) = ∂(u, x, k, 2)
-∂z(u::AbstractField, x, k) = ∂(u, x, k, 3)
+#### integrals ####
+
+function ∫(u::FVField) 
+    return u.g.J.dets'*u.values*sum(u.g.el.quad_wts)
+end
+function ∫(u::FEField) 
+    return ∫(u[u.g.t]*u.g.φ_qp, u.g)
+end
+function ∫(u::DGField) 
+    return ∫(u.values*u.g.φ_qp, u.g)
+end

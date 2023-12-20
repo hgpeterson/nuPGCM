@@ -147,7 +147,17 @@ end
 """
 function compute_U(Ψ)
     g = Ψ.g
-    Ux = FVField([-∂y(Ψ, [0, 0], k) for k=1:g.nt], g)
-    Uy = FVField([+∂x(Ψ, [0, 0], k) for k=1:g.nt], g)
+    Ux = FVField([-∂η(Ψ, [0, 0], k) for k=1:g.nt], g)
+    Uy = FVField([+∂ξ(Ψ, [0, 0], k) for k=1:g.nt], g)
     return Ux, Uy
+end
+
+function initial_state(m::ModelSetup3D, b; showplots=false)
+    ωx = DGField(0, m.geom.g1)
+    ωy = DGField(0, m.geom.g1)
+    χx = DGField(0, m.geom.g1)
+    χy = DGField(0, m.geom.g1)
+    Ψ = FEField(0, m.geom.g_sfc1)
+    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, [0])
+    return invert!(m, s; showplots)
 end

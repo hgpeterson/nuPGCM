@@ -56,7 +56,7 @@ end
 
 #### Grids ####
 
-struct Grid{E, I, J, P, T, V, PT}
+struct Grid{E, I, J, P, T, V, PT, M, A}
     # elements on this grid
     el::E # `Element`
 
@@ -83,6 +83,10 @@ struct Grid{E, I, J, P, T, V, PT}
 
     # map from p to t
     p_to_t::PT # vector of vectors of integers
+
+    # shape functions and their derivatives evaluated at quadrature points
+    φ_qp::M # nn × n_quad matrix
+    ∂φ_qp::A # nt × nn × dim × n_quad array
 end
 
 """
@@ -102,7 +106,11 @@ function Grid(el::AbstractElement, p, t, e::Dict)
     # map from p to t
     p_to_t = get_p_to_t(t, np)
 
-    return Grid(el, J, p, np, t, nt, nn, e, p_to_t)
+    # shape functions and their derivatives evaluated at quadrature points
+    φ_qp = φ_quad_pts(el)
+    ∂φ_qp = ∂φ_quad_pts(el, J)
+
+    return Grid(el, J, p, np, t, nt, nn, e, p_to_t, φ_qp, ∂φ_qp)
 end
 function Grid(el::AbstractElement, p, t, e::AbstractVector)
     # make e a dict
@@ -145,6 +153,17 @@ function get_p_to_t(t, np)
         end
     end
     return p_to_t
+end
+
+# function φ_quad_pts(g::Grid) 
+#     φ_qp_el = φ_quad_pts(g.el)
+#     return [φ_qp_el[i, i_quad] for k ∈ 1:g.nt, i ∈ 1:g.el.n, i_quad ∈ eachindex(g.el.quad_wts)]
+# end
+
+function ∂φ_quad_pts(el::AbstractElement, J::Jacobians) 
+    nt = length(J.dets)
+    ∂φ_qp_el = ∂φ_quad_pts(el)
+    return [sum(∂φ_qp_el[i, j, i_quad]*J.Js[k, j, d] for j ∈ 1:el.dim) for k ∈ 1:nt, i ∈ 1:el.n, d ∈ 1:el.dim, i_quad ∈ eachindex(el.quad_wts)]
 end
 
 """
@@ -224,7 +243,11 @@ function add_midpoints(g::Grid, el::Triangle)
     # p2 to t2 map
     p2_to_t2 = get_p_to_t(t2, np2)
 
-    return Grid(el2, g.J, p2, np2, t2, g.nt, el2.n, e2, p2_to_t2)
+    # shape functions and their derivatives evaluated at quadrature points
+    φ_qp2 = φ_quad_pts(el2)
+    ∂φ_qp2 = ∂φ_quad_pts(el2, g.J)
+
+    return Grid(el2, g.J, p2, np2, t2, g.nt, el2.n, e2, p2_to_t2, φ_qp2, ∂φ_qp2)
 end
 add_midpoints(g::Grid) = add_midpoints(g, g.el)
 
@@ -269,18 +292,9 @@ function all_edges(t)
     return emap, edges, bndix
 end
 
-#### Quadrature ####
+#### Integrals #### 
 
-function φ_quad_pts(g::Grid) 
-    φ_qp_el = φ_quad_pts(g.el)
-    # return [φ_qp_el[i, j] for k ∈ 1:g.nt, i ∈ axes(g.el.quad_pts, 1), j ∈ 1:g.el.n]
-    return [φ_qp_el[i, i_quad] for k ∈ 1:g.nt, i ∈ 1:g.el.n, i_quad ∈ eachindex(g.el.quad_wts)]
-end
-
-function ∂φ_quad_pts(g::Grid) 
-    ∂φ_qp_el = ∂φ_quad_pts(g.el)
-    return [sum(∂φ_qp_el[i, j, i_quad]*g.J.Js[k, j, d] for j ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ 1:g.el.n, d ∈ 1:g.el.dim, i_quad ∈ eachindex(g.el.quad_wts)]
-end
+∫(u_qp::AbstractArray, g::Grid) = g.J.dets'*u_qp*g.el.quad_wts
 
 #### Matrices ####
 
@@ -293,36 +307,16 @@ function sparse_stamp(g::Grid, A_el)
 end
 
 function mass_matrix(g::Grid)
-    φ_qp = φ_quad_pts(g)
-    M_el = [sum(g.el.quad_wts[i_quad]*φ_qp[k, i, i_quad]*φ_qp[k, j, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    M_el = [sum(g.el.quad_wts[i_quad]*g.φ_qp[i, i_quad]*g.φ_qp[j, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
     return sparse_stamp(g, M_el)
 end
 
 function stiffness_matrix(g::Grid)
-    ∂φ_qp = ∂φ_quad_pts(g)
-    K_el = [sum(g.el.quad_wts[i_quad]*∂φ_qp[k, i, d, i_quad]*∂φ_qp[k, j, d, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts), d ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    K_el = [sum(g.el.quad_wts[i_quad]*g.∂φ_qp[k, i, d, i_quad]*g.∂φ_qp[k, j, d, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts), d ∈ 1:g.el.dim) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
     return sparse_stamp(g, K_el)
 end
 
 function stiffness_matrix_zz(g::Grid)
-    ∂φ_qp = ∂φ_quad_pts(g)
-    K_el = [sum(g.el.quad_wts[i_quad]*∂φ_qp[k, i, end, i_quad]*∂φ_qp[k, j, end, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
+    K_el = [sum(g.el.quad_wts[i_quad]*g.∂φ_qp[k, i, end, i_quad]*g.∂φ_qp[k, j, end, i_quad]*g.J.dets[k] for i_quad ∈ eachindex(g.el.quad_wts)) for k ∈ 1:g.nt, i ∈ 1:g.nn, j ∈ 1:g.nn]
     return sparse_stamp(g, K_el)
 end
-
-function ∫(u::FVField) 
-    return u.g.J.dets'*u.values*sum(u.g.el.quad_wts)
-end
-function ∫(u::FEField) 
-    φ_qp = φ_quad_pts(u.g)
-    u_qp = sum(u[u.g.t].*φ_qp, dims=2)[:, 1, :]
-    return ∫(u_qp, u.g)
-    # return sum(reshape(u.g.J.dets.*u[u.g.t].*φ_qp, (:, length(u.g.el.quad_wts)))*u.g.el.quad_wts)
-end
-function ∫(u::DGField) 
-    φ_qp = φ_quad_pts(u.g)
-    u_qp = sum(u.values.*φ_qp, dims=2)[:, 1, :]
-    return ∫(u_qp, u.g)
-    # return sum(reshape(u.g.J.dets.*u.values.*φ_qp, (:, length(u.g.el.quad_wts)))*u.g.el.quad_wts)
-end
-∫(u_qp::AbstractArray, g::Grid) = g.J.dets'*u_qp*g.el.quad_wts

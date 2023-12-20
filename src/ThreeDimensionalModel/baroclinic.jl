@@ -40,7 +40,7 @@ function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
 
         # ∫ ν ∂φⱼ∂φᵢ + ∫ ∂(ν) φⱼ∂φᵢ
         νK = [ref_el_quad(ξ -> ν(ξ, k)*φξ(el, ξ, i)*φξ(el, ξ, j)*J.Js[k, 1, 1]^2*J.dets[k], el) for i=1:el.n, j=1:el.n] + 
-             [ref_el_quad(ξ -> ∂x(ν, ξ, k)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
+             [ref_el_quad(ξ -> ∂(ν, ξ, k, 1)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
 
         # indices
         ωxi = ωxmap[g.t[k, :]]

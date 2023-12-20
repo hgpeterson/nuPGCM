@@ -117,6 +117,9 @@ export
     ModelSetup3D,
     ModelState3D,
 
+    # init
+    initial_state,
+
     # plotting
     plot_profiles,
     plot_xslices,

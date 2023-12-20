@@ -115,8 +115,8 @@ function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
     H = FEField(H_func, g_sfc2)
 
     # H gradients are DG fields
-    Hx = DGField([∂x(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-    Hy = DGField([∂y(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    Hx = DGField([∂ξ(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    Hy = DGField([∂η(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     return Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_col, σ, nσ)
 end
@@ -159,10 +159,10 @@ function Forcing(geom::Geometry, τx_func::Function, τy_func::Function, ν_func
     κ = FEField([κ_func(g2.p[i, 3], H[get_i_sfc(i, nσ)]) for i=1:g2.np], g2)
 
     # gradients as DG fields
-    τx_x = DGField([∂x(τx, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-    τx_y = DGField([∂y(τx, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-    τy_x = DGField([∂x(τy, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
-    τy_y = DGField([∂y(τy, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τx_x = DGField([∂ξ(τx, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τx_y = DGField([∂η(τx, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τy_x = DGField([∂ξ(τy, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    τy_y = DGField([∂η(τy, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     return Forcing(τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ)
 end
