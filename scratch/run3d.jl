@@ -14,7 +14,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 function setup()
     # params
     μ = 1e4
-    ε² = 1e-3
+    ε² = 1e-2
     ϱ = 1e-4
     # Δt = 1e-4*μ*ϱ/ε²
     Δt = 1e-3
@@ -24,7 +24,7 @@ function setup()
     params = Params(; ε², μ, ϱ, Δt, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
+    geom = Geometry(:circle, H, res=4, nσ=0, chebyshev=true)
 
     # forcing
     τx(x) = 0.
@@ -44,7 +44,7 @@ end
 function run3d(m::ModelSetup3D)
     # b = FEField(x -> H(x)*x[3], m.geom.g2)
     b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
-    s = initial_state(m, b, showplots=true)
+    s = initial_state(m, b, showplots=false)
 
     # t_final = 10
     # t_plot = 1
@@ -68,7 +68,7 @@ end
 
 # m = setup()
 # m = load_setup_3D("$out_folder/setup4.h5")
-m = load_setup_3D("$out_folder/setup.h5")
+# m = load_setup_3D("$out_folder/setup.h5")
 s = run3d(m)
 # postprocess()
 

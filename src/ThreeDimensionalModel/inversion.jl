@@ -79,23 +79,21 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     Ψ = s.Ψ
 
     # get buoyancy ω and χ
-    # @time "\tsolve_baroclinic_buoyancy" ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
-    ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
+    @time "\tsolve_baroclinic_buoyancy" ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
+    # ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
     νωx_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     νωy_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωy_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     # solve barotropic
-    # @time "\tbuild_barotropic_RHS_b" barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
-    # @time "\tinvert" Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
-    barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
+    @time "\tbuild_barotropic_RHS_b" barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
+    # barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
     Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
 
     # take gradients to get Uˣ and Uʸ
-    # @time "\tcompute_U" Ux, Uy = compute_U(Ψ, showplots=showplots)
     Ux, Uy = compute_U(Ψ)
 
     # put them all together to get full ω's and χ's
-    # @time "\tsum" begin
+    @time "\tsum" begin
     for ig ∈ in_nodes1
         for I ∈ g_sfc1.p_to_t[ig]
             k = I[1]
@@ -113,7 +111,7 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
             end
         end
     end
-    # end
+    end
 
     if showplots
         title = latexstring(L"$t = $", @sprintf("%.3f", m.params.Δt*s.i[1]))
@@ -121,8 +119,8 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
         quick_plot(Ux, cb_label=L"U^x", title=title, filename="$out_folder/Ux.png")
         quick_plot(Uy, cb_label=L"U^y", title=title, filename="$out_folder/Uy.png")
 
-        # save .vtu
-        plot_ω_χ(m, ωx, ωy, χx, χy)
+        # # save .vtu
+        # plot_ω_χ(m, ωx, ωy, χx, χy)
 
         # profile and slice plots
         # plot_profiles(m, b, ωx, ωy, χx, χy,  0.5, 0.0, "$out_folder/profiles_x=+0.5_y=0.0.png")

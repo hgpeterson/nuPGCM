@@ -10,7 +10,7 @@ function potential_energy(m::ModelSetup3D, s::ModelState3D)
 
     # fe fields
     σ = FEField(g2.p[:, 3], g2)
-    H_g2 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g2.np], g2)
+    @time H_g2 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g2.np], g2)
 
     # # integrand
     # function f(ξ, k)
@@ -120,6 +120,7 @@ end
 function KE_dissipation(m::ModelSetup3D, s::ModelState3D)
     # unpack
     ε² = m.params.ε²
+    g1 = m.geom.g1
     g2 = m.geom.g2
     nσ = m.geom.nσ
     H = m.geom.H
@@ -127,13 +128,19 @@ function KE_dissipation(m::ModelSetup3D, s::ModelState3D)
     ωx = s.ωx
     ωy = s.ωy
 
-    # integrand
-    function f(ξ, k)
-        k_sfc = get_k_sfc(k, nσ)
-        return ε²*ν(ξ, k)*H(ξ, k_sfc)*(ωx(ξ, k)^2 + ωy(ξ, k)^2)*g2.J.dets[k]
-    end
+    ωx = FEField(ωx)
+    ωy = FEField(ωy)
+    H_g2 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g2.np], g2)
 
-    return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)
+    return ∫(ε²*(ν[g2.t]*g2.φ_qp) .* (H_g2[g2.t]*g2.φ_qp) .* ( (ωx[g1.t]*g1.φ_qp).^2 .+ (ωy[g1.t]*g1.φ_qp).^2 ), g2)
+
+    # # integrand
+    # function f(ξ, k)
+    #     k_sfc = get_k_sfc(k, nσ)
+    #     return ε²*ν(ξ, k)*H(ξ, k_sfc)*(ωx(ξ, k)^2 + ωy(ξ, k)^2)*g2.J.dets[k]
+    # end
+
+    # return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)
 end
 
 """
@@ -148,10 +155,16 @@ function PE_production(m::ModelSetup3D, s::ModelState3D)
     κ = m.forcing.κ
     b = s.b
 
-    # integrand
-    function f(ξ, k)
-        return ε²/μ/ϱ*κ(ξ, k)*∂σ(b, ξ, k)*g2.J.dets[k]
+    bσ = zeros(g2.nt, length(g2.el.quad_wts))
+    for k ∈ 1:g2.nt, i_quad ∈ eachindex(g2.el.quad_wts), i ∈ 1:g2.nn
+        bσ[k, i_quad] += b[g2.t[k, i]]*g2.∂φ_qp[k, i, 3, i_quad]
     end
+    return ∫(ε²/μ/ϱ*(κ[g2.t]*g2.φ_qp) .* bσ, g2)
 
-    return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)
+    # # integrand
+    # function f(ξ, k)
+    #     return ε²/μ/ϱ*κ(ξ, k)*∂σ(b, ξ, k)*g2.J.dets[k]
+    # end
+
+    # return sum(ref_el_quad(ξ -> f(ξ, k), g2.el) for k=1:g2.nt)
 end

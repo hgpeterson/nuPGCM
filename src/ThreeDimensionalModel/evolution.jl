@@ -330,20 +330,25 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     for i ∈ (i0 + 1):n_steps
         # stabilizing diffusion
         # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
+        @time "hdiff" begin
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
+        end
         # b_gpu = CuArray(s.b.values)
         # s.b.values[:] = Array(b_gpu + D*b_gpu)
         # s.b.values[:] = s.b.values + D*s.b.values
 
         # Δt/2 vertical diffusion step
+        @time "vdiff" begin
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        end
 
         # Δt advection step
+        @time "adv" begin
         if m.evolution.advection
             # invert
             invert!(m, s)
@@ -361,17 +366,22 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # update
             s.b.values[:] = s.b.values + Δt*Array(adv)
         end
+        end
 
         # Δt/2 diffusion step
+        @time "vdiff" begin
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
+        end
 
         # stabilizing diffusion
+        @time "hdiff" begin
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
+        end
 
         # i++
         s.i[1] = i

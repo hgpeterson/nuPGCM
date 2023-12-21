@@ -276,8 +276,8 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     baroclinic_LHSs = m.inversion.baroclinic_LHSs
 
     # compute gradients
-    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
-    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    @time "\t\tDx" bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    @time "\t\tDy" by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
 
     # pre-allocate
     ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
@@ -290,15 +290,19 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
         ig = in_nodes1[i]
         for I ∈ g_sfc1.p_to_t[ig]
             # solve baroclinic problem with bx and by from element column
-            r = build_baroclinic_RHS(g_col, bx[I, :], by[I, :], 0, 0, 0, 0)
-            sol = baroclinic_LHSs[i]\r
+            @time "r" r = build_baroclinic_RHS(g_col, bx[I, :], by[I, :], 0, 0, 0, 0) # TODO: optimize
+            @time "sol" sol = baroclinic_LHSs[i]\r
 
             # store
+            @time "store" begin
             ωx_b[I, :] = sol[0*nσ+1:1*nσ]
             ωy_b[I, :] = sol[1*nσ+1:2*nσ]
             χx_b[I, :] = sol[2*nσ+1:3*nσ]
             χy_b[I, :] = sol[3*nσ+1:4*nσ]
+            end
+            break
         end
+        break
     end
 
     if showplots
