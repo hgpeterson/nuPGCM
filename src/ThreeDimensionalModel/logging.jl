@@ -27,8 +27,7 @@ function save_setup(m::ModelSetup3D, save_file)
 
     # Params
     write(file, "ε²", m.params.ε²)
-    write(file, "μ", m.params.μ)
-    write(file, "ϱ", m.params.ϱ)
+    write(file, "μϱ", m.params.μϱ)
     write(file, "Δt", m.params.Δt)
     write(file, "f", m.params.f)
     write(file, "β", m.params.β)
@@ -75,6 +74,7 @@ function save_setup(m::ModelSetup3D, save_file)
     # InversionComponents
     write(file, "Dx", m.inversion.Dx) # see above for sparse matrix
     write(file, "Dy", m.inversion.Dy)
+    write(file, "M_bc", m.inversion.M_bc)
     write(file, "ωx_Ux", m.inversion.ωx_Ux)
     write(file, "ωy_Ux", m.inversion.ωy_Ux)
     write(file, "χx_Ux", m.inversion.χx_Ux)
@@ -98,8 +98,7 @@ function save_setup(m::ModelSetup3D, save_file)
     println("\n$out_folder/out.txt contents:\n")
     log_params(ofile, "3D νPGCM with Parameters:")
     log_params(ofile, @sprintf("ε  = %1.1e (δ = %1.1e)", sqrt(m.params.ε²), sqrt(2*m.params.ε²)))
-    log_params(ofile, @sprintf("μ  = %1.1e", m.params.μ))
-    log_params(ofile, @sprintf("ϱ  = %1.1e", m.params.ϱ))
+    log_params(ofile, @sprintf("μϱ = %1.1e", m.params.μϱ))
     log_params(ofile, @sprintf("f₀ = %1.1e", m.params.f))
     log_params(ofile, @sprintf("β  = %1.1e", m.params.β))
     log_params(ofile, @sprintf("Δt = %1.1e", m.params.Δt))
@@ -129,12 +128,11 @@ function load_setup_3D(filename)
 
     # Params
     ε² = read(file, "ε²")
-    μ = read(file, "μ")
-    ϱ = read(file, "ϱ")
+    μϱ = read(file, "μϱ")
     Δt = read(file, "Δt")
     f = read(file, "f")
     β = read(file, "β")
-    params = Params(; ε², μ, ϱ, Δt, f, β)
+    params = Params(; ε², μϱ, Δt, f, β)
 
     # Geometry
     Hvals = read(file, "H")
@@ -204,6 +202,7 @@ function load_setup_3D(filename)
     # InversionComponents
     Dx = read_sparse_matrix(file, "Dx")
     Dy = read_sparse_matrix(file, "Dy")
+    M_bc = read_sparse_matrix(file, "M_bc")
     ωx_Ux = read(file, "ωx_Ux")
     ωy_Ux = read(file, "ωy_Ux")
     χx_Ux = read(file, "χx_Ux")
@@ -223,7 +222,7 @@ function load_setup_3D(filename)
     νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
     νωy_τ_bot = τx1*νωy_τx_bot + τy1*νωx_τx_bot
     barotropic_RHS_τ = build_barotropic_RHS_τ(params, geom, forcing, νωx_τ_bot, νωy_τ_bot)
-    inversion = InversionComponents(Dx, Dy, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
+    inversion = InversionComponents(Dx, Dy, baroclinic_LHSs, M_bc, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 
     # EvolutionComponents
     HM = read_sparse_matrix(file, "HM")

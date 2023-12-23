@@ -1,17 +1,31 @@
 struct InversionComponents{D, FAV, M, FA, FTV}
-    Dx::D
+    # buoyancy gradient matrices
+    Dx::D # sparse matrix
     Dy::D
-    baroclinic_LHSs::FAV
-    ωx_Ux::M
+
+    # LHS matrices for baroclinc inversion
+    baroclinic_LHSs::FAV # vector of factored matrices
+
+    # mass matrix for building baroclinc RHS
+    M_bc::D
+
+    # g_sfc1.np × nσ matrices of transport component of inversion
+    ωx_Ux::M # matrix
     ωy_Ux::M
     χx_Ux::M
     χy_Ux::M
-    barotropic_LHS::FA
+
+    # LHS matrix for barotropic inversion
+    barotropic_LHS::FA # factored matrix
+
+    # g_sfc1.np × nσ matrices of wind component of inversion
     ωx_τx::M
     ωy_τx::M
     χx_τx::M
     χy_τx::M
-    barotropic_RHS_τ::FTV
+
+    # RHS vector for wind component of barotropic inversion
+    barotropic_RHS_τ::FTV # vector of floats
 end
 
 """
@@ -19,6 +33,7 @@ end
 """
 function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     # unpack
+    g_col = geom.g_col
     g_sfc1 = geom.g_sfc1
     ν_bot = forcing.ν_bot
     τx = forcing.τx
@@ -32,8 +47,11 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     # baroclinc LHS for each node column on first order grid
     baroclinic_LHSs = build_baroclinic_LHSs(params, geom, forcing)
 
+    # baroclinic RHS mass matrix
+    M_bc = build_M_bc(g_col)
+
     # transport ω and χ
-    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = solve_baroclinic_transport(geom, baroclinic_LHSs, showplots=true)
+    ωx_Ux, ωy_Ux, χx_Ux, χy_Ux = solve_baroclinic_transport(geom, baroclinic_LHSs, M_bc, showplots=true)
     νωx_Ux_bot = ν_bot*FEField(ωx_Ux[:, 1], g_sfc1)
     νωy_Ux_bot = ν_bot*FEField(ωy_Ux[:, 1], g_sfc1)
 
@@ -41,7 +59,7 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     barotropic_LHS = build_barotropic_LHS(params, geom, νωx_Ux_bot, νωy_Ux_bot)
 
     # wind stress ω and χ
-    ωx_τx, ωy_τx, χx_τx, χy_τx = solve_baroclinic_wind(geom, params, baroclinic_LHSs, showplots=true)
+    ωx_τx, ωy_τx, χx_τx, χy_τx = solve_baroclinic_wind(geom, params, baroclinic_LHSs, M_bc, showplots=true)
     νωx_τx_bot = ν_bot*FEField(ωx_τx[:, 1], g_sfc1)
     νωy_τx_bot = ν_bot*FEField(ωy_τx[:, 1], g_sfc1)
     νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
@@ -52,7 +70,7 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = build_barotropic_RHS_τ(params, geom, forcing, νωx_τ_bot, νωy_τ_bot)
 
-    return InversionComponents(Dx, Dy, baroclinic_LHSs, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
+    return InversionComponents(Dx, Dy, baroclinic_LHSs, M_bc, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 end
 
 """
@@ -92,25 +110,27 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     # take gradients to get Uˣ and Uʸ
     Ux, Uy = compute_U(Ψ)
 
-    # put them all together to get full ω's and χ's
     @time "\tsum" begin
-    for ig ∈ in_nodes1
-        for I ∈ g_sfc1.p_to_t[ig]
-            k = I[1]
-            i = I[2]
+    imap = Matrix{CartesianIndex{3}}(undef, size(ωx.values))
+    for k ∈ 1:g_sfc1.nt
+        for i ∈ 1:g_sfc1.nn
             for j=1:nσ-1
                 k_w = get_k_w(k, nσ, j)
-                ωx.values[k_w, i] = ωx_b[k, i, j] + Ux[k]*ωx_Ux[ig, j]/H[ig]^2 - Uy[k]*ωy_Ux[ig, j]/H[ig]^2 #FIXME: add τ's
-                ωy.values[k_w, i] = ωy_b[k, i, j] + Ux[k]*ωy_Ux[ig, j]/H[ig]^2 + Uy[k]*ωx_Ux[ig, j]/H[ig]^2
-                χx.values[k_w, i] = χx_b[k, i, j] + Ux[k]*χx_Ux[ig, j]/H[ig]^2 - Uy[k]*χy_Ux[ig, j]/H[ig]^2
-                χy.values[k_w, i] = χy_b[k, i, j] + Ux[k]*χy_Ux[ig, j]/H[ig]^2 + Uy[k]*χx_Ux[ig, j]/H[ig]^2
-                ωx.values[k_w, i+3] = ωx_b[k, i, j+1] + Ux[k]*ωx_Ux[ig, j+1]/H[ig]^2 - Uy[k]*ωy_Ux[ig, j+1]/H[ig]^2 
-                ωy.values[k_w, i+3] = ωy_b[k, i, j+1] + Ux[k]*ωy_Ux[ig, j+1]/H[ig]^2 + Uy[k]*ωx_Ux[ig, j+1]/H[ig]^2
-                χx.values[k_w, i+3] = χx_b[k, i, j+1] + Ux[k]*χx_Ux[ig, j+1]/H[ig]^2 - Uy[k]*χy_Ux[ig, j+1]/H[ig]^2
-                χy.values[k_w, i+3] = χy_b[k, i, j+1] + Ux[k]*χy_Ux[ig, j+1]/H[ig]^2 + Uy[k]*χx_Ux[ig, j+1]/H[ig]^2
+                imap[k_w, i] = CartesianIndex(k, i, j)
+                imap[k_w, i+3] = CartesianIndex(k, i, j+1)
             end
         end
     end
+
+    # put them all together to get full ω's and χ's
+    ωx_full = @. ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :]) #FIXME: add τ's
+    ωy_full = @. ωy_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωy_Ux[g_sfc1.t, :] + Uy.values*ωx_Ux[g_sfc1.t, :])
+    χx_full = @. χx_b + 1/H[g_sfc1.t]^2 * (Ux.values*χx_Ux[g_sfc1.t, :] - Uy.values*χy_Ux[g_sfc1.t, :])
+    χy_full = @. χy_b + 1/H[g_sfc1.t]^2 * (Ux.values*χy_Ux[g_sfc1.t, :] + Uy.values*χx_Ux[g_sfc1.t, :])
+    ωx.values[:, :] = ωx_full[imap]
+    ωy.values[:, :] = ωy_full[imap]
+    χx.values[:, :] = χx_full[imap]
+    χy.values[:, :] = χy_full[imap]
     end
 
     if showplots

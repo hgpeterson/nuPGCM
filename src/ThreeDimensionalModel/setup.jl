@@ -30,11 +30,8 @@ struct Params{FT}
     # Ekman number
     ε²::FT # float
 
-    # Prandtl number
-    μ::FT
-
-    # Burger number
-    ϱ::FT
+    # Prandtl*Burger number
+    μϱ::FT
 
     # timestep 
     Δt::FT
@@ -47,12 +44,12 @@ struct Params{FT}
 end
 
 """
-    params = Params(; ε², μ, ϱ, Δt, f, β)
+    params = Params(; ε², μϱ, Δt, f, β)
 
 Set of numerical parameters for 3D model.
 """
-function Params(; ε², μ, ϱ, Δt, f, β)
-    return Params(ε², μ, ϱ, Δt, f, β)
+function Params(; ε², μϱ, Δt, f, β)
+    return Params(ε², μϱ, Δt, f, β)
 end
 
 ### Model geometry

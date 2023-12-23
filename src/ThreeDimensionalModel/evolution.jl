@@ -125,8 +125,7 @@ end
 function build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forcing)
     # unpack
     ε² = params.ε²
-    μ = params.μ
-    ϱ = params.ϱ
+    μϱ = params.μϱ
     Δt = params.Δt
     σ = geom.σ
     nσ = geom.nσ
@@ -134,7 +133,7 @@ function build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forci
     κ = forcing.κ
     g_sfc2 = geom.g_sfc2
 
-    α = ε²/μ/ϱ
+    α = ε²/μϱ
     K_cols = [build_K_col(σ, κ[get_col_inds(i, geom.nσ)]) for i=1:g_sfc2.np]
     LHSs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHSs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]

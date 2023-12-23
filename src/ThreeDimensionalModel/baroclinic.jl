@@ -109,7 +109,7 @@ function build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
 end
 
 """
-    r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy)
+    r = build_baroclinic_RHS(g, M_bc, bx, by, Ux, Uy, τx, τy)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - fωʸ =  ∂y(b),
@@ -120,11 +120,7 @@ with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
 """
-function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
-    # unpack
-    J = g.J
-    el = g.el
-
+function build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy)
     # indices
     ωxmap = 0*g.np+1:1*g.np
     ωymap = 1*g.np+1:2*g.np
@@ -134,31 +130,10 @@ function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
     bot = g.e["bot"][1]
     sfc = g.e["sfc"][1]
 
-    # mass matrix over reference element
-    M_el = mass_matrix(el)
-
-    # stamp system
+    # interior
     r = zeros(N)
-    for k=1:g.nt
-        # mass matrix
-        M = M_el*J.dets[k]
-
-        if size(bx, 1) == g.nt
-            # bx, by are constant discontinuous
-            r[ωxmap[g.t[k, :]]] += by[k]*M*[1, 1]
-            r[ωymap[g.t[k, :]]] -= bx[k]*M*[1, 1]
-        elseif size(bx, 1) == 2g.nt
-            # bx, by are linear discontinuous
-            r[ωxmap[g.t[k, :]]] += M*[by[2k-1], by[2k]]
-            r[ωymap[g.t[k, :]]] -= M*[bx[2k-1], bx[2k]]
-        elseif size(bx, 1) == g.np
-            # bx, by are linear continuous
-            r[ωxmap[g.t[k, :]]] += M*by[g.t[k, :]]
-            r[ωymap[g.t[k, :]]] -= M*bx[g.t[k, :]]
-        else
-            error("Unsupported length of buoyancy gradient vector for baroclinc problem. Expected $(g.nt), $(2g.nt), or $(g.np), got $(length(bx)).")
-        end
-    end
+    r[ωxmap] = +M_bc*by
+    r[ωymap] = -M_bc*bx
 
     # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
     r[ωxmap[bot]] = 0
@@ -172,8 +147,25 @@ function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
 
     return r
 end
+function build_M_bc(g::Grid)
+    # unpack
+    J = g.J
+    el = g.el
 
-function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs; showplots=false)
+    # mass matrix over reference element
+    M_el = mass_matrix(el)
+
+    # stamp system
+    M = Tuple{Int64, Int64, Float64}[]
+    for k ∈ 1:g.nt, i ∈ 1:g.nn
+        push!(M, (g.t[k, i], 2k-1, M_el[i, 1]*J.dets[k]))
+        push!(M, (g.t[k, i], 2k,   M_el[i, 2]*J.dets[k]))
+    end
+
+    return dropzeros!(sparse((x->x[1]).(M), (x->x[2]).(M), (x->x[3]).(M), g.np, 2*g.nt))
+end
+
+function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs, M_bc; showplots=false)
     # unpack
     g_col = geom.g_col
     nσ = geom.nσ
@@ -192,7 +184,7 @@ function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs; showplots=f
         ig = in_nodes1[i]
 
         # get rhs with Uˣ = H^2 and all else zeros
-        r = build_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), H[ig]^2, 0, 0, 0)
+        r = build_baroclinic_RHS(g_col, M_bc, zeros(2nσ-2), zeros(2nσ-2), H[ig]^2, 0, 0, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -219,7 +211,7 @@ function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs; showplots=f
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
 end
 
-function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs; showplots=false)
+function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs, M_bc; showplots=false)
     # unpack
     g_col = geom.g_col
     nσ = geom.nσ
@@ -238,7 +230,7 @@ function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs; 
         ig = in_nodes1[i]
 
         # get rhs with τˣ = 1 and all else zeros
-        r = build_baroclinic_RHS(g_col, zeros(nσ-1), zeros(nσ-1), 0, 0, 1, 0)
+        r = build_baroclinic_RHS(g_col, M_bc, zeros(2nσ-2), zeros(2nσ-2), 0, 0, 1, 0)
 
         # solve baroclinc problem
         sol = baroclinic_LHSs[i]\r
@@ -274,10 +266,11 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     Dx = m.inversion.Dx
     Dy = m.inversion.Dy
     baroclinic_LHSs = m.inversion.baroclinic_LHSs
+    M_bc = m.inversion.M_bc
 
     # compute gradients
-    @time "\t\tDx" bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
-    @time "\t\tDy" by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
 
     # pre-allocate
     ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
@@ -290,19 +283,15 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
         ig = in_nodes1[i]
         for I ∈ g_sfc1.p_to_t[ig]
             # solve baroclinic problem with bx and by from element column
-            @time "r" r = build_baroclinic_RHS(g_col, bx[I, :], by[I, :], 0, 0, 0, 0) # TODO: optimize
-            @time "sol" sol = baroclinic_LHSs[i]\r
+            r = build_baroclinic_RHS(g_col, M_bc, bx[I, :], by[I, :], 0, 0, 0, 0)
+            sol = baroclinic_LHSs[i]\r
 
             # store
-            @time "store" begin
             ωx_b[I, :] = sol[0*nσ+1:1*nσ]
             ωy_b[I, :] = sol[1*nσ+1:2*nσ]
             χx_b[I, :] = sol[2*nσ+1:3*nσ]
             χy_b[I, :] = sol[3*nσ+1:4*nσ]
-            end
-            break
         end
-        break
     end
 
     if showplots
