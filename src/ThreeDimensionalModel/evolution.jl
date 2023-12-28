@@ -1,12 +1,12 @@
-struct EvolutionComponents{HM, FAV, MV, A}
+struct EvolutionComponents{SM, VSM, A}
     # depth-weighted mass matrix
-    HM::HM # sparse matrix
+    HM::SM # sparse matrix
 
-    K_hdiff::HM
+    # stiffness matrix for horizontal diffusion
+    K_hdiff::SM
 
-    # vectors of diffusion LHS and RHS matrices for each 1D σ-column
-    LHS_diffs::FAV # vector of factorized matrices
-    RHS_diffs::MV # vector of sparse matrices
+    # "stiffness" matrices for vertical diffusion
+    K_cols::VSM # vector of sparse matrices
 
     # advection arrays
     Ax::A # 4D array
@@ -17,19 +17,25 @@ struct EvolutionComponents{HM, FAV, MV, A}
 end
 
 """
-    evolution = EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, advection)
+    evolution = EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
 """
-function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, advection)
+function EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
     # unpack
+    σ = geom.σ
+    nσ = geom.nσ
     g1 = geom.g1
     g2 = geom.g2
+    g_sfc2 = geom.g_sfc2
     H = geom.H
     nσ = geom.nσ
+    κ = forcing.κ
 
+    # horizontal diffusion
     K_hdiff = build_K_hdiff(geom)
     # K_hdiff = spzeros(g2.np, g2.np)
 
-    LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
+    # vertical diffusion
+    K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]
 
     if advection
         HM = build_HM(g2, H, nσ)
@@ -39,7 +45,7 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
         Ax = Ay = zeros(1, 1, 1, 1)
     end
 
-    return EvolutionComponents(HM, K_hdiff, LHS_diffs, RHS_diffs, Ax, Ay, advection)
+    return EvolutionComponents(HM, K_hdiff, K_cols, Ax, Ay, advection)
 end
 
 function build_K_hdiff(geom::Geometry)
@@ -120,21 +126,18 @@ function build_K_col(σ, κ)
 end
 
 """
-    LHSs, RHSs = build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forcing)
+    LHSs, RHSs = build_diffusion_matrices(m::ModelSetup3D, Δt)
 """
-function build_diffusion_matrices(params::Params, geom::Geometry, forcing::Forcing)
+function build_diffusion_matrices(m::ModelSetup3D, Δt)
     # unpack
-    ε² = params.ε²
-    μϱ = params.μϱ
-    Δt = params.Δt
-    σ = geom.σ
-    nσ = geom.nσ
-    H = geom.H
-    κ = forcing.κ
-    g_sfc2 = geom.g_sfc2
+    ε² = m.params.ε²
+    μϱ = m.params.μϱ
+    nσ = m.geom.nσ
+    H = m.geom.H
+    g_sfc2 = m.geom.g_sfc2
+    K_cols = m.evolution.K_cols
 
     α = ε²/μϱ
-    K_cols = [build_K_col(σ, κ[get_col_inds(i, geom.nσ)]) for i=1:g_sfc2.np]
     LHSs_sp = [sparse(1.0*I(nσ)) for i=1:g_sfc2.np]
     RHSs = [sparse(zeros(nσ, nσ)) for i=1:g_sfc2.np]
     for i=1:g_sfc2.np
@@ -269,16 +272,15 @@ function advection(m::ModelSetup3D, χx, χy, b)
     return cpu_adv
 end
 
-function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
+function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=0)
     # unpack
-    Δt = m.params.Δt
+    ε² = m.params.ε²
+    μϱ = m.params.μϱ
     g1 = m.geom.g1
     g2 = m.geom.g2
     nσ = m.geom.nσ
     H = m.geom.H
     g_sfc2 = m.geom.g_sfc2
-    LHS_diffs = m.evolution.LHS_diffs
-    RHS_diffs = m.evolution.RHS_diffs
     HM = m.evolution.HM
     K_hdiff = m.evolution.K_hdiff
 
@@ -287,26 +289,30 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     Pinv_adv = CuSparseMatrixCSC(sparse(inv(Diagonal(HM))))
 
     # stiffness matrix for stabilizing diffusion
+    # κ_h = 1e-1*ε²/μϱ
     κ_h = 1e-4
     LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
     RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
     Pinv_hdiff = CuSparseMatrixCSC(sparse(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff))))
     CUDA.memory_status()
 
+    # stiffness matrix for vertical diffusion
+    LHS_diffs, RHS_diffs = build_diffusion_matrices(m, Δt)
+
     # element map TODO: add this to `Grid`?
     el_map = build_element_map(g2)
 
     # timestep
-    n_steps = Int64(round(t_final/Δt))
-    n_steps_plot = Int64(round(t_plot/Δt))
+    t_current = s.t[1]
+    n_steps = Int64(round((t_final - t_current)/Δt))
     n_steps_save = Int64(round(t_save/Δt))
 
     # initial condition
     ∫b₀ = sum(HM*s.b.values)
-    pe₀ = potential_energy(m, s)
+    # pe₀ = potential_energy(m, s)
+    pe₀ = 0
     println("\nInitial condition:") 
     @printf("    ∫b₀ = % .5e\n    pe₀ = % .5e\n", ∫b₀, pe₀)
-    i_save = s.i[1] ÷ n_steps_save
     save_state(s, "$out_folder/state$i_save.h5")
     i_save += 1
 
@@ -325,29 +331,28 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
     # solve
     adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
     t0 = time()
-    i0 = s.i[1]
-    for i ∈ (i0 + 1):n_steps
+    for i ∈ 1:n_steps
         # stabilizing diffusion
         # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
-        @time "hdiff" begin
+        # @time "hdiff" begin
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
-        end
+        # end
         # b_gpu = CuArray(s.b.values)
         # s.b.values[:] = Array(b_gpu + D*b_gpu)
         # s.b.values[:] = s.b.values + D*s.b.values
 
         # Δt/2 vertical diffusion step
-        @time "vdiff" begin
+        # @time "vdiff" begin
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        end
+        # end
 
         # Δt advection step
-        @time "adv" begin
+        # @time "adv" begin
         if m.evolution.advection
             # invert
             invert!(m, s)
@@ -365,25 +370,25 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # update
             s.b.values[:] = s.b.values + Δt*Array(adv)
         end
-        end
+        # end
 
         # Δt/2 diffusion step
-        @time "vdiff" begin
+        # @time "vdiff" begin
         for j=1:g_sfc2.np
             inds = get_col_inds(j, nσ)
             s.b.values[inds] = LHS_diffs[j]\(RHS_diffs[j]*s.b.values[inds])
         end
-        end
+        # end
 
         # stabilizing diffusion
-        @time "hdiff" begin
+        # @time "hdiff" begin
         b_gpu = CuArray(s.b.values)
         cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
         s.b.values[:] = Array(b_gpu)
-        end
+        # end
 
-        # i++
-        s.i[1] = i
+        # set time
+        s.t[1] = s.t[1] + Δt
 
         if any(isnan.(s.b.values))
             error("Solution blew up 😢")
@@ -393,9 +398,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # timing
             elapsed = time() - t0
             elapsed_h, elapsed_m, elapsed_s = hrs_mins_secs(elapsed)
-            ETR = (n_steps - i)*elapsed/(i - i0)
+            ETR = (n_steps - i)*elapsed/i
             ETR_h, ETR_m, ETR_s = hrs_mins_secs(ETR)
-            @printf("\nt = %.2e (%d/%d steps)\n", i*Δt, i, n_steps)
+            @printf("\nt = %.2e (%d/%d steps)\n", s.t[1], i, n_steps)
             @printf("    time elapsed:   %02d:%02d:%02d\n", elapsed_h, elapsed_m, elapsed_s)
             @printf("    time remaining: %02d:%02d:%02d\n", ETR_h, ETR_m, ETR_s) 
 
@@ -434,7 +439,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_plot, t_save)
             # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
             # debug plot
-            quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", (i + 1)*Δt)), filename="$out_folder/psi.png")
+            quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%.3f", s.t[1])), filename="$out_folder/psi.png")
             plot_xslice(m, s.b, s.χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
             plot_xslice(m, s.b, s.χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
 

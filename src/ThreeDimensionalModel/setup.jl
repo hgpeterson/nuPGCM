@@ -5,7 +5,7 @@
 
 State of 3D model.
 """
-struct ModelState3D{I, F1, F2, FS1}
+struct ModelState3D{F2, F1, FS1, T}
     # buoyancy
 	b::F2 # FEField on second order grid
 
@@ -20,8 +20,8 @@ struct ModelState3D{I, F1, F2, FS1}
     # barotropic streamfunction
     Ψ::FS1 # FEField on first order surface grid
 
-    # iteration
-    i::I # integer
+    # time
+    t::T # vector containing one number
 end
 
 ### Model parameters
@@ -33,9 +33,6 @@ struct Params{FT}
     # Prandtl*Burger number
     μϱ::FT
 
-    # timestep 
-    Δt::FT
-
     # Coriolis parameter
     f::FT
 
@@ -44,17 +41,17 @@ struct Params{FT}
 end
 
 """
-    params = Params(; ε², μϱ, Δt, f, β)
+    params = Params(; ε², μϱ, f, β)
 
 Set of numerical parameters for 3D model.
 """
-function Params(; ε², μϱ, Δt, f, β)
-    return Params(ε², μϱ, Δt, f, β)
+function Params(; ε², μϱ, f, β)
+    return Params(ε², μϱ, f, β)
 end
 
 ### Model geometry
 
-struct Geometry{F1, F2, GS, VI, G, GC, VF, I}
+struct Geometry{F1, F2, GS, VI, G, AC, AB, GC, VF, I}
     # depth and its derivatives
     H::F1 # `FEField` on g_sfc1
     Hx::F2 # `FEField` on g_sfc2
@@ -71,6 +68,12 @@ struct Geometry{F1, F2, GS, VI, G, GC, VF, I}
     # grids in x, y, σ (first and second order)
     g1::G # `Grid` of `Wedge`s
     g2::G
+
+    # map from (g_sfc1.nt × g_sfc1.nn × nσ) to (g1.nt × g1.nn)
+    g_sfc1_to_g1_map::AC # 3-dim array of CartesianIndices
+
+    # coast mask in (g_sfc1.nt × g_sfc1.nn × nσ) space
+    coast_mask::AB # 3-dim array of ones and zeros
 
     # 1D grid in σ (first order)
     g_col::GC # `Grid` of `Line`s
@@ -100,9 +103,15 @@ function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
 
     # 3D mesh
     g1, g2, σ = generate_wedge_cols(g_sfc1, g_sfc2, nσ=nσ, chebyshev=chebyshev)
+    nσ = length(σ)
+
+    # map from (g_sfc1.nt × g_sfc1.nn × nσ) to (g1.nt × g1.nn)
+    g_sfc1_to_g1_map = build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
+
+    # coast mask in (g_sfc1.nt × g_sfc1.nn × nσ) space
+    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
 
     # 1D grid
-    nσ = length(σ)
     p = σ
     t = [i + j - 1 for i=1:nσ-1, j=1:2]
     e = Dict("bot"=>[1], "sfc"=>[nσ])
@@ -115,7 +124,36 @@ function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
     Hx = DGField([∂ξ(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     Hy = DGField([∂η(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
-    return Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_col, σ, nσ)
+    return Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_sfc1_to_g1_map, coast_mask, g_col, σ, nσ)
+end
+
+"""
+    g_sfc1_to_g1_map = build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
+
+Returns 3-dimensional array of CartesianIndices mapping from (g_sfc1.nt × g_sfc1.nn × nσ) to (g1.nt × g1.nn).
+"""
+function build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
+    g_sfc1_to_g1_map = Matrix{CartesianIndex{3}}(undef, g1.nt, g1.nn)
+    for k ∈ 1:g_sfc1.nt, i ∈ 1:g_sfc1.nn, j ∈ 1:nσ-1
+        k_w = get_k_w(k, nσ, j)
+        g_sfc1_to_g1_map[k_w, i] = CartesianIndex(k, i, j)
+        g_sfc1_to_g1_map[k_w, i+3] = CartesianIndex(k, i, j+1)
+    end
+    return g_sfc1_to_g1_map
+end
+
+"""
+    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
+
+Returns 3-dimensional array of ones and zeros in (g_sfc1.nt × g_sfc1.nn × nσ) space (zero for node on coast,
+one otherwise).
+"""
+function build_coast_mask(g_sfc1, in_nodes1, nσ)
+    coast_mask = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    for ig ∈ in_nodes1, I ∈ g_sfc1.p_to_t[ig]
+        coast_mask[I, :] .= 1
+    end
+    return coast_mask
 end
 
 ### Model forcing
@@ -196,7 +234,7 @@ function ModelSetup3D(params::Params, geom::Geometry, forcing::Forcing; advectio
     quick_plot(curl, cb_label=L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", filename="$out_folder/curl.png")
 
     inversion = InversionComponents(params, geom, forcing)
-    evolution = EvolutionComponents(params, geom, forcing, advection)
+    evolution = EvolutionComponents(geom, forcing, advection)
 
     CUDA.memory_status()
 

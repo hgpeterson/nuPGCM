@@ -14,16 +14,14 @@ H(x) = 1 - x[1]^2 - x[2]^2
 function setup()
     # params
     ε² = 1e-2
-    μϱ = 1.
-    # Δt = 1e-4*μ*ϱ/ε²
-    Δt = 1e-3
+    μϱ = 1e-4
     f = 1.
     β = 0.
-    # β = 1.
-    params = Params(; ε², μϱ, Δt, f, β)
+    # β = 0.95
+    params = Params(; ε², μϱ, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=4, nσ=0, chebyshev=true)
+    geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
 
     # forcing
     τx(x) = 0.
@@ -41,14 +39,17 @@ function setup()
 end
 
 function run3d(m::ModelSetup3D)
-    # b = FEField(x -> H(x)*x[3], m.geom.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
-    s = initial_state(m, b, showplots=true)
+    b = FEField(x -> H(x)*x[3], m.geom.g2)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
+    s = initial_state(m, b)
+    # s = initial_state(m, b, showplots=true)
 
     # t_final = 10
-    # t_plot = 1
     # t_save = 0.1
-    # evolve!(m, s, t_final, t_plot, t_save)
+    Δt = 1e-6
+    t_final = 1e-3
+    t_save = 1e-5
+    evolve!(m, s, t_final, t_save; Δt)
     return s
 end
 
@@ -56,7 +57,7 @@ function postprocess()
     i = 1
     while isfile("$out_folder/state$i.h5")
         s = load_state_3D(m, "$out_folder/state$i.h5")
-        title = latexstring(L"$t = $", @sprintf("%.3f", m.params.Δt*s.i[1]))
+        title = latexstring(L"$t = $", @sprintf("%.3f", s.t[1]))
         filename = @sprintf("%s/psi%03d.png", out_folder, i)
         nuPGCM.quick_plot(s.Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename=filename)
         nuPGCM.plot_u(m, s, 0, i=i)
@@ -66,7 +67,7 @@ function postprocess()
 end
 
 # m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
+m = load_setup_3D("$out_folder/setup.h5")
 s = run3d(m)
 # postprocess()
 

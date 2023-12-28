@@ -79,9 +79,9 @@ end
 function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     # unpack
     g_sfc1 = m.geom.g_sfc1
-    nσ = m.geom.nσ
-    in_nodes1 = m.geom.in_nodes1
     H = m.geom.H
+    g_sfc1_to_g1_map = m.geom.g_sfc1_to_g1_map
+    coast_mask = m.geom.coast_mask
     ν_bot = m.forcing.ν_bot
     barotropic_LHS = m.inversion.barotropic_LHS
     barotropic_RHS_τ = m.inversion.barotropic_RHS_τ
@@ -97,41 +97,32 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     Ψ = s.Ψ
 
     # get buoyancy ω and χ
-    @time "\tsolve_baroclinic_buoyancy" ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
-    # ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
+    # @time "\tsolve_baroclinic_buoyancy" ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
+    ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b, showplots=showplots)
     νωx_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
     νωy_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωy_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
 
     # solve barotropic
-    @time "\tbuild_barotropic_RHS_b" barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
-    # barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
+    # @time "\tbuild_barotropic_RHS_b" barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
+    barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot, showplots=showplots)
     Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
 
     # take gradients to get Uˣ and Uʸ
     Ux, Uy = compute_U(Ψ)
 
-    @time "\tsum" begin
-    imap = Matrix{CartesianIndex{3}}(undef, size(ωx.values))
-    for k ∈ 1:g_sfc1.nt
-        for i ∈ 1:g_sfc1.nn
-            for j=1:nσ-1
-                k_w = get_k_w(k, nσ, j)
-                imap[k_w, i] = CartesianIndex(k, i, j)
-                imap[k_w, i+3] = CartesianIndex(k, i, j+1)
-            end
-        end
-    end
-
     # put them all together to get full ω's and χ's
-    ωx_full = @. ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :]) #FIXME: add τ's
-    ωy_full = @. ωy_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωy_Ux[g_sfc1.t, :] + Uy.values*ωx_Ux[g_sfc1.t, :])
-    χx_full = @. χx_b + 1/H[g_sfc1.t]^2 * (Ux.values*χx_Ux[g_sfc1.t, :] - Uy.values*χy_Ux[g_sfc1.t, :])
-    χy_full = @. χy_b + 1/H[g_sfc1.t]^2 * (Ux.values*χy_Ux[g_sfc1.t, :] + Uy.values*χx_Ux[g_sfc1.t, :])
-    ωx.values[:, :] = ωx_full[imap]
-    ωy.values[:, :] = ωy_full[imap]
-    χx.values[:, :] = χx_full[imap]
-    χy.values[:, :] = χy_full[imap]
-    end
+    # @time "\tfull sum" begin
+    ωx_full = @. coast_mask * (ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :])) #FIXME: add τ's
+    ωy_full = @. coast_mask * (ωy_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωy_Ux[g_sfc1.t, :] + Uy.values*ωx_Ux[g_sfc1.t, :]))
+    χx_full = @. coast_mask * (χx_b + 1/H[g_sfc1.t]^2 * (Ux.values*χx_Ux[g_sfc1.t, :] - Uy.values*χy_Ux[g_sfc1.t, :]))
+    χy_full = @. coast_mask * (χy_b + 1/H[g_sfc1.t]^2 * (Ux.values*χy_Ux[g_sfc1.t, :] + Uy.values*χx_Ux[g_sfc1.t, :]))
+    # end
+    # @time "\tstore" begin
+    ωx.values[:, :] = ωx_full[g_sfc1_to_g1_map]
+    ωy.values[:, :] = ωy_full[g_sfc1_to_g1_map]
+    χx.values[:, :] = χx_full[g_sfc1_to_g1_map]
+    χy.values[:, :] = χy_full[g_sfc1_to_g1_map]
+    # end
 
     if showplots
         title = latexstring(L"$t = $", @sprintf("%.3f", m.params.Δt*s.i[1]))
@@ -176,6 +167,6 @@ function initial_state(m::ModelSetup3D, b; showplots=false)
     χx = DGField(0, m.geom.g1)
     χy = DGField(0, m.geom.g1)
     Ψ = FEField(0, m.geom.g_sfc1)
-    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, [0])
+    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, [0.])
     return invert!(m, s; showplots)
 end

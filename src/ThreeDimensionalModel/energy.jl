@@ -10,7 +10,7 @@ function potential_energy(m::ModelSetup3D, s::ModelState3D)
 
     # fe fields
     σ = FEField(g2.p[:, 3], g2)
-    @time H_g2 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g2.np], g2)
+    H_g2 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g2.np], g2)
 
     # # integrand
     # function f(ξ, k)

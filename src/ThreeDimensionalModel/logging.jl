@@ -28,7 +28,6 @@ function save_setup(m::ModelSetup3D, save_file)
     # Params
     write(file, "ε²", m.params.ε²)
     write(file, "μϱ", m.params.μϱ)
-    write(file, "Δt", m.params.Δt)
     write(file, "f", m.params.f)
     write(file, "β", m.params.β)
 
@@ -101,7 +100,6 @@ function save_setup(m::ModelSetup3D, save_file)
     log_params(ofile, @sprintf("μϱ = %1.1e", m.params.μϱ))
     log_params(ofile, @sprintf("f₀ = %1.1e", m.params.f))
     log_params(ofile, @sprintf("β  = %1.1e", m.params.β))
-    log_params(ofile, @sprintf("Δt = %1.1e", m.params.Δt))
     log_params(ofile, "\nResolution:")
     log_params(ofile, @sprintf("np = %d", m.geom.g_sfc1.np))
     log_params(ofile, @sprintf("nσ = %d (σ[2] - σ[1] = %1.1e)", m.geom.nσ, m.geom.σ[2] - m.geom.σ[1]))
@@ -129,10 +127,9 @@ function load_setup_3D(filename)
     # Params
     ε² = read(file, "ε²")
     μϱ = read(file, "μϱ")
-    Δt = read(file, "Δt")
     f = read(file, "f")
     β = read(file, "β")
-    params = Params(; ε², μϱ, Δt, f, β)
+    params = Params(; ε², μϱ, f, β)
 
     # Geometry
     Hvals = read(file, "H")
@@ -176,7 +173,10 @@ function load_setup_3D(filename)
     σ = read(file, "σ")
     nσ = read(file, "nσ")
 
-    geom = Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_col, σ, nσ)
+    g_sfc1_to_g1_map = build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
+    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
+
+    geom = Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_sfc1_to_g1_map, coast_mask, g_col, σ, nσ)
 
     # Forcing
     τxvals = read(file, "τx")
@@ -227,19 +227,19 @@ function load_setup_3D(filename)
     # EvolutionComponents
     HM = read_sparse_matrix(file, "HM")
     K_hdiff = read_sparse_matrix(file, "K_hdiff")
-    LHS_diffs, RHS_diffs = build_diffusion_matrices(params, geom, forcing)
+    K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]
     Ax = CuArray(read(file, "Ax"))
     Ay = CuArray(read(file, "Ay"))
     CUDA.memory_status()
     advection = read(file, "advection")
-    evolution = EvolutionComponents(HM, K_hdiff, LHS_diffs, RHS_diffs, Ax, Ay, advection)
+    evolution = EvolutionComponents(HM, K_hdiff, K_cols, Ax, Ay, advection)
 
     close(file)
     return ModelSetup3D(params, geom, forcing, inversion, evolution)
 end
 
 """
-    save_state(s, save_file
+    save_state(s, save_file)
 
 Save .h5 state file.
 """
@@ -262,7 +262,7 @@ function save_state(s::ModelState3D, save_file)
     write(file, "p_sfc", s.Ψ.g.p)
     write(file, "t_sfc", s.Ψ.g.t)
     write(file, "e_sfc", s.Ψ.g.e["bdy"])
-    write(file, "i", s.i)
+    write(file, "t", s.t)
     close(file)
     println(save_file)
 end
@@ -307,11 +307,11 @@ function load_state_3D(filename)
     g_sfc = Grid(Triangle(order=1), p_sfc, t_sfc, e_sfc)
     Ψ = FEField(Ψvals, g_sfc)
 
-    i = read(file, "i")
+    t = read(file, "t")
 
     close(file)
 
-    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, i)
+    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, t)
     return s
 end
 function load_state_3D(m::ModelSetup3D, filename)
@@ -335,10 +335,10 @@ function load_state_3D(m::ModelSetup3D, filename)
     Ψvals = read(file, "Ψ")
     Ψ = FEField(Ψvals, m.geom.g_sfc1)
 
-    i = read(file, "i")
+    t = read(file, "t")
 
     close(file)
 
-    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, i)
+    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, t)
     return s
 end
