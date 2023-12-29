@@ -166,18 +166,20 @@ function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
 end
 
 function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y, cb_label, fname)
-    # params
-    nx = 2^8
-    nσ = m.geom.nσ
-    σ = m.geom.σ
+    # unpack
     g_sfc1 = m.geom.g_sfc1
     g1 = m.geom.g1
     H = m.geom.H
 
     # get x slice
+    nx = 2^8
     bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
     x = range(neary[2], neary[3], length=nx)
+
+    # vertical grid
+    nσ = 2^8
+    σ = collect(-(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2)
     
     # get indices of surface tris
     k_sfcs = [get_k([x[i], y], g_sfc1, g_sfc1.el) for i=1:nx]
@@ -186,8 +188,7 @@ function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y, cb_
     ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x[i], y], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
 
     # get indices of wedges
-    k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:nx]
-    k_ws = vcat(k_ws, k_ws[end, :]')
+    k_ws = [get_k_w(k_sfcs[j], m.geom.nσ, findfirst(k -> m.geom.σ[k] ≤ σ[i] ≤ m.geom.σ[k+1], 1:m.geom.nσ)) for i ∈ 1:nσ, j ∈ 1:nx] 
 
     # get points in reference wedge
     ξ_ws = [transform_to_ref_el(g1.el, [x[j], y, σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
@@ -208,18 +209,20 @@ function plot_xslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, y, cb_
 end
 
 function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x, cb_label, fname)
-    # params
-    ny = 2^8
-    nσ = m.geom.nσ
-    σ = m.geom.σ
+    # unpack
     g_sfc1 = m.geom.g_sfc1
     g1 = m.geom.g1
     H = m.geom.H
 
     # get y slice
+    ny = 2^8
     bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     nearx = sort(bdy[sortperm(abs.(bdy[:, 1] .- x)), 2][1:4])
     y = range(nearx[2], nearx[3], length=ny)
+
+    # vertical grid
+    nσ = 2^8
+    σ = collect(-(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2)
 
     # get indices of surface tris
     k_sfcs = [get_k([x, y[i]], g_sfc1, g_sfc1.el) for i=1:ny]
@@ -228,8 +231,7 @@ function plot_yslice(m::ModelSetup3D, b::AbstractField, u::AbstractField, x, cb_
     ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x, y[i]], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:ny]
 
     # get indices of wedges
-    k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:ny]
-    k_ws = vcat(k_ws, k_ws[end, :]')
+    k_ws = [get_k_w(k_sfcs[j], m.geom.nσ, findfirst(k -> m.geom.σ[k] ≤ σ[i] ≤ m.geom.σ[k+1], 1:m.geom.nσ)) for i ∈ 1:nσ, j ∈ 1:ny] 
 
     # get points in reference wedge
     ξ_ws = [transform_to_ref_el(g1.el, [x, y[j], σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:ny]
@@ -294,10 +296,7 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
         i_str = @sprintf("%03d", i)
     end
 
-    # params
-    nx = 2^8
-    nσ = m.geom.nσ
-    σ = m.geom.σ
+    # unpack
     g_sfc1 = m.geom.g_sfc1
     g1 = m.geom.g1
     H = m.geom.H
@@ -305,9 +304,14 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     Hy = m.geom.Hy
 
     # get x slice
+    nx = 2^8
     bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
     x = range(neary[2], neary[3], length=nx)
+
+    # vertical grid
+    nσ = 2^8
+    σ = collect(-(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2)
     
     # get indices of surface tris
     k_sfcs = [get_k([x[i], y], g_sfc1, g_sfc1.el) for i=1:nx]
@@ -316,11 +320,10 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     ξ_sfcs = [transform_to_ref_el(g_sfc1.el, [x[i], y], g_sfc1.p[g_sfc1.t[k_sfcs[i], :], :]) for i=1:nx]
 
     # get indices of wedges
-    k_ws = [get_k_w(k_sfcs[j], nσ, i) for i=1:nσ-1, j=1:nx]
-    k_ws = vcat(k_ws, k_ws[end, :]')
+    k_ws = [get_k_w(k_sfcs[j], m.geom.nσ, findfirst(k -> m.geom.σ[k] ≤ σ[i] ≤ m.geom.σ[k+1], 1:m.geom.nσ)) for i ∈ 1:nσ, j ∈ 1:nx] 
 
     # get points in reference wedge
-    ξ_ws = [transform_to_ref_el(g1.el, [x[j], y, σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i=1:nσ, j=1:nx]
+    ξ_ws = [transform_to_ref_el(g1.el, [x[j], y, σ[i]], g1.p[g1.t[k_ws[i, j], :], :]) for i ∈ 1:nσ, j ∈ 1:nx]
 
     # nσ × nx coords
     Hs = [H(ξ_sfcs[i], k_sfcs[i]) for i=1:nx] 
@@ -332,15 +335,9 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     # evaluate
     χx_fe = FEField(s.χx)
     χy_fe = FEField(s.χy)
-    χx = [χx_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
-    χy = [χy_fe(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
-    ux = zeros(nσ, nx)
-    uy = zeros(nσ, nx)
-    for i=2:nx-1
-        ux[:, i] = -differentiate(χy[:, i], σ*Hs[i])
-        uy[:, i] = +differentiate(χx[:, i], σ*Hs[i])
-    end
-    Huσ = [∂x(χy_fe, ξ_ws[i, j], k_ws[i, j]) - ∂y(χx_fe, ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
+    ux = [-∂σ(χy_fe, ξ_ws[i, j], k_ws[i, j])/Hs[j] for i ∈ 1:nσ, j ∈ 1:nx]
+    uy = [+∂σ(χx_fe, ξ_ws[i, j], k_ws[i, j])/Hs[j] for i ∈ 1:nσ, j ∈ 1:nx]
+    Huσ = [∂ξ(χy_fe, ξ_ws[i, j], k_ws[i, j]) - ∂η(χx_fe, ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
     uz = [Huσ[i, j] + σ[i]*Hxs[j]*ux[i, j] + σ[i]*Hys[j]*uy[i, j] for i=1:nσ, j=1:nx]
     bs = [s.b(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
 
@@ -405,10 +402,10 @@ function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$
     χxs = [χx_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
     χys = [χy_fe(ξ_ws[i], k_ws[i]) for i=1:nσ]
     # bs = [b(ξ_ws[i], k_ws[i]) for i=1:nσ]
-    bzs = [∂z(b, ξ_ws[i], k_ws[i])/H for i=1:nσ]
-    uxs = [-∂z(χy_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
-    uys = [+∂z(χx_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
-    uσs = [(∂x(χy_fe, ξ_ws[i], k_ws[i]) - ∂y(χx_fe, ξ_ws[i], k_ws[i]))/H for i=1:nσ]
+    bzs = [∂σ(b, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uxs = [-∂σ(χy_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uys = [+∂σ(χx_fe, ξ_ws[i], k_ws[i])/H for i=1:nσ]
+    uσs = [(∂ξ(χy_fe, ξ_ws[i], k_ws[i]) - ∂η(χx_fe, ξ_ws[i], k_ws[i]))/H for i=1:nσ]
     uzs = @. H*uσs + σ*Hx*uxs + σ*Hy*uys
 
     fig, ax = plt.subplots(2, 3, figsize=(6, 6.4), sharey=true)

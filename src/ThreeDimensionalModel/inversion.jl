@@ -125,7 +125,7 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     # end
 
     if showplots
-        title = latexstring(L"$t = $", @sprintf("%.3f", m.params.Δt*s.i[1]))
+        title = latexstring(L"$t = $", @sprintf("%.3f", s.t[1]))
         quick_plot(Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename="$out_folder/psi.png")
         quick_plot(Ux, cb_label=L"U^x", title=title, filename="$out_folder/Ux.png")
         quick_plot(Uy, cb_label=L"U^y", title=title, filename="$out_folder/Uy.png")
