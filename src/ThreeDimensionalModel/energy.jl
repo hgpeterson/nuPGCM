@@ -149,8 +149,7 @@ end
 function PE_production(m::ModelSetup3D, s::ModelState3D)
     # unpack
     ε² = m.params.ε²
-    μ = m.params.μ
-    ϱ = m.params.ϱ
+    μϱ = m.params.μϱ
     g2 = m.geom.g2
     κ = m.forcing.κ
     b = s.b
@@ -159,7 +158,7 @@ function PE_production(m::ModelSetup3D, s::ModelState3D)
     for k ∈ 1:g2.nt, i_quad ∈ eachindex(g2.el.quad_wts), i ∈ 1:g2.nn
         bσ[k, i_quad] += b[g2.t[k, i]]*g2.∂φ_qp[k, i, 3, i_quad]
     end
-    return ∫(ε²/μ/ϱ*(κ[g2.t]*g2.φ_qp) .* bσ, g2)
+    return ∫(ε²/μϱ*(κ[g2.t]*g2.φ_qp) .* bσ, g2)
 
     # # integrand
     # function f(ξ, k)

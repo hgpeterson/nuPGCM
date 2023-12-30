@@ -290,7 +290,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
 
     # stiffness matrix for stabilizing diffusion
     # κ_h = 1e-1*ε²/μϱ
-    κ_h = 1e-4
+    # κ_h = 1e-4
+    κ_h = 0.
     LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
     RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
     Pinv_hdiff = CuSparseMatrixCSC(sparse(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff))))
