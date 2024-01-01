@@ -11,9 +11,8 @@ set_out_folder("../output/bowl2D/")
 function run()
     # parameters
     ε² = 1e-3
-    μ = 1e4
-    ϱ = 1e-4
-    α = ε²/μ/ϱ
+    μϱ = 1.
+    α = ε²/μϱ
     T = 5e-2/α
     n_steps = 500
     Δt = T/n_steps
