@@ -26,9 +26,9 @@ end
 
 function solve_heat()
     # grid
-    nσ = 2^4
-    σ = -1:1/(nσ-1):0 
-    # σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2 
+    nσ = 64
+    # σ = -1:1/(nσ-1):0 
+    σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2 
     t = [i + j - 1 for i=1:nσ-1, j=1:2]
     e = Dict("bot"=>[1], "sfc"=>[nσ])
     g = Grid(Line(order=1), σ, t, e)
@@ -36,9 +36,9 @@ function solve_heat()
     # params
     H = 1.0
     κ = @. 1e-2 + exp(-H*(σ + 1)/0.1)
-    α = 1e-2
-    Δt = 0.04
-    n_steps = 1000
+    α = 1e1
+    Δt = 1e-5
+    n_steps = 100
 
     # b₀
     b = H*σ
@@ -47,8 +47,12 @@ function solve_heat()
 
     M = nuPGCM.mass_matrix(g)
     K = build_K(g, κ)
-    LHS = lu(M + α*Δt/2*K)
-    RHS = M - α*Δt/2*K
+    LHS = M + α/H^2*Δt/2*K
+    LHS[nσ, :] .= 0
+    LHS[nσ, nσ] = 1
+    LHS = lu(LHS)
+    RHS = M - α/H^2*Δt/2*K
+    RHS[nσ, :] .= 0
 
     for i=1:n_steps
         b = LHS\(RHS*b)
@@ -63,11 +67,12 @@ function solve_heat()
     println("Δb_pct = ", Δb_pct)
 
     # plot
-    bz = differentiate(b, σ*H)
+    σ_hr = -1:0.001:0
+    bz = [∂(FEField(b, g), σ_hr[i], 1) for i ∈ eachindex(σ_hr)]
     fig, ax = plt.subplots(1, 2, figsize=(4, 3.2), sharey=true)
     ax[1].plot(b, σ*H)
     ax[1].set_xlim(-H, 0)
-    ax[2].plot(bz, σ*H)
+    ax[2].plot(bz, σ_hr*H)
     ax[1].set_xlabel(L"b")
     ax[2].set_xlabel(L"\partial_z b")
     ax[1].set_ylabel(L"z")

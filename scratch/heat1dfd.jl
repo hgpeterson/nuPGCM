@@ -25,32 +25,26 @@ function get_K(σ, κ)
     push!(K, (1, 1, fd_σ[1]))
     push!(K, (1, 2, fd_σ[2]))
     push!(K, (1, 3, fd_σ[3]))
-    # ∂σ(b) = 0 at z = 0
-    fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
-    push!(K, (nσ, nσ-2, fd_σ[1]))
-    push!(K, (nσ, nσ-1, fd_σ[2]))
-    push!(K, (nσ, nσ  , fd_σ[3]))
+    # # ∂σ(b) = 0 at z = 0
+    # fd_σ = mkfdstencil(σ[nσ-2:nσ], σ[nσ], 1)
+    # push!(K, (nσ, nσ-2, fd_σ[1]))
+    # push!(K, (nσ, nσ-1, fd_σ[2]))
+    # push!(K, (nσ, nσ  , fd_σ[3]))
+    # b = 0 at z = 0
+    push!(K, (nσ, nσ, 1))
     return dropzeros!(sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nσ, nσ))
 end
 
 function solve_heat()
     # params
-    nσ = 2^4
-    σ = -1:1/(nσ-1):0 
-    # σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2 
-    ε² = 1e-2
-    μ = 1
-    ϱ = 1e-4
+    nσ = 64
+    # σ = -1:1/(nσ-1):0 
+    σ = -(cos.(π*(0:nσ-1)/(nσ-1)) .+ 1)/2 
     H = 1.0
     κ = @. 1e-2 + exp(-H*(σ + 1)/0.1)
-    # κ = ones(nσ)
-    # α = ε²/μ/ϱ
-    α = 1e-2
-    # T = 5e-2/α
-    # n_steps = 50
-    # Δt = T/n_steps
-    Δt = 0.04
-    n_steps = 1000
+    α = 1e1
+    Δt = 1e-5
+    n_steps = 100
 
     # b₀
     b = H*σ
@@ -64,13 +58,12 @@ function solve_heat()
     LHS[nσ, :] = K[nσ, :]
     LHS = lu(LHS)
     RHS = I + α/H^2*Δt/2*K
+    RHS[1, :] .= 0
+    RHS[nσ, :] .= 0
 
     # loop
     for i=1:n_steps
-        r = RHS*b
-        r[1] = 0
-        r[nσ] = 0
-        b = LHS\r
+        b = LHS\(RHS*b)
     end
 
     # integral conservation

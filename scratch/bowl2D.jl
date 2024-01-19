@@ -40,10 +40,10 @@ function run()
 
     # diffusivity
     # κ_func(ξ, σ) = ε²/μ/ϱ
-    κ_func(ξ, σ) = ε²/μ/ϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
+    κ_func(ξ, σ) = ε²/μϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
 
     # viscosity
-    ν_func(ξ, σ) = μ*ϱ*κ_func(ξ, σ)
+    ν_func(ξ, σ) = μϱ*κ_func(ξ, σ)
 
     # stratification
     N2 = 1
