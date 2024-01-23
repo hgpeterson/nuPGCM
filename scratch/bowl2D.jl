@@ -10,12 +10,10 @@ set_out_folder("../output/bowl2D/")
 
 function run()
     # parameters
-    ε² = 1e-3
-    μϱ = 1.
-    α = ε²/μϱ
-    T = 5e-2/α
-    n_steps = 500
-    Δt = T/n_steps
+    ε² = 1e-4
+    μϱ = 1e-4
+    T = 1e-1
+    Δt = 1e-4
     f = 1.
     L = 1.
     nξ = 2^8 
@@ -61,13 +59,13 @@ function run()
 
     # set initial state
     b = copy(m.z)
-    b = @. m.z + 0.1*exp(-(m.z+m.H)/0.1) #- 0.1*exp(m.z/0.1)
+    # b = @. m.z + 0.1*exp(-(m.z+m.H)/0.1) #- 0.1*exp(m.z/0.1)
     χ, uξ, uη, uσ, U = invert(m, b)
     i = [1]
     s = ModelState2D(b, χ, uξ, uη, uσ, i)
 
-    # # solve
-    # evolve!(m, s, T, t_plot, t_save) 
+    # solve
+    evolve!(m, s, T, t_plot, t_save) 
 
     # cartesian
     ux, uy, uz = transform_from_TF(m, s)

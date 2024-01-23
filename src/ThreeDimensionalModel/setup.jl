@@ -225,13 +225,13 @@ end
     m = ModelSetup3D(params::Params, geom::Geometry, forcing::Forcing; advection=true)
 """
 function ModelSetup3D(params::Params, geom::Geometry, forcing::Forcing; advection=true)
-    quick_plot(geom.H,  cb_label=L"H",   filename="$out_folder/H.png")
-    quick_plot(geom.Hx, cb_label=L"H_x", filename="$out_folder/Hx.png")
-    quick_plot(geom.Hy, cb_label=L"H_y", filename="$out_folder/Hy.png")
+    quick_plot(geom.H,  cb_label=L"H",   filename="$out_folder/images/H.png")
+    quick_plot(geom.Hx, cb_label=L"H_x", filename="$out_folder/images/Hx.png")
+    quick_plot(geom.Hy, cb_label=L"H_y", filename="$out_folder/images/Hy.png")
     f_over_H = FEField(x->params.f + params.β*x[2], geom.g_sfc2)/(geom.H + FEField(1e-5, geom.g_sfc2))
-    quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/f_over_H.png", vmax=6)
+    quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/images/f_over_H.png", vmax=6)
     curl = (forcing.τy_x - forcing.τx_y)*geom.H - (forcing.τy*geom.Hx - forcing.τx*geom.Hy)
-    quick_plot(curl, cb_label=L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", filename="$out_folder/curl.png")
+    quick_plot(curl, cb_label=L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", filename="$out_folder/images/curl.png")
 
     inversion = InversionComponents(params, geom, forcing)
     evolution = EvolutionComponents(geom, forcing, advection)
@@ -242,4 +242,9 @@ function ModelSetup3D(params::Params, geom::Geometry, forcing::Forcing; advectio
     flush(stderr)
 
     return ModelSetup3D(params, geom, forcing, inversion, evolution)
+end
+
+function advection_off(m::ModelSetup3D)
+    evolution_adv_off = advection_off(m.evolution)
+    return ModelSetup3D(m.params, m.geom, m.forcing, m.inversion, evolution_adv_off)
 end

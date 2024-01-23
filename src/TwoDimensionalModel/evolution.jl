@@ -18,7 +18,11 @@ function get_evolution_LHS(m::ModelSetup2D, a)
 
     # no flux boundaries
     LHS[bottomBdy, :] = m.D[bottomBdy, :]
-    LHS[topBdy, :] = m.D[topBdy, :]
+    # LHS[topBdy, :] = m.D[topBdy, :]
+    LHS[topBdy, :] .= 0
+    for i ∈ topBdy
+        LHS[i, i] = 1
+    end
 
     return lu(LHS)
 end

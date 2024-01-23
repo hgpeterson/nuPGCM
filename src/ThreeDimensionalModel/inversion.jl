@@ -64,8 +64,8 @@ function InversionComponents(params::Params, geom::Geometry, forcing::Forcing)
     νωy_τx_bot = ν_bot*FEField(ωy_τx[:, 1], g_sfc1)
     νωx_τ_bot = τx1*νωx_τx_bot - τy1*νωy_τx_bot
     νωy_τ_bot = τx1*νωy_τx_bot + τy1*νωx_τx_bot
-    quick_plot(νωx_τ_bot, cb_label=L"\nu\omega^x_\tau|_{-H}", filename="$out_folder/nu_omegax_tau_bot.png")
-    quick_plot(νωy_τ_bot, cb_label=L"\nu\omega^y_\tau|_{-H}", filename="$out_folder/nu_omegay_tau_bot.png")
+    quick_plot(νωx_τ_bot, cb_label=L"\nu\omega^x_\tau|_{-H}", filename="$out_folder/images/nu_omegax_tau_bot.png")
+    quick_plot(νωy_τ_bot, cb_label=L"\nu\omega^y_\tau|_{-H}", filename="$out_folder/images/nu_omegay_tau_bot.png")
 
     # barotropic RHS due to wind stress
     barotropic_RHS_τ = build_barotropic_RHS_τ(params, geom, forcing, νωx_τ_bot, νωy_τ_bot)
@@ -125,27 +125,22 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
     # end
 
     if showplots
-        title = latexstring(L"$t = $", @sprintf("%.3f", s.t[1]))
-        quick_plot(Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename="$out_folder/psi.png")
-        quick_plot(Ux, cb_label=L"U^x", title=title, filename="$out_folder/Ux.png")
-        quick_plot(Uy, cb_label=L"U^y", title=title, filename="$out_folder/Uy.png")
-
-        # # save .vtu
-        # plot_ω_χ(m, ωx, ωy, χx, χy)
-
-        # profile and slice plots
-        # plot_profiles(m, b, ωx, ωy, χx, χy,  0.5, 0.0, "$out_folder/profiles_x=+0.5_y=0.0.png")
-        # plot_profiles(m, b, ωx, ωy, χx, χy, -0.5, 0.0, "$out_folder/profiles_x=-0.5_y=0.0.png")
-        # plot_profiles(m, b, ωx, ωy, χx, χy, 0.0,  0.5, "$out_folder/profiles_x=0.0_y=+0.5.png")
-        # plot_profiles(m, b, ωx, ωy, χx, χy, 0.0, -0.5, "$out_folder/profiles_x=0.0_y=-0.5.png")
-        plot_xslice(m, b, χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/xslice_chix.png")
-        plot_xslice(m, b, χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/xslice_chiy.png")
-        plot_yslice(m, b, χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/yslice_chix.png")
-        plot_yslice(m, b, χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/yslice_chiy.png")
-        plot_xslice(m, b, ωx, 0.0, L"Vorticity $\omega^x$", "$out_folder/xslice_omegax.png")
-        plot_xslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/xslice_omegay.png")
-        plot_yslice(m, b, ωx, 0.0, L"Vorticity $\omega^x$", "$out_folder/yslice_omegax.png")
-        plot_yslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/yslice_omegay.png")
+        title = latexstring(L"$t = $", @sprintf("%1.1e", s.t[1]))
+        quick_plot(Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename="$out_folder/images/psi.png")
+        quick_plot(Ux, cb_label=L"U^x", title=title, filename="$out_folder/images/Ux.png")
+        quick_plot(Uy, cb_label=L"U^y", title=title, filename="$out_folder/images/Uy.png")
+        plot_profiles(m, s, x=0.5, y=0.0, filename="$out_folder/images/profiles_+0.5_+0.0.png")
+        plot_profiles(m, s, x=-0.5, y=0.0, filename="$out_folder/images/profiles_-0.5_+0.0.png")
+        plot_profiles(m, s, x=0.0, y=0.5, filename="$out_folder/images/profiles_+0.0_+0.5.png")
+        plot_profiles(m, s, x=0.0, y=-0.5, filename="$out_folder/images/profiles_+0.0_-0.5.png")
+        plot_xslice(m, b, χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/images/xslice_chix.png")
+        plot_xslice(m, b, χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/images/xslice_chiy.png")
+        plot_yslice(m, b, χx, 0.0, L"Streamfunction $\chi^x$", "$out_folder/images/yslice_chix.png")
+        plot_yslice(m, b, χy, 0.0, L"Streamfunction $\chi^y$", "$out_folder/images/yslice_chiy.png")
+        plot_xslice(m, b, ωx, 0.0, L"Vorticity $\omega^x$", "$out_folder/images/xslice_omegax.png")
+        plot_xslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/images/xslice_omegay.png")
+        plot_yslice(m, b, ωx, 0.0, L"Vorticity $\omega^x$", "$out_folder/images/yslice_omegax.png")
+        plot_yslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/images/yslice_omegay.png")
     end
 
     return s

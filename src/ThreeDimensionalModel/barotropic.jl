@@ -191,7 +191,7 @@ function build_JEBAR(m::ModelSetup3D, b; showplots=false)
 
     if showplots
         f = DGField(m.geom.H[g_sfc1.t].^3 .* JEBAR.values, g_sfc1)
-        quick_plot(f, cb_label=L"H^3 J(1/H, \gamma)", filename="$out_folder/JEBAR.png")
+        quick_plot(f, cb_label=L"H^3 J(1/H, \gamma)", filename="$out_folder/images/JEBAR.png")
     end
     return JEBAR
 end

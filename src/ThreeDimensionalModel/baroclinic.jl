@@ -147,6 +147,16 @@ function build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy)
 
     return r
 end
+function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
+    M_bc = build_M_bc(g)
+    return build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy)
+end
+
+"""
+    M_bc = build_M_bc(g::Grid)
+
+Mass matrix for baroclinic inversion so that the RHS is just M_bc*by and M_bc*bx.
+"""
 function build_M_bc(g::Grid)
     # unpack
     J = g.J
@@ -204,8 +214,8 @@ function solve_baroclinic_transport(geom::Geometry, baroclinic_LHSs, M_bc; showp
     if showplots
         ωx_Ux_bot = FEField(ωx_Ux[:, 1], g_sfc1)
         ωy_Ux_bot = FEField(ωy_Ux[:, 1], g_sfc1)
-        quick_plot(ωx_Ux_bot, cb_label=L"\omega^x_{U^x}(-H)",  filename="$out_folder/omegax_Ux_bot.png")
-        quick_plot(ωy_Ux_bot, cb_label=L"\omega^y_{U^x}(-H)}", filename="$out_folder/omegay_Ux_bot.png")
+        quick_plot(ωx_Ux_bot, cb_label=L"\omega^x_{U^x}(-H)",  filename="$out_folder/images/omegax_Ux_bot.png")
+        quick_plot(ωy_Ux_bot, cb_label=L"\omega^y_{U^x}(-H)}", filename="$out_folder/images/omegay_Ux_bot.png")
     end
 
     return ωx_Ux, ωy_Ux, χx_Ux, χy_Ux
@@ -250,8 +260,8 @@ function solve_baroclinic_wind(geom::Geometry, params::Params, baroclinic_LHSs, 
     if showplots
         ωx_τx_bot = FEField(ωx_τx[:, 1], g_sfc1)
         ωy_τx_bot = FEField(ωy_τx[:, 1], g_sfc1)
-        quick_plot(ωx_τx_bot, cb_label=L"\omega^x_{\tau^x}(-H)",  filename="$out_folder/omegax_taux_bot.png")
-        quick_plot(ωy_τx_bot, cb_label=L"\omega^y_{\tau^x}(-H)}", filename="$out_folder/omegay_taux_bot.png")
+        quick_plot(ωx_τx_bot, cb_label=L"\omega^x_{\tau^x}(-H)",  filename="$out_folder/images/omegax_taux_bot.png")
+        quick_plot(ωy_τx_bot, cb_label=L"\omega^y_{\tau^x}(-H)}", filename="$out_folder/images/omegay_taux_bot.png")
     end
 
     return ωx_τx, ωy_τx, χx_τx, χy_τx
@@ -297,8 +307,8 @@ function solve_baroclinic_buoyancy(m::ModelSetup3D, b; showplots=false)
     if showplots
         ωx_b_bot = DGField(ωx_b[:, :, 1], g_sfc1)
         ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
-        quick_plot(ωx_b_bot, cb_label=L"\omega^x_b(-H)", filename="$out_folder/omegax_b_bot.png")
-        quick_plot(ωy_b_bot, cb_label=L"\omega^y_b(-H)", filename="$out_folder/omegay_b_bot.png")
+        quick_plot(ωx_b_bot, cb_label=L"\omega^x_b(-H)", filename="$out_folder/images/omegax_b_bot.png")
+        quick_plot(ωy_b_bot, cb_label=L"\omega^y_b(-H)", filename="$out_folder/images/omegay_b_bot.png")
     end
 
     return ωx_b, ωy_b, χx_b, χy_b

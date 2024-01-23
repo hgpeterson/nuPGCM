@@ -6,7 +6,16 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
+if !isdir("../output")
+    mkdir("../output")
+end
 set_out_folder("../output")
+if !isdir("$out_folder/data")
+    mkdir("$out_folder/data")
+end
+if !isdir("$out_folder/images")
+    mkdir("$out_folder/images")
+end
 
 # depth
 H(x) = 1 - x[1]^2 - x[2]^2
@@ -44,19 +53,19 @@ function run3d(m::ModelSetup3D)
     s = initial_state(m, b)
     # s = initial_state(m, b, showplots=true)
 
-    Δt = 1e-5
-    t_save = 1e-4
-    t_final = 1e-3
+    Δt = 1e-4
+    t_save = 1e-3
+    t_final = 1e-1
     evolve!(m, s, t_final, t_save; Δt)
     return s
 end
 
 function postprocess()
     i = 1
-    while isfile("$out_folder/state$i.h5")
-        s = load_state_3D(m, "$out_folder/state$i.h5")
+    while isfile("$out_folder/data/state$i.h5")
+        s = load_state_3D(m, "$out_folder/data/state$i.h5")
         title = latexstring(L"$t = $", @sprintf("%1.1e", s.t[1]))
-        filename = @sprintf("%s/psi%03d.png", out_folder, i)
+        filename = @sprintf("%s/images/psi%03d.png", out_folder, i)
         nuPGCM.quick_plot(s.Ψ,  cb_label=L"Barotropic streamfunction $\Psi$", title=title, filename=filename)
         nuPGCM.plot_u(m, s, 0, i=i)
         i += 1
@@ -64,13 +73,11 @@ function postprocess()
     # run(`bash -c "make_movie 20 psi"`)
 end
 
-m = setup()
-# m = load_setup_3D("$out_folder/setup.h5")
-s = run3d(m)
+# m = setup()
+# m = load_setup_3D("$out_folder/data/setup.h5")
+# m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
+s = load_state_3D(m, "$out_folder/data/state5.h5")
+# s = run3d(m)
 # postprocess()
-
-# ∫b     = -5.23639e-01
-# Δb     =  3.97311e-05
-# Δb_pct =  7.58809e-03
 
 println("Done.")

@@ -116,6 +116,7 @@ export
     Forcing,
     ModelSetup3D,
     ModelState3D,
+    advection_off,
 
     # init
     initial_state,

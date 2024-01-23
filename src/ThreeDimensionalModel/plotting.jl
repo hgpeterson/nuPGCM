@@ -64,11 +64,11 @@ function tplot(g::Grid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 
-function quick_plot(u::FEField; cb_label="", title="", filename="$out_folder/quick_plot.png", vmax=0.)
+function quick_plot(u::FEField; cb_label="", title="", filename="$out_folder/images/quick_plot.png", vmax=0.)
     fig, ax, im = tplot(u, contour=true; cb_label, vmax)
     quick_plot_save(filename, ax, title)
 end
-function quick_plot(u::FVField; cb_label="", title="", filename="$out_folder/quick_plot.png", vmax=0.)
+function quick_plot(u::FVField; cb_label="", title="", filename="$out_folder/images/quick_plot.png", vmax=0.)
     fig, ax, im = tplot(u, contour=false; cb_label, vmax)
     quick_plot_save(filename, ax, title)
 end
@@ -119,7 +119,7 @@ function write_vtk(g, fname, data)
     println(fname)
 end
 
-function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/omega_chi.vtu")
+function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/images/omega_chi.vtu")
     # unpack 
     g = m.geom.g1
     g_sfc2 = m.geom.g_sfc2
@@ -307,7 +307,7 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     nx = 2^8
     bdy = g_sfc1.p[g_sfc1.e["bdy"], :]
     neary = sort(bdy[sortperm(abs.(bdy[:, 2] .- y)), 1][1:4])
-    x = range(neary[2], neary[3], length=nx)
+    x = range(0.99neary[2], 0.99neary[3], length=nx)
 
     # vertical grid
     nσ = 2^8
@@ -343,16 +343,16 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
 
     # plot
     title = latexstring(@sprintf("Slice at \$y = %1.1f\$", y))
-    plot_vertical_slice(xx, zz, ux, bs, L"Zonal flow $u^x$",      "$out_folder/ux$i_str.png", title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uy, bs, L"Meridional flow $u^y$", "$out_folder/uy$i_str.png", title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uz, bs, L"Vertical flow $u^z$",   "$out_folder/uz$i_str.png", title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $u^z b$",   "$out_folder/uzb$i_str.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, ux,     bs, L"Zonal flow $u^x$",            "$out_folder/images/ux$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uy,     bs, L"Meridional flow $u^y$",       "$out_folder/images/uy$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz,     bs, L"Vertical flow $u^z$",         "$out_folder/images/uz$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $u^z b$", "$out_folder/images/uzb$i_str.png", title, contour=false, slice_dir="x")
 end
 
 function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir)
     fig, ax = plt.subplots(1)
     vmax = maximum(abs.(u))
-    img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="gouraud")
+    img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="nearest")
     if contour
         levels = range(-vmax, vmax, length=8)
         ax.contour(xx, zz, u, levels=levels, colors="k", linestyles="-", linewidths=0.25)
@@ -378,7 +378,7 @@ function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true,
     plt.close()
 end
 
-function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$out_folder/profiles.png", m2D=nothing, s2D=nothing)
+function plot_profiles(m::ModelSetup3D, b, ωx, ωy, χx, χy; x, y, filename="$out_folder/images/profiles.png", m2D=nothing, s2D=nothing)
     g_sfc1 = m.geom.g_sfc1
     g1 = m.geom.g1
     k_sfc = get_k([x, y], g_sfc1, g_sfc1.el)

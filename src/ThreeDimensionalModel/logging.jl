@@ -113,7 +113,7 @@ function save_setup(m::ModelSetup3D, save_file)
     close(ofile)
 end
 function save_setup(m::ModelSetup3D)
-    save_setup(m, "$out_folder/setup.h5")
+    save_setup(m, "$out_folder/data/setup.h5")
 end
 
 """
@@ -246,74 +246,21 @@ Save .h5 state file.
 function save_state(s::ModelState3D, save_file)
     file = h5open(save_file, "w")
     write(file, "b", s.b.values)
-    write(file, "p2", s.b.g.p)
-    write(file, "t2", s.b.g.t)
-    write(file, "e2_sfc", s.b.g.e["sfc"])
-    write(file, "e2_bot", s.b.g.e["bot"])
     write(file, "ωx", s.ωx.values)
     write(file, "ωy", s.ωy.values)
     write(file, "χx", s.χx.values)
     write(file, "χy", s.χy.values)
-    write(file, "p1", s.ωx.g.p)
-    write(file, "t1", s.ωx.g.t)
-    write(file, "e1_sfc", s.ωx.g.e["sfc"])
-    write(file, "e1_bot", s.ωx.g.e["bot"])
     write(file, "Ψ", s.Ψ.values)
-    write(file, "p_sfc", s.Ψ.g.p)
-    write(file, "t_sfc", s.Ψ.g.t)
-    write(file, "e_sfc", s.Ψ.g.e["bdy"])
     write(file, "t", s.t)
     close(file)
     println(save_file)
 end
 
 """
-    s = load_state_3D(filename)
+    s = load_state_3D(m::ModelSetup3D, filename)
 
 Load .h5 state file given by `filename`.
 """
-function load_state_3D(filename)
-    file = h5open(filename, "r")
-
-    # b
-    bvals = read(file, "b")
-    p2 = read(file, "p2")
-    t2 = read(file, "t2")
-    e2_sfc = read(file, "e2_sfc")
-    e2_bot = read(file, "e2_bot")
-    g2 = Grid(Wedge(order=2), p2, t2, Dict("sfc"=>e2_sfc, "bot"=>e2_bot))
-    b = FEField(bvals, g2)
-
-    # ω, χ
-    ωxvals = read(file, "ωx")
-    ωyvals = read(file, "ωy")
-    χxvals = read(file, "χx")
-    χyvals = read(file, "χy")
-    p1 = read(file, "p1")
-    t1 = read(file, "t1")
-    e1_sfc = read(file, "e1_sfc")
-    e1_bot = read(file, "e1_bot")
-    g1 = Grid(Wedge(order=1), p1, t1, Dict("sfc"=>e1_sfc, "bot"=>e1_bot))
-    ωx = DGField(ωxvals, g1)
-    ωy = DGField(ωyvals, g1)
-    χx = DGField(χxvals, g1)
-    χy = DGField(χyvals, g1)
-
-    # Ψ
-    Ψvals = read(file, "Ψ")
-    p_sfc = read(file, "p_sfc")
-    t_sfc = read(file, "t_sfc")
-    e_sfc = read(file, "e_sfc")
-    g_sfc = Grid(Triangle(order=1), p_sfc, t_sfc, e_sfc)
-    Ψ = FEField(Ψvals, g_sfc)
-
-    t = read(file, "t")
-
-    close(file)
-
-    s = ModelState3D(b, ωx, ωy, χx, χy, Ψ, t)
-    return s
-end
 function load_state_3D(m::ModelSetup3D, filename)
     file = h5open(filename, "r")
 
@@ -335,6 +282,7 @@ function load_state_3D(m::ModelSetup3D, filename)
     Ψvals = read(file, "Ψ")
     Ψ = FEField(Ψvals, m.geom.g_sfc1)
 
+    # time
     t = read(file, "t")
 
     close(file)

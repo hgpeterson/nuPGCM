@@ -43,12 +43,6 @@ function generate_wedge_cols(g_sfc1, g_sfc2; nσ=0, chebyshev=false)
               "coast"=>flatten(collect.(get_col_inds.(g_sfc1.e["bdy"], nσ))))
     g1 = Grid(Wedge(order=1), p2[1:np1, :], t2[:, 1:6], e1)
 
-    # vtk_grid("$out_folder/mesh.vtu", g1.p', [MeshCell(VTKCellTypes.VTK_WEDGE, g1.t[k, :]) for k ∈ axes(g1.t, 1)]) do vtk 
-    #     vtk["bot"] = [i ∈ g1.e["bot"] ? 1 : 0 for i=1:g1.np]
-    #     vtk["sfc"] = [i ∈ g1.e["sfc"] ? 1 : 0 for i=1:g1.np]
-    # end
-    # println("$out_folder/mesh.vtu")
-
     return g1, g2, σ
 end
 
