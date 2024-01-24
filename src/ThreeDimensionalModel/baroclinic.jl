@@ -1,5 +1,5 @@
 """
-    A = build_baroclinic_LHS(g, ν, H, ε², f)
+    A = build_baroclinic_LHS(g, ν, H, ε², f; bl=false)
 
 Create LU-factored matrix for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - fωʸ =  ∂y(b),
@@ -9,18 +9,30 @@ Create LU-factored matrix for 1D baroclinc problem:
 with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
+For `bl=true`:
+    f*∂zz(χˣ) = ∂x(b),
+    f*∂zz(χʸ) = ∂y(b),
+with bc
+    z = 0:   χˣ = 0, χʸ = 0,
+    z = -H:  χˣ = 0, χʸ = 0.
 """
-function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
+function build_baroclinic_LHS(g::Grid, ν, H, ε², f; bl=false)
     # unpack
     J = g.J
     el = g.el
 
     # indices
-    ωxmap = 0*g.np+1:1*g.np
-    ωymap = 1*g.np+1:2*g.np
-    χxmap = 2*g.np+1:3*g.np
-    χymap = 3*g.np+1:4*g.np
-    N = 4*g.np
+    if bl
+        χxmap = 0*g.np+1:1*g.np
+        χymap = 1*g.np+1:2*g.np
+        N = 2*g.np
+    else
+        ωxmap = 0*g.np+1:1*g.np
+        ωymap = 1*g.np+1:2*g.np
+        χxmap = 2*g.np+1:3*g.np
+        χymap = 3*g.np+1:4*g.np
+        N = 4*g.np
+    end
     bot = g.e["bot"][1]
     sfc = g.e["sfc"][1]
 
@@ -43,46 +55,67 @@ function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
              [ref_el_quad(ξ -> ∂(ν, ξ, k, 1)*φξ(el, ξ, i)*φ(el, ξ, j)*J.Js[k, 1, 1]*J.dets[k], el) for i=1:el.n, j=1:el.n]
 
         # indices
-        ωxi = ωxmap[g.t[k, :]]
-        ωyi = ωymap[g.t[k, :]]
+        if !bl
+            ωxi = ωxmap[g.t[k, :]]
+            ωyi = ωymap[g.t[k, :]]
+        end
         χxi = χxmap[g.t[k, :]]
         χyi = χymap[g.t[k, :]]
 
         for i=1:el.n, j=1:el.n
-            if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
-                # -ε²∂zz(ν*ωx)
-                push!(A, (ωxi[i], ωxi[j], ε²/H^2*νK[i, j]))
-                # -ωy
-                push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
+            if bl
+                if g.t[k, i] ≠ sfc && g.t[k, i] ≠ bot
+                    # ∂zz(χx)
+                    push!(A, (χxi[i], χxi[j], -f/H^2*K[i, j]))
 
-                # -ε²∂zz(ν*ωy)
-                push!(A, (ωyi[i], ωyi[j], ε²/H^2*νK[i, j]))
-                # +ωx
-                push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
-            end
-            if g.t[k, i] ≠ sfc
-                # -∂zz(χx)
-                push!(A, (χxi[i], χxi[j], 1/H^2*K[i, j]))
-                # -ωx
-                push!(A, (χxi[i], ωxi[j], -M[i, j]))
+                    # ∂zz(χy)
+                    push!(A, (χyi[i], χyi[j], -f/H^2*K[i, j]))
+                end
+            else
+                if g.t[k, i] ≠ bot &&  g.t[k, i] ≠ sfc
+                    # -ε²∂zz(ν*ωx)
+                    push!(A, (ωxi[i], ωxi[j], ε²/H^2*νK[i, j]))
+                    # -ωy
+                    push!(A, (ωxi[i], ωyi[j], -f*M[i, j]))
 
-                # -∂zz(χy)
-                push!(A, (χyi[i], χyi[j], 1/H^2*K[i, j]))
-                # -ωy
-                push!(A, (χyi[i], ωyi[j], -M[i, j]))
+                    # -ε²∂zz(ν*ωy)
+                    push!(A, (ωyi[i], ωyi[j], ε²/H^2*νK[i, j]))
+                    # +ωx
+                    push!(A, (ωyi[i], ωxi[j], f*M[i, j]))
+                end
+                if g.t[k, i] ≠ sfc
+                    # -∂zz(χx)
+                    push!(A, (χxi[i], χxi[j], 1/H^2*K[i, j]))
+                    # -ωx
+                    push!(A, (χxi[i], ωxi[j], -M[i, j]))
+
+                    # -∂zz(χy)
+                    push!(A, (χyi[i], χyi[j], 1/H^2*K[i, j]))
+                    # -ωy
+                    push!(A, (χyi[i], ωyi[j], -M[i, j]))
+                end
             end
         end
     end
 
-    # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
-    push!(A, (ωxmap[bot], χxmap[bot], 1))
-    push!(A, (ωymap[bot], χymap[bot], 1))
+    if bl
+        # z = -H: χˣ = 0, χʸ = 0
+        push!(A, (χxmap[bot], χxmap[bot], 1))
+        push!(A, (χymap[bot], χymap[bot], 1))
+        # z = -0: χˣ = 0, χʸ = 0
+        push!(A, (χxmap[sfc], χxmap[sfc], 1))
+        push!(A, (χymap[sfc], χymap[sfc], 1))
+    else
+        # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
+        push!(A, (ωxmap[bot], χxmap[bot], 1))
+        push!(A, (ωymap[bot], χymap[bot], 1))
 
-    # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
-    push!(A, (ωxmap[sfc], ωxmap[sfc], ν[sfc]*ε²))
-    push!(A, (ωymap[sfc], ωymap[sfc], ν[sfc]*ε²))
-    push!(A, (χxmap[sfc], χxmap[sfc], 1))
-    push!(A, (χymap[sfc], χymap[sfc], 1))
+        # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
+        push!(A, (ωxmap[sfc], ωxmap[sfc], ν[sfc]*ε²))
+        push!(A, (ωymap[sfc], ωymap[sfc], ν[sfc]*ε²))
+        push!(A, (χxmap[sfc], χxmap[sfc], 1))
+        push!(A, (χymap[sfc], χymap[sfc], 1))
+    end
 
     # make CSC matrix
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), N, N)
@@ -91,11 +124,11 @@ function build_baroclinic_LHS(g::Grid, ν, H, ε², f)
 end
 
 """
-    baroclinic_LHSs = build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
+    baroclinic_LHSs = build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing; bl=false)
 
 Build baroclinc LHS for each node column on first order grid.
 """
-function build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
+function build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing; bl=false)
     g_col = geom.g_col
     ν = forcing.ν
     nσ = geom.nσ
@@ -105,11 +138,11 @@ function build_baroclinic_LHSs(params::Params, geom::Geometry, forcing::Forcing)
     β = params.β
     g_sfc1 = geom.g_sfc1
     in_nodes1 = geom.in_nodes1
-    return [build_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]) for i ∈ in_nodes1]
+    return [build_baroclinic_LHS(g_col, ν[get_col_inds(i, nσ)], H[i], ε², f + β*g_sfc1.p[i, 2]; bl) for i ∈ in_nodes1]
 end
 
 """
-    r = build_baroclinic_RHS(g, M_bc, bx, by, Ux, Uy, τx, τy)
+    r = build_baroclinic_RHS(g, M_bc, bx, by, Ux, Uy, τx, τy; bl=false)
 
 Create RHS vector for 1D baroclinc problem:
     -ε²∂zz(νωˣ) - fωʸ =  ∂y(b),
@@ -119,37 +152,64 @@ Create RHS vector for 1D baroclinc problem:
 with bc
     z = 0:   ωˣ = -τʸ/νε², ωʸ = τˣ/νε², χˣ = Uʸ, χʸ = -Uˣ,
     z = -H:  χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
+For `bl=true`:
+    f*∂zz(χˣ) = ∂x(b),
+    f*∂zz(χʸ) = ∂y(b),
+with bc
+    z = 0:   χˣ = 0, χʸ = 0,
+    z = -H:  χˣ = 0, χʸ = 0.
 """
-function build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy)
+function build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy; bl=false)
     # indices
-    ωxmap = 0*g.np+1:1*g.np
-    ωymap = 1*g.np+1:2*g.np
-    χxmap = 2*g.np+1:3*g.np
-    χymap = 3*g.np+1:4*g.np
-    N = 4*g.np
+    if bl
+        χxmap = 0*g.np+1:1*g.np
+        χymap = 1*g.np+1:2*g.np
+        N = 2*g.np
+    else
+        ωxmap = 0*g.np+1:1*g.np
+        ωymap = 1*g.np+1:2*g.np
+        χxmap = 2*g.np+1:3*g.np
+        χymap = 3*g.np+1:4*g.np
+        N = 4*g.np
+    end
     bot = g.e["bot"][1]
     sfc = g.e["sfc"][1]
 
     # interior
     r = zeros(N)
-    r[ωxmap] = +M_bc*by
-    r[ωymap] = -M_bc*bx
+    if bl
+        r[χxmap] = M_bc*bx
+        r[χymap] = M_bc*by
+    else
+        r[ωxmap] = +M_bc*by
+        r[ωymap] = -M_bc*bx
+    end
 
-    # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
-    r[ωxmap[bot]] = 0
-    r[ωymap[bot]] = 0
+    if bl
+        # z = -H: χˣ = 0, χʸ = 0
+        r[χxmap[bot]] = 0
+        r[χymap[bot]] = 0
 
-    # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
-    r[ωxmap[sfc]] = -τy
-    r[ωymap[sfc]] = τx
-    r[χxmap[sfc]] = Uy
-    r[χymap[sfc]] = -Ux
+        # z = 0: χˣ = 0, χʸ = 0
+        r[χxmap[sfc]] = 0
+        r[χymap[sfc]] = 0
+    else
+        # z = -H: χˣ = 0, χʸ = 0, ∂z(χˣ) = 0, ∂z(χʸ) = 0.
+        r[ωxmap[bot]] = 0
+        r[ωymap[bot]] = 0
+
+        # z = 0: ν*ε²*ωˣ = -τʸ, ν*ε²*ωʸ = τˣ, χˣ = Uʸ, χʸ = -Uˣ,
+        r[ωxmap[sfc]] = -τy
+        r[ωymap[sfc]] = τx
+        r[χxmap[sfc]] = Uy
+        r[χymap[sfc]] = -Ux
+    end
 
     return r
 end
-function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy)
+function build_baroclinic_RHS(g::Grid, bx, by, Ux, Uy, τx, τy; bl=false)
     M_bc = build_M_bc(g)
-    return build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy)
+    return build_baroclinic_RHS(g::Grid, M_bc, bx, by, Ux, Uy, τx, τy; bl)
 end
 
 """

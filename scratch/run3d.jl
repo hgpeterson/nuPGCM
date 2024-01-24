@@ -25,8 +25,8 @@ function setup()
     ε² = 1e-3
     μϱ = 1e-4
     f = 1.
-    β = 0.
-    # β = 0.95
+    # β = 0.
+    β = 0.95
     params = Params(; ε², μϱ, f, β)
 
     # geometry
@@ -48,15 +48,15 @@ function setup()
 end
 
 function run3d(m::ModelSetup3D)
-    b = FEField(x -> H(x)*x[3], m.geom.g2)
-    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
+    # b = FEField(x -> H(x)*x[3], m.geom.g2)
+    b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
     s = initial_state(m, b)
     # s = initial_state(m, b, showplots=true)
 
     Δt = 1e-4
     t_save = 1e-3
     t_final = 1e-1
-    evolve!(m, s, t_final, t_save; Δt)
+    # evolve!(m, s, t_final, t_save; Δt)
     return s
 end
 
@@ -74,10 +74,10 @@ function postprocess()
 end
 
 # m = setup()
-# m = load_setup_3D("$out_folder/data/setup.h5")
+m = load_setup_3D("$out_folder/data/setup.h5")
 # m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
-s = load_state_3D(m, "$out_folder/data/state5.h5")
-# s = run3d(m)
+# s = load_state_3D(m, "$out_folder/data/state5.h5")
+s = run3d(m)
 # postprocess()
 
 println("Done.")
