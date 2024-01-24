@@ -74,8 +74,8 @@ function postprocess()
 end
 
 # m = setup()
-m = load_setup_3D("$out_folder/data/setup.h5")
-# m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
+# m = load_setup_3D("$out_folder/data/setup.h5")
+m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "$out_folder/data/state5.h5")
 s = run3d(m)
 # postprocess()

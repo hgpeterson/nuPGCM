@@ -1,5 +1,5 @@
 # for defining operations on FEField's
-import Base: -, +, *, /, ^, log, abs, maximum, minimum, argmax, argmin, getindex
+import Base: -, +, *, /, ^, log, sqrt, abs, maximum, minimum, argmax, argmin, getindex
 
 abstract type AbstractField{V, G} end
 
@@ -36,6 +36,7 @@ end
 getindex(u::FEField, i) = u.values[i]
 ^(u::FEField, n::Number) = FEField(u.values .^ n, u.g)
 log(u::FEField) = FEField(log.(u.values), u.g)
+sqrt(u::FEField) = FEField(sqrt.(u.values), u.g)
 abs(u::FEField) = FEField(abs.(u.values), u.g)
 -(u::FEField, v::FEField) = FEField(u.values - v.values, u.g)
 -(u::FEField) = FEField(-u.values, u.g)
@@ -71,6 +72,7 @@ end
 getindex(u::DGField, i, j) = u.values[i, j]
 ^(u::DGField, n::Number) = DGField(u.values .^ n, u.g)
 log(u::DGField) = DGField(log.(u.values), u.g)
+sqrt(u::DGField) = DGField(sqrt.(u.values), u.g)
 abs(u::DGField) = DGField(abs.(u.values), u.g)
 -(u::DGField, v::DGField) = DGField(u.values - v.values, u.g)
 -(u::DGField) = DGField(-u.values, u.g)
@@ -125,6 +127,7 @@ end
 getindex(u::FVField, k) = u.values[k]
 ^(u::FVField, n::Number) = FVField(u.values .^ n, u.g)
 log(u::FVField) = FVField(log.(u.values), u.g)
+sqrt(u::FVField) = FVField(sqrt.(u.values), u.g)
 abs(u::FVField) = FVField(abs.(u.values), u.g)
 -(u::FVField, v::FVField) = FVField(u.values - v.values, u.g)
 -(u::FVField) = FVField(-u.values, u.g)
