@@ -349,9 +349,11 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0)
     plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $u^z b$", "$out_folder/images/uzb$i_str.png", title, contour=false, slice_dir="x")
 end
 
-function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir)
+function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir, vmax=nothing)
     fig, ax = plt.subplots(1)
-    vmax = maximum(abs.(u))
+    if vmax === nothing
+        vmax = maximum(abs.(u))
+    end
     img = ax.pcolormesh(xx, zz, u, cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true, shading="nearest")
     if contour
         levels = range(-vmax, vmax, length=8)

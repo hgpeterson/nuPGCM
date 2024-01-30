@@ -74,8 +74,8 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
             # interior O(1) χ
             r = build_baroclinic_RHS(g_col, M_bc, bx[I, :], by[I, :], 0, 0, 0, 0; bl=true)
             sol = baroclinic_LHSs[i]\r
-            χx_b[I, :] += sol[0*nσ+1:1*nσ]
-            χy_b[I, :] += sol[1*nσ+1:2*nσ]
+            χx_b[I, :] += sol[1:nσ]
+            χy_b[I, :] += sol[nσ+1:2nσ]
 
             # interior O(ε) χ
             dχxdz_bot = ∂(FEField(χx_b[I, :], g_col), -1, 1)/H0
@@ -98,8 +98,8 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
         χy_Ux[ig, :] += -H0^2 .- H0*z
 
         # interior O(ε) χ
-        χx_Ux[ig, :] += -ε*z/(2q0*H0^2)
-        χy_Ux[ig, :] += -ε*z/(2q0*H0^2)
+        χx_Ux[ig, :] += -ε*z/(2q0)
+        χy_Ux[ig, :] += -ε*z/(2q0)
 
         # BL correction
         c1 = -q0*H0
@@ -181,7 +181,7 @@ function test_1d()
     # grid
     nσ = 2^8
     σ = @. -(cos(π*(0:nσ-1)/(nσ-1)) + 1)/2
-    H = 1
+    H = 0.5
     z = H*σ
     p = σ
     t = [i + j - 1 for i=1:nσ-1, j=1:2]
@@ -195,11 +195,12 @@ function test_1d()
         z_dg[2i-1] = z[i]
         z_dg[2i]   = z[i+1]
     end
-    # bx = @. z_dg*exp(-(z_dg + H)/(0.1*H))
-    # by = @. exp(-(z_dg + H)/(0.1*H))
-    bx = zeros(2nσ-2)
-    by = zeros(2nσ-2)
-    Ux = H^2
+    bx = @. z_dg*exp(-(z_dg + H)/(0.1*H))
+    by = @. exp(-(z_dg + H)/(0.1*H))
+    Ux = 0
+    # bx = zeros(2nσ-2)
+    # by = zeros(2nσ-2)
+    # Ux = H^2
     Uy = 0
     τx = 0
     τy = 0
@@ -217,21 +218,21 @@ function test_1d()
     q = sqrt(f/2/ν[1])
     z_b = (z .+ H)/ε
 
-    # transport
-    c1 = -q*H
-    c2 = +q*H
-    χx_I0 = 0
-    χy_I0 = @. -(z + H)*H
-    χx_I1 = @. -z/(2*q*H^2)
-    χy_I1 = @. +z/(2*q*H^2)
-    ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
-    ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
-    χx_B1 = @. exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))/(2*q^2)
-    χy_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))/(2*q^2)
-    ωx_BL = 1/ε*ωx_B1
-    ωy_BL = 1/ε*ωy_B1
-    χx_BL = χx_I0 .+ ε*(χx_I1 .+ χx_B1)
-    χy_BL = χy_I0 .+ ε*(χy_I1 .+ χy_B1)
+    # # transport
+    # c1 = -q*H
+    # c2 = +q*H
+    # χx_I0 = 0
+    # χy_I0 = @. -H^2 - H*z
+    # χx_I1 = @. -z/(2q)
+    # χy_I1 = @. -z/(2q)
+    # ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    # ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
+    # χx_B1 = @. exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))/(2*q^2)
+    # χy_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))/(2*q^2)
+    # ωx_BL = 1/ε*ωx_B1
+    # ωy_BL = 1/ε*ωy_B1
+    # χx_BL = χx_I0 .+ ε*(χx_I1 .+ χx_B1)
+    # χy_BL = χy_I0 .+ ε*(χy_I1 .+ χy_B1)
 
     # # wind
     # c1 = c2 = -1/(2*H*q)
@@ -252,30 +253,30 @@ function test_1d()
     # χx_BL = χx_I0 .+ χx0_B0 .+ ε*(χx_I1 .+ χx_B1)
     # χy_BL = χy_I0 .+ χy0_B0 .+ ε*(χy_I1 .+ χy_B1)
 
-    # # buoyancy
-    # A = build_baroclinic_LHS(g, ν, H, ε², f; bl=true)
-    # r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy; bl=true)
-    # sol = A\r
-    # M = mass_matrix(g)
-    # M_bc = build_M_bc(g)
-    # ωx_I0 = -1/f*M\(M_bc*bx)
-    # ωy_I0 = -1/f*M\(M_bc*by)
-    # χx_I0 = sol[0nσ+1:1nσ]
-    # χy_I0 = sol[1nσ+1:2nσ]
-    # dχxdz_bot = ∂(FEField(χx_I0, g), -1, 1)/H
-    # dχydz_bot = ∂(FEField(χy_I0, g), -1, 1)/H
-    # c1 = -q*(dχxdz_bot - dχydz_bot)
-    # c2 = -q*(dχxdz_bot + dχydz_bot)
-    # χx_I1 = -c2*z/(2q^2*H)
-    # χy_I1 = +c1*z/(2q^2*H)
-    # ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
-    # ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
-    # χx_B1 = @. exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))/(2q^2)
-    # χy_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))/(2q^2)
-    # ωx_BL = ωx_I0 + 1/ε*(ωx_B1)
-    # ωy_BL = ωy_I0 + 1/ε*(ωy_B1)
-    # χx_BL = χx_I0 + ε*(χx_I1 + χx_B1)
-    # χy_BL = χy_I0 + ε*(χy_I1 + χy_B1)
+    # buoyancy
+    A = build_baroclinic_LHS(g, ν, H, ε², f; bl=true)
+    r = build_baroclinic_RHS(g, bx, by, Ux, Uy, τx, τy; bl=true)
+    sol = A\r
+    M = mass_matrix(g)
+    M_bc = build_M_bc(g)
+    ωx_I0 = -1/f*M\(M_bc*bx)
+    ωy_I0 = -1/f*M\(M_bc*by)
+    χx_I0 = sol[0nσ+1:1nσ]
+    χy_I0 = sol[1nσ+1:2nσ]
+    dχxdz_bot = ∂(FEField(χx_I0, g), -1, 1)/H
+    dχydz_bot = ∂(FEField(χy_I0, g), -1, 1)/H
+    c1 = -q*(dχxdz_bot - dχydz_bot)
+    c2 = -q*(dχxdz_bot + dχydz_bot)
+    χx_I1 = -c2*z/(2q^2*H)
+    χy_I1 = +c1*z/(2q^2*H)
+    ωx_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))
+    ωy_B1 = @. exp(-q*z_b)*(c2*cos(q*z_b) - c1*sin(q*z_b))
+    χx_B1 = @. exp(-q*z_b)*(c1*sin(q*z_b) - c2*cos(q*z_b))/(2q^2)
+    χy_B1 = @. exp(-q*z_b)*(c1*cos(q*z_b) + c2*sin(q*z_b))/(2q^2)
+    ωx_BL = ωx_I0 + 1/ε*(ωx_B1)
+    ωy_BL = ωy_I0 + 1/ε*(ωy_B1)
+    χx_BL = χx_I0 + ε*(χx_I1 + χx_B1)
+    χy_BL = χy_I0 + ε*(χy_I1 + χy_B1)
 
     # plot
     fig, ax = plt.subplots(2, 2, figsize=(3.2, 5.2))
@@ -301,9 +302,9 @@ function test_1d()
     ax[2, 2].set_xlabel(L"\chi")
     ax[1, 1].legend()
     ax[1, 2].legend()
-    # ax[2, 1].set_xlim(-2/ε, 2/ε)
+    ax[2, 1].set_xlim(-2/ε, 2/ε)
     ax[2, 1].set_ylim(-H, -H + 5*ε/q)
-    # ax[2, 2].set_xlim(-2*ε, 2*ε)
+    ax[2, 2].set_xlim(-2*ε, 2*ε)
     ax[2, 2].set_ylim(-H, -H + 5*ε/q)
     ax[1, 2].set_yticklabels([])
     ax[2, 2].set_yticklabels([])
