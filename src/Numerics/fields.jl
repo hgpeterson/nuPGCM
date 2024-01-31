@@ -40,8 +40,10 @@ sqrt(u::FEField) = FEField(sqrt.(u.values), u.g)
 abs(u::FEField) = FEField(abs.(u.values), u.g)
 -(u::FEField, v::FEField) = FEField(u.values - v.values, u.g)
 -(u::FEField) = FEField(-u.values, u.g)
++(u::FEField) = FEField(+u.values, u.g)
 +(u::FEField, v::FEField) = FEField(u.values + v.values, u.g)
 *(u::FEField, v::FEField) = FEField(u.values .* v.values, u.g)
+*(c::Number, u::FEField) = FEField(c*u.values, u.g)
 /(u::FEField, v::FEField) = FEField(u.values ./ v.values, u.g)
 /(u::FEField, n::Number) = FEField(u.values / n, u.g)
 
@@ -76,6 +78,7 @@ sqrt(u::DGField) = DGField(sqrt.(u.values), u.g)
 abs(u::DGField) = DGField(abs.(u.values), u.g)
 -(u::DGField, v::DGField) = DGField(u.values - v.values, u.g)
 -(u::DGField) = DGField(-u.values, u.g)
++(u::DGField) = DGField(+u.values, u.g)
 +(u::DGField, v::DGField) = DGField(u.values + v.values, u.g)
 *(u::DGField, v::DGField) = DGField(u.values .* v.values, u.g)
 /(u::DGField, v::DGField) = DGField(u.values ./ v.values, u.g)
@@ -83,6 +86,7 @@ abs(u::DGField) = DGField(abs.(u.values), u.g)
 # operations between FE and DG fields
 *(u::DGField, v::FEField) = DGField([u[k, i]*v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 *(u::FEField, v::DGField) = v * u
+*(c::Number, u::DGField) = DGField(c*u.values, u.g)
 /(u::DGField, v::FEField) = DGField([u[k, i]/v[u.g.t[k, i]] for k=1:u.g.nt, i=1:u.g.nn], u.g)
 /(u::FEField, v::DGField) = (v / u)^-1
 
@@ -131,8 +135,10 @@ sqrt(u::FVField) = FVField(sqrt.(u.values), u.g)
 abs(u::FVField) = FVField(abs.(u.values), u.g)
 -(u::FVField, v::FVField) = FVField(u.values - v.values, u.g)
 -(u::FVField) = FVField(-u.values, u.g)
++(u::FVField) = FVField(+u.values, u.g)
 +(u::FVField, v::FVField) = FVField(u.values + v.values, u.g)
 *(u::FVField, v::FVField) = FVField(u.values .* v.values, u.g)
+*(c::Number, u::FVField) = FVField(c*u.values, u.g)
 /(u::FVField, v::FVField) = FVField(u.values ./ v.values, u.g)
 
 # convert DGField to FVField by averaging

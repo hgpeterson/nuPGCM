@@ -125,6 +125,7 @@ function load_setup_3D(filename)
     file = h5open(filename, "r")
 
     # Params
+    println("Loading Params...")
     ε² = read(file, "ε²")
     μϱ = read(file, "μϱ")
     f = read(file, "f")
@@ -132,6 +133,7 @@ function load_setup_3D(filename)
     params = Params(; ε², μϱ, f, β)
 
     # Geometry
+    println("Loading Geometry...")
     Hvals = read(file, "H")
     Hxvals = read(file, "Hx")
     Hyvals = read(file, "Hy")
@@ -152,12 +154,14 @@ function load_setup_3D(filename)
     Hx = DGField(Hxvals, g_sfc1)
     Hy = DGField(Hyvals, g_sfc1)
 
+    println("\tg1")
     p1 = read(file, "p1")
     t1 = read(file, "t1")
     e1_sfc = read(file, "e1_sfc")
     e1_bot = read(file, "e1_bot")
     g1 = Grid(Wedge(order=1), p1, t1, Dict("sfc"=>e1_sfc, "bot"=>e1_bot))
 
+    println("\tg2")
     p2 = read(file, "p2")
     t2 = read(file, "t2")
     e2_sfc = read(file, "e2_sfc")
@@ -179,6 +183,7 @@ function load_setup_3D(filename)
     geom = Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_sfc1_to_g1_map, coast_mask, g_col, σ, nσ)
 
     # Forcing
+    println("Loading Forcing...")
     τxvals = read(file, "τx")
     τyvals = read(file, "τy")
     τx_xvals = read(file, "τx_x")
@@ -200,6 +205,7 @@ function load_setup_3D(filename)
     forcing = Forcing(τx, τy, τx_x, τx_y, τy_x, τy_y, ν, ν_bot, κ)
 
     # InversionComponents
+    println("Loading InversionComponents...")
     Dx = read_sparse_matrix(file, "Dx")
     Dy = read_sparse_matrix(file, "Dy")
     M_bc = read_sparse_matrix(file, "M_bc")
@@ -225,6 +231,7 @@ function load_setup_3D(filename)
     inversion = InversionComponents(Dx, Dy, baroclinic_LHSs, M_bc, ωx_Ux, ωy_Ux, χx_Ux, χy_Ux, barotropic_LHS, ωx_τx, ωy_τx, χx_τx, χy_τx, barotropic_RHS_τ)
 
     # EvolutionComponents
+    println("Loading EvolutionComponents...")
     HM = read_sparse_matrix(file, "HM")
     K_hdiff = read_sparse_matrix(file, "K_hdiff")
     K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]

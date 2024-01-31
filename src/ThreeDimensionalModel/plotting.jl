@@ -3,7 +3,7 @@
 
 Plot filled contour color plot of solution `u` on mesh defined by nodes positions `p` and connectivities `t`.
 """
-function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, cb_label="", cb_orientation="vertical")
+function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6, cb_label="", cb_orientation="vertical")
     fig, ax = subplots(1)
 
     # set vmax
@@ -33,7 +33,9 @@ function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, cb_label="", cb_o
 
     im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
     if contour
-        levels = vmax*[-3/4, -1/2, -1/4, 1/4, 1/2, 3/4]
+        spacing = 1/(contour_levels - 2)
+        levels = vmax*(spacing:spacing:1-spacing)
+        levels = vcat(reverse(-levels), levels)
         ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
     end
     cb = colorbar(im, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation)
@@ -64,12 +66,12 @@ function tplot(g::Grid; kwargs...)
     return tplot(g.p, g.t; kwargs...)
 end
 
-function quick_plot(u::FEField; cb_label="", title="", filename="$out_folder/images/quick_plot.png", vmax=0.)
-    fig, ax, im = tplot(u, contour=true; cb_label, vmax)
+function quick_plot(u::FEField; title="", filename="$out_folder/images/quick_plot.png", kwargs...)
+    fig, ax, im = tplot(u, contour=true; kwargs...)
     quick_plot_save(filename, ax, title)
 end
-function quick_plot(u::FVField; cb_label="", title="", filename="$out_folder/images/quick_plot.png", vmax=0.)
-    fig, ax, im = tplot(u, contour=false; cb_label, vmax)
+function quick_plot(u::FVField; title="", filename="$out_folder/images/quick_plot.png", kwargs...)
+    fig, ax, im = tplot(u, contour=false; kwargs...)
     quick_plot_save(filename, ax, title)
 end
 function quick_plot(u::DGField; kwargs...)
@@ -119,48 +121,77 @@ function write_vtk(g, fname, data)
     println(fname)
 end
 
-function plot_ω_χ(m, ωx, ωy, χx, χy; fname="$out_folder/images/omega_chi.vtu")
+function save_u_vtk(m::ModelSetup3D, s::ModelState3D; fname="$out_folder/data/u.vtu")
     # unpack 
-    g = m.geom.g1
+    g1 = m.geom.g1
     g_sfc2 = m.geom.g_sfc2
     H = m.geom.H
+    Hx = m.geom.Hx
+    Hy = m.geom.Hy
     nσ = m.geom.nσ
+    χx = s.χx
+    χy = s.χy
+    b = s.b
 
-    # DG p, t
-    np = g.nt*g.nn
-    p = zeros(Float64, (np, 3))
-    t = zeros(Int64, (g.nt, 6))
+    # σ, H, Hx, Hy on g1
+    σ1 = FEField(g1.p[:, 3], g1)
+    H1 = FEField([H[get_i_sfc(i, nσ)] for i ∈ 1:g1.np], g1)
+    Hx1 = DGField([Hx[get_k_sfc(k_w, nσ), mod1(i, 3)] for k_w ∈ 1:g1.nt, i ∈ 1:g1.nn], g1)
+    Hy1 = DGField([Hy[get_k_sfc(k_w, nσ), mod1(i, 3)] for k_w ∈ 1:g1.nt, i ∈ 1:g1.nn], g1)
 
-    # global solutions
-    ωx_plot = zeros(np)
-    ωy_plot = zeros(np)
-    χx_plot = zeros(np)
-    χy_plot = zeros(np)
+    # compute u
+    ux = -∂σ(χy)/H1
+    uy = +∂σ(χx)/H1
+    uσ = (∂ξ(χy) - ∂η(χx))/H1
+    uz = H1*uσ + σ1*Hx1*ux + σ1*Hy1*uy
+    uzb = uz*FEField(b[1:g1.np], g1)
 
-    # all the nodes within each column will have a unique tag
-    i_p = 0
-    for k_sfc=1:g_sfc2.nt
-        for j=1:nσ-1
-            k_w = get_k_w(k_sfc, nσ, j)
-            p[i_p+1:i_p+6, 1:2] = g.p[g.t[k_w, :], 1:2]
-            p[i_p+1:i_p+3, 3] = g.p[g.t[k_w, 1:3], 3].*H[g_sfc2.t[k_sfc, 1:3]]
-            p[i_p+4:i_p+6, 3] = g.p[g.t[k_w, 4:6], 3].*H[g_sfc2.t[k_sfc, 1:3]]
-            t[k_w, :] = i_p+1:i_p+6
-            ωx_plot[i_p+1:i_p+6] = ωx[k_w, :]
-            ωy_plot[i_p+1:i_p+6] = ωy[k_w, :]
-            χx_plot[i_p+1:i_p+6] = χx[k_w, :]
-            χy_plot[i_p+1:i_p+6] = χy[k_w, :]
-            i_p += 6
-        end
-    end
+    # FE fields
+    ux = FEField(ux)
+    uy = FEField(uy)
+    uz = FEField(uz)
+    uzb = FEField(uzb)
+
+    # # DG p, t
+    # np = g1.nt*g1.nn
+    # p = zeros(Float64, (np, 3))
+    # t = zeros(Int64, (g1.nt, 6))
+
+    # # global solutions
+    # ux_plot = zeros(np)
+    # uy_plot = zeros(np)
+    # uz_plot = zeros(np)
+
+    # # map DG fields to p
+    # i_p = 0
+    # for k_sfc ∈ 1:g_sfc2.nt
+    #     for j ∈ 1:nσ-1
+    #         k_w = get_k_w(k_sfc, nσ, j)
+    #         p[i_p+1:i_p+6, 1:2] = g1.p[g1.t[k_w, :], 1:2]
+    #         p[i_p+1:i_p+3, 3] = g1.p[g1.t[k_w, 1:3], 3].*H[g_sfc2.t[k_sfc, 1:3]]
+    #         p[i_p+4:i_p+6, 3] = g1.p[g1.t[k_w, 4:6], 3].*H[g_sfc2.t[k_sfc, 1:3]]
+    #         t[k_w, :] = i_p+1:i_p+6
+    #         ux_plot[i_p+1:i_p+6] = ux[k_w, :]
+    #         uy_plot[i_p+1:i_p+6] = uy[k_w, :]
+    #         uz_plot[i_p+1:i_p+6] = uz[k_w, :]
+    #         i_p += 6
+    #     end
+    # end
+
+    p = copy(g1.p)
+    p[:, 3] = p[:, 3].*H1.values
+    t = g1.t
 
     # save as .vtu
     cells = [MeshCell(VTKCellTypes.VTK_WEDGE, t[i, :]) for i ∈ axes(t, 1)]
     vtk_grid(fname, p', cells) do vtk
-        vtk["omega^x"] = ωx_plot
-        vtk["omega^y"] = ωy_plot
-        vtk["chi^x"] = χx_plot
-        vtk["chi^y"] = χy_plot
+        # vtk["ux"] = ux_plot
+        # vtk["uy"] = uy_plot
+        # vtk["uz"] = uz_plot
+        vtk["ux"] = ux.values
+        vtk["uy"] = uy.values
+        vtk["uz"] = uz.values
+        vtk["uzb"] = uzb.values
     end
     println(fname)
 end

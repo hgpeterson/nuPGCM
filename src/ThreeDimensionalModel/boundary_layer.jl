@@ -25,10 +25,15 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
     χy = s.χy
     Ψ = s.Ψ
 
+    # buoyancy component
+    ωx_b, ωy_b, χx_b, χy_b =  solve_baroclinic_buoyancy_BL(m, b)
+
+    # transport component
+
     # q = √f/2ν
     q = FEField(x->sqrt((f + β*x[2])/2), g_sfc1)/sqrt(ν_bot)
 
-    # bottom drag 
+    # bottom stress 
     H1 = FEField(H[1:g_sfc1.np], g_sfc1)
     νωx_Ux_bot = -ν_bot*H1*q/ε
     νωy_Ux_bot =  ν_bot*H1*q/ε
@@ -36,27 +41,11 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
     # barotropic LHS
     barotropic_LHS = build_barotropic_LHS(m.params, m.geom, νωx_Ux_bot, νωy_Ux_bot)
 
-    # 1D mass matrix for interior ω
-    M = mass_matrix(g_col)
-
-    # build BL LHSs
-    baroclinic_LHSs = build_baroclinic_LHSs(m.params, m.geom, m.forcing; bl=true)
-
-    # compute gradients
-    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
-    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
-
-    # pre-allocate
-    ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
-    ωy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
-    χx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
-    χy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    # loop
     ωx_Ux = zeros(g_sfc1.np, nσ)
     ωy_Ux = zeros(g_sfc1.np, nσ)
     χx_Ux = zeros(g_sfc1.np, nσ)
     χy_Ux = zeros(g_sfc1.np, nσ)
-
-    # compute and store
     for i ∈ eachindex(in_nodes1) # H = 0 solution: all zeros
         ig = in_nodes1[i]
         q0 = q[ig]
@@ -64,35 +53,6 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
         f0 = f + β*g_sfc1.p[ig, 2]
         z = σ*H0
         z_b = (σ .+ 1)*H0/ε
-        for I ∈ g_sfc1.p_to_t[ig]
-            ### buoyancy
-
-            # interior ω
-            ωx_b[I, :] += -1/f0*M\(M_bc*bx[I, :])
-            ωy_b[I, :] += -1/f0*M\(M_bc*by[I, :])
-
-            # interior O(1) χ
-            r = build_baroclinic_RHS(g_col, M_bc, bx[I, :], by[I, :], 0, 0, 0, 0; bl=true)
-            sol = baroclinic_LHSs[i]\r
-            χx_b[I, :] += sol[1:nσ]
-            χy_b[I, :] += sol[nσ+1:2nσ]
-
-            # interior O(ε) χ
-            dχxdz_bot = ∂(FEField(χx_b[I, :], g_col), -1, 1)/H0
-            dχydz_bot = ∂(FEField(χy_b[I, :], g_col), -1, 1)/H0
-            c1 = -q0*(dχxdz_bot - dχydz_bot)
-            c2 = -q0*(dχxdz_bot + dχydz_bot)
-            χx_b[I, :] += -ε*c2*z/(2q0^2*H0)
-            χy_b[I, :] += +ε*c1*z/(2q0^2*H0)
-
-            # BL correction
-            ωx_b[I, :] += @. 1/ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))
-            ωy_b[I, :] += @. 1/ε*exp(-q0*z_b)*(c2*cos(q0*z_b) - c1*sin(q0*z_b))
-            χx_b[I, :] += @.   ε*exp(-q0*z_b)*(c1*sin(q0*z_b) - c2*cos(q0*z_b))/(2q0^2)
-            χy_b[I, :] += @.   ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))/(2q0^2)
-        end
-
-        ### transport
 
         # interior O(1) χ
         χy_Ux[ig, :] += -H0^2 .- H0*z
@@ -109,33 +69,6 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
         χx_Ux[ig, :] += @.   ε*exp(-q0*z_b)*(c1*sin(q0*z_b) - c2*cos(q0*z_b))/(2q0^2)
         χy_Ux[ig, :] += @.   ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))/(2q0^2)
     end
-
-    # ωx_b_bot = DGField(ωx_b[:, :, 1], g_sfc1)
-    # ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
-    # quick_plot(ωx_b_bot, cb_label=L"\omega^x_b(-H)", filename="$out_folder/images/omegax_b_bot_BL.png")
-    # quick_plot(ωy_b_bot, cb_label=L"\omega^y_b(-H)", filename="$out_folder/images/omegay_b_bot_BL.png")
-
-    # ωx_b0, ωy_b0, χx_b0, χy_b0 = solve_baroclinic_buoyancy(m, s.b)
-    # ωx_b0_bot = DGField(ωx_b0[:, :, 1], g_sfc1)
-    # ωy_b0_bot = DGField(ωy_b0[:, :, 1], g_sfc1)
-    # quick_plot(abs(ωx_b_bot - ωx_b0_bot), cb_label=L"$\omega^x_b(-H)$ error", filename="$out_folder/images/omegax_b_bot_BL_err.png")
-    # quick_plot(abs(ωy_b_bot - ωy_b0_bot), cb_label=L"$\omega^y_b(-H)$ error", filename="$out_folder/images/omegay_b_bot_BL_err.png")
-
-    # ωx_b = DGField((coast_mask .* ωx_b)[g_sfc1_to_g1_map], g1)
-    # ωy_b = DGField((coast_mask .* ωy_b)[g_sfc1_to_g1_map], g1)
-    # χx_b = DGField((coast_mask .* χx_b)[g_sfc1_to_g1_map], g1)
-    # χy_b = DGField((coast_mask .* χy_b)[g_sfc1_to_g1_map], g1)
-    # ωx_b0 = DGField((coast_mask .* ωx_b0)[g_sfc1_to_g1_map], g1)
-    # ωy_b0 = DGField((coast_mask .* ωy_b0)[g_sfc1_to_g1_map], g1)
-    # χx_b0 = DGField((coast_mask .* χx_b0)[g_sfc1_to_g1_map], g1)
-    # χy_b0 = DGField((coast_mask .* χy_b0)[g_sfc1_to_g1_map], g1)
-
-    # plot_xslice(m, s.b, ωx_b, 0, L"$\omega^x_b$", "$out_folder/images/omegax_b_slice_BL.png")
-    # plot_xslice(m, s.b, ωx_b0, 0, L"$\omega^x_b$", "$out_folder/images/omegax_b_slice.png")
-    # plot_xslice(m, s.b, abs(ωx_b - ωx_b0), 0, L"$\omega^x_b$ error", "$out_folder/images/omegax_b_slice_BL_err.png")
-    # plot_xslice(m, s.b, ωy_b, 0, L"$\omega^x_b$", "$out_folder/images/omegay_b_slice_BL.png")
-    # plot_xslice(m, s.b, ωy_b0, 0, L"$\omega^x_b$", "$out_folder/images/omegay_b_slice.png")
-    # plot_xslice(m, s.b, abs(ωy_b - ωy_b0), 0, L"$\omega^y_b$ error", "$out_folder/images/omegay_b_slice_BL_err.png")
 
     # solve barotropic
     νωx_b_bot = DGField([ν_bot[g_sfc1.t[k, i]]*ωx_b[k, i, 1] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
@@ -172,7 +105,145 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
     plot_yslice(m, b, ωy, 0.0, L"Vorticity $\omega^y$", "$out_folder/images/yslice_omegay_BL.png")
 end
 
-function test_1d()
+function solve_baroclinic_buoyancy_BL(m::ModelSetup3D, b)
+    # unpack
+    g_col = m.geom.g_col
+    g_sfc1 = m.geom.g_sfc1
+    nσ = m.geom.nσ
+    in_nodes1 = m.geom.in_nodes1
+    H = m.geom.H
+    σ = m.geom.σ
+    M_bc = m.inversion.M_bc
+    Dx = m.inversion.Dx
+    Dy = m.inversion.Dy
+    f = m.params.f
+    β = m.params.β
+    ε² = m.params.ε²
+    ε = √ε²
+    ν_bot = m.forcing.ν_bot
+    barotropic_RHS_τ = m.inversion.barotropic_RHS_τ
+
+    # q = √f/2ν
+    q = FEField(x->sqrt((f + β*x[2])/2), g_sfc1)/sqrt(ν_bot)
+
+    # 1D mass matrix for interior ω
+    M = mass_matrix(g_col)
+
+    # build BL LHSs
+    baroclinic_LHSs = build_baroclinic_LHSs(m.params, m.geom, m.forcing; bl=true)
+
+    # compute gradients
+    bx = reshape(Dx*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+    by = reshape(Dy*b.values, (g_sfc1.nt, g_sfc1.nn, 2nσ-2))
+
+    # pre-allocate
+    ωx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    ωy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    χx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    χy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+
+    # compute and store
+    for i ∈ eachindex(in_nodes1) # H = 0 solution: all zeros
+        ig = in_nodes1[i]
+        q0 = q[ig]
+        H0 = H[ig]
+        f0 = f + β*g_sfc1.p[ig, 2]
+        z = σ*H0
+        z_b = (σ .+ 1)*H0/ε
+        for I ∈ g_sfc1.p_to_t[ig]
+            ### buoyancy
+
+            # interior ω
+            ωx_b[I, :] += -1/f0*M\(M_bc*bx[I, :])
+            ωy_b[I, :] += -1/f0*M\(M_bc*by[I, :])
+
+            # interior O(1) χ
+            r = build_baroclinic_RHS(g_col, M_bc, bx[I, :], by[I, :], 0, 0, 0, 0; bl=true)
+            sol = baroclinic_LHSs[i]\r
+            χx_b[I, :] += sol[1:nσ]
+            χy_b[I, :] += sol[nσ+1:2nσ]
+
+            # interior O(ε) χ
+            dχxdz_bot = ∂(FEField(χx_b[I, :], g_col), -1, 1)/H0
+            dχydz_bot = ∂(FEField(χy_b[I, :], g_col), -1, 1)/H0
+            c1 = -q0*(dχxdz_bot - dχydz_bot)
+            c2 = -q0*(dχxdz_bot + dχydz_bot)
+            χx_b[I, :] += -ε*c2*z/(2q0^2*H0)
+            χy_b[I, :] += +ε*c1*z/(2q0^2*H0)
+
+            # BL correction
+            ωx_b[I, :] += @. 1/ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))
+            ωy_b[I, :] += @. 1/ε*exp(-q0*z_b)*(c2*cos(q0*z_b) - c1*sin(q0*z_b))
+            χx_b[I, :] += @.   ε*exp(-q0*z_b)*(c1*sin(q0*z_b) - c2*cos(q0*z_b))/(2q0^2)
+            χy_b[I, :] += @.   ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))/(2q0^2)
+        end
+    end
+
+    # ωx_b_bot = DGField(ωx_b[:, :, 1], g_sfc1)
+    # ωy_b_bot = DGField(ωy_b[:, :, 1], g_sfc1)
+    # quick_plot(ωx_b_bot, cb_label=L"\omega^x_b(-H)", filename="$out_folder/images/omegax_b_bot_BL.png")
+    # quick_plot(ωy_b_bot, cb_label=L"\omega^y_b(-H)", filename="$out_folder/images/omegay_b_bot_BL.png")
+
+    # ωx_b0, ωy_b0, χx_b0, χy_b0 = solve_baroclinic_buoyancy(m, b)
+    # ωx_b0_bot = DGField(ωx_b0[:, :, 1], g_sfc1)
+    # ωy_b0_bot = DGField(ωy_b0[:, :, 1], g_sfc1)
+    # quick_plot(abs(ωx_b_bot - ωx_b0_bot), cb_label=L"$\omega^x_b(-H)$ error", filename="$out_folder/images/omegax_b_bot_BL_err.png")
+    # quick_plot(abs(ωy_b_bot - ωy_b0_bot), cb_label=L"$\omega^y_b(-H)$ error", filename="$out_folder/images/omegay_b_bot_BL_err.png")
+
+    # ωx_b = DGField((coast_mask .* ωx_b)[g_sfc1_to_g1_map], g1)
+    # ωy_b = DGField((coast_mask .* ωy_b)[g_sfc1_to_g1_map], g1)
+    # χx_b = DGField((coast_mask .* χx_b)[g_sfc1_to_g1_map], g1)
+    # χy_b = DGField((coast_mask .* χy_b)[g_sfc1_to_g1_map], g1)
+    # ωx_b0 = DGField((coast_mask .* ωx_b0)[g_sfc1_to_g1_map], g1)
+    # ωy_b0 = DGField((coast_mask .* ωy_b0)[g_sfc1_to_g1_map], g1)
+    # χx_b0 = DGField((coast_mask .* χx_b0)[g_sfc1_to_g1_map], g1)
+    # χy_b0 = DGField((coast_mask .* χy_b0)[g_sfc1_to_g1_map], g1)
+
+    # plot_xslice(m, s.b, ωx_b, 0, L"$\omega^x_b$", "$out_folder/images/omegax_b_slice_BL.png")
+    # plot_xslice(m, s.b, ωx_b0, 0, L"$\omega^x_b$", "$out_folder/images/omegax_b_slice.png")
+    # plot_xslice(m, s.b, abs(ωx_b - ωx_b0), 0, L"$\omega^x_b$ error", "$out_folder/images/omegax_b_slice_BL_err.png")
+    # plot_xslice(m, s.b, ωy_b, 0, L"$\omega^x_b$", "$out_folder/images/omegay_b_slice_BL.png")
+    # plot_xslice(m, s.b, ωy_b0, 0, L"$\omega^x_b$", "$out_folder/images/omegay_b_slice.png")
+    # plot_xslice(m, s.b, abs(ωy_b - ωy_b0), 0, L"$\omega^y_b$ error", "$out_folder/images/omegay_b_slice_BL_err.png")
+
+    return ωx_b, ωy_b, χx_b, χy_b
+end
+
+function barotropic_terms_BL(m::ModelSetup3D, s::ModelState3D)
+    # unpack
+    ε² = m.params.ε²
+    f = m.params.f
+    β = m.params.β
+    g_sfc1 = m.geom.g_sfc1
+    g_sfc2 = m.geom.g_sfc2
+    H = m.geom.H
+    ν_bot = m.forcing.ν_bot
+    b = s.b
+
+    # f/H
+    f_over_H = FEField(x->f + β*x[2], g_sfc2)/H
+    vmax = 1e1
+    f_over_H.values[g_sfc2.e["bdy"]] .= vmax
+    quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/images/f_over_H.png"; vmax, contour_levels=30)
+
+    # ω_b
+    ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b)
+    # ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy_BL(m, b)
+    νωx_b_over_H = DGField([ν_bot[g_sfc1.t[k, i]]*ωx_b[k, i, 1]/H[g_sfc1.t[k, i]] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    νωy_b_over_H = DGField([ν_bot[g_sfc1.t[k, i]]*ωy_b[k, i, 1]/H[g_sfc1.t[k, i]] for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)
+    # vmax = 5e1
+    # νωx_b_over_H.values[isnan.(νωx_b_over_H.values)] .= vmax
+    # νωy_b_over_H.values[isnan.(νωy_b_over_H.values)] .= vmax
+    # quick_plot(νωx_b_over_H, cb_label=L"\nu\omega^x_b/H", filename="$out_folder/images/nu_omegax_b_over_H.png"; vmax)
+    # quick_plot(νωy_b_over_H, cb_label=L"\nu\omega^y_b/H", filename="$out_folder/images/nu_omegay_b_over_H.png"; vmax)
+    el = g_sfc1.el
+    div_νω_b_over_H = ε²*(∂ξ(νωx_b_over_H) + ∂η(νωy_b_over_H))*H^3
+    div_νω_b_over_H.values[isnan.(div_νω_b_over_H.values)] .= 0
+    quick_plot(div_νω_b_over_H, cb_label=L"H^3\varepsilon^2\nabla\cdot(\nu\omega^x_b/H)", filename="$out_folder/images/div_nu_omega_b_over_H.png")
+    # quick_plot(div_νω_b_over_H, cb_label=L"H^3\varepsilon^2\nabla\cdot(\nu\omega^x_b/H)", filename="$out_folder/images/div_nu_omega_b_over_H_BL.png")
+end
+
+function test_baroclinic_BL()
     # params
     ε² = 1e-4
     ε = sqrt(ε²)
@@ -313,24 +384,29 @@ function test_1d()
     plt.close()
 end
 
-function test_2d()
-    # params
-    ε² = 1e-3
+function bottom_stress_BL(m::ModelSetup3D)
+    # unpack
+    ε² = m.params.ε²
     ε = sqrt(ε²)
-    f = 1
-    β = 0.95
-    ν_bot = 1.01
-
-    # grid
-    g = Grid(Triangle(order=2), "$(@__DIR__)/../../meshes/circle/mesh5.h5")
+    f = m.params.f
+    β = m.params.β
+    g_sfc1 = m.geom.g_sfc1
+    H = m.geom.H
+    ν_bot = m.forcing.ν_bot
+    ωx_Ux = m.inversion.ωx_Ux
+    ωy_Ux = m.inversion.ωy_Ux
 
     # functions on grid
-    H = FEField(x->1 - x[1]^2 - x[2]^2, g)
-    q = FEField(x->√((f + β*x[2])/(2*ν_bot)), g)
-    ωx_Ux_bot = -H*q/ε
-    ωy_Ux_bot = H*q/ε
+    q = FEField(x->sqrt((f + β*x[2])/2), g_sfc1)/sqrt(ν_bot)
+    H1 = FEField(H[1:g_sfc1.np], g_sfc1)
+    # q = FEField(x->sign(f + β*x[2])*√(abs(f + β*x[2])/(2*ν_bot)), g) # sign???
+    ωx_Ux_bot = -H1*q/ε
+    ωy_Ux_bot = +H1*q/ε
+    # ωy_Ux_bot = H*abs(q)/ε # abs???
 
     # plot
     quick_plot(ωx_Ux_bot, cb_label=L"\omega^x_{U^x}(-H)", filename="$out_folder/images/omegax_Ux_bot_BL.png")
     quick_plot(ωy_Ux_bot, cb_label=L"\omega^y_{U^x}(-H)", filename="$out_folder/images/omegay_Ux_bot_BL.png")
+    quick_plot(FEField(ωx_Ux[:, 1], g_sfc1), cb_label=L"\omega^x_{U^x}(-H)", filename="$out_folder/images/omegax_Ux_bot.png")
+    quick_plot(FEField(ωy_Ux[:, 1], g_sfc1), cb_label=L"\omega^y_{U^x}(-H)", filename="$out_folder/images/omegay_Ux_bot.png")
 end

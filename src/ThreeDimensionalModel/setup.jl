@@ -119,6 +119,7 @@ function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
 
     # convert H to FE field
     H = FEField(H_func, g_sfc2)
+    H.values[g_sfc2.e["bdy"]] .= 0 # enforce H = 0 on boundary
 
     # H gradients are DG fields
     Hx = DGField([∂ξ(H, g_sfc1.el.p[i, :], k) for k=1:g_sfc1.nt, i=1:g_sfc1.nn], g_sfc1)

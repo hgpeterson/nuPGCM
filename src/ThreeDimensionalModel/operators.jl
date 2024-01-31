@@ -6,6 +6,15 @@
 ∂η(u::AbstractField, x, k) = ∂(u, x, k, 2)
 ∂σ(u::AbstractField, x, k) = ∂(u, x, k, 3)
 
+function ∂(u::AbstractField, j)
+    g = u.g
+    el = g.el 
+    return DGField([∂(u, el.p[i, :], k, j) for k=1:g.nt, i=1:el.n], g)
+end
+∂ξ(u::AbstractField) = ∂(u, 1)
+∂η(u::AbstractField) = ∂(u, 2)
+∂σ(u::AbstractField) = ∂(u, 3)
+
 function H_quad_pts(m::ModelSetup3D, g::Grid)
     H = m.geom.H
     nσ = m.geom.nσ

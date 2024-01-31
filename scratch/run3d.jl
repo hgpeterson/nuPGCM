@@ -22,11 +22,11 @@ H(x) = 1 - x[1]^2 - x[2]^2
 
 function setup()
     # params
-    ε² = 1e-3
+    ε² = 1e-4
     μϱ = 1e-4
     f = 1.
-    # β = 0.
-    β = 0.95
+    β = 0.
+    # β = 0.95
     params = Params(; ε², μϱ, f, β)
 
     # geometry
@@ -73,10 +73,10 @@ function postprocess()
     # run(`bash -c "make_movie 20 psi"`)
 end
 
-# m = setup()
+m = setup()
 # m = load_setup_3D("$out_folder/data/setup.h5")
 # m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
-m = load_setup_3D("../../group_dir/sim012/adv_on/output/data/setup.h5")
+# m = load_setup_3D("../../group_dir/sim012/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "$out_folder/data/state5.h5")
 s = run3d(m)
 # postprocess()
