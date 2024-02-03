@@ -112,10 +112,14 @@ function invert!(m::ModelSetup3D, s::ModelState3D; showplots=false)
 
     # put them all together to get full ω's and χ's
     # @time "\tfull sum" begin
-    ωx_full = @. coast_mask * (ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :])) #FIXME: add τ's
-    ωy_full = @. coast_mask * (ωy_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωy_Ux[g_sfc1.t, :] + Uy.values*ωx_Ux[g_sfc1.t, :]))
-    χx_full = @. coast_mask * (χx_b + 1/H[g_sfc1.t]^2 * (Ux.values*χx_Ux[g_sfc1.t, :] - Uy.values*χy_Ux[g_sfc1.t, :]))
-    χy_full = @. coast_mask * (χy_b + 1/H[g_sfc1.t]^2 * (Ux.values*χy_Ux[g_sfc1.t, :] + Uy.values*χx_Ux[g_sfc1.t, :]))
+    ωx_full = @. ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :]) #FIXME: add τ's
+    ωy_full = @. ωy_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωy_Ux[g_sfc1.t, :] + Uy.values*ωx_Ux[g_sfc1.t, :])
+    χx_full = @. χx_b + 1/H[g_sfc1.t]^2 * (Ux.values*χx_Ux[g_sfc1.t, :] - Uy.values*χy_Ux[g_sfc1.t, :])
+    χy_full = @. χy_b + 1/H[g_sfc1.t]^2 * (Ux.values*χy_Ux[g_sfc1.t, :] + Uy.values*χx_Ux[g_sfc1.t, :])
+    ωx_full[coast_mask] .= 0.0
+    ωy_full[coast_mask] .= 0.0
+    χx_full[coast_mask] .= 0.0
+    χy_full[coast_mask] .= 0.0
     # end
     # @time "\tstore" begin
     ωx.values[:, :] = ωx_full[g_sfc1_to_g1_map]

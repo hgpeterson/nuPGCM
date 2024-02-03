@@ -26,7 +26,9 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
     Ψ = s.Ψ
 
     # buoyancy component
-    ωx_b, ωy_b, χx_b, χy_b =  solve_baroclinic_buoyancy_BL(m, b)
+    ωx_b, ωy_b, χx_b, χy_b, Ux_BL_b, Uy_BL_b = solve_baroclinic_buoyancy_BL(m, b)
+    quick_plot(DGField(Ux_BL_b, g_sfc1), cb_label=L"U^x_{BL, b}", filename="$out_folder/images/Ux_BL_b.png")
+    quick_plot(DGField(Uy_BL_b, g_sfc1), cb_label=L"U^y_{BL, b}", filename="$out_folder/images/Uy_BL_b.png")
 
     # transport component
 
@@ -76,6 +78,22 @@ function invert_BL(m::ModelSetup3D, s::ModelState3D)
     barotropic_RHS_b = build_barotropic_RHS_b(m, b, νωx_b_bot, νωy_b_bot)
     Ψ.values[:] = barotropic_LHS\(barotropic_RHS_τ + barotropic_RHS_b)
     Ux, Uy = compute_U(Ψ)
+
+    # BL transport
+    Ux_BL_Ψ = zeros(g_sfc1.nt, g_sfc1.nn)
+    Uy_BL_Ψ = zeros(g_sfc1.nt, g_sfc1.nn)
+    for k ∈ 1:g_sfc1.nt, i ∈ 1:g_sfc1.nn
+        ig = g_sfc1.t[k, i]
+        if ig ∈ g_sfc1.e["bdy"]
+            continue
+        end
+        Ux_BL_Ψ[k, i] = -ε/(2q[ig])*(Ux[k] + Uy[k])/H[ig]
+        Uy_BL_Ψ[k, i] = +ε/(2q[ig])*(Ux[k] - Uy[k])/H[ig]
+    end
+    quick_plot(DGField(Ux_BL_Ψ, g_sfc1), cb_label=L"U^x_{BL,\Psi}", filename="$out_folder/images/Ux_BL_psi.png")
+    quick_plot(DGField(Uy_BL_Ψ, g_sfc1), cb_label=L"U^y_{BL,\Psi}", filename="$out_folder/images/Uy_BL_psi.png")
+    quick_plot(DGField(Ux_BL_b + Ux_BL_Ψ, g_sfc1), cb_label=L"U^x_{BL}", filename="$out_folder/images/Ux_BL_tot.png")
+    quick_plot(DGField(Ux_BL_b + Uy_BL_Ψ, g_sfc1), cb_label=L"U^y_{BL}", filename="$out_folder/images/Uy_BL_tot.png")
 
     # put them all together to get full ω's and χ's
     ωx_full = @. coast_mask * (ωx_b + 1/H[g_sfc1.t]^2 * (Ux.values*ωx_Ux[g_sfc1.t, :] - Uy.values*ωy_Ux[g_sfc1.t, :]))
@@ -141,6 +159,8 @@ function solve_baroclinic_buoyancy_BL(m::ModelSetup3D, b)
     ωy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
     χx_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
     χy_b = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
+    Ux_BL_b = zeros(g_sfc1.nt, g_sfc1.nn)
+    Uy_BL_b = zeros(g_sfc1.nt, g_sfc1.nn)
 
     # compute and store
     for i ∈ eachindex(in_nodes1) # H = 0 solution: all zeros
@@ -170,6 +190,10 @@ function solve_baroclinic_buoyancy_BL(m::ModelSetup3D, b)
             c2 = -q0*(dχxdz_bot + dχydz_bot)
             χx_b[I, :] += -ε*c2*z/(2q0^2*H0)
             χy_b[I, :] += +ε*c1*z/(2q0^2*H0)
+
+            # BL transport
+            Ux_BL_b[I] = ε*c1/(2q0^2)
+            Uy_BL_b[I] = ε*c2/(2q0^2)
 
             # BL correction
             ωx_b[I, :] += @. 1/ε*exp(-q0*z_b)*(c1*cos(q0*z_b) + c2*sin(q0*z_b))
@@ -206,7 +230,7 @@ function solve_baroclinic_buoyancy_BL(m::ModelSetup3D, b)
     # plot_xslice(m, s.b, ωy_b0, 0, L"$\omega^x_b$", "$out_folder/images/omegay_b_slice.png")
     # plot_xslice(m, s.b, abs(ωy_b - ωy_b0), 0, L"$\omega^y_b$ error", "$out_folder/images/omegay_b_slice_BL_err.png")
 
-    return ωx_b, ωy_b, χx_b, χy_b
+    return ωx_b, ωy_b, χx_b, χy_b, Ux_BL_b, Uy_BL_b
 end
 
 function barotropic_terms_BL(m::ModelSetup3D, s::ModelState3D)

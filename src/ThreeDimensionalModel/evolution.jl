@@ -31,8 +31,8 @@ function EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
     κ = forcing.κ
 
     # horizontal diffusion
-    # K_hdiff = build_K_hdiff(geom)
-    K_hdiff = spzeros(g2.np, g2.np)
+    K_hdiff = build_K_hdiff(geom)
+    # K_hdiff = spzeros(g2.np, g2.np)
 
     # vertical diffusion
     K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]
@@ -290,23 +290,33 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
     g_sfc2 = m.geom.g_sfc2
     HM = m.evolution.HM
     K_hdiff = m.evolution.K_hdiff
+    advection_on = m.evolution.advection
 
-    if m.evolution.advection
+    if advection_on
+        # stiffness matrix for stabilizing diffusion
+        κ_h = 1e-2*ε²/μϱ
+        @printf("κ_h = %1.1e\n", κ_h)
+        # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
+        # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
+        LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
+        RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
+        @showprogress "Applying b.c. to horiz. diff. matrices..." for i ∈ unique(vcat(g2.e["sfc"], g2.e["coast"]))
+            LHS_hdiff[i, :] .= 0
+            RHS_hdiff[i, :] .= 0
+            LHS_hdiff[i, i] = 1
+        end
+        Pinv_hdiff = sparse(inv(Diagonal(LHS_hdiff)))
+
         # put on GPU
         HM_gpu = CuSparseMatrixCSC(HM)
         Pinv_adv = CuSparseMatrixCSC(sparse(inv(Diagonal(HM))))
         adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
+        LHS_hdiff = CuSparseMatrixCSC(LHS_hdiff)
+        RHS_hdiff = CuSparseMatrixCSC(RHS_hdiff)
+        Pinv_hdiff = CuSparseMatrixCSC(Pinv_hdiff)
+        CUDA.memory_status()
     end
 
-    # # stiffness matrix for stabilizing diffusion
-    # # κ_h = 1e-1*ε²/μϱ
-    # # κ_h = 1e-3
-    κ_h = 0.
-    @printf("κ_h = %1.1e\n", κ_h)
-    # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
-    # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
-    # Pinv_hdiff = CuSparseMatrixCSC(sparse(inv(Diagonal(HM + κ_h*Δt/4*K_hdiff))))
-    # CUDA.memory_status()
 
     # stiffness matrix for vertical diffusion
     LHS_diffs, RHS_diffs = build_diffusion_matrices(m, Δt)
@@ -342,16 +352,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
     # solve
     t0 = time()
     for i ∈ 1:n_steps
-        # # stabilizing diffusion
-        # # @time s.b.values[:] = Array(cg(LHS_hdiff, RHS_hdiff*CuArray(s.b.values)))
-        # # @time "hdiff" begin
-        # b_gpu = CuArray(s.b.values)
-        # cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
-        # s.b.values[:] = Array(b_gpu)
-        # # end
-        # # b_gpu = CuArray(s.b.values)
-        # # s.b.values[:] = Array(b_gpu + D*b_gpu)
-        # # s.b.values[:] = s.b.values + D*s.b.values
+        # stabilizing diffusion
+        if advection_on
+            b_gpu = CuArray(s.b.values)
+            cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
+            s.b.values[:] = Array(b_gpu)
+        end
 
         # Δt/2 vertical diffusion step
         # @time "vdiff" begin
@@ -363,7 +369,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
 
         # Δt advection step
         # @time "adv" begin
-        if m.evolution.advection
+        if advection_on
             # invert
             invert!(m, s)
 
@@ -390,12 +396,12 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
         end
         # end
 
-        # # stabilizing diffusion
-        # # @time "hdiff" begin
-        # b_gpu = CuArray(s.b.values)
-        # cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
-        # s.b.values[:] = Array(b_gpu)
-        # # end
+        # stabilizing diffusion
+        if advection_on
+            b_gpu = CuArray(s.b.values)
+            cg!(b_gpu, LHS_hdiff, RHS_hdiff*b_gpu, Pinv=Pinv_hdiff)
+            s.b.values[:] = Array(b_gpu)
+        end
 
         # set time
         s.t[1] = s.t[1] + Δt

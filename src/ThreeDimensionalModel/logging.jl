@@ -178,7 +178,7 @@ function load_setup_3D(filename)
     nσ = read(file, "nσ")
 
     g_sfc1_to_g1_map = build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
-    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
+    coast_mask = build_coast_mask(g_sfc1, nσ)
 
     geom = Geometry(H, Hx, Hy, g_sfc1, g_sfc2, in_nodes1, in_nodes2, g1, g2, g_sfc1_to_g1_map, coast_mask, g_col, σ, nσ)
 

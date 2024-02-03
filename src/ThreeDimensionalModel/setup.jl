@@ -73,7 +73,7 @@ struct Geometry{F1, F2, GS, VI, G, AC, AB, GC, VF, I}
     g_sfc1_to_g1_map::AC # 3-dim array of CartesianIndices
 
     # coast mask in (g_sfc1.nt × g_sfc1.nn × nσ) space
-    coast_mask::AB # 3-dim array of ones and zeros
+    coast_mask::AB # 3-dim array of Bools
 
     # 1D grid in σ (first order)
     g_col::GC # `Grid` of `Line`s
@@ -109,7 +109,7 @@ function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
     g_sfc1_to_g1_map = build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
 
     # coast mask in (g_sfc1.nt × g_sfc1.nn × nσ) space
-    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
+    coast_mask = build_coast_mask(g_sfc1, nσ)
 
     # 1D grid
     p = σ
@@ -144,14 +144,14 @@ function build_g_sfc1_to_g1_map(g_sfc1, g1, nσ)
 end
 
 """
-    coast_mask = build_coast_mask(g_sfc1, in_nodes1, nσ)
+    coast_mask = build_coast_mask(g_sfc1, nσ)
 
 Returns 3-dimensional array of ones and zeros in (g_sfc1.nt × g_sfc1.nn × nσ) space (zero for node on coast,
 one otherwise).
 """
-function build_coast_mask(g_sfc1, in_nodes1, nσ)
-    coast_mask = zeros(g_sfc1.nt, g_sfc1.nn, nσ)
-    for ig ∈ in_nodes1, I ∈ g_sfc1.p_to_t[ig]
+function build_coast_mask(g_sfc1, nσ)
+    coast_mask = zeros(Bool, g_sfc1.nt, g_sfc1.nn, nσ)
+    for ig ∈ g_sfc1.e["bdy"], I ∈ g_sfc1.p_to_t[ig]
         coast_mask[I, :] .= 1
     end
     return coast_mask
