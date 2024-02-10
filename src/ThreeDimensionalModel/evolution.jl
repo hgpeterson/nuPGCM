@@ -294,17 +294,16 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
 
     if advection_on
         # stiffness matrix for stabilizing diffusion
-        κ_h = 1e-2*ε²/μϱ
+        κ_h = 4e-2*ε²/μϱ
         @printf("κ_h = %1.1e\n", κ_h)
         # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
         # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)
         LHS_hdiff = HM + κ_h*Δt/4*K_hdiff # Δt = Δt/2
         RHS_hdiff = HM - κ_h*Δt/4*K_hdiff
-        @showprogress "Applying b.c. to horiz. diff. matrices..." for i ∈ unique(vcat(g2.e["sfc"], g2.e["coast"]))
-            LHS_hdiff[i, :] .= 0
-            RHS_hdiff[i, :] .= 0
-            LHS_hdiff[i, i] = 1
-        end
+        # e_idxs = unique(vcat(g2.e["sfc"], g2.e["coast"]))
+        # LHS_hdiff[e_idxs, :] .= 0
+        # RHS_hdiff[e_idxs, :] .= 0
+        # LHS_hdiff[[CartesianIndex(i, i) for i ∈ e_idxs]] .= 1
         Pinv_hdiff = sparse(inv(Diagonal(LHS_hdiff)))
 
         # put on GPU
