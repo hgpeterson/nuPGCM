@@ -294,7 +294,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
 
     if advection_on
         # stiffness matrix for stabilizing diffusion
-        κ_h = 4e-2*ε²/μϱ
+        κ_h = 1e-2*ε²/μϱ
         @printf("κ_h = %1.1e\n", κ_h)
         # LHS_hdiff = CuSparseMatrixCSC(HM + κ_h*Δt/4*K_hdiff) # Δt = Δt/2
         # RHS_hdiff = CuSparseMatrixCSC(HM - κ_h*Δt/4*K_hdiff)

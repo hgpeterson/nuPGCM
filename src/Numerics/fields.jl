@@ -144,6 +144,19 @@ abs(u::FVField) = FVField(abs.(u.values), u.g)
 # convert DGField to FVField by averaging
 FVField(u::DGField) = FVField([sum(u[k, i] for i=1:u.g.nn)/u.g.nn for k=1:u.g.nt], u.g)
 
+# convert FVField to FEField by averaging
+function FEField(u::FVField) 
+    g = u.g
+    u_cg = zeros(g.np)
+    for k=1:g.nt
+        for i=1:g.nn
+            u_cg[g.t[k, i]] += u[k]
+        end
+    end
+    u_cg ./= length.(g.p_to_t) # average
+    return FEField(u_cg, g)
+end
+
 """
     l2 = L2norm(u)
 

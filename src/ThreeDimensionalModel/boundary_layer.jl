@@ -248,7 +248,7 @@ function barotropic_terms_BL(m::ModelSetup3D, s::ModelState3D)
     f_over_H = FEField(x->f + β*x[2], g_sfc2)/H
     vmax = 1e1
     f_over_H.values[g_sfc2.e["bdy"]] .= vmax
-    quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/images/f_over_H.png"; vmax, contour_levels=30)
+    quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/images/f_over_H.png"; vmax, contour_levels=10)
 
     # ω_b
     ωx_b, ωy_b, χx_b, χy_b = solve_baroclinic_buoyancy(m, b)
@@ -260,10 +260,9 @@ function barotropic_terms_BL(m::ModelSetup3D, s::ModelState3D)
     # νωy_b_over_H.values[isnan.(νωy_b_over_H.values)] .= vmax
     # quick_plot(νωx_b_over_H, cb_label=L"\nu\omega^x_b/H", filename="$out_folder/images/nu_omegax_b_over_H.png"; vmax)
     # quick_plot(νωy_b_over_H, cb_label=L"\nu\omega^y_b/H", filename="$out_folder/images/nu_omegay_b_over_H.png"; vmax)
-    el = g_sfc1.el
     div_νω_b_over_H = ε²*(∂ξ(νωx_b_over_H) + ∂η(νωy_b_over_H))*H^3
     div_νω_b_over_H.values[isnan.(div_νω_b_over_H.values)] .= 0
-    quick_plot(div_νω_b_over_H, cb_label=L"H^3\varepsilon^2\nabla\cdot(\nu\omega^x_b/H)", filename="$out_folder/images/div_nu_omega_b_over_H.png")
+    quick_plot(div_νω_b_over_H, cb_label=L"\vec{z} \cdot \nabla \times (\nu \vec{\tau}^b / H )", filename="$out_folder/images/curl_tau_b.png")
     # quick_plot(div_νω_b_over_H, cb_label=L"H^3\varepsilon^2\nabla\cdot(\nu\omega^x_b/H)", filename="$out_folder/images/div_nu_omega_b_over_H_BL.png")
 end
 
