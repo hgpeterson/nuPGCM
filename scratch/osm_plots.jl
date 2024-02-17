@@ -22,11 +22,17 @@ end
 
 ### load m, s
 
+# f = 1
 # m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "../../group_dir/sim011/adv_on/output/data/state10.h5")
 
-# m = load_setup_3D("../../group_dir/sim012/adv_on/output/data/setup.h5")
-# s = load_state_3D(m, "../../group_dir/sim012/adv_on/output/data/state10.h5")
+# f = 1 + 0.5y
+# m = load_setup_3D("../../group_dir/sim014/output/data/setup.h5")
+# s = load_state_3D(m, "../../group_dir/sim014/output/data/state10.h5")
+
+# f = 1 + y
+# m = load_setup_3D("../../group_dir/sim015/output/data/setup.h5")
+# s = load_state_3D(m, "../../group_dir/sim015/output/data/state10.h5")
 
 ### f_over_H.png, curl_tau_b.png
 
@@ -60,11 +66,12 @@ end
 
 ### psi.png
 
+# nuPGCM.quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", filename="$out_folder/images/psi.png", vmax=2.8e-2)
 # nuPGCM.quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", filename="$out_folder/images/psi.png")
 
 ### ux.png, uy.png
 
-# nuPGCM.plot_u(m, s, 0; title="")
+nuPGCM.plot_u(m, s, 0; title="")
 
 ### baroclinic_U.png
 
