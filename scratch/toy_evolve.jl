@@ -1,6 +1,8 @@
 using nuPGCM
 using PyPlot
 using LinearAlgebra
+using Random
+using ProgressMeter
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -11,7 +13,7 @@ set_out_folder("../output")
 Random.seed!(42)
 
 """
-∇²ψ - ψ/λ² = ζ
+q = ∇²ψ + βy - ψ/λ²
 """
 function build_inversion_LHS(g, K, M, λ)
     A = -K - M/λ^2
@@ -22,14 +24,25 @@ function build_inversion_LHS(g, K, M, λ)
     return lu(A)
 end
 
-function invert(g, LHS, M, ζ)
-    RHS = M*ζ
-    RHS[g.e["bdy"]] .= 0
-    return LHS\RHS
+function invert!(ψ, LHS, M, q)
+    RHS = M*q.values
+    RHS[ψ.g.e["bdy"]] .= 0
+    ψ.values[:] = LHS\RHS
+    return ψ
 end
 
 """
-Aᵢⱼₖ = ∫ [∂x(ψⱼ)∂y(ζₖ) - ∂y(ψⱼ)∂x(ζₖ)] φᵢ. 
+u = -∂y(ψ)
+v =  ∂x(ψ)
+"""
+function compute_velocities(ψ)
+    u = -∂(ψ, 2)
+    v = ∂(ψ, 1)
+    return FVField(u), FVField(v)
+end
+
+"""
+Aᵢⱼₖ = ∫ [∂x(ψⱼ)∂y(qₖ) - ∂y(ψⱼ)∂x(qₖ)] φᵢ. 
 """
 function build_advection_array(g)
     # unpack
@@ -56,10 +69,38 @@ function build_advection_array(g)
     return A
 end
 
-function advection(g, A, ζ, ψ)
+function build_SD_matrices(g, δ, u, v)
+    J = g.J
+    el = g.el
+    M_SD = zeros(g.np, g.np)
+    A_SD = zeros(g.np, g.np)
+    for k ∈ 1:g.nt
+        jac = J.Js[k, :, :]
+        Δ = J.dets[k]
+
+        f_M(ξ, i, j) = (u(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 1] + ∂φ(el, ξ, i, 2)*jac[2, 1]) + 
+                        v(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 2] + ∂φ(el, ξ, i, 2)*jac[2, 2]))*φ(el, ξ, j)*Δ
+        M_SDᵏ = [nuPGCM.ref_el_quad(ξ -> f_M(ξ, i, j), el) for i ∈ 1:g.nn, j ∈ 1:g.nn]
+
+        f_A(ξ, i, j) = (u(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 1] + ∂φ(el, ξ, i, 2)*jac[2, 1]) + 
+                        v(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 2] + ∂φ(el, ξ, i, 2)*jac[2, 2]))*
+                       (u(ξ, k)*(∂φ(el, ξ, j, 1)*jac[1, 1] + ∂φ(el, ξ, j, 2)*jac[2, 1]) + 
+                        v(ξ, k)*(∂φ(el, ξ, j, 1)*jac[1, 2] + ∂φ(el, ξ, j, 2)*jac[2, 2]))*Δ
+        A_SDᵏ = [nuPGCM.ref_el_quad(ξ -> f_A(ξ, i, j), el) for i ∈ 1:g.nn, j ∈ 1:g.nn]
+
+        for i ∈ 1:g.nn, j ∈ 1:g.nn
+            M_SD[g.t[k, i], g.t[k, j]] += δ[k]*M_SDᵏ[i, j]
+            A_SD[g.t[k, i], g.t[k, j]] += M_SDᵏ[j, i] + δ[k]*A_SDᵏ[i, j]
+        end
+    end
+    return M_SD, A_SD
+end
+
+function advection(A, q, ψ)
+    g = ψ.g
     adv = zeros(g.np)
-    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ ∈ 1:g.nn, iζ ∈ 1:g.nn
-        adv[g.t[k, i]] += A[k, i, iψ, iζ]*ψ[g.t[k, iψ]]*ζ[g.t[k, iζ]]
+    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ ∈ 1:g.nn, iq ∈ 1:g.nn
+        adv[g.t[k, i]] += A[k, i, iψ, iq]*ψ[g.t[k, iψ]]*q[g.t[k, iq]]
     end
     return adv
 end
@@ -83,30 +124,59 @@ function evolve()
     A = build_advection_array(g)
 
     # initial condition
-    t = 0
-    # ζ = 0.5*randn(g.np)
+    # q = 0.5*randn(g.np)
     x = g.p[:, 1]
     y = g.p[:, 2]
-    Δ = 0.1
-    ζ = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
-    ψ = invert(g, inv_LHS, M, ζ)
+    # Δ = 0.1
+    # q = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    q = @. (1 - y^2)*(1 - x^2 - y^2)
+    q = FEField(q, g)
+    ψ = FEField(0, g)
+    invert!(ψ, inv_LHS, M, q)
+    u, v = compute_velocities(ψ)
+    nuPGCM.quick_plot(ψ, cb_label=L"Streamfunction $\psi$", filename="$out_folder/psi.png")
+    nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q.png")
+    nuPGCM.quick_plot(u, cb_label=L"u", filename="$out_folder/u.png")
+    nuPGCM.quick_plot(v, cb_label=L"v", filename="$out_folder/v.png")
 
     # step forward
-    for i ∈ 1:10000
+    t1 = time()
+    N = 1700
+    for i ∈ 1:N
         # invert
-        ψ = invert(g, inv_LHS, M, ζ)
+        invert!(ψ, inv_LHS, M, q)
 
         # advect (RK2)
-        dζ = adv_LHS\advection(g, A, ζ, ψ)
-        dζ = adv_LHS\advection(g, A, ζ + Δt/2*dζ, ψ)
-        ζ -= Δt*dζ
+        dq = adv_LHS\advection(A, q.values, ψ)
+        dq = adv_LHS\advection(A, q.values + Δt/2*dq, ψ)
+        q.values[:] = q.values - Δt*dq
+
+        # # advect (RK2)
+        # u, v = compute_velocities(ψ)
+        # M_SD, A_SD = build_SD_matrices(g, δ, u, v)
+        # dq = (M + M_SD)\(A_SD*q.values)
+        # dq = (M + M_SD)\(A_SD*(q.values + Δt/2*dq))
+        # q.values[:] = q.values - Δt*dq
 
         if mod(i, 100) == 0
-            ψ = invert(g, inv_LHS, M, ζ)
-            nuPGCM.quick_plot(FEField(ψ, g), cb_label=L"Streamfunction $\psi$", filename="$out_folder/psi.png")
-            nuPGCM.quick_plot(FEField(ζ, g), cb_label=L"Vorticity $\zeta$", filename="$out_folder/zeta.png")
+            # CFL
+            u, v = compute_velocities(ψ)
+            println("\ni = $i/$N")
+            println("CFL Δt: ", min(minimum(abs.(δ./u.values)), minimum(abs.(δ./v.values))))
+
+            # plots
+            nuPGCM.quick_plot(ψ, cb_label=L"Streamfunction $\psi$", filename="$out_folder/psi.png")
+            nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q.png")
+            nuPGCM.quick_plot(u, cb_label=L"u", filename="$out_folder/u.png")
+            nuPGCM.quick_plot(v, cb_label=L"v", filename="$out_folder/v.png")
         end
     end
+    t2 = time()
+    println((t2 - t1)/N)
+
+    return q
 end
 
-evolve()
+q = evolve()
+
+println("Done.")
