@@ -41,7 +41,7 @@ function setup()
     forcing = Forcing(geom, τx, τy, ν, κ)
 
     # setup and save
-    m = ModelSetup3D(params, geom, forcing, advection=true)
+    m = ModelSetup3D(params, geom, forcing, advection=false)
     save_setup(m)
 
     return m
@@ -49,9 +49,11 @@ end
 
 function run3d(m::ModelSetup3D)
     # b = FEField(x -> H(x)*x[3], m.geom.g2)
-    b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
-    s = initial_state(m, b)
-    # s = initial_state(m, b, showplots=true)
+    # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
+    # b = FEField(x -> x[1], m.geom.g2)
+    b = FEField(x -> -cos(π*x[1]/2), m.geom.g2)
+    # s = initial_state(m, b)
+    s = initial_state(m, b, showplots=true)
 
     Δt = 1e-4
     t_save = 1e-3
@@ -77,7 +79,7 @@ end
 # m = load_setup_3D("$out_folder/data/setup.h5")
 # m = load_setup_3D("../../group_dir/sim012/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "$out_folder/data/state5.h5")
-# s = run3d(m)
+s = run3d(m)
 # postprocess()
 
 # m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
