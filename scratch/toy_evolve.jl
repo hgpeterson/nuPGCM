@@ -105,9 +105,37 @@ function advection(A, q, ψ)
     return adv
 end
 
+function advection(q, ψ, δ)
+    # unpack
+    g = ψ.g
+    el = g.el
+    w = el.quad_wts
+    φ = g.φ_qp
+    φx = g.∂φ_qp[:, :, 1, :]
+    φy = g.∂φ_qp[:, :, 2, :]
+    Δ = g.J.dets
+
+    adv = zeros(g.np)
+    M_SD = zeros(g.np, g.np)
+    for k ∈ 1:g.nt
+        for i ∈ 1:g.nn, iq ∈ 1:g.nn, iψ ∈ 1:g.nn
+            for i_quad ∈ eachindex(w)
+                qx = φx[k, iq, i_quad]*q[g.t[k, iq]]
+                qy = φy[k, iq, i_quad]*q[g.t[k, iq]]
+                ψx = φx[k, iψ, i_quad]*ψ[g.t[k, iψ]]
+                ψy = φy[k, iψ, i_quad]*ψ[g.t[k, iψ]]
+                adv[g.t[k, i]] -= w[i_quad]*(ψy*qx - ψx*qy)*φ[i, i_quad]*Δ[k]
+                adv[g.t[k, i]] -= δ[k]*w[i_quad]*(ψy*φx[k, iq, i_quad] - ψx*φy[k, iq, i_quad])*φ[i, i_quad]*Δ[k]
+                M_SD[g.t[k, iq], g.t[k, i]] += δ[k]*w[i_quad]*(ψy*qx - ψx*qy)*φ[i, i_quad]*Δ[k]
+            end
+        end
+    end
+    return adv, M_SD
+end
+
 function evolve()
     # params
-    Δt = 1e-2
+    Δt = 2e-2
     λ = 0.5
 
     # grid
@@ -127,9 +155,9 @@ function evolve()
     # q = 0.5*randn(g.np)
     x = g.p[:, 1]
     y = g.p[:, 2]
-    # Δ = 0.1
-    # q = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
-    q = @. (1 - y^2)*(1 - x^2 - y^2)
+    Δ = 0.1
+    q = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
+    # q = @. (1 - y^2)*(1 - x^2 - y^2)
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
@@ -141,22 +169,26 @@ function evolve()
 
     # step forward
     t1 = time()
-    N = 1700
+    N = 1000
     for i ∈ 1:N
         # invert
         invert!(ψ, inv_LHS, M, q)
 
         # advect (RK2)
-        dq = adv_LHS\advection(A, q.values, ψ)
-        dq = adv_LHS\advection(A, q.values + Δt/2*dq, ψ)
-        q.values[:] = q.values - Δt*dq
+        # dq = adv_LHS\advection(A, q.values, ψ)
+        # dq = adv_LHS\advection(A, q.values + Δt/2*dq, ψ)
+        # q.values[:] = q.values - Δt*dq
 
-        # # advect (RK2)
+        # advect (RK2)
         # u, v = compute_velocities(ψ)
         # M_SD, A_SD = build_SD_matrices(g, δ, u, v)
         # dq = (M + M_SD)\(A_SD*q.values)
         # dq = (M + M_SD)\(A_SD*(q.values + Δt/2*dq))
-        # q.values[:] = q.values - Δt*dq
+        adv, M_SD = advection(q.values, ψ, δ)
+        dq = (M + M_SD)\adv
+        adv, M_SD = advection(q.values + Δt/2*dq, ψ, δ)
+        dq = (M + M_SD)\adv
+        q.values[:] = q.values - Δt*dq
 
         if mod(i, 100) == 0
             # CFL
