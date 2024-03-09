@@ -44,72 +44,9 @@ function compute_velocities(ψ)
 end
 
 """
-Aᵢⱼₖ = ∫ [∂x(ψⱼ)∂y(qₖ) - ∂y(ψⱼ)∂x(qₖ)] φᵢ. 
 """
-function build_advection_array(g)
+function build_advection_arrays(g, δ)
     # unpack
-    J = g.J
-    el = g.el
-
-    # compute general integrals
-    f(ξ, i, j, k, d1, d2) = ∂φ(el, ξ, k, d1)*∂φ(el, ξ, j, d2)*φ(el, ξ, i)
-    A_el = [nuPGCM.ref_el_quad(ξ -> f(ξ, i, j, k, d1, d2), el) for i=1:el.n, j=1:el.n, k=1:el.n, d1=1:2, d2=1:2]
-
-    # allocate
-    A = zeros(g.nt, el.n, el.n, el.n)
-
-    for k=1:g.nt
-        # unpack
-        jac = J.Js[k, :, :]
-        Δ = J.dets[k]
-
-        for d1=1:2, d2=1:2
-            A[k, :, :, :] += A_el[:, :, :, d1, d2]*(jac[d1, 2]*jac[d2, 1] - jac[d1, 1]*jac[d2, 2])*Δ
-        end
-    end
-
-    return A
-end
-
-function build_SD_matrices(g, δ, u, v)
-    J = g.J
-    el = g.el
-    M_SD = zeros(g.np, g.np)
-    A_SD = zeros(g.np, g.np)
-    for k ∈ 1:g.nt
-        jac = J.Js[k, :, :]
-        Δ = J.dets[k]
-
-        f_M(ξ, i, j) = (u(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 1] + ∂φ(el, ξ, i, 2)*jac[2, 1]) + 
-                        v(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 2] + ∂φ(el, ξ, i, 2)*jac[2, 2]))*φ(el, ξ, j)*Δ
-        M_SDᵏ = [nuPGCM.ref_el_quad(ξ -> f_M(ξ, i, j), el) for i ∈ 1:g.nn, j ∈ 1:g.nn]
-
-        f_A(ξ, i, j) = (u(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 1] + ∂φ(el, ξ, i, 2)*jac[2, 1]) + 
-                        v(ξ, k)*(∂φ(el, ξ, i, 1)*jac[1, 2] + ∂φ(el, ξ, i, 2)*jac[2, 2]))*
-                       (u(ξ, k)*(∂φ(el, ξ, j, 1)*jac[1, 1] + ∂φ(el, ξ, j, 2)*jac[2, 1]) + 
-                        v(ξ, k)*(∂φ(el, ξ, j, 1)*jac[1, 2] + ∂φ(el, ξ, j, 2)*jac[2, 2]))*Δ
-        A_SDᵏ = [nuPGCM.ref_el_quad(ξ -> f_A(ξ, i, j), el) for i ∈ 1:g.nn, j ∈ 1:g.nn]
-
-        for i ∈ 1:g.nn, j ∈ 1:g.nn
-            M_SD[g.t[k, i], g.t[k, j]] += δ[k]*M_SDᵏ[i, j]
-            A_SD[g.t[k, i], g.t[k, j]] += M_SDᵏ[j, i] + δ[k]*A_SDᵏ[i, j]
-        end
-    end
-    return M_SD, A_SD
-end
-
-function advection(A, q, ψ)
-    g = ψ.g
-    adv = zeros(g.np)
-    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ ∈ 1:g.nn, iq ∈ 1:g.nn
-        adv[g.t[k, i]] += A[k, i, iψ, iq]*ψ[g.t[k, iψ]]*q[g.t[k, iq]]
-    end
-    return adv
-end
-
-function advection_SD(q, ψ, δ)
-    # unpack
-    g = ψ.g
     el = g.el
     w = el.quad_wts
     φ = g.φ_qp
@@ -117,43 +54,62 @@ function advection_SD(q, ψ, δ)
     φy = g.∂φ_qp[:, :, 2, :]
     Δ = g.J.dets
 
-    adv = zeros(g.np)
-    M_SD_I = zeros(Int64, g.nt*g.nn^2*length(w))
-    M_SD_J = zeros(Int64, g.nt*g.nn^2*length(w))
-    M_SD_V = zeros(Float64, g.nt*g.nn^2*length(w))
-    n = 1
-    for k ∈ 1:g.nt
-        u = zeros(length(w))
-        v = zeros(length(w))
-        for iψ ∈ 1:g.nn
-            v += φx[k, iψ, :]*ψ[g.t[k, iψ]]
-            u -= φy[k, iψ, :]*ψ[g.t[k, iψ]]
-        end
-        for i ∈ 1:g.nn, iq ∈ 1:g.nn
-            for i_quad ∈ eachindex(w)
-                qx = φx[k, iq, i_quad]*q[g.t[k, iq]]
-                qy = φy[k, iq, i_quad]*q[g.t[k, iq]]
-                φ∇uq = w[i_quad]*(u[i_quad]*qx + v[i_quad]*qy)*φ[i, i_quad]*Δ[k]
-                adv[g.t[k, i]] += φ∇uq + 
-                                  δ[k]*w[i_quad]*(u[i_quad]*qx               + v[i_quad]*qy)*
-                                                 (u[i_quad]*φx[k, i, i_quad] + v[i_quad]*φy[k, i, i_quad])*Δ[k]
-                M_SD_I[n] = g.t[k, iq]
-                M_SD_J[n] = g.t[k, i]
-                M_SD_V[n] = δ[k]*φ∇uq
-                n += 1
-            end
+    # allocate
+    A1 = zeros(g.nt, el.n, el.n, el.n)
+    A2 = zeros(g.nt, el.n, el.n, el.n, el.n)
+    A3 = zeros(g.nt, el.n, el.n, el.n)
+
+    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ1 ∈ 1:g.nn, iq ∈ 1:g.nn, i_quad ∈ eachindex(w)
+        u1 = -φy[k, iψ1, i_quad]
+        v1 =  φx[k, iψ1, i_quad]
+        A1[k, i, iψ1, iq] +=      w[i_quad]*(u1*φx[k, iq, i_quad] + v1*φy[k, iq, i_quad])*φ[i, i_quad]*Δ[k]
+        A3[k, i, iψ1, iq] += δ[k]*w[i_quad]*(u1*φx[k, i,  i_quad] + v1*φy[k, i,  i_quad])*φ[iq, i_quad]*Δ[k]
+        for iψ2 ∈ 1:g.nn
+            u2 = -φy[k, iψ2, i_quad]
+            v2 =  φx[k, iψ2, i_quad]
+            A2[k, i, iψ1, iψ2, iq] += δ[k]*w[i_quad]*(u1*φx[k, iq, i_quad] + v1*φy[k, iq, i_quad])*
+                                                     (u2*φx[k, i,  i_quad] + v2*φy[k, i,  i_quad])*Δ[k]
         end
     end
-    return adv, sparse(M_SD_I, M_SD_J, M_SD_V)
+
+    return A1, A2, A3
+end
+
+function advection(A1, A2, q, ψ)
+    g = ψ.g
+    adv = zeros(g.np)
+    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ1 ∈ 1:g.nn, iq ∈ 1:g.nn
+        adv[g.t[k, i]] += A1[k, i, iψ1, iq]*ψ[g.t[k, iψ1]]*q[g.t[k, iq]]
+        for iψ2 ∈ 1:g.nn
+            adv[g.t[k, i]] += A2[k, i, iψ1, iψ2, iq]*ψ[g.t[k, iψ1]]*ψ[g.t[k, iψ2]]*q[g.t[k, iq]]
+        end
+    end
+    return adv
+end
+
+function build_M_SD(A3, q, ψ)
+    g = ψ.g
+    M_SD_I = zeros(Int64,   g.nt*g.nn^3)
+    M_SD_J = zeros(Int64,   g.nt*g.nn^3)
+    M_SD_V = zeros(Float64, g.nt*g.nn^3)
+    n = 1
+    for k ∈ 1:g.nt, i ∈ 1:g.nn, iψ ∈ 1:g.nn, iq ∈ 1:g.nn
+        M_SD_I[n] = g.t[k, i]
+        M_SD_J[n] = g.t[k, iq]
+        M_SD_V[n] = A3[k, i, iψ, iq]*ψ[g.t[k, iψ]]*q[g.t[k, iq]]
+        n += 1
+    end
+    return sparse(M_SD_I, M_SD_J, M_SD_V)
 end
 
 function evolve()
     # params
-    Δt = 1e-2
+    Δt = 2e-1
     λ = 0.5
 
     # grid
-    g = Grid(Triangle(order=1), "../meshes/circle/mesh4.h5")
+    # g = Grid(Triangle(order=1), "../meshes/circle/mesh4.h5")
+    g = Grid(Triangle(order=1), "../meshes/rectangle/mesh4.h5")
 
     # δ = 0.1*(local mesh width)
     h = sqrt.(g.J.dets)*2/3^(1/4)
@@ -163,47 +119,47 @@ function evolve()
     K = nuPGCM.stiffness_matrix(g)
     M = nuPGCM.mass_matrix(g)
     Pinv = sparse(inv(Diagonal(M)))
-    adv_LHS = lu(M)
     inv_LHS = build_inversion_LHS(g, K, M, λ)
-    A = build_advection_array(g)
+    A1, A2, A3 = build_advection_arrays(g, δ)
 
     # initial condition
-    # q = 0.5*randn(g.np)
     x = g.p[:, 1]
     y = g.p[:, 2]
-    Δ = 0.1
-    q = @. 0.9*(exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)))
-    qmax = maximum(abs.(q))
-    # q = @. (1 - y^2)*(1 - x^2 - y^2)
+    # Δ = 0.1
+    # q = @. exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2))
+    q = 2*(rand(g.np) .- 0.5)
+    # qmax = maximum(abs.(q))
+    qmax = 0
+    contour = false
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
-    u, v = compute_velocities(ψ)
-    # nuPGCM.quick_plot(ψ, cb_label=L"Streamfunction $\psi$", filename="$out_folder/psi.png")
-    nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q000.png"; vmax=qmax)
-    # nuPGCM.quick_plot(u, cb_label=L"u", filename="$out_folder/u.png")
-    # nuPGCM.quick_plot(v, cb_label=L"v", filename="$out_folder/v.png")
+    nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q000.png"; contour, vmax=qmax)
 
     # step forward
     t1 = time()
     N = 10000
     dq = zeros(g.np)
+    dq_prev = zeros(g.np)
     i_img = 1
     for i ∈ 1:N
-        # invert
-        invert!(ψ, inv_LHS, M, q)
+        if i == 1
+            # euler first step
+            invert!(ψ, inv_LHS, M, q)
+            adv = advection(A1, A2, q.values, ψ)
+            M_SD = build_M_SD(A3, q.values, ψ)
+            nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
+            q.values[:] = q.values - Δt*dq
+        else
+            # AB2 otherwise
+            invert!(ψ, inv_LHS, M, q)
+            adv = advection(A1, A2, q.values, ψ)
+            M_SD = build_M_SD(A3, q.values, ψ)
+            nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
+            q.values[:] = q.values - 3/2*Δt*dq + 1/2*Δt*dq_prev
+        end
 
-        # # advect (RK2)
-        # dq = adv_LHS\advection(A, q.values, ψ)
-        # dq = adv_LHS\advection(A, q.values + Δt/2*dq, ψ)
-        # q.values[:] = q.values - Δt*dq
-
-        # advect (RK2)
-        adv, M_SD = advection_SD(q.values, ψ, δ)
-        nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
-        adv, M_SD = advection_SD(q.values + Δt/2*dq, ψ, δ)
-        nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
-        q.values[:] = q.values - Δt*dq
+        dq_prev[:] = dq[:]
 
         if mod(i, 100) == 0
             # CFL
@@ -212,11 +168,8 @@ function evolve()
             println("CFL Δt: ", min(minimum(abs.(h./u.values)), minimum(abs.(h./v.values))))
 
             # plots
-            # nuPGCM.quick_plot(ψ, cb_label=L"Streamfunction $\psi$", filename="$out_folder/psi.png")
-            nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename=@sprintf("%s/q%03d.png", out_folder, i_img); vmax=qmax)
+            nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename=@sprintf("%s/q%03d.png", out_folder, i_img); contour, vmax=qmax)
             i_img += 1
-            # nuPGCM.quick_plot(u, cb_label=L"u", filename="$out_folder/u.png")
-            # nuPGCM.quick_plot(v, cb_label=L"v", filename="$out_folder/v.png")
         end
     end
     t2 = time()
