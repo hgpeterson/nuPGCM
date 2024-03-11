@@ -104,16 +104,16 @@ end
 
 function evolve()
     # params
-    Δt = 2e-1
-    λ = 0.5
+    Δt = 1e-1
+    λ = 0.1
 
     # grid
     # g = Grid(Triangle(order=1), "../meshes/circle/mesh4.h5")
-    g = Grid(Triangle(order=1), "../meshes/rectangle/mesh4.h5")
+    g = Grid(Triangle(order=1), "../meshes/H/mesh4.h5")
 
     # δ = 0.1*(local mesh width)
     h = sqrt.(g.J.dets)*2/3^(1/4)
-    δ = 0.2*h
+    δ = 0.3*h
 
     # matrices
     K = nuPGCM.stiffness_matrix(g)
@@ -134,7 +134,7 @@ function evolve()
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
-    nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q000.png"; contour, vmax=qmax)
+    quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q000.png"; contour, vmax=qmax)
 
     # step forward
     t1 = time()
@@ -168,7 +168,7 @@ function evolve()
             println("CFL Δt: ", min(minimum(abs.(h./u.values)), minimum(abs.(h./v.values))))
 
             # plots
-            nuPGCM.quick_plot(q, cb_label=L"PV $q$", filename=@sprintf("%s/q%03d.png", out_folder, i_img); contour, vmax=qmax)
+            quick_plot(q, cb_label=L"PV $q$", filename=@sprintf("%s/q%03d.png", out_folder, i_img); contour, vmax=qmax)
             i_img += 1
         end
     end
@@ -176,6 +176,21 @@ function evolve()
     println((t2 - t1)/N)
 
     return q
+end
+
+function quick_plot(u; cb_label, filename, contour, vmax)
+    g = u.g
+    fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
+    vmax = maximum(abs(u))
+    im = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u.values, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="gouraud", rasterized=true)
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.axis("equal")
+    savefig(filename)
+    println(filename)
+    plt.close()
 end
 
 q = evolve()

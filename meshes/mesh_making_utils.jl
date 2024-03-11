@@ -1,4 +1,5 @@
 using nuPGCM
+using PyPlot
 using HDF5
 import Gmsh: gmsh
 
@@ -60,7 +61,8 @@ end
 function make_meshes(mesh_maker::Function, shape)
     for i=0:5
         # res
-        h = 1e-2*2^(5-i)
+        # h = 1e-2*2^(5-i)
+        h = 1e-2*2. ^(3-i)
 
         # make mesh.msh file
         mesh_maker(h)
