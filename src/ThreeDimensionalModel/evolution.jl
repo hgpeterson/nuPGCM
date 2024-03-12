@@ -310,6 +310,7 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
         HM_gpu = CuSparseMatrixCSC(HM)
         Pinv_adv = CuSparseMatrixCSC(sparse(inv(Diagonal(HM))))
         adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
+        adv_prev = zeros(eltype(HM_gpu), g2.np) 
         LHS_hdiff = CuSparseMatrixCSC(LHS_hdiff)
         RHS_hdiff = CuSparseMatrixCSC(RHS_hdiff)
         Pinv_hdiff = CuSparseMatrixCSC(Pinv_hdiff)
@@ -372,18 +373,21 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
             # invert
             invert!(m, s)
 
-            # advect first half-step
+            # update adv
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values)
             adv_node_gpu = CuArray(el_map*adv_el[:])
             cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv_adv)
 
-            # advect second half-step
-            adv_el = advection(m, s.χx.values, s.χy.values, s.b.values .+ Δt/2*Array(adv))
-            adv_node_gpu = CuArray(el_map*adv_el[:])
-            cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv_adv)
+            if i == 1
+                # euler first step
+                s.b.values[:] = s.b.values + Δt*Array(adv)
+            else
+                # AB2 otherwise
+                s.b.values[:] = s.b.values + 3/2*Δt*Array(adv) - 1/2*Δt*adv_prev
+            end
 
-            # update
-            s.b.values[:] = s.b.values + Δt*Array(adv)
+            # save for AB2
+            adv_prev[:] = Array(adv)[:]
         end
         # end
 
