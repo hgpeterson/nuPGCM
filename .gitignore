@@ -15,6 +15,7 @@
 *.svg
 *.gif
 *.mp4
+*.webm
 
 # ignore swap files
 *.swp
