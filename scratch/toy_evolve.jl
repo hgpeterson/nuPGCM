@@ -2,7 +2,7 @@ using nuPGCM
 using PyPlot
 using LinearAlgebra
 using Random
-using ProgressMeter
+using HDF5
 using SparseArrays
 using Printf
 
@@ -102,18 +102,25 @@ function build_M_SD(A3, q, ψ)
     return sparse(M_SD_I, M_SD_J, M_SD_V)
 end
 
+function save_q(q, filename)
+    file = h5open(filename, "w")
+    write(file, "q", q.values)
+    close(file)
+    println(filename)
+end
+
 function evolve()
     # params
     Δt = 1e-1
-    λ = 0.1
+    λ = 0.05
 
     # grid
     # g = Grid(Triangle(order=1), "../meshes/circle/mesh4.h5")
     g = Grid(Triangle(order=1), "../meshes/H/mesh4.h5")
 
-    # δ = 0.1*(local mesh width)
+    # δ = const*(local mesh width)
     h = sqrt.(g.J.dets)*2/3^(1/4)
-    δ = 0.3*h
+    δ = 1.0*h
 
     # matrices
     K = nuPGCM.stiffness_matrix(g)
@@ -127,14 +134,16 @@ function evolve()
     y = g.p[:, 2]
     # Δ = 0.1
     # q = @. exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2))
-    q = 2*(rand(g.np) .- 0.5)
+    # q = 2*(rand(g.np) .- 0.5)
+    q = copy(q_smoothed.values)
     # qmax = maximum(abs.(q))
-    qmax = 0
+    qmax = 1.0
+    # qmax = 0
     contour = false
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
-    quick_plot(q, cb_label=L"PV $q$", filename="$out_folder/q000.png"; contour, vmax=qmax)
+    quick_plot(q, filename="$out_folder/images/q000.png", vmax=qmax)
 
     # step forward
     t1 = time()
@@ -143,22 +152,23 @@ function evolve()
     dq_prev = zeros(g.np)
     i_img = 1
     for i ∈ 1:N
+        # update flow
+        invert!(ψ, inv_LHS, M, q)
+
+        # compute dq
+        adv = advection(A1, A2, q.values, ψ)
+        M_SD = build_M_SD(A3, q.values, ψ)
+        nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
+
         if i == 1
             # euler first step
-            invert!(ψ, inv_LHS, M, q)
-            adv = advection(A1, A2, q.values, ψ)
-            M_SD = build_M_SD(A3, q.values, ψ)
-            nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
             q.values[:] = q.values - Δt*dq
         else
             # AB2 otherwise
-            invert!(ψ, inv_LHS, M, q)
-            adv = advection(A1, A2, q.values, ψ)
-            M_SD = build_M_SD(A3, q.values, ψ)
-            nuPGCM.cg!(dq, M + M_SD, adv; Pinv)
             q.values[:] = q.values - 3/2*Δt*dq + 1/2*Δt*dq_prev
         end
 
+        # save for next step
         dq_prev[:] = dq[:]
 
         if mod(i, 100) == 0
@@ -167,8 +177,9 @@ function evolve()
             println("\ni = $i/$N")
             println("CFL Δt: ", min(minimum(abs.(h./u.values)), minimum(abs.(h./v.values))))
 
-            # plots
-            quick_plot(q, cb_label=L"PV $q$", filename=@sprintf("%s/q%03d.png", out_folder, i_img); contour, vmax=qmax)
+            # plot and save
+            quick_plot(q, filename=@sprintf("%s/images/q%03d.png", out_folder, i_img), vmax=qmax)
+            save_q(q, @sprintf("%s/data/q%03d.h5", out_folder, i_img))
             i_img += 1
         end
     end
@@ -178,17 +189,19 @@ function evolve()
     return q
 end
 
-function quick_plot(u; cb_label, filename, contour, vmax)
+function quick_plot(u; filename, vmax=0)
     g = u.g
-    fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
-    vmax = maximum(abs(u))
+    fig, ax = plt.subplots(1, figsize=(3.2, 4.5))
+    if vmax == 0
+        vmax = maximum(abs(u))
+    end
     im = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u.values, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="gouraud", rasterized=true)
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.axis("equal")
-    savefig(filename)
+    savefig(filename, transparent=true)
     println(filename)
     plt.close()
 end
