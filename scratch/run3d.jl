@@ -26,11 +26,10 @@ function setup()
     μϱ = 1e-4
     f = 1.
     β = 0.
-    # β = 0.95
     params = Params(; ε², μϱ, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
+    geom = Geometry(:circle, H, res=2, nσ=0, chebyshev=true)
 
     # forcing
     τx(x) = 0.
@@ -41,23 +40,26 @@ function setup()
     forcing = Forcing(geom, τx, τy, ν, κ)
 
     # setup and save
-    m = ModelSetup3D(params, geom, forcing, advection=false)
+    m = ModelSetup3D(params, geom, forcing, advection=true)
     save_setup(m)
 
     return m
 end
 
 function run3d(m::ModelSetup3D)
+    b_func(x) = exp(-((x[1] + 0.25)^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1) - exp(-((x[1] - 0.25)^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1)
+    b = FEField(b_func, m.geom.g2)
     # b = FEField(x -> H(x)*x[3], m.geom.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
     # b = FEField(x -> x[1], m.geom.g2)
-    b = FEField(x -> -cos(π*x[1]/2), m.geom.g2)
+    # b = FEField(x -> -cos(π*x[1]/2), m.geom.g2)
     # s = initial_state(m, b)
-    s = initial_state(m, b, showplots=true)
+    s = initial_state(m, b, showplots=false)
+    nuPGCM.plot_u(m, s, 0)
 
-    Δt = 1e-4
-    t_save = 1e-3
-    t_final = 1e-1
+    # Δt = 1e-4
+    # t_save = 1e-3
+    # t_final = 1e-1
     # evolve!(m, s, t_final, t_save; Δt)
     return s
 end
@@ -74,6 +76,7 @@ function postprocess()
     end
     # run(`bash -c "make_movie 20 psi"`)
 end
+
 
 # m = setup()
 # m = load_setup_3D("$out_folder/data/setup.h5")

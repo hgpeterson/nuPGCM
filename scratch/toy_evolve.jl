@@ -120,7 +120,7 @@ function evolve()
 
     # δ = const*(local mesh width)
     h = sqrt.(g.J.dets)*2/3^(1/4)
-    δ = 1.0*h
+    δ = 2.0*h
 
     # matrices
     K = nuPGCM.stiffness_matrix(g)
@@ -135,15 +135,14 @@ function evolve()
     # Δ = 0.1
     # q = @. exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2))
     # q = 2*(rand(g.np) .- 0.5)
-    q = copy(q_smoothed.values)
-    # qmax = maximum(abs.(q))
+    q = @. sin(10*π*y)*sin(10*π*x)
+    q .+= 0.05*(rand(g.np) .- 0.5)
     qmax = 1.0
-    # qmax = 0
-    contour = false
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
     quick_plot(q, filename="$out_folder/images/q000.png", vmax=qmax)
+    save_q(q, "$out_folder/data/q000.h5")
 
     # step forward
     t1 = time()

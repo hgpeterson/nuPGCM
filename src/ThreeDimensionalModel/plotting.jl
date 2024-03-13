@@ -395,8 +395,10 @@ function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true,
     end
     cb = colorbar(img, ax=ax, label=cb_label, fraction=0.0235)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    levels = range(-1, 0, length=20)
-    ax.contour(xx, zz, b, levels=levels[1:end-1], colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
+    levels = range(minimum(b), maximum(b), length=20)
+    ax.contour(xx, zz, b, levels=levels[1:end-1], colors="k", alpha=0.3, linewidths=0.5)
+    # levels = range(-1, 0, length=20)
+    # ax.contour(xx, zz, b, levels=levels[1:end-1], colors="k", alpha=0.3, linestyles="-", linewidths=0.5)
     ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
