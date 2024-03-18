@@ -22,20 +22,20 @@ H(x) = 1 - x[1]^2 - x[2]^2
 
 function setup()
     # params
-    ε² = 1e-4
-    μϱ = 1e-4
+    ε² = 1e0
+    μϱ = 1e0
     f = 1.
     β = 0.
     params = Params(; ε², μϱ, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=2, nσ=0, chebyshev=true)
+    geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
 
     # forcing
     τx(x) = 0.
     τy(x) = 0.
-    κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
-    # κ(σ, H) = 1 + 0*σ*H
+    # κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
+    κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
     forcing = Forcing(geom, τx, τy, ν, κ)
 
@@ -47,20 +47,21 @@ function setup()
 end
 
 function run3d(m::ModelSetup3D)
-    b_func(x) = exp(-((x[1] + 0.25)^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1) - exp(-((x[1] - 0.25)^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1)
+    δ = 0.1
+    b_func(x) = H(x)*x[3] + 0.5 * (exp(-((x[1] + 0.25)^2 + x[2]^2)/δ) - exp(-((x[1] - 0.25)^2 + x[2]^2)/δ)) * sqrt(π*δ)/2 * erf((H(x)*x[3] + 0.5)/sqrt(δ))
     b = FEField(b_func, m.geom.g2)
     # b = FEField(x -> H(x)*x[3], m.geom.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
     # b = FEField(x -> x[1], m.geom.g2)
     # b = FEField(x -> -cos(π*x[1]/2), m.geom.g2)
-    # s = initial_state(m, b)
-    s = initial_state(m, b, showplots=false)
-    nuPGCM.plot_u(m, s, 0)
+    s = initial_state(m, b; showplots=false)
+    # nuPGCM.plot_u(m, s, 0, i=0)
+    # nuPGCM.plot_profiles(m, s; x=0.25, y=0.0)
 
-    # Δt = 1e-4
-    # t_save = 1e-3
-    # t_final = 1e-1
-    # evolve!(m, s, t_final, t_save; Δt)
+    Δt = 1e-2
+    t_save = 10
+    t_final = 1000
+    evolve!(m, s, t_final, t_save; Δt)
     return s
 end
 
@@ -87,47 +88,6 @@ s = run3d(m)
 
 # m = load_setup_3D("../../group_dir/sim011/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "../../group_dir/sim011/adv_on/output/data/state10.h5")
-
-# using PyCall
-# lines = pyimport("matplotlib.lines")
-# Ux, Uy = nuPGCM.compute_U(s.Ψ)
-# Ux = FEField(Ux)
-# Uy = FEField(Uy)
-# x = -1.0:0.01:1.0
-# y = 0
-# fig, ax = plt.subplots(1)
-# ax.axhline(0, c="k", ls="--", lw=0.25)
-# ax.set_xlim(-1, 1)
-# ax.set_ylim(-0.06, 0.06)
-# ax.set_xlabel(L"Zonal coordinate $x$")
-# ax.set_ylabel("Transport")
-# ax.plot(x, [Ux([x₀, y]) for x₀ ∈ x], "C0-")
-# ax.plot(x, Ux_beta, "C0--")
-# ax.plot(x, [Uy([x₀, y]) for x₀ ∈ x], "C1-")
-# ax.plot(x, Uy_beta, "C1--")
-# custom_handles = [lines.Line2D([0], [0], c="C0", ls="-",  lw=1),
-#                   lines.Line2D([0], [0], c="C1", ls="-",  lw=1),
-#                   lines.Line2D([0], [0], c="k",  ls="-",  lw=1),
-#                   lines.Line2D([0], [0], c="k",  ls="--", lw=1)]
-# custom_labels = [L"U^x", L"U^y", L"$f$-plane", L"$\beta$-plane"]
-# ax.legend(custom_handles, custom_labels, ncol=2)
-# savefig("$out_folder/images/U.png")
-# println("$out_folder/images/U.png")
-
-# # f/H
-# f = m.params.f
-# β = m.params.β
-# g_sfc2 = m.geom.g_sfc2
-# f_over_H = FEField(x->f + β*x[2], g_sfc2)/m.geom.H
-# vmax = 1e1
-# f_over_H.values[g_sfc2.e["bdy"]] .= vmax
-# nuPGCM.quick_plot(f_over_H, cb_label=L"f/H", filename="$out_folder/images/f_over_H.png"; vmax, contour_levels=10)
-
-# # Psi
-# nuPGCM.quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", filename="$out_folder/images/psi.png")
-
-# # ux, uy
-# nuPGCM.plot_u(m, s, 0; title="")
 
 # ωx_b, ωy_b, χx_b, χy_b, Ux_BL_b, Uy_BL_b = nuPGCM.solve_baroclinic_buoyancy_BL(m, s.b)
 

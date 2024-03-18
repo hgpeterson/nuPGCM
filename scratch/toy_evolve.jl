@@ -10,7 +10,13 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
 
-set_out_folder("../output")
+set_out_folder("../output/delta2.5")
+if !isdir("$out_folder/data")
+    mkdir("$out_folder/data")
+end
+if !isdir("$out_folder/images")
+    mkdir("$out_folder/images")
+end
 
 Random.seed!(42)
 
@@ -109,9 +115,16 @@ function save_q(q, filename)
     println(filename)
 end
 
+function read_q(filename)
+    file = h5open(filename, "r")
+    q = read(file, "q")
+    close(file)
+    return q
+end
+
 function evolve()
     # params
-    Δt = 1e-1
+    Δt = 5e-2
     λ = 0.05
 
     # grid
@@ -120,7 +133,7 @@ function evolve()
 
     # δ = const*(local mesh width)
     h = sqrt.(g.J.dets)*2/3^(1/4)
-    δ = 2.0*h
+    δ = 2.5*h
 
     # matrices
     K = nuPGCM.stiffness_matrix(g)
@@ -134,22 +147,24 @@ function evolve()
     y = g.p[:, 2]
     # Δ = 0.1
     # q = @. exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2))
-    # q = 2*(rand(g.np) .- 0.5)
-    q = @. sin(10*π*y)*sin(10*π*x)
-    q .+= 0.05*(rand(g.np) .- 0.5)
+    # q = @. sin(10*π*y)*sin(10*π*x)
+    # q .+= 0.05*(rand(g.np) .- 0.5)
+    # i_img = 0
+    i_img = 195
+    q = read_q(@sprintf("%s/data/q%03d.h5", out_folder, i_img))
     qmax = 1.0
     q = FEField(q, g)
     ψ = FEField(0, g)
     invert!(ψ, inv_LHS, M, q)
-    quick_plot(q, filename="$out_folder/images/q000.png", vmax=qmax)
-    save_q(q, "$out_folder/data/q000.h5")
+    quick_plot(q, filename=@sprintf("%s/images/q%03d.png", out_folder, i_img), vmax=qmax)
+    # save_q(q, @sprintf("%s/data/q%03d.h5", out_folder, i_img))
+    i_img += 1
 
     # step forward
     t1 = time()
-    N = 10000
+    N = 100000
     dq = zeros(g.np)
     dq_prev = zeros(g.np)
-    i_img = 1
     for i ∈ 1:N
         # update flow
         invert!(ψ, inv_LHS, M, q)

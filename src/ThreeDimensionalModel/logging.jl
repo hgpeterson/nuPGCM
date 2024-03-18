@@ -85,7 +85,6 @@ function save_setup(m::ModelSetup3D, save_file)
 
     # EvolutionComponents
     write(file, "HM", m.evolution.HM)
-    write(file, "K_hdiff", m.evolution.K_hdiff)
     write(file, "Ax", Array(m.evolution.Ax))
     write(file, "Ay", Array(m.evolution.Ay))
     write(file, "advection", m.evolution.advection)
@@ -233,13 +232,12 @@ function load_setup_3D(filename)
     # EvolutionComponents
     println("Loading EvolutionComponents...")
     HM = read_sparse_matrix(file, "HM")
-    K_hdiff = read_sparse_matrix(file, "K_hdiff")
     K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]
     Ax = CuArray(read(file, "Ax"))
     Ay = CuArray(read(file, "Ay"))
     CUDA.memory_status()
     advection = read(file, "advection")
-    evolution = EvolutionComponents(HM, K_hdiff, K_cols, Ax, Ay, advection)
+    evolution = EvolutionComponents(HM, K_cols, Ax, Ay, advection)
 
     close(file)
     return ModelSetup3D(params, geom, forcing, inversion, evolution)
