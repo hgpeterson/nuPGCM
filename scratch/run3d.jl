@@ -23,7 +23,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 
 function setup()
     # params
-    ε² = 1e0
+    ε² = 1e-2
     μϱ = 1e0
     f = 1.
     β = 0.
@@ -35,8 +35,8 @@ function setup()
     # forcing
     τx(x) = 0.
     τy(x) = 0.
-    # κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
-    κ(σ, H) = 1 + 0*σ*H
+    κ(σ, H) = 1e-2 + exp(-H*(σ + 1)/0.1)
+    # κ(σ, H) = 1 + 0*σ*H
     ν(σ, H) = κ(σ, H)
     forcing = Forcing(geom, τx, τy, ν, κ)
 
@@ -51,18 +51,18 @@ function run3d(m::ModelSetup3D)
     # δ = 0.1
     # b_func(x) = H(x)*x[3] + 0.5 * (exp(-((x[1] + 0.25)^2 + x[2]^2)/δ) - exp(-((x[1] - 0.25)^2 + x[2]^2)/δ)) * sqrt(π*δ)/2 * erf((H(x)*x[3] + 0.5)/sqrt(δ))
     # b = FEField(b_func, m.geom.g2)
-    # b = FEField(x -> H(x)*x[3], m.geom.g2)
+    b = FEField(x -> H(x)*x[3], m.geom.g2)
     # b = FEField(x -> H(x)*x[3] + 0.1*exp(-(H(x)*x[3] + H(x))/0.1), m.geom.g2)
     # b = FEField(x -> x[1], m.geom.g2)
     # b = FEField(x -> -cos(π*x[1]/2), m.geom.g2)
-    b = FEField(x -> exp(-(x[1]^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1), m.geom.g2)
+    # b = FEField(x -> -exp(-(x[1]^2 + x[2]^2 + (x[3]*H(x) + 0.5)^2)/0.1), m.geom.g2)
     s = initial_state(m, b; showplots=false)
     # nuPGCM.plot_u(m, s, 0, i=0)
     # nuPGCM.plot_profiles(m, s; x=0.25, y=0.0)
 
-    Δt = 1e-4
-    t_save = 1e-4
-    t_final = 1
+    Δt = 1e-3 # crashes after 5 saves at 1e-2
+    t_save = 1
+    t_final = 10
     evolve!(m, s, t_final, t_save; Δt)
     return s
 end
@@ -79,7 +79,6 @@ function postprocess()
     end
     # run(`bash -c "make_movie 20 psi"`)
 end
-
 
 # m = setup()
 # m = load_setup_3D("$out_folder/data/setup.h5")

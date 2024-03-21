@@ -321,8 +321,8 @@ function plot_zslice(m::ModelSetup3D, u::AbstractField, z, cb_label, fname)
     plt.close()
 end
 
-function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=0, title=nothing)
-    if i == 0
+function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=-1, title=nothing)
+    if i == -1
         i_str = ""
     else
         i_str = @sprintf("%03d", i)
