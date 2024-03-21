@@ -30,7 +30,7 @@ function setup()
     params = Params(; ε², μϱ, f, β)
 
     # geometry
-    geom = Geometry(:circle, H, res=2, chebyshev=true)
+    geom = Geometry(:circle, H, res=3, chebyshev=false)
 
     # forcing
     τx(x) = 0.
@@ -60,8 +60,8 @@ function run3d(m::ModelSetup3D)
     # nuPGCM.plot_u(m, s, 0, i=0)
     # nuPGCM.plot_profiles(m, s; x=0.25, y=0.0)
 
-    Δt = 1e-3 # crashes after 5 saves at 1e-2
-    t_save = 1
+    Δt = 1e-3 
+    t_save = 1e-1
     t_final = 10
     evolve!(m, s, t_final, t_save; Δt)
     return s
