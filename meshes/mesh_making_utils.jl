@@ -1,7 +1,7 @@
 using nuPGCM
 using PyPlot
 using HDF5
-import Gmsh: gmsh
+# import Gmsh: gmsh
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
