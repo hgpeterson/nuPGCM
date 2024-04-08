@@ -394,7 +394,19 @@ function transformation_matrix(el::Line, p)
     return (p[2] - p[1])/2
 end
 function transformation_matrix(el::Triangle, p)
-    return [p[j+1, i] - p[1, i] for i=1:2, j=1:2]
+    p1 = p[1, :]
+    p2 = p[2, :]
+    p3 = p[3, :]
+    v1 = p2 - p1
+    v2 = p3 - p1
+    x′ = v1/norm(v1)
+    # z′ = cross(v1, v2)
+    # z′ /= norm(z′)
+    # y′ = cross(z′, x′)
+    y′ = cross(cross(v1, v2), v1)
+    y′ /= norm(y′)
+    return [dot(v1, x′)  dot(v2, x′)
+            dot(v1, y′)  dot(v2, y′)]
 end
 function transformation_matrix(el::Wedge, p)
     return [max(i, j) ≤ 2 || i == j ? p[j+1, i] - p[1, i] : 0. for i=1:3, j=1:3]
@@ -413,7 +425,10 @@ where
 function transformation_vector(el::Line, p)
     return (p[1] + p[2])/2
 end
-function transformation_vector(el::Union{Triangle, Wedge}, p)
+function transformation_vector(el::Triangle, p)
+    return [0., 0.]
+end
+function transformation_vector(el::Wedge, p)
     return p[1, :]
 end
 
