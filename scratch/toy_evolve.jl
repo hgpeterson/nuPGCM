@@ -94,8 +94,8 @@ end
 #     end
 #     return adv
 # end
-# function advection(A1, A2, q, ψ, t)
-function advection(δ, w, φ, φx, φy, Δ, q, ψ, t)
+function advection(A1, A2, q, ψ, t)
+# function advection(δ, w, φ, φx, φy, Δ, q, ψ, t)
     # unpack
     g = q.g
 
@@ -105,15 +105,15 @@ function advection(δ, w, φ, φx, φy, Δ, q, ψ, t)
     ψ_gpu = CuArray(ψ.values)
 
     # setup advection kernel
-    # kernel = @cuda launch=false gpu_adv!(adv, A1, A2, q_gpu, ψ_gpu, t)
-    kernel = @cuda launch=false gpu_adv!(adv, δ, w, φ, φx, φy, Δ, q_gpu, ψ_gpu, t)
+    kernel = @cuda launch=false gpu_adv!(adv, A1, A2, q_gpu, ψ_gpu, t)
+    # kernel = @cuda launch=false gpu_adv!(adv, δ, w, φ, φx, φy, Δ, q_gpu, ψ_gpu, t)
     config = launch_configuration(kernel.fun)
     threads = min(g.nt, config.threads)
     blocks = cld(g.nt, threads)
 
     CUDA.@sync begin
-        # kernel(adv, A1, A2, q_gpu, ψ_gpu, t; threads, blocks)
-        kernel(adv, δ, w, φ, φx, φy, Δ, q_gpu, ψ_gpu, t; threads, blocks)
+        kernel(adv, A1, A2, q_gpu, ψ_gpu, t; threads, blocks)
+        # kernel(adv, δ, w, φ, φx, φy, Δ, q_gpu, ψ_gpu, t; threads, blocks)
     end
 
     # copy result to CPU
@@ -121,30 +121,30 @@ function advection(δ, w, φ, φx, φy, Δ, q, ψ, t)
     return cpu_adv
 end
 
-# function gpu_adv!(adv, A1, A2, q, ψ, t)
-#     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-#     stride = gridDim().x * blockDim().x
-#     for k ∈ index:stride:size(A1, 1), i ∈ axes(A1, 2), iψ1 ∈ axes(A1, 3), iq ∈ axes(A1, 4)
-#         adv[k, i] += A1[k, i, iψ1, iq]*ψ[t[k, iψ1]]*q[t[k, iq]]
-#         for iψ2 ∈ axes(A2, 4)
-#             adv[k, i] += A2[k, i, iψ1, iψ2, iq]*ψ[t[k, iψ1]]*ψ[t[k, iψ2]]*q[t[k, iq]]
-#         end
-#     end
-#     return
-# end
-
-function gpu_adv!(adv, δ, w, φ, φx, φy, Δ, q, ψ, t)
+function gpu_adv!(adv, A1, A2, q, ψ, t)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
-    for k ∈ index:stride:length(Δ), i ∈ axes(t, 2), iψ1 ∈ axes(t, 2), iq ∈ axes(t, 2), i_quad ∈ eachindex(w)
-        adv[k, i] += w[i_quad]*(φx[k, iψ1, i_quad]*φy[k, iq, i_quad] - φy[k, iψ1, i_quad]*φx[k, iq, i_quad])*φ[i, i_quad]*Δ[k]*ψ[t[k, iψ1]]*q[t[k, iq]]
-        for iψ2 ∈ axes(t, 2)
-            adv[k, i] += δ[k]*w[i_quad]*(φx[k, iψ1, i_quad]*φy[k, iq, i_quad] - φy[k, iψ1, i_quad]*φx[k, iq, i_quad])*
-                                        (φx[k, iψ2, i_quad]*φy[k, i,  i_quad] - φy[k, iψ2, i_quad]*φx[k, i,  i_quad])*Δ[k]*ψ[t[k, iψ1]]*ψ[t[k, iψ2]]*q[t[k, iq]]
+    for k ∈ index:stride:size(A1, 1), i ∈ axes(A1, 2), iψ1 ∈ axes(A1, 3), iq ∈ axes(A1, 4)
+        adv[k, i] += A1[k, i, iψ1, iq]*ψ[t[k, iψ1]]*q[t[k, iq]]
+        for iψ2 ∈ axes(A2, 4)
+            adv[k, i] += A2[k, i, iψ1, iψ2, iq]*ψ[t[k, iψ1]]*ψ[t[k, iψ2]]*q[t[k, iq]]
         end
     end
     return
 end
+
+# function gpu_adv!(adv, δ, w, φ, φx, φy, Δ, q, ψ, t)
+#     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+#     stride = gridDim().x * blockDim().x
+#     for k ∈ index:stride:length(Δ), i ∈ axes(t, 2), iψ1 ∈ axes(t, 2), iq ∈ axes(t, 2), i_quad ∈ eachindex(w)
+#         adv[k, i] += w[i_quad]*(φx[k, iψ1, i_quad]*φy[k, iq, i_quad] - φy[k, iψ1, i_quad]*φx[k, iq, i_quad])*φ[i, i_quad]*Δ[k]*ψ[t[k, iψ1]]*q[t[k, iq]]
+#         for iψ2 ∈ axes(t, 2)
+#             adv[k, i] += δ[k]*w[i_quad]*(φx[k, iψ1, i_quad]*φy[k, iq, i_quad] - φy[k, iψ1, i_quad]*φx[k, iq, i_quad])*
+#                                         (φx[k, iψ2, i_quad]*φy[k, i,  i_quad] - φy[k, iψ2, i_quad]*φx[k, i,  i_quad])*Δ[k]*ψ[t[k, iψ1]]*ψ[t[k, iψ2]]*q[t[k, iq]]
+#         end
+#     end
+#     return
+# end
 
 # function build_M_SD(A3, q, ψ)
 #     g = ψ.g
@@ -224,11 +224,9 @@ function evolve()
     λ = 0.05
 
     # grid
-    g = Grid(Triangle(order=1), "../meshes/H/mesh2.h5")
-    g = add_midpoints(g)
+    g = Grid(Triangle(order=1), "../meshes/H/mesh5.h5")
+    # g = add_midpoints(g)
     println("DoF: $(g.np)")
-    println(g.nn)
-    println(size(g.t))
     t_gpu = CuArray(g.t)
     el_map = nuPGCM.build_element_map(g)
 
@@ -236,13 +234,13 @@ function evolve()
     h = sqrt.(4/π*g.J.dets) # diameter of circle with element area
     δ = 4*h
 
-    δ_gpu = CuArray(δ)
-    el = g.el
-    w_gpu = CuArray(el.quad_wts)
-    φ_gpu = CuArray(g.φ_qp)
-    φx_gpu = CuArray(g.∂φ_qp[:, :, 1, :])
-    φy_gpu = CuArray(g.∂φ_qp[:, :, 2, :])
-    Δ_gpu = CuArray(g.J.dets)
+    # δ_gpu = CuArray(δ)
+    # el = g.el
+    # w_gpu = CuArray(el.quad_wts)
+    # φ_gpu = CuArray(g.φ_qp)
+    # φx_gpu = CuArray(g.∂φ_qp[:, :, 1, :])
+    # φy_gpu = CuArray(g.∂φ_qp[:, :, 2, :])
+    # Δ_gpu = CuArray(g.J.dets)
 
     # matrices
     K = nuPGCM.stiffness_matrix(g)
@@ -260,8 +258,9 @@ function evolve()
     y = g.p[:, 2]
     # Δ = 0.1
     # q = @. exp(-(x + 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2)) - exp(-(x - 0.25)^2/(2*Δ^2) - y^2/(2*Δ^2))
-    q = @. sin(10*π*y)*sin(10*π*x)
-    q .+= 0.05*(rand(g.np) .- 0.5)
+    F = @. sin(10*π*y)*sin(10*π*x)
+    τ = 1e2
+    q = F .+ 0.05*(rand(g.np) .- 0.5)
     i_img = 0
     # q = read_q(@sprintf("%s/data/q%03d.h5", out_folder, i_img))
     qmax = 1.0
@@ -283,8 +282,8 @@ function evolve()
 
         # compute dq
         # @time "adv" begin # 0.004
-            # adv_el = advection(A1, A2, q, ψ, t_gpu)
-            adv_el = advection(δ_gpu, w_gpu, φ_gpu, φx_gpu, φy_gpu, Δ_gpu, q, ψ, t_gpu)
+            adv_el = advection(A1, A2, q, ψ, t_gpu)
+            # adv_el = advection(δ_gpu, w_gpu, φ_gpu, φx_gpu, φy_gpu, Δ_gpu, q, ψ, t_gpu)
             adv = CuArray(el_map*adv_el[:])
             M_SD = build_M_SD(M_SD_I, M_SD_J, A3, q, ψ, t_gpu)
         # end
@@ -294,10 +293,10 @@ function evolve()
 
         if i == 1
             # euler first step
-            q.values[:] = q.values - Δt*Array(dq)
+            q.values[:] = q.values - Δt*Array(dq) + Δt*(F - q.values)/τ
         else
             # AB2 otherwise
-            q.values[:] = q.values - 3/2*Δt*Array(dq) + 1/2*Δt*dq_prev
+            q.values[:] = q.values - 3/2*Δt*Array(dq) + 1/2*Δt*dq_prev + Δt*(F - q.values)/τ
         end
 
         # save for next step
