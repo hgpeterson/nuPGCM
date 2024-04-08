@@ -3,8 +3,10 @@
 
 Plot filled contour color plot of solution `u` on mesh defined by nodes positions `p` and connectivities `t`.
 """
-function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6, cb_label="", cb_orientation="vertical")
-    fig, ax = subplots(1)
+function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6, cb_label="", cb_orientation="vertical", fig=nothing, ax=nothing)
+    if fig === nothing && ax === nothing
+        fig, ax = subplots(1)
+    end
 
     # set vmax
     if vmax == 0.
