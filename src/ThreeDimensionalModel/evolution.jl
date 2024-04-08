@@ -40,8 +40,8 @@ function EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
     if advection
         # h = sqrt.(g_sfc2.J.dets)*2/3^(1/4)
         # δ = [2.5*h[get_k_sfc(k, nσ)] for k ∈ 1:g1.nt]
-        h = 2*cbrt.(3/(4π)*g1.J.dets) # diameter of sphere with volume equal to wedge
-        δ = 0.1*h
+        h = cbrt.(6/π*g1.J.dets) # diameter of sphere with volume equal to wedge
+        δ = 4*h
         Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD = build_advection_arrays(g1, g2, δ, H, nσ)
     else
         Ax1 = Ay1 = Ax_HM_SD = Ay_HM_SD = zeros(1, 1, 1, 1)
@@ -167,6 +167,9 @@ function build_advection_arrays(g1, g2, δ, H, nσ)
     nt = g1.nt
 
     # allocate
+    println("I hope you have $((4*nt*el2.n*el1.n*el2.n + 2*nt*el2.n*el1.n*el1.n*el2.n)*8/1e9)G of memory...")
+    flush(stdout)
+
     Ax1 = zeros(nt, el2.n, el1.n, el2.n)
     Ay1 = zeros(nt, el2.n, el1.n, el2.n)
     Ax2 = zeros(nt, el2.n, el1.n, el1.n, el2.n)
@@ -178,18 +181,18 @@ function build_advection_arrays(g1, g2, δ, H, nσ)
     @showprogress "Building advection arrays..." for k ∈ 1:nt, i ∈ 1:el2.n, iχ1 ∈ 1:el1.n, ib ∈ 1:el2.n, i_quad ∈ eachindex(w)
         # ∂σ(χx)*∂η(b) - ∂η(χx)*∂σ(b)
         Ax1[k, i, iχ1, ib]      +=      w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*φ2[i,  i_quad]*Δ[k]
-        # Ax_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
+        Ax_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
 
         # ∂ξ(χy)*∂σ(b) - ∂σ(χy)*∂ξ(b)
         Ay1[k, i, iχ1, ib]      +=      w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, ib, i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, ib, i_quad])*φ2[i,  i_quad]*Δ[k]
-        # Ay_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
+        Ay_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
 
-        # for iχ2 ∈ 1:el1.n
-        #     Ax2[k, i, iχ1, iχ2, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*
-        #                                               (φσ1[k, iχ2, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ2, i_quad]*φσ2[k, i,  i_quad])*Δ[k]
-        #     Ay2[k, i, iχ1, iχ2, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, ib, i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, ib, i_quad])*
-        #                                               (φξ1[k, iχ2, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ2, i_quad]*φξ2[k, i,  i_quad])*Δ[k]
-        # end
+        for iχ2 ∈ 1:el1.n
+            Ax2[k, i, iχ1, iχ2, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*
+                                                      (φσ1[k, iχ2, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ2, i_quad]*φσ2[k, i,  i_quad])*Δ[k]
+            Ay2[k, i, iχ1, iχ2, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, ib, i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, ib, i_quad])*
+                                                      (φξ1[k, iχ2, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ2, i_quad]*φξ2[k, i,  i_quad])*Δ[k]
+        end
     end
 
     # return Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD
@@ -301,8 +304,8 @@ function advection(m::ModelSetup3D, χx, χy, b, t2)
     b_gpu = CuArray(b)
 
     # setup advection kernel
-    kernel = @cuda launch=false gpu_adv!(adv, Ax1, Ay1, χx_gpu, χy_gpu, b_gpu, t2)
-    # kernel = @cuda launch=false gpu_adv!(adv, Ax1, Ay1, Ax2, Ay2, χx_gpu, χy_gpu, b_gpu, t2)
+    # kernel = @cuda launch=false gpu_adv!(adv, Ax1, Ay1, χx_gpu, χy_gpu, b_gpu, t2)
+    kernel = @cuda launch=false gpu_adv!(adv, Ax1, Ay1, Ax2, Ay2, χx_gpu, χy_gpu, b_gpu, t2)
     config = launch_configuration(kernel.fun)
     threads = min(g2.nt, config.threads)
     blocks = cld(g2.nt, threads)
@@ -310,8 +313,8 @@ function advection(m::ModelSetup3D, χx, χy, b, t2)
     # println(blocks)
 
     CUDA.@sync begin
-        kernel(adv, Ax1, Ay1, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
-        # kernel(adv, Ax1, Ay1, Ax2, Ay2, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
+        # kernel(adv, Ax1, Ay1, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
+        kernel(adv, Ax1, Ay1, Ax2, Ay2, χx_gpu, χy_gpu, b_gpu, t2; threads, blocks)
         # @cuda threads=threads blocks=cld(g2.nt, threads) gpu_adv!(adv, Ax1, Ay1, χx_gpu, χy_gpu, b_gpu, t2)
     end
 
@@ -397,17 +400,17 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
             # invert
             @time "invert!" invert!(m, s)
             
-            # @time "\tadv" begin
-            # adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu)
-            # adv_node_gpu = CuArray(el_map*adv_el[:])
-            # end
-            # @time "\tHM_SD" HM_SD = build_HM_SD(m, HM_SD_I, HM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
-            # @time "\tcg!" cg!(adv, HM_gpu + HM_SD, -adv_node_gpu; Pinv)
-
-            # update adv
-            adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu) 
+            @time "\tadv" begin
+            adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv)
+            end
+            @time "\tHM_SD" HM_SD = build_HM_SD(m, HM_SD_I, HM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
+            @time "\tcg!" cg!(adv, HM_gpu + HM_SD, -adv_node_gpu; Pinv)
+
+            # # update adv
+            # adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu) 
+            # adv_node_gpu = CuArray(el_map*adv_el[:])
+            # cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv)
 
             if i == 1
                 # euler first step
