@@ -27,7 +27,8 @@ function setup()
     μϱ = 1e0
     f = 1.
     β = 0.
-    params = Params(; ε², μϱ, f, β)
+    δ₀ = 4.
+    params = Params(; ε², μϱ, f, β, δ₀)
 
     # geometry
     geom = Geometry(:circle, H, res=3, chebyshev=false)
@@ -80,7 +81,7 @@ function postprocess()
     # run(`bash -c "make_movie 20 psi"`)
 end
 
-# m = setup()
+m = setup()
 # m = load_setup_3D("$out_folder/data/setup.h5")
 # m = load_setup_3D("../../group_dir/sim012/adv_on/output/data/setup.h5")
 # s = load_state_3D(m, "$out_folder/data/state5.h5")

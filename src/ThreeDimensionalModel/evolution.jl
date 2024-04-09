@@ -20,8 +20,9 @@ end
 """
     evolution = EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
 """
-function EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
+function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, advection)
     # unpack
+    δ₀ = params.δ₀
     σ = geom.σ
     nσ = geom.nσ
     g1 = geom.g1
@@ -41,7 +42,7 @@ function EvolutionComponents(geom::Geometry, forcing::Forcing, advection)
         # h = sqrt.(g_sfc2.J.dets)*2/3^(1/4)
         # δ = [2.5*h[get_k_sfc(k, nσ)] for k ∈ 1:g1.nt]
         h = cbrt.(6/π*g1.J.dets) # diameter of sphere with volume equal to wedge
-        δ = 4*h
+        δ = δ₀*h
         Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD = build_advection_arrays(g1, g2, δ, H, nσ)
     else
         Ax1 = Ay1 = Ax_HM_SD = Ay_HM_SD = zeros(1, 1, 1, 1)
@@ -398,14 +399,14 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
         # @time "adv" begin
         if advection_on
             # invert
-            @time "invert!" invert!(m, s)
+            invert!(m, s)
             
-            @time "\tadv" begin
+            # @time "\tadv" begin
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu)
             adv_node_gpu = CuArray(el_map*adv_el[:])
-            end
-            @time "\tHM_SD" HM_SD = build_HM_SD(m, HM_SD_I, HM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
-            @time "\tcg!" cg!(adv, HM_gpu + HM_SD, -adv_node_gpu; Pinv)
+            # end
+            HM_SD = build_HM_SD(m, HM_SD_I, HM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
+            cg!(adv, HM_gpu + HM_SD, -adv_node_gpu; Pinv)
 
             # # update adv
             # adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu) 

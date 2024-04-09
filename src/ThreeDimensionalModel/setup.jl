@@ -38,15 +38,18 @@ struct Params{FT}
 
     # meridional gradient of Coriolis
     β::FT
+
+    # Streamline diffusion strength
+    δ₀::FT
 end
 
 """
-    params = Params(; ε², μϱ, f, β)
+    params = Params(; ε², μϱ, f, β, δ₀)
 
 Set of numerical parameters for 3D model.
 """
-function Params(; ε², μϱ, f, β)
-    return Params(ε², μϱ, f, β)
+function Params(; ε², μϱ, f, β, δ₀)
+    return Params(ε², μϱ, f, β, δ₀)
 end
 
 ### Model geometry
@@ -235,7 +238,7 @@ function ModelSetup3D(params::Params, geom::Geometry, forcing::Forcing; advectio
     quick_plot(curl, cb_label=L"H^2 \mathbf{z} \cdot \nabla \times (\tau / H)", filename="$out_folder/images/curl.png")
 
     inversion = InversionComponents(params, geom, forcing)
-    evolution = EvolutionComponents(geom, forcing, advection)
+    evolution = EvolutionComponents(params, geom, forcing, advection)
 
     CUDA.memory_status()
 
