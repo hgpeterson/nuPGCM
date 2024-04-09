@@ -16,10 +16,10 @@ function load_msh(ifile)
 
     # find node positions by looping through indices
     np = gmsh.model.mesh.get_max_node_tag()
-    p = zeros(np, 2)
+    p = zeros(np, 3)
     for i=1:np
         coord, parametricCoord, dim, tag = gmsh.model.mesh.getNode(i)
-        p[i, :] = coord[1:2]
+        p[i, :] = coord[1:3]
     end
 
     # get tri

@@ -8,6 +8,7 @@
 *.pvsm
 *.csv
 *.pvd
+*.geo
 
 # ignore images and videos
 *.png

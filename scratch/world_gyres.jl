@@ -1,11 +1,14 @@
 using nuPGCM
 using PyPlot
+using PyCall
 using LinearAlgebra
 using SparseArrays
 
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 pygui(false)
+
+crs = pyimport("cartopy.crs")
 
 if !isdir("../output")
     mkdir("../output")
@@ -97,7 +100,7 @@ function build_barotropic_RHS(τx, τy, H, ρ)
     return rhs
 end
 
-g = Grid(Triangle(order=1), "../meshes/ocean_a.h5")
+g = Grid(Triangle(order=1), "../meshes/ocean2.h5")
 H = FEField(4e3, g)
 r = FEField(1e-5, g)
 ϕ(x) = atan(x[3]/sqrt(x[1]^2 + x[2]^2))
@@ -125,10 +128,12 @@ t2 = t[findall(k -> t[k, 1] ∈ i2 && t[k, 2] ∈ i2 && t[k, 3] ∈ i2, 1:nt), :
 e2 = e[findall(i -> e[i] ∈ i2, 1:size(e, 1))]
 fig, ax = plt.subplots(1, 2, figsize=(6.4, 2))
 nuPGCM.tplot(p[:, 2:3], t1, Ψ; fig, ax=ax[1], contour=true)
+ax[1].plot(p[e1, 2], p[e1, 3], "ko", ms=0.3, markeredgecolor="none")
 # nuPGCM.tplot(p, t1, τ.values; fig, ax=ax[1])
 p_flip = copy(p)
 p_flip[:, 2] = -p_flip[:, 2]
 nuPGCM.tplot(p_flip[:, 2:3], t2, Ψ; fig, ax=ax[2], contour=true)
+ax[2].plot(p_flip[e2, 2], p_flip[e2, 3], "ko", ms=0.3, markeredgecolor="none")
 # nuPGCM.tplot(p_flip, t2, τ.values; fig, ax=ax[2])
 ax[1].axis("equal")
 ax[2].axis("equal")
@@ -143,19 +148,20 @@ println("$out_folder/images/psi.png")
 ϕs = [ϕ(p[i, :])*180/π for i ∈ 1:np]
 pθϕ = hcat(θs, ϕs)
 tθϕ = copy(t)
+println("Number of triangles: $nt")
 for i ∈ 1:nt
     if !(sign(θs[t[i, 1]]) == sign(θs[t[i, 2]]) == sign(θs[t[i, 3]])) && abs(θs[t[i, 1]]) > 170
-        println("Longitude sign change in triangle $i")
         tθϕ[i, :] = t[1, :]
     end
 end
 tθϕ = unique(tθϕ, dims=1)
 ntθϕ = size(tθϕ, 1)
-println("Number of triangles: $ntθϕ")
-crs = pyimport("cartopy.crs")
-fig, ax = plt.subplots(subplot_kw=Dict("projection"=>crs.PlateCarree(central_longitude=180)))
+println("Number of triangles: $ntθϕ (after removing θ = 0 crossings)")
+# fig, ax = plt.subplots(subplot_kw=Dict("projection"=>crs.PlateCarree(central_longitude=180)))
+# fig, ax = plt.subplots(subplot_kw=Dict("projection"=>crs.PlateCarree()))
+fig, ax = plt.subplots(1)
 nuPGCM.tplot(pθϕ, tθϕ, Ψ; contour=true, fig, ax)
-ax.coastlines(lw=0.5)
+# ax.coastlines(lw=0.5)
 ax.plot(pθϕ[e, 1], pθϕ[e, 2], "ko", ms=0.3, markeredgecolor="none")
 ax.set_xlabel("Longitude (°)")
 ax.set_ylabel("Latitude (°)")
