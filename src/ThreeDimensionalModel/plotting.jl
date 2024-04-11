@@ -3,22 +3,23 @@
 
 Plot filled contour color plot of solution `u` on mesh defined by nodes positions `p` and connectivities `t`.
 """
-function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6, cb_label="", cb_orientation="vertical", fig=nothing, ax=nothing)
+function tplot(p, t, u; cmap="RdBu_r", vmin=0., vmax=0., contour=false, contour_levels=6, cb_label="", cb_orientation="vertical", fig=nothing, ax=nothing)
     if fig === nothing && ax === nothing
         fig, ax = subplots(1)
     end
 
     # set vmax
-    if vmax == 0.
+    if vmin == vmax == 0.
         vmax = maximum(abs.(u))
+        vmin = -vmax
         extend = "neither"
     else
         # set extend
-        if maximum(u) > vmax && minimum(u) < -vmax
+        if maximum(u) > vmax && minimum(u) < vmin
             extend = "both"
-        elseif maximum(u) > vmax && minimum(u) > -vmax
+        elseif maximum(u) > vmax && minimum(u) > vmin
             extend = "max"
-        elseif maximum(u) < vmax && minimum(u) < -vmax
+        elseif maximum(u) < vmax && minimum(u) < vmin
             extend = "min"
         else
             extend = "neither"
@@ -33,7 +34,7 @@ function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6,
         shading = "gouraud"
     end
 
-    im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=-vmax, vmax=vmax, shading=shading, rasterized=true)
+    im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, cmap=cmap, vmin=vmin, vmax=vmax, shading=shading, rasterized=true)
     if contour
         spacing = 1/(contour_levels - 2)
         levels = vmax*(spacing:spacing:1-spacing)
@@ -41,7 +42,7 @@ function tplot(p, t, u; cmap="RdBu_r", vmax=0., contour=false, contour_levels=6,
         ax.tricontour(p[:, 1], p[:, 2], t[:, 1:3] .- 1, u, colors="k", linewidths=0.5, linestyles="-", levels=levels)
     end
     cb = colorbar(im, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation)
-    cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
 
     # no spines
     ax.spines["left"].set_visible(false)
@@ -57,8 +58,10 @@ end
 
 Plot triangular mesh with nodes `p` and triangles `t`.
 """
-function tplot(p, t; lw=0.2, edgecolors="k")
-    fig, ax = subplots(1)
+function tplot(p, t; lw=0.2, edgecolors="k", fig=nothing, ax=nothing)
+    if fig === nothing && ax === nothing
+        fig, ax = subplots(1)
+    end
     im = ax.tripcolor(p[:, 1], p[:, 2], t[:, 1:3] .- 1, 0*t[:, 1], cmap="Greys", edgecolors=edgecolors, linewidth=lw, rasterized=true)
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
