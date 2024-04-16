@@ -292,6 +292,29 @@ function all_edges(t)
     return emap, edges, bndix
 end
 
+"""
+    Δs = tri_areas(p, t)
+
+Compute the area of each triangle in the grid of points `p` and elements `t`. 
+"""
+function tri_areas(p, t)
+    nt = size(t, 1)
+    areas = zeros(nt)
+    for k ∈ 1:nt
+        p0 = p[t[k, :], :]
+        v1 = p0[2, :] - p0[1, :]
+        v2 = p0[3, :] - p0[1, :]
+        areas[k] = 1/2*norm(cross(v1, v2))
+    end
+    return areas
+end
+function tri_areas(g::Grid)
+    if g.el.dim != 2
+        throw(ArgumentError("Only 2D elements are supported."))
+    end
+    return tri_areas(g.p, g.t)
+end
+
 #### Integrals #### 
 
 ∫(u_qp::AbstractArray, g::Grid) = g.J.dets'*u_qp*g.el.quad_wts

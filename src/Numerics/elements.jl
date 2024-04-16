@@ -399,14 +399,11 @@ function transformation_matrix(el::Triangle, p)
     p3 = p[3, :]
     v1 = p2 - p1
     v2 = p3 - p1
-    x′ = v1/norm(v1)
-    # z′ = cross(v1, v2)
-    # z′ /= norm(z′)
-    # y′ = cross(z′, x′)
-    y′ = cross(cross(v1, v2), v1)
-    y′ /= norm(y′)
-    return [dot(v1, x′)  dot(v2, x′)
-            dot(v1, y′)  dot(v2, y′)]
+    e_x′ = v1/norm(v1)
+    e_y′ = cross(cross(v1, v2), v1)
+    e_y′ /= norm(e_y′)
+    return [dot(v1, e_x′)  dot(v2, e_x′)
+            dot(v1, e_y′)  dot(v2, e_y′)]
 end
 function transformation_matrix(el::Wedge, p)
     return [max(i, j) ≤ 2 || i == j ? p[j+1, i] - p[1, i] : 0. for i=1:3, j=1:3]
