@@ -1,6 +1,7 @@
 struct EvolutionComponents{SM, VSM, A4, A5}
     # depth-weighted mass matrix
     HM::SM # sparse matrix
+    HHM::SM
 
     # "stiffness" matrices for vertical diffusion
     K_cols::VSM # vector of sparse matrices
@@ -10,8 +11,8 @@ struct EvolutionComponents{SM, VSM, A4, A5}
     Ay1::A4
     Ax2::A5 # 5D array
     Ay2::A5
-    Ax_HM_SD::A4 
-    Ay_HM_SD::A4
+    Ax_HHM_SD::A4 
+    Ay_HHM_SD::A4
 
     # advection on or off?
     advection::Bool
@@ -37,23 +38,22 @@ function EvolutionComponents(params::Params, geom::Geometry, forcing::Forcing, a
 
     # depth-weighted mass matrix
     HM = build_HM(g2, H, nσ)
+    HHM = build_HHM(g2, H, nσ)
 
     if advection
-        # h = sqrt.(g_sfc2.J.dets)*2/3^(1/4)
-        # δ = [2.5*h[get_k_sfc(k, nσ)] for k ∈ 1:g1.nt]
         h = cbrt.(6/π*g1.J.dets) # diameter of sphere with volume equal to wedge
         δ = δ₀*h
-        Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD = build_advection_arrays(g1, g2, δ, H, nσ)
+        Ax1, Ay1, Ax2, Ay2, Ax_HHM_SD, Ay_HHM_SD = build_advection_arrays(g1, g2, δ, H, nσ)
     else
-        Ax1 = Ay1 = Ax_HM_SD = Ay_HM_SD = zeros(1, 1, 1, 1)
+        Ax1 = Ay1 = Ax_HHM_SD = Ay_HHM_SD = zeros(1, 1, 1, 1)
         Ax2 = Ay2 = zeros(1, 1, 1, 1, 1)
     end
 
-    return EvolutionComponents(HM, K_cols, Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD, advection)
+    return EvolutionComponents(HM, HHM, K_cols, Ax1, Ay1, Ax2, Ay2, Ax_HHM_SD, Ay_HHM_SD, advection)
 end
 
 function advection_off(e::EvolutionComponents)
-    return EvolutionComponents(e.HM, e.K_cols, e.Ax1, e.Ay1, e.Ax2, e.Ay2, e.Ax_HM_SD, e.Ay_HM_SD, false)
+    return EvolutionComponents(e.HM, e.HHM, e.K_cols, e.Ax1, e.Ay1, e.Ax2, e.Ay2, e.Ax_HHM_SD, e.Ay_HHM_SD, false)
 end
 
 """
@@ -150,6 +150,36 @@ function build_HM(g2, H::FEField, nσ)
     return dropzeros!(sparse(I, J, V, g2.np, g2.np))
 end
 
+"""
+    HHM = build_HHM(g2, H, nσ)
+
+Compute `HHM` = ∫ H² φᵢ φⱼ for second order 3D grid `g2` with `nσ` vertical nodes.
+"""
+function build_HHM(g2, H::FEField, nσ)
+    # unpack
+    el = g2.el
+    w = el.quad_wts
+    qp = el.quad_pts
+    φ2 = g2.φ_qp
+    Δ = g2.J.dets
+
+    # stamp
+    I = zeros(Int64,   g2.nt*el.n^2)
+    J = zeros(Int64,   g2.nt*el.n^2)
+    V = zeros(Float64, g2.nt*el.n^2)
+    n = 1
+    @showprogress "Building H²M..." for k ∈ 1:g2.nt, i ∈ 1:el.n, j ∈ 1:el.n
+        k_sfc = get_k_sfc(k, nσ)
+        I[n] = g2.t[k, i]
+        J[n] = g2.t[k, j]
+        for i_quad ∈ eachindex(w)
+            V[n] += w[i_quad]*H(qp[i_quad, :], k_sfc)^2*φ2[i, i_quad]*φ2[j, i_quad]*Δ[k]
+        end
+        n += 1
+    end
+    return dropzeros!(sparse(I, J, V, g2.np, g2.np))
+end
+
 function build_advection_arrays(g1, g2, δ, H, nσ)
     # unpack
     el1 = g1.el
@@ -175,18 +205,20 @@ function build_advection_arrays(g1, g2, δ, H, nσ)
     Ay1 = zeros(nt, el2.n, el1.n, el2.n)
     Ax2 = zeros(nt, el2.n, el1.n, el1.n, el2.n)
     Ay2 = zeros(nt, el2.n, el1.n, el1.n, el2.n)
-    Ax_HM_SD = zeros(nt, el2.n, el1.n, el2.n)
-    Ay_HM_SD = zeros(nt, el2.n, el1.n, el2.n)
+    Ax_HHM_SD = zeros(nt, el2.n, el1.n, el2.n)
+    Ay_HHM_SD = zeros(nt, el2.n, el1.n, el2.n)
 
-    # uξ*∂ξ(b) + uη*∂η(b) + uσ*∂σ(b) = -∂σ(χy)*∂ξ(b) + ∂σ(χx)*∂η(b) + [∂ξ(χy) - ∂η(χx)]**∂σ(b) 
+    # uξ*∂ξ(b) + uη*∂η(b) + uσ*∂σ(b) = -∂σ(χy)*∂ξ(b) + ∂σ(χx)*∂η(b) + [∂ξ(χy) - ∂η(χx)]*∂σ(b) 
     @showprogress "Building advection arrays..." for k ∈ 1:nt, i ∈ 1:el2.n, iχ1 ∈ 1:el1.n, ib ∈ 1:el2.n, i_quad ∈ eachindex(w)
+        k_sfc = get_k_sfc(k, nσ)
+
         # ∂σ(χx)*∂η(b) - ∂η(χx)*∂σ(b)
-        Ax1[k, i, iχ1, ib]      +=      w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*φ2[i,  i_quad]*Δ[k]
-        Ax_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
+        Ax1[k, i, iχ1, ib]       +=      w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*φ2[i,  i_quad]*H(qp[i_quad, :], k_sfc)*Δ[k]
+        Ax_HHM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, i,  i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, i,  i_quad])*φ2[ib, i_quad]*H(qp[i_quad, :], k_sfc)*Δ[k]
 
         # ∂ξ(χy)*∂σ(b) - ∂σ(χy)*∂ξ(b)
-        Ay1[k, i, iχ1, ib]      +=      w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, ib, i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, ib, i_quad])*φ2[i,  i_quad]*Δ[k]
-        Ay_HM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]*H(qp[i_quad, :], get_k_sfc(k, nσ))
+        Ay1[k, i, iχ1, ib]       +=      w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, ib, i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, ib, i_quad])*φ2[i,  i_quad]*H(qp[i_quad, :], k_sfc)*Δ[k]
+        Ay_HHM_SD[k, i, iχ1, ib] += δ[k]*w[i_quad]*(φξ1[k, iχ1, i_quad]*φσ2[k, i,  i_quad] - φσ1[k, iχ1, i_quad]*φξ2[k, i,  i_quad])*φ2[ib, i_quad]*H(qp[i_quad, :], k_sfc)*Δ[k]
 
         for iχ2 ∈ 1:el1.n
             Ax2[k, i, iχ1, iχ2, ib] += δ[k]*w[i_quad]*(φσ1[k, iχ1, i_quad]*φη2[k, ib, i_quad] - φη1[k, iχ1, i_quad]*φσ2[k, ib, i_quad])*
@@ -196,80 +228,59 @@ function build_advection_arrays(g1, g2, δ, H, nσ)
         end
     end
 
-    # return Ax1, Ay1, Ax2, Ay2, Ax_HM_SD, Ay_HM_SD
-
-    Ax1_gpu = CuArray(Ax1)
-    Ay1_gpu = CuArray(Ay1)
-    Ax2_gpu = CuArray(Ax2)
-    Ay2_gpu = CuArray(Ay2)
-    Ax_HM_SD_gpu = CuArray(Ax_HM_SD)
-    Ay_HM_SD_gpu = CuArray(Ay_HM_SD)
-
-    return Ax1_gpu, Ay1_gpu, Ax2_gpu, Ay2_gpu, Ax_HM_SD_gpu, Ay_HM_SD_gpu
+    return CuArray(Ax1), CuArray(Ay1), CuArray(Ax2), CuArray(Ay2), CuArray(Ax_HHM_SD), CuArray(Ay_HHM_SD)
 end
-# function advection(Ax1, Ay1, Ax2, Ay2, b, χx, χy)
-#     # unpack
-#     g1 = χx.g
-#     g2 = b.g
-#     el1 = g1.el
-#     el2 = g2.el
-#     nt = g1.nt
 
-#     adv = zeros(g2.np)
-#     for k ∈ 1:nt, i ∈ 1:el2.n, iχ1 ∈ 1:el1.n, ib ∈ 1:el2.n
-#         adv[g2.t[k, i]] += (Ax1[k, i, iχ1, ib]*χx[k, iχ1] + Ay1[k, i, iχ1, ib]*χy[k, iχ1])*b[g2.t[k, ib]]
-#         for iχ2 ∈ 1:el1.n
-#             adv[g2.t[k, i]] += (Ax2[k, i, iχ1, iχ2, ib]*χx[k, iχ1]*χx[k, iχ2] + Ay2[k, i, iχ1, iχ2, ib]*χy[k, iχ1]*χy[k, iχ2])*b[g2.t[k, ib]]
-#         end
-#     end
-#     return adv
-# end
-function build_HM_SD(m::ModelSetup3D, HM_SD_I, HM_SD_J, b, χx, χy, t2)
+#### 
+
+function build_HHM_SD(m::ModelSetup3D, HHM_SD_I, HHM_SD_J, b, χx, χy, t2)
     # unpack
     g2 = m.geom.g2
-    Ax_HM_SD = m.evolution.Ax_HM_SD
-    Ay_HM_SD = m.evolution.Ay_HM_SD
+    Ax_HHM_SD = m.evolution.Ax_HHM_SD
+    Ay_HHM_SD = m.evolution.Ay_HHM_SD
 
     # load arrays on GPU
-    HM_SD_V = CUDA.zeros(g2.nt, g2.nn, g2.nn) 
+    HHM_SD_V = CUDA.zeros(g2.nn, g2.nn, g2.nt)  # transpose in order to flatten in column-major order
     χx_gpu = CuArray(χx)
     χy_gpu = CuArray(χy)
     b_gpu = CuArray(b)
 
     # setup kernel
-    kernel = @cuda launch=false gpu_HM_SD!(HM_SD_V, Ax_HM_SD, Ay_HM_SD, b_gpu, χx_gpu, χy_gpu, t2)
+    kernel = @cuda launch=false gpu_HHM_SD!(HHM_SD_V, Ax_HHM_SD, Ay_HHM_SD, b_gpu, χx_gpu, χy_gpu, t2)
     config = launch_configuration(kernel.fun)
     threads = min(g2.nt, config.threads)
     blocks = cld(g2.nt, threads)
 
     CUDA.@sync begin
-        kernel(HM_SD_V, Ax_HM_SD, Ay_HM_SD, b_gpu, χx_gpu, χy_gpu, t2; threads, blocks)
+        kernel(HHM_SD_V, Ax_HHM_SD, Ay_HHM_SD, b_gpu, χx_gpu, χy_gpu, t2; threads, blocks)
     end
 
     # sparse matrix
-    return CuSparseMatrixCSC(HM_SD_I, HM_SD_J, HM_SD_V[:], (g2.np, g2.np))
+    return CuSparseMatrixCSC(HHM_SD_I, HHM_SD_J, HHM_SD_V[:], (g2.np, g2.np))
 end
-function build_HM_SD_IJ(g2)
-    HM_SD_I = zeros(Int32, g2.nt*g2.nn*g2.nn) 
-    HM_SD_J = zeros(Int32, g2.nt*g2.nn*g2.nn) 
+function build_HHM_SD_IJ(g2)
+    HHM_SD_I = zeros(Int32, g2.nt*g2.nn*g2.nn) 
+    HHM_SD_J = zeros(Int32, g2.nt*g2.nn*g2.nn) 
     n = 1
     for k ∈ 1:g2.nt, i ∈ 1:g2.nn, ib ∈ 1:g2.nn
-        HM_SD_I[n] = g2.t[k, i]
-        HM_SD_J[n] = g2.t[k, ib]
+        HHM_SD_I[n] = g2.t[k, i]
+        HHM_SD_J[n] = g2.t[k, ib]
         n += 1
     end
-    HM_SD_I = CuArray(HM_SD_I)
-    HM_SD_J = CuArray(HM_SD_J)
-    return HM_SD_I, HM_SD_J
+    HHM_SD_I = CuArray(HHM_SD_I)
+    HHM_SD_J = CuArray(HHM_SD_J)
+    return HHM_SD_I, HHM_SD_J
 end
-function gpu_HM_SD!(HM_SD_V, Ax_HM_SD, Ay_HM_SD, b, χx, χy, t2)
+function gpu_HHM_SD!(HHM_SD_V, Ax_HHM_SD, Ay_HHM_SD, b, χx, χy, t2)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
-    for k ∈ index:stride:size(Ax_HM_SD, 1), i ∈ axes(Ax_HM_SD, 2), iχ ∈ axes(Ax_HM_SD, 3), ib ∈ axes(Ax_HM_SD, 4)
-        HM_SD_V[k, i, ib] += (Ax_HM_SD[k, i, iχ, ib]*χx[k, iχ] + Ay_HM_SD[k, i, iχ, ib]*χy[k, iχ])*b[t2[k, ib]]
+    for k ∈ index:stride:size(Ax_HHM_SD, 1), i ∈ axes(Ax_HHM_SD, 2), iχ ∈ axes(Ax_HHM_SD, 3), ib ∈ axes(Ax_HHM_SD, 4)
+        HHM_SD_V[ib, i, k] += (Ax_HHM_SD[k, i, iχ, ib]*χx[k, iχ] + Ay_HHM_SD[k, i, iχ, ib]*χy[k, iχ])*b[t2[k, ib]] # transpose in order to flatten in column-major order
     end
     return 
 end
+
+####
 
 function gpu_adv!(adv, Ax, Ay, χx, χy, b, t2)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -323,6 +334,23 @@ function advection(m::ModelSetup3D, χx, χy, b, t2)
     cpu_adv = Array(adv)
     return cpu_adv
 end
+# function advection(Ax1, Ay1, Ax2, Ay2, b, χx, χy)
+#     # unpack
+#     g1 = χx.g
+#     g2 = b.g
+#     el1 = g1.el
+#     el2 = g2.el
+#     nt = g1.nt
+
+#     adv = zeros(g2.np)
+#     for k ∈ 1:nt, i ∈ 1:el2.n, iχ1 ∈ 1:el1.n, ib ∈ 1:el2.n
+#         adv[g2.t[k, i]] += (Ax1[k, i, iχ1, ib]*χx[k, iχ1] + Ay1[k, i, iχ1, ib]*χy[k, iχ1])*b[g2.t[k, ib]]
+#         for iχ2 ∈ 1:el1.n
+#             adv[g2.t[k, i]] += (Ax2[k, i, iχ1, iχ2, ib]*χx[k, iχ1]*χx[k, iχ2] + Ay2[k, i, iχ1, iχ2, ib]*χy[k, iχ1]*χy[k, iχ2])*b[g2.t[k, ib]]
+#         end
+#     end
+#     return adv
+# end
 
 function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=0)
     # unpack
@@ -332,15 +360,22 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
     H = m.geom.H
     g_sfc2 = m.geom.g_sfc2
     HM = m.evolution.HM
+    HHM = m.evolution.HHM
     advection_on = m.evolution.advection
     t2_gpu = CuArray(g2.t)
 
     if advection_on
-        HM_gpu = CuSparseMatrixCSC(HM)
-        HM_SD_I, HM_SD_J = build_HM_SD_IJ(g2)
-        Pinv = CuSparseMatrixCSC(sparse(inv(Diagonal(HM))))
-        adv = CUDA.zeros(eltype(HM_gpu), g2.np) # pre-allocate for `cg!`
-        adv_prev = zeros(eltype(HM_gpu), g2.np) 
+        # δ = m.params.δ₀*cbrt.(6/π*g1.J.dets)
+        # A, A_HM_SD = build_advection_arrays_fixed_flow(g2, δ, H, m.geom.Hx, nσ)
+        # Pinv = sparse(inv(Diagonal(HM)))
+        # adv = zeros(g2.np)
+        # adv_prev = zeros(g2.np) 
+
+        HHM_gpu = CuSparseMatrixCSC(HHM)
+        HHM_SD_I, HHM_SD_J = build_HHM_SD_IJ(g2)
+        Pinv = CuSparseMatrixCSC(sparse(inv(Diagonal(HHM))))
+        adv = CUDA.zeros(eltype(HHM_gpu), g2.np) # pre-allocate for `cg!`
+        adv_prev = zeros(eltype(HHM_gpu), g2.np) 
         CUDA.memory_status()
 
         # Pinv = sparse(inv(Diagonal(HM)))
@@ -359,10 +394,10 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
     n_steps = Int64(round((t_final - t_current)/Δt))
     n_steps_save = Int64(round(t_save/Δt))
 
-    # # fixed flow
+    # # fixed flow: u = 1, v = w = 0 → χx = 0, χy = -σH
     # s.χx.values[:] .= 0
-    # s.χy.values[:] = -g1.p[g1.t, 3].*H[get_i_sfc.(g1.t, nσ)].^2
-    # plot_u(m, s, 0; i=0)
+    # s.χy.values[:] = -g1.p[g1.t, 3].*H[get_i_sfc.(g1.t, nσ)]
+    # plot_u(m, s, 0)
 
     # initial condition
     ∫b₀ = sum(HM*s.b.values)
@@ -405,13 +440,8 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
             adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu)
             adv_node_gpu = CuArray(el_map*adv_el[:])
             # end
-            HM_SD = build_HM_SD(m, HM_SD_I, HM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
-            cg!(adv, HM_gpu + HM_SD, -adv_node_gpu; Pinv)
-
-            # # update adv
-            # adv_el = advection(m, s.χx.values, s.χy.values, s.b.values, t2_gpu) 
-            # adv_node_gpu = CuArray(el_map*adv_el[:])
-            # cg!(adv, HM_gpu, -adv_node_gpu, Pinv=Pinv)
+            HHM_SD = build_HHM_SD(m, HHM_SD_I, HHM_SD_J, s.b.values, s.χx.values, s.χy.values, t2_gpu)
+            cg!(adv, HHM_gpu + HHM_SD, -adv_node_gpu; Pinv)
 
             if i == 1
                 # euler first step
@@ -420,6 +450,9 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
                 # AB2 otherwise
                 s.b.values[:] = s.b.values + 3/2*Δt*Array(adv) - 1/2*Δt*adv_prev
             end
+
+            # # for advection only: set b = 0 on coast
+            # s.b.values[g2.e["coast"]] .= 0
 
             # save for AB2
             adv_prev[:] = Array(adv)[:]
@@ -483,18 +516,19 @@ function evolve!(m::ModelSetup3D, s::ModelState3D, t_final, t_save; Δt, i_save=
             # @printf("    pe_prod = % .5e\n", pe_prod)
 
             # # advection solution
-            # ba = [ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np]
-            # @printf "Max Err = %1.1e\n" maximum(abs.(s.b.values - ba))
+            # ba = FEField([ba_adv(g2.p[j, :], i*Δt, H[get_i_sfc(j, nσ)]) for j=1:g2.np], g2)
+            # @printf "Max Err = %1.1e\n" maximum(abs(s.b - ba))
             # # diffusion solution
             # ba = [ba_diff(g2.p[j, 3], i*Δt, α/(1-g2.p[j, 1]^2-g2.p[j, 2]^2)^2, 1-g2.p[j, 1]^2-g2.p[j, 2]^2) for j=1:g2.np]
 
             # debug plot
-            # if !m.evolution.advection
-            #     invert!(m, s)
-            # end
+            if !m.evolution.advection
+                invert!(m, s)
+            end
             quick_plot(s.Ψ, cb_label=L"Barotropic streamfunction $\Psi$", title=latexstring(L"$t = $", @sprintf("%1.1e", s.t[1])), filename=@sprintf("%s/images/psi%03d.png", out_folder, i_save))
             plot_u(m, s, 0; i=i_save)
             plot_profiles(m, s, x=0.5, y=0.0, filename=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+            # plot_xslice(m, s.b, abs(s.b - ba), 0, L"|b - b_a|", @sprintf("%s/images/b%03d.png", out_folder, i_save))
 
             # plot_xslice(m, s.b, s.b, 0.0, L"b", @sprintf("%s/images/b%03d.png", out_folder, i_save))
 
@@ -537,7 +571,60 @@ end
 Analytical solution to ∂t(b) + ∂x(b) = 0 for gaussian initial condition.
 """
 function ba_adv(x, t, H)
-    # return exp(-((x[1] - t)^2 + x[2]^2 + (H*x[3] + 0.5)^2)/0.02)
-    # return exp(-(x[1]^2 + (x[2] - t)^2 + (H*x[3] + 0.5)^2)/0.02)
-    return exp(-(x[1]^2 + x[2]^2 + (H*x[3] + 0.5 - t)^2)/0.02)
+    return -exp(-((x[1] - t)^2 + x[2]^2 + (H*x[3] + 0.5)^2)/0.02)
 end
+
+# function build_advection_arrays_fixed_flow(g2, δ, H, Hx, nσ)
+#     # unpack
+#     el2 = g2.el
+#     w = el2.quad_wts
+#     qp = el2.quad_pts
+#     φ2 = g2.φ_qp
+#     φξ2 = g2.∂φ_qp[:, :, 1, :]
+#     φσ2 = g2.∂φ_qp[:, :, 3, :]
+#     Δ = g2.J.dets
+#     nt = g2.nt
+
+#     # fixed flow: u = 1, v = w = 0 → χx = 0, χy = -σH
+#     A = zeros(nt, el2.n, el2.n)
+#     A_HM_SD = zeros(nt, el2.n, el2.n)
+#     @showprogress "Building advection arrays..." for k ∈ 1:nt, i ∈ 1:el2.n, ib ∈ 1:el2.n, i_quad ∈ eachindex(w)
+#         # -σHₓ*∂σ(b) + H*∂ξ(b)
+#         k_sfc = get_k_sfc(k, nσ)
+#         A[k, i, ib]       +=      w[i_quad]*(H(qp[i_quad, :], k_sfc)*φξ2[k, ib, i_quad] - qp[i_quad, 3]*Hx(qp[i_quad, :], k_sfc)*φσ2[k, ib, i_quad])*φ2[i,  i_quad]*Δ[k] +
+#                              δ[k]*w[i_quad]*(H(qp[i_quad, :], k_sfc)*φξ2[k, ib, i_quad] - qp[i_quad, 3]*Hx(qp[i_quad, :], k_sfc)*φσ2[k, ib, i_quad])*
+#                                             (H(qp[i_quad, :], k_sfc)*φξ2[k, i,  i_quad] - qp[i_quad, 3]*Hx(qp[i_quad, :], k_sfc)*φσ2[k, i,  i_quad])*Δ[k]/H(qp[i_quad, :], k_sfc)
+#         A_HM_SD[k, i, ib] += δ[k]*w[i_quad]*(H(qp[i_quad, :], k_sfc)*φξ2[k, i,  i_quad] - qp[i_quad, 3]*Hx(qp[i_quad, :], k_sfc)*φσ2[k, i,  i_quad])*φ2[ib, i_quad]*Δ[k]
+#     end
+#     return A, A_HM_SD
+# end
+# function advection_fixed_flow(A, b)
+#     # unpack
+#     g2 = b.g
+#     el2 = g2.el
+#     nt = g2.nt
+
+#     adv = zeros(g2.np)
+#     for k ∈ 1:nt, i ∈ 1:el2.n, ib ∈ 1:el2.n
+#         adv[g2.t[k, i]] += A[k, i, ib]*b[g2.t[k, ib]]
+#     end
+#     return adv
+# end
+# function build_HM_SD_fixed_flow(A_HM_SD, b)
+#     # unpack
+#     g2 = b.g
+#     el2 = g2.el
+#     nt = g2.nt
+
+#     HM_SD_I = zeros(Int64, nt*el2.n*el2.n) 
+#     HM_SD_J = zeros(Int64, nt*el2.n*el2.n) 
+#     HM_SD_V = zeros(Float64, nt*el2.n*el2.n) 
+#     n = 1
+#     for k ∈ 1:nt, i ∈ 1:el2.n, ib ∈ 1:el2.n
+#         HM_SD_I[n] = g2.t[k, i]
+#         HM_SD_J[n] = g2.t[k, ib]
+#         HM_SD_V[n] = A_HM_SD[k, i, ib]*b[g2.t[k, ib]]
+#         n += 1
+#     end
+#     return dropzeros!(sparse(HM_SD_I, HM_SD_J, HM_SD_V, g2.np, g2.np))
+# end

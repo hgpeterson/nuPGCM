@@ -26,7 +26,8 @@ function setup()
     μϱ = 1e-4
     f = 1.
     β = 0.
-    params = Params(; ε², μϱ, f, β)
+    δ₀ = 0.0 # experimental, please ignore
+    params = Params(; ε², μϱ, f, β, δ₀)
 
     # geometry
     geom = Geometry(:circle, H, res=3, nσ=0, chebyshev=true)
@@ -39,7 +40,7 @@ function setup()
     forcing = Forcing(geom, τx, τy, ν, κ)
 
     # setup and save
-    m = ModelSetup3D(params, geom, forcing, advection=true)
+    m = ModelSetup3D(params, geom, forcing, advection=false) # still experimenting with advection, recommend false
     save_setup(m)
 
     return m
