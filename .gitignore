@@ -8,6 +8,8 @@
 *.pvsm
 *.csv
 *.pvd
+*.out
+*.err
 
 # ignore images and videos
 *.png
@@ -20,8 +22,8 @@
 # ignore swap files
 *.swp
 
-# ignore nohup files
-*.out
-
 # ignore VScode stuff
 *.vscode
+
+# ignore bash script
+scratch/run.sh
