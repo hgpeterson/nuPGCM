@@ -51,9 +51,10 @@ function run3d(m::ModelSetup3D)
     s = initial_state(m, b)
 
     Δt = 1e-4
-    t_save = 1e-3
+    t_plot = 1e-3
+    t_save = 1e-2
     t_final = 1e-1
-    evolve!(m, s, t_final, t_save; Δt)
+    evolve!(m, s, t_final, t_plot, t_save; Δt)
     return s
 end
 
