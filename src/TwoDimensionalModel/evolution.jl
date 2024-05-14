@@ -36,7 +36,8 @@ function reset_BCs!(m::ModelSetup2D, s::ModelState2D, RHS)
     # boundary fluxes: dσ(b)/H at σ = -1, 0
     if m.bl
         RHS[:, 1] = s.χ[:, 1].*∂ξ(m, s.b[:, 1])./m.κ[:, 1]
-        RHS[:, m.nσ] = s.χ[:, m.nσ].*∂ξ(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
+        # RHS[:, m.nσ] = s.χ[:, m.nσ].*∂ξ(m, s.b[:, m.nσ])./m.κ[:, m.nσ] .+ m.N2[:, m.nσ]
+        RHS[:, m.nσ] .= 0
     else
         RHS[:, 1] .= 0
         # RHS[:, m.nσ] .= m.N2[:, m.nσ]
@@ -45,18 +46,24 @@ function reset_BCs!(m::ModelSetup2D, s::ModelState2D, RHS)
 end
 
 """
+    db = advection_RHS(m::ModelSetup2D, uξ, uσ, b)
+
+Return db = -uξ*∂ξ(b) - uσ*∂σ(b) for the advection term in the evolution equation.
+"""
+function advection_RHS(m::ModelSetup2D, uξ, uσ, b)
+    return -uξ.*∂ξ(m, b) .- uσ.*∂σ(m, b)
+end
+
+"""
     evolve!(m, s, t_final, t_plot, t_save)
 
 Solve evoluion equation for `b` and update model state.
 """
 function evolve!(m::ModelSetup2D, s::ModelState2D, t_final, t_plot, t_save)
-    # grid points
-    n_pts = m.nξ*m.nσ
-
     # timestep
-    n_steps = Int64(t_final/m.Δt)
-    n_steps_plot = Int64(t_plot/m.Δt)
-    n_steps_save = Int64(t_save/m.Δt)
+    n_steps      = Int64(round(t_final/m.Δt))
+    n_steps_plot = Int64(round(t_plot/m.Δt))
+    n_steps_save = Int64(round(t_save/m.Δt))
 
     # save initial state
     i_save = 0
@@ -83,28 +90,37 @@ function evolve!(m::ModelSetup2D, s::ModelState2D, t_final, t_plot, t_save)
 
     # main loop
     t = 0
+    uξ_prev = zeros(size(s.uξ))
+    uσ_prev = zeros(size(s.uσ))
+    b_prev  = zeros(size(s.b))
+    RHS     = zeros(size(s.b))
     for i=1:n_steps
-        # explicit timestep for advection
-        function advection_RHS(b)
-            χ, uξ, uη, uσ, U = invert(m, b)
-            return -uξ.*∂ξ(m, b) .- uσ.*∂σ(m, b)
-        end
+        # store previoius step for next time
+        uξ_prev[:, :] = s.uξ[:, :]
+        uσ_prev[:, :] = s.uσ[:, :]
+        b_prev[:, :]  = s.b[:, :]
 
+        # form RHS = b + Δt*(advection + diffusion)
+        RHS[:, :] = s.b[:, :]
+        # advection
         if i == 1
             # first step: CNAB1
-            RHS = s.b + m.Δt*(advection_RHS(s.b) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ)) # right-hand-side
-            reset_BCs!(m, s, RHS) # modify RHS to implement boundary conditions
-            b_prev = s.b # store previoius step for next time
-            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)  # solve
-            s.i[1] = i + 1 # next step
+            RHS += m.Δt*advection_RHS(m, s.uξ, s.uσ, s.b)
         else
             # other steps: CNAB2
-            RHS = s.b + m.Δt*(3/2*advection_RHS(s.b) - 1/2*advection_RHS(b_prev) + 1/2*reshape(m.D*s.b[:], m.nξ, m.nσ))
-            reset_BCs!(m, s, RHS)
-            b_prev = s.b 
-            s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ)
-            s.i[1] = i + 1
+            RHS += m.Δt*(3/2*advection_RHS(m, s.uξ, s.uσ, s.b) - 1/2*advection_RHS(m, uξ_prev, uσ_prev, b_prev))
         end
+        # diffusion
+        RHS += m.Δt/2*reshape(m.D*s.b[:], m.nξ, m.nσ)
+
+        # modify RHS to implement boundary conditions
+        reset_BCs!(m, s, RHS)
+
+        # solve
+        s.b[:, :] = reshape(LHS\RHS[:], m.nξ, m.nσ) 
+
+        # next step
+        s.i[1] = i + 1
         t += m.Δt
 
         # invert buoyancy for flow and save to state

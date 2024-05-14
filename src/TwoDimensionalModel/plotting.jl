@@ -68,7 +68,7 @@ function ridge_plot(m::ModelSetup2D, s::ModelState2D, field, title, cb_label;
         else
             cb = colorbar(img, ax=ax, label=cb_label, extend=extend, orientation=cb_orientation, pad=pad)
         end
-        cb.ax.ticklabel_format(style="sci", scilimits=(0, 0), useMathText=true)
+        cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     else
         error("Unkown style: ", style)
     end
@@ -113,19 +113,14 @@ function profile_plot(setup_file, state_files, iξ)
     m = load_setup_2D(setup_file)
 
     # init plot
-    fig, ax = subplots(1, 3, figsize=(27*pc, 12*pc), sharey=true)
-
+    fig, ax = subplots(1, 3, figsize=(6, 3.2), sharey=true)
     ax[1].set_xlabel(string("Streamfunction\n", L"$\chi$ (m$^2$ s$^{-1}$)"))
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
-
-    ax[2].set_xlabel(string("Along-slope flow\n", L"$u^\eta$ (m s$^{-1}$)"))
-
+    ax[2].set_xlabel(string("Along-slope flow\n", L"$v$ (m s$^{-1}$)"))
     ax[3].set_xlabel(string("Stratification\n", L"$\partial_z b$ (s$^{-2}$)"))
 
-    subplots_adjust(bottom=0.3, top=0.90, left=0.1, right=0.95, wspace=0.2, hspace=0.6)
-
     for a in ax
-        a.ticklabel_format(style="sci", axis="x", scilimits=(0, 0), useMathText=true)
+        a.ticklabel_format(style="sci", axis="x", scilimits=(-2, 2), useMathText=true)
     end
 
     # lims
@@ -166,6 +161,31 @@ function profile_plot(setup_file, state_files, iξ)
 
     savefig(string(out_folder, "profiles.png"))
     println(string(out_folder, "profiles.png"))
+    plt.close()
+end
+
+"""
+    profile_plot(m, s, iξ)
+
+Plot profiles of u, v, ∂z(b) from the current model state `s` at ξ = ξ[iξ].
+"""
+function profile_plot(m::ModelSetup2D, s::ModelState2D, iξ)
+    fig, ax = subplots(1, 3, figsize=(6, 3.2), sharey=true)
+    ax[1].set_xlabel(L"Zonal flow $u$")
+    ax[1].set_ylabel(L"Vertical coordinate $z$")
+    ax[2].set_xlabel(L"Meridional flow $v$")
+    ax[2].set_title(latexstring(@sprintf("\$x = %1.1f, \\quad t = %1.1f\$", m.ξ[iξ], s.i[1]*m.Δt)))
+    ax[3].set_xlabel(L"Stratification $\partial_z b$")
+    for a in ax
+        a.ticklabel_format(style="sci", axis="x", scilimits=(-2, 2), useMathText=true)
+    end
+    u, v, w = transform_from_TF(m, s)
+    bz = ∂z(m, s.b)
+    ax[1].plot(u[iξ, :],  m.z[iξ, :])
+    ax[2].plot(v[iξ, :],  m.z[iξ, :])
+    ax[3].plot(bz[iξ, :], m.z[iξ, :])
+    ax[1].set_ylim([m.z[iξ, 1], 0])
+    return ax
 end
 
 """
@@ -186,7 +206,11 @@ function plot_state(m::ModelSetup2D, s::ModelState2D, i_img)
     savefig(@sprintf("%sb%03d.png", out_folder, i_img))
     plt.close()
 
-    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Along-slope flow $u^y$ (m s$^{-1}$)"; style="pcolormesh")
+    ridge_plot(m, s, v, @sprintf("t = %4d years", s.i[1]*m.Δt/secs_in_year), L"Along-slope flow $v$ (m s$^{-1}$)"; style="pcolormesh")
     savefig(@sprintf("%sv%03d.png", out_folder, i_img))
+    plt.close()
+
+    profile_plot(m, s, Int64(round(m.nξ/2)))
+    savefig(@sprintf("%sprofiles%03d.png", out_folder, i_img))
     plt.close()
 end
