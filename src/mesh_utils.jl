@@ -93,31 +93,3 @@ function unpack_fefunction(u, g::MyGrid)
     u_cell_values = get_cell_dof_values(u)
     return [u_cell_values[g.p_to_t[i][1][1]][g.p_to_t[i][1][2]] for i ∈ 1:size(g.p, 1)]
 end
-
-"""
-    quick_plot(u, g; b, label, fname)
-
-Plot a scalar field `u` on a mesh `g`.
-"""
-function quick_plot(u, g::MyGrid; b=nothing, label="", fname="image.png")
-    u = unpack_fefunction(u, g)
-    fig, ax = plt.subplots(1)
-    umax = maximum(abs.(u))
-    img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
-    if b !== nothing
-        b = unpack_fefunction(b, g)
-        ax.tricontour(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, b, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
-    end
-    cb = plt.colorbar(img, ax=ax, label=label)
-    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    ax.axis("equal")
-    ax.set_xlabel(L"x")
-    ax.set_ylabel(L"y")
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    savefig(fname)
-    println(fname)
-    plt.close()
-end
