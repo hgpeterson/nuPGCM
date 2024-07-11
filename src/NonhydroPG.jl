@@ -3,8 +3,13 @@ module NonhydroPG
     using GridapGmsh
     using Gmsh: gmsh
     using PyPlot
+    using SparseArrays
+    using HDF5
+    using Printf
 
-    include("utils.jl")
+    include("mesh_utils.jl")
+    include("plotting.jl")
+    include("IO.jl")
 
     export 
     chebyshev_nodes,
@@ -13,5 +18,8 @@ module NonhydroPG
     get_p_to_t,
     nan_eval,
     unpack_fefunction,
-    quick_plot
+    quick_plot,
+    plot_sparsity_pattern,
+    write_sparse_matrix,
+    read_sparse_matrix
 end
