@@ -139,40 +139,59 @@ function assemble_LHS_inversion(arch::AbstractArchitecture)
     return on_architecture(arch, FT.(LHS_inversion))
 end
 
-LHS_inversion = assemble_LHS_inversion(arch)
-write_sparse_matrix("out/LHS_inversion.h5", on_architecture(CPU(), LHS_inversion))
-# LHS_inversion = on_architecture(arch, read_sparse_matrix("out/LHS_inversion.h5"))
+# LHS_inversion = assemble_LHS_inversion(arch)
+# write_sparse_matrix("out/LHS_inversion.h5", on_architecture(CPU(), LHS_inversion))
+LHS_inversion = on_architecture(arch, read_sparse_matrix("out/LHS_inversion.h5"))
 println("eltype(LHS_inversion): ", eltype(LHS_inversion))
+
+# DOF reordering using Cuthill-McKee
+a_m_u(u, v) = ∫( u*v )dΩ
+M_ux = assemble_matrix(a_m_u, Ux, Vx)
+M_uy = assemble_matrix(a_m_u, Uy, Vy)
+M_uz = assemble_matrix(a_m_u, Uz, Vz)
+a_m_p(p, q) = ∫( p*q )dΩ
+M_p = assemble_matrix(a_m_p, P, Q)
+dof_reordering_ux = CUSOLVER.symrcm(M_ux) .+ 1
+dof_reordering_uy = CUSOLVER.symrcm(M_uy) .+ 1
+dof_reordering_uz = CUSOLVER.symrcm(M_uz) .+ 1
+dof_reordering_p  = CUSOLVER.symrcm(M_p)  .+ 1
+dof_reordering = [dof_reordering_ux; 
+                  dof_reordering_uy .+ nx; 
+                  dof_reordering_uz .+ nx .+ ny; 
+                  dof_reordering_p  .+ nx .+ ny .+ nz]
+inv_dof_reordering = invperm(dof_reordering)
+plot_sparsity_pattern(LHS_inversion, fname="images/LHS_inversion.png")
+LHS_inversion_p = LHS_inversion[dof_reordering, dof_reordering]
+plot_sparsity_pattern(LHS_inversion_p, fname="images/LHS_inversion_symrcm.png")
+error()
 
 # preconditioners for inversion LHS
 function compute_P_inversion(::CPU, LHS_inversion)
     @time "LHS_inversion_ilu" P_inversion = ilu(LHS_inversion, τ=1e-6)
 end
 function compute_P_inversion(::GPU, LHS_inversion)
-    return I
-    # perm_inversion = zfd(LHS_inversion)
-    # perm_inversion .+= 1
-    # invperm_inversion = invperm(perm_inversion)
-    # LHS_inversion = LHS_inversion[:, perm_inversion]
-    # LHS_inversion_gpu = CuSparseMatrixCSR(LHS_inversion)
-    # @time "P_inversion" P_inversion = ilu02(LHS_inversion_gpu)
+    # return I
 
-    # # additional vector required for solving triangular systems
-    # T = eltype(LHS_inversion_gpu)
-    # N = size(LHS_inversion_gpu, 1)
-    # temp = CUDA.zeros(T, N)
+    LHS_inversion_cpu = on_architecture(CPU(), LHS_inversion)
+    perm_inversion = zfd(LHS_inversion_cpu)
+    perm_inversion .+= 1
+    invperm_inversion = invperm(perm_inversion)
+    LHS_inversion = on_architecture(GPU(), LHS_inversion_cpu[:, perm_inversion])
+    @time "P_inversion" P_inversion = ilu02(LHS_inversion)
 
-    # # solve Py = x
-    # function ldiv_ilu0!(P::CuSparseMatrixCSR, x, y, temp)
-    #     ldiv!(temp, UnitLowerTriangular(P), x)  # forward substitution with L
-    #     ldiv!(y, UpperTriangular(P), temp)      # backward substitution with U
-    #     return y
-    # end
+    # additional vector required for solving triangular systems
+    temp = CUDA.zeros(FT, N)
 
-    # # Operator that model P⁻¹
-    # symmetric = hermitian = false
-    # P_inversion_op = LinearOperator(T, N, N, symmetric, hermitian, (y, x) -> ldiv_ilu0!(P_inversion, x, y, temp))
-    # return P_inversion_op
+    # solve Py = x
+    function ldiv_ilu0!(P::CuSparseMatrixCSR, x, y, temp)
+        ldiv!(temp, UnitLowerTriangular(P), x)  # forward substitution with L
+        ldiv!(y, UpperTriangular(P), temp)      # backward substitution with U
+        return y
+    end
+
+    # Operator that models P⁻¹
+    P_inversion_op = LinearOperator(FT, N, N, false, false, (y, x) -> ldiv_ilu0!(P_inversion, x, y, temp))
+    return P_inversion_op
 end
 
 P_inversion = compute_P_inversion(arch, LHS_inversion)
@@ -223,7 +242,7 @@ println("eltype(LHS_evolution): ", eltype(LHS_evolution))
 
 # preconditioners for evolution LHS
 function compute_P_evolution(::CPU)
-    @time "LHS_evolution_ilu" P_evolution = ilu(LHS_evolution, τ=1e-8)
+    @time "LHS_evolution_ilu" P_evolution = ilu(LHS_evolution, τ=1e-3)
     return P_evolution
 end
 function compute_P_evolution(::GPU)
