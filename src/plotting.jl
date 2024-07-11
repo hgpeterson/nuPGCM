@@ -3,11 +3,11 @@
 
 Plot a scalar field `u` on a mesh `g`.
 """
-function quick_plot(u, g::MyGrid; b=nothing, label="", fname="image.png")
-    u = unpack_fefunction(u, g)
+function quick_plot(u::AbstractVector, g::MyGrid; b=nothing, label="", fname="image.png")
     fig, ax = plt.subplots(1)
     umax = maximum(abs.(u))
-    img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
+    # img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
+    img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", cmap="rainbow", rasterized=true)
     if b !== nothing
         b = unpack_fefunction(b, g)
         ax.tricontour(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, b, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
@@ -24,6 +24,10 @@ function quick_plot(u, g::MyGrid; b=nothing, label="", fname="image.png")
     savefig(fname)
     println(fname)
     plt.close()
+end
+function quick_plot(u::FEFunction, g::MyGrid; kwargs...)
+    u = unpack_fefunction(u, g)
+    quick_plot(u, g; kwargs...)
 end
 
 function plot_sparsity_pattern(A; fname="sparsity_pattern.png")
