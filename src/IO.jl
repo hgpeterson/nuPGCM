@@ -19,6 +19,6 @@ function read_sparse_matrix(filename::AbstractString)
     m = read(file, "m")
     n = read(file, "n")
     close(file)
-    @printf("Sparse matrix loaded from '%s'\n", filename)
+    @printf("Sparse matrix (%.2f GB) loaded from '%s'.\n", length(V)*(2*sizeof(eltype(I)) + sizeof(eltype(V)))/1e9, filename)
     return sparse(I, J, V, m, n)
 end
