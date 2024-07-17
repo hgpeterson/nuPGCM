@@ -56,19 +56,21 @@ function plot_profiles(ux, uy, uz, b, x, y, H; t=nothing, fname="profiles.png")
     uxs = [nan_eval(ux, Point(x, y, zᵢ)) for zᵢ ∈ z]
     uys = [nan_eval(uy, Point(x, y, zᵢ)) for zᵢ ∈ z]
     uzs = [nan_eval(uz, Point(x, y, zᵢ)) for zᵢ ∈ z]
-    bz = VectorValue(0.0, 0.0, 1.0)⋅∇(b)
-    bzs = [nan_eval(bz, Point(x, y, zᵢ)) for zᵢ ∈ z]
+    # bz = VectorValue(0.0, 0.0, 1.0)⋅∇(b)
+    # bzs = [nan_eval(bz, Point(x, y, zᵢ)) for zᵢ ∈ z]
+    bs = [nan_eval(b, Point(x, y, zᵢ)) for zᵢ ∈ z]
     uxs[1] = 0
     uys[1] = 0
     uzs[1] = 0
-    bzs[1] = 0
+    # bzs[1] = 0
 
     fig, ax = plt.subplots(1, 4, figsize=(8, 3.2))
     ax[1].set_ylabel(L"z")
     ax[1].set_xlabel(L"u")
     ax[2].set_xlabel(L"v")
     ax[3].set_xlabel(L"w")
-    ax[4].set_xlabel(L"\partial_z b")
+    # ax[4].set_xlabel(L"\partial_z b")
+    ax[4].set_xlabel(L"b")
     ax[2].set_yticklabels([])
     ax[3].set_yticklabels([])
     ax[4].set_yticklabels([])
@@ -79,7 +81,8 @@ function plot_profiles(ux, uy, uz, b, x, y, H; t=nothing, fname="profiles.png")
     ax[1].plot(uxs, z)
     ax[2].plot(uys, z)
     ax[3].plot(uzs, z)
-    ax[4].plot(bzs, z)
+    # ax[4].plot(bzs, z)
+    ax[4].plot(bs, z)
     if t === nothing
         ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
     else
