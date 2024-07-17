@@ -80,7 +80,11 @@ end
 Evaluate `u(x)` and return `NaN` if an error occurs.
 """
 function nan_eval(u::Gridap.CellField, x)
-    try u(x) catch NaN end
+    try 
+        u(x) 
+    catch 
+        NaN 
+    end
 end
 
 """
