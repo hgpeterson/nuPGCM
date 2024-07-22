@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CuthillMcKee = "17f17636-5e38-52e3-a803-7ae3aaaf3da9"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 GridapGmsh = "3025c34a-b394-11e9-2a55-3fee550c04c8"
