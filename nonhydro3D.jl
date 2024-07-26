@@ -1,6 +1,6 @@
 using NonhydroPG
 using Gridap, GridapGmsh
-using IncompleteLU, Krylov, LinearOperators
+using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using SparseArrays, LinearAlgebra
 using Printf
@@ -9,6 +9,14 @@ using PyPlot
 pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
+
+out_folder = "out"
+
+if !isdir(out_folder)
+    mkdir(out_folder)
+    mkdir("$out_folder/images")
+    mkdir("$out_folder/data")
+end
 
 # define CPU and GPU architectures
 abstract type AbstractArchitecture end
@@ -30,26 +38,26 @@ on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
 # choose architecture
-# arch = CPU()
-arch = GPU()
+arch = CPU()
+# arch = GPU()
 
 # Float type on CPU and GPU
-FT = typeof(arch) == CPU ? Float64 : Float32
-# FT = Float64
+# FT = typeof(arch) == CPU ? Float64 : Float32
+FT = Float64
 
 # Vector type on CPU and GPU
 VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
 
 # save to vtu
 function save(ux, uy, uz, p, b, i)
-    fname = @sprintf("out/nonhydro3D%03d.vtu", i)
+    fname = @sprintf("%s/data/nonhydro3D%03d.vtu", out_folder, i)
     writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
     println(fname)
 end
 
 # model
-hres = 0.01
-model = GmshDiscreteModel(@sprintf("bowl3D_%0.2f.msh", hres))
+hres = 0.02
+model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # mesh res
 pts, conns = get_p_t(model)
@@ -116,35 +124,43 @@ H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1
-γ = 1
-f₀ = 0
+ε² = 5e-3
+γ = 1/4
+f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
-Δt = 1e-3*μϱ/ε²
+Δt = 1e-4*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
 println("Parameters:\n")
 @printf("ε² = %.1e (δ = %.1e, %.1e ≤ h ≤ %.1e)\n", ε², √(2ε²), hmin, hmax)
+@printf("f₀ = %.1e\n", f₀)
+@printf(" β = %.1e\n", β)
 @printf(" γ = %.1e\n", γ)
 @printf("μϱ = %.1e\n", μϱ)
 @printf("Δt = %.1e\n", Δt)
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("out/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
-LHS_evolution_fname = @sprintf("out/LHS_evolution_%e_%e.h5", hres, α)
+LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
 # println(LHS_inversion_fname)
 # println(LHS_evolution_fname)
 
 # inversion LHS
+γε² = γ*ε²
+γ²ε² = γ^2*ε²
 function assemble_LHS_inversion()
     a_inversion((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-           γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-         γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                                                      ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        ∫(∂z(ux)*∂z(vx)*ν*ε² - uy*vx*f + ∂x(p)*vx +
+          ∂z(uy)*∂z(vy)*ν*ε² + ux*vy*f + ∂y(p)*vy +
+          ∂z(uz)*∂z(vz)*ν*ε² +           ∂z(p)*vz +
+          ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        # ∫( γε²*∂x(ux)*∂x(vx)*ν +  γε²*∂y(ux)*∂y(vx)*ν +  ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+        #    γε²*∂x(uy)*∂x(vy)*ν +  γε²*∂y(uy)*∂y(vy)*ν +  ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+        #   γ²ε²*∂x(uz)*∂x(vz)*ν + γ²ε²*∂y(uz)*∂y(vz)*ν + γε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+        #                                                            ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
     @time "assemble LHS_inversion" LHS_inversion = assemble_matrix(a_inversion, X, Y)
     write_sparse_matrix(LHS_inversion_fname, LHS_inversion)
     return LHS_inversion
@@ -155,6 +171,7 @@ if isfile(LHS_inversion_fname)
 else
     LHS_inversion = assemble_LHS_inversion()
 end
+# LHS_inversion = assemble_LHS_inversion()
 
 # Cuthill-McKee DOF reordering
 @time "RCM perm" begin 
@@ -163,10 +180,17 @@ M_ux = assemble_matrix(a_m, Ux, Vx)
 M_uy = assemble_matrix(a_m, Uy, Vy)
 M_uz = assemble_matrix(a_m, Uz, Vz)
 M_p  = assemble_matrix(a_m, P, Q)
-perm_ux = CUSOLVER.symrcm(M_ux) .+ 1
-perm_uy = CUSOLVER.symrcm(M_uy) .+ 1
-perm_uz = CUSOLVER.symrcm(M_uz) .+ 1
-perm_p  = CUSOLVER.symrcm(M_p)  .+ 1
+if typeof(arch) == GPU
+    perm_ux = CUSOLVER.symrcm(M_ux) .+ 1
+    perm_uy = CUSOLVER.symrcm(M_uy) .+ 1
+    perm_uz = CUSOLVER.symrcm(M_uz) .+ 1
+    perm_p  = CUSOLVER.symrcm(M_p)  .+ 1
+else
+    perm_ux = CuthillMcKee.symrcm(M_ux)
+    perm_uy = CuthillMcKee.symrcm(M_uy)
+    perm_uz = CuthillMcKee.symrcm(M_uz)
+    perm_p  = CuthillMcKee.symrcm(M_p) 
+end
 perm_inversion = [perm_ux; 
                   perm_uy .+ nx; 
                   perm_uz .+ nx .+ ny; 
@@ -186,7 +210,6 @@ end
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
 if typeof(arch) == GPU
-    println()
     CUDA.memory_status()
     println()
 end
@@ -197,7 +220,8 @@ struct LUPreconditioner{L,U}
     U::U
 end
 function compute_P_inversion(::CPU, LHS_inversion)
-    @time "LHS_inversion_ilu" P_inversion = ilu(LHS_inversion, τ=1e-6)
+    return I
+    # @time "LHS_inversion_ilu" P_inversion = ilu(LHS_inversion, τ=1e-6)
 end
 function compute_P_inversion(::GPU, LHS_inversion)
     return I
@@ -223,7 +247,7 @@ end
 P_inversion = compute_P_inversion(arch, LHS_inversion)
 
 import LinearAlgebra: ldiv!
-temp = CUDA.zeros(FT, N)
+temp = on_architecture(arch, zeros(FT, N))
 function ldiv!(x, P::LUPreconditioner, y)
     ldiv!(temp, P.L, y)
     ldiv!(x, P.U, temp)
@@ -231,8 +255,12 @@ function ldiv!(x, P::LUPreconditioner, y)
 end
 
 # Krylov solver for inversion
-# solver_inversion = GmresSolver(N, N, 20, VT) # can't use on GPU, too much memory
-solver_inversion = GmresSolver(N, N, 2, VT)
+if typeof(arch) == GPU
+    memory = 2
+else
+    memory = 20
+end
+solver_inversion = GmresSolver(N, N, memory, VT)
 # solver_inversion = BicgstabSolver(N, N, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
@@ -242,8 +270,8 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
-    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true)
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, atol=FT(1e-6), rtol=FT(1e-6))
+    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, verbose=1)
+    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, atol=FT(1e-6), rtol=FT(1e-6))
     return solver_inversion
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -256,17 +284,26 @@ function update_u_p!(ux, uy, uz, p, solver_inversion)
     return ux, uy, uz, p
 end
 
+flush(stdout)
+flush(stderr)
+
 # initial condition
-b0(x) = x[3]
-# b0(x) = x[3] + 0.1*exp(-(x[3] + H(x))/0.1)
+# b0(x) = x[3]
+b0(x) = x[3] + 0.1*exp(-(x[3] + H(x))/0.1)
 b = interpolate_everywhere(b0, B)
+if typeof(arch) == CPU
+    p̄ = sum(∫( x->x[3]^2/2 )*dΩ.quad) / sum(∫( 1 )dΩ.quad)
+    p0(x) = x[3]^2/2 - p̄
+    p = interpolate_everywhere(p0, P)
+    solver_inversion.x[inv_perm_inversion[nx+ny+nz+1:end]] .= p.free_values[:]
+end
 solver_inversion = invert!(arch, solver_inversion, b)
 ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 i_save = 0
-plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("images/profiles%03d.png", i_save))
+plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
 save(ux, uy, uz, p, b, i_save)
 i_save += 1
-# error()
+error()
 
 # evolution LHS
 function assemble_LHS_evolution()
@@ -286,7 +323,11 @@ end
 # Cuthill-McKee DOF reordering
 @time "RCM perm" begin
 M_b = assemble_matrix(a_m, B, D)
-perm_evolution = CUSOLVER.symrcm(M_b) .+ 1
+if typeof(arch) == GPU
+    perm_evolution = CUSOLVER.symrcm(M_b) .+ 1
+else
+    perm_evolution = CuthillMcKee.symrcm(M_b)
+end
 end
 @time "inv_perm" inv_perm_evolution = invperm(perm_evolution)
 # plot_sparsity_pattern(LHS_evolution, fname="images/LHS_evolution.png")
@@ -296,16 +337,16 @@ end
 # put on GPU, if needed
 LHS_evolution = on_architecture(arch, FT.(LHS_evolution))
 if typeof(arch) == GPU
-    println()
     CUDA.memory_status()
     println()
 end
 
 # preconditioners for evolution LHS
 function compute_P_evolution(::CPU)
-    @time "LHS_evolution_ilu" P_evolution = ilu(LHS_evolution, τ=1e-10)
+    return I
+    # @time "LHS_evolution_ilu" P_evolution = ilu(LHS_evolution, τ=1e-10)
     # @time "LHS_evolution_ilu" P_evolution = lu(LHS_evolution)
-    return P_evolution
+    # return P_evolution
 end
 function compute_P_evolution(::GPU)
     return I
@@ -322,11 +363,12 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 # evolution functions
 function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
     l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
+    # l_evolution(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
                                     FT.(assemble_vector(l_evolution, D)[perm_evolution])
                                     )
-    # @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, M=P_evolution, ldiv=true)
-    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, M=P_evolution, ldiv=true, atol=FT(1e-6), rtol=FT(1e-6))
+    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, M=P_evolution, ldiv=true)
+    # @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, M=P_evolution, ldiv=true, atol=FT(1e-6), rtol=FT(1e-6))
     return solver_evolution
 end
 function update_b!(b, solver_evolution)
@@ -338,6 +380,9 @@ end
 function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, n_steps)
     t0 = time()
     for i ∈ 1:n_steps
+        flush(stdout)
+        flush(stderr)
+
         # evolve
         solver_evolution = evolve!(arch, solver_evolution, ux, uy, uz, b)
         b = update_b!(b, solver_evolution)
@@ -351,7 +396,11 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
         end
 
         # info/save
-        if mod(i, 10) == 0
+        if mod(i, 1) == 0
+            # # invert
+            # solver_inversion = invert!(arch, solver_inversion, b)
+            # ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+
             t1 = time()
             println("\n---")
             @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
@@ -361,7 +410,7 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
             println("---\n")
 
-            plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("images/profiles%03d.png", i_save))
+            plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
             save(ux, uy, uz, p, b, i_save)
             i_save += 1
         end
@@ -374,4 +423,4 @@ function hrs_mins_secs(seconds)
 end
 
 # run
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 50)
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 500)
