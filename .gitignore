@@ -2,3 +2,7 @@
 *.h5
 *.vtu
 *.png
+*.txt
+*.err
+*.out
+*.sh
