@@ -24,6 +24,15 @@ inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 pc = 1/6 # a pica is 1/6th of an inch
 
+# notation 
+notation = "standard"
+# notation = "tensor"
+if notation == "standard"
+    labels = Dict("ux" => L"u", "uy" => L"v", "uz" => L"w")
+elseif notation == "tensor"
+    labels = Dict("ux" => L"u^x", "uy" => L"u^y", "uz" => L"u^z")
+end
+
 function sketch_ridge()
     fig, ax = subplots(1)
     ax.fill_between(x[:, 1]/1000, z[:, 1]/1000, minimum(z)/1000, color="k", alpha=0.3, lw=0.0)
@@ -60,7 +69,7 @@ function spinup_ridge(folder)
     # plot
     fig, ax = subplots(1, 2, figsize=(33*pc, 33*pc/1.62/2), sharey=true)
     ridge_plot(m, s, 1e3*s.χ,  "", L"Streamfunction $\chi$ ($\times 10^{-3}$ m$^2$ s$^{-1}$)"; ax=ax[1], vext=1.5)
-    ridge_plot(m, s, 1e2*s.uη, "", L"Along-slope flow $u^y$ ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
+    ridge_plot(m, s, 1e2*s.uη, "", "Along-slope flow "*labels["uy"]*L" ($\times 10^{-2}$ m s$^{-1}$)"; ax=ax[2], style="pcolormesh", vext=1.5)
     ax[1].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     ax[2].plot([m.L/1e3/4, m.L/1e3/4], [m.z[ix, 1]/1e3, 0], "r-", alpha=0.5)
     # ax[1].annotate("(a)", (0.0, 1.05), xycoords="axes fraction")
@@ -435,7 +444,7 @@ function spinup_profiles_PGvsFull(folder)
     plt.close()
 end
 
-path = "../../sims/"
+path = "../../group_dir/sims_1d_2d/"
 
 # sketchRidge() 
 # sketchSlope() 

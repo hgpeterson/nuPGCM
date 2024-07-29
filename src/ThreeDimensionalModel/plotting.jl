@@ -380,10 +380,10 @@ function plot_u(m::ModelSetup3D, s::ModelState3D, y; i=-1, title=nothing)
     bs = [s.b(ξ_ws[i, j], k_ws[i, j]) for i=1:nσ, j=1:nx]
 
     # plot
-    plot_vertical_slice(xx, zz, ux,     bs, L"Zonal flow $u^x$",            "$out_folder/images/ux$i_str.png",  title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uy,     bs, L"Meridional flow $u^y$",       "$out_folder/images/uy$i_str.png",  title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uz,     bs, L"Vertical flow $u^z$",         "$out_folder/images/uz$i_str.png",  title, contour=false, slice_dir="x")
-    plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $u^z b$", "$out_folder/images/uzb$i_str.png", title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, ux,     bs, L"Zonal flow $u$",            "$out_folder/images/u$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uy,     bs, L"Meridional flow $v$",       "$out_folder/images/v$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz,     bs, L"Vertical flow $w$",         "$out_folder/images/w$i_str.png",  title, contour=false, slice_dir="x")
+    plot_vertical_slice(xx, zz, uz.*bs, bs, L"Buoyancy production $w b$", "$out_folder/images/wb$i_str.png", title, contour=false, slice_dir="x")
 end
 
 function plot_vertical_slice(xx, zz, u, b, cb_label, fname, title; contour=true, slice_dir, vmax=nothing)
