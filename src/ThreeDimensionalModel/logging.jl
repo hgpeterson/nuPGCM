@@ -136,7 +136,11 @@ function load_setup_3D(filename)
     μϱ = read(file, "μϱ")
     f = read(file, "f")
     β = read(file, "β")
-    δ₀ = read(file, "δ₀")
+    δ₀ = try
+             read(file, "δ₀")
+         catch
+             0.0
+         end
     params = Params(; ε², μϱ, f, β, δ₀)
 
     # Geometry
@@ -240,7 +244,11 @@ function load_setup_3D(filename)
     # EvolutionComponents
     println("Loading EvolutionComponents...")
     HM = read_sparse_matrix(file, "HM")
-    HHM = read_sparse_matrix(file, "HHM")
+    HHM = try
+              read_sparse_matrix(file, "HHM")
+          catch
+              HM
+          end
     K_cols = [build_K_col(σ, κ[get_col_inds(i, nσ)]) for i ∈ 1:g_sfc2.np]
     # Ax1 = CuArray(read(file, "Ax1"))
     # Ay1 = CuArray(read(file, "Ay1"))
