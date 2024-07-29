@@ -11,6 +11,15 @@ inset_locator = pyimport("mpl_toolkits.axes_grid1.inset_locator")
 lines = pyimport("matplotlib.lines")
 pc = 1/6 # a pica is 1/6th of an inch
 
+# notation 
+notation = "standard"
+# notation = "tensor"
+if notation == "standard"
+    labels = Dict("ux" => L"u", "uy" => L"v", "uz" => L"w")
+elseif notation == "tensor"
+    labels = Dict("ux" => L"u^x", "uy" => L"u^y", "uz" => L"u^z")
+end
+
 ### utility functions
 
 """
@@ -370,7 +379,7 @@ function spinup_profiles_tc(folder; μ=1)
     ax[1].set_ylabel(L"Vertical coordinate $z$ (km)")
 
     ax[1].set_xlabel(string(L"Streamfunction $\chi$", "\n", L"($\times10^{-3}$ m$^2$ s$^{-1}$)"))
-    ax[2].set_xlabel(string(L"Along-slope flow $u^y$", "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
+    ax[2].set_xlabel(string("Along-slope flow ", labels["uy"], "\n", L"($\times10^{-2}$ m s$^{-1}$)"))
     ax[3].set_xlabel(string(L"Stratification $\partial_z b$", "\n", L"($\times10^{-6}$ s$^{-2}$)"))
 
     # color map
@@ -490,7 +499,7 @@ function spinup_profiles_v(folder; μ=1)
     plt.close()
 end
 
-path = "../../sims/"
+path = "../../group_dir/sims_1d_2d/"
 
 # spinupProfilesAnimation(string(path, "sim036/"))
 # chiProfile(string(path, "sim039"))
