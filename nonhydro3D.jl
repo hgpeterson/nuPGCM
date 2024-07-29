@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "h100_1e-3_test"
 
 if !isdir(out_folder)
     mkdir(out_folder)
@@ -38,8 +38,8 @@ on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
 # choose architecture
-arch = CPU()
-# arch = GPU()
+# arch = CPU()
+arch = GPU()
 
 # Float type on CPU and GPU
 # FT = typeof(arch) == CPU ? Float64 : Float32
@@ -56,7 +56,7 @@ function save(ux, uy, uz, p, b, i)
 end
 
 # model
-hres = 0.02
+hres = 0.01
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # mesh res
@@ -124,8 +124,8 @@ H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 5e-3
-γ = 1/4
+ε² = 1e-3
+γ = 1
 f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
@@ -153,14 +153,14 @@ LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
 γ²ε² = γ^2*ε²
 function assemble_LHS_inversion()
     a_inversion((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        ∫(∂z(ux)*∂z(vx)*ν*ε² - uy*vx*f + ∂x(p)*vx +
-          ∂z(uy)*∂z(vy)*ν*ε² + ux*vy*f + ∂y(p)*vy +
-          ∂z(uz)*∂z(vz)*ν*ε² +           ∂z(p)*vz +
-          ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-        # ∫( γε²*∂x(ux)*∂x(vx)*ν +  γε²*∂y(ux)*∂y(vx)*ν +  ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-        #    γε²*∂x(uy)*∂x(vy)*ν +  γε²*∂y(uy)*∂y(vy)*ν +  ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-        #   γ²ε²*∂x(uz)*∂x(vz)*ν + γ²ε²*∂y(uz)*∂y(vz)*ν + γε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-        #                                                            ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        # ∫(∂z(ux)*∂z(vx)*ν*ε² - uy*vx*f + ∂x(p)*vx +
+        #   ∂z(uy)*∂z(vy)*ν*ε² + ux*vy*f + ∂y(p)*vy +
+        #   ∂z(uz)*∂z(vz)*ν*ε² +           ∂z(p)*vz +
+        #   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        ∫( γε²*∂x(ux)*∂x(vx)*ν +  γε²*∂y(ux)*∂y(vx)*ν +  ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           γε²*∂x(uy)*∂x(vy)*ν +  γε²*∂y(uy)*∂y(vy)*ν +  ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+          γ²ε²*∂x(uz)*∂x(vz)*ν + γ²ε²*∂y(uz)*∂y(vz)*ν + γε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                                   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
     @time "assemble LHS_inversion" LHS_inversion = assemble_matrix(a_inversion, X, Y)
     write_sparse_matrix(LHS_inversion_fname, LHS_inversion)
     return LHS_inversion
@@ -171,7 +171,6 @@ if isfile(LHS_inversion_fname)
 else
     LHS_inversion = assemble_LHS_inversion()
 end
-# LHS_inversion = assemble_LHS_inversion()
 
 # Cuthill-McKee DOF reordering
 @time "RCM perm" begin 
@@ -200,12 +199,6 @@ inv_perm_inversion = invperm(perm_inversion)
 LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
 # plot_sparsity_pattern(LHS_inversion, fname="images/LHS_inversion_symrcm.png")
 end
-# # permutation such that LHS_inversion has no zeros on the diagonal
-# @time "ZFD perm" begin
-# perm_inversion_zfd = zfd(LHS_inversion) .+ 1
-# inv_perm_inversion_zfd = invperm(perm_inversion_zfd)
-# LHS_inversion = LHS_inversion[:, perm_inversion_zfd]
-# end
 
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
@@ -256,11 +249,10 @@ end
 
 # Krylov solver for inversion
 if typeof(arch) == GPU
-    memory = 2
+    solver_inversion = DqgmresSolver(N, N, 20, VT)
 else
-    memory = 20
+    solver_inversion = GmresSolver(N, N, 20, VT)
 end
-solver_inversion = GmresSolver(N, N, memory, VT)
 # solver_inversion = BicgstabSolver(N, N, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
@@ -270,7 +262,9 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, verbose=1)
+    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, verbose=1)
+    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, verbose=1, itmax=2000)
+    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, verbose=1, restart=false)
     # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, ldiv=true, atol=FT(1e-6), rtol=FT(1e-6))
     return solver_inversion
 end
@@ -288,8 +282,8 @@ flush(stdout)
 flush(stderr)
 
 # initial condition
-# b0(x) = x[3]
-b0(x) = x[3] + 0.1*exp(-(x[3] + H(x))/0.1)
+b0(x) = x[3]
+# b0(x) = x[3] + 0.1*exp(-(x[3] + H(x))/0.1)
 b = interpolate_everywhere(b0, B)
 if typeof(arch) == CPU
     p̄ = sum(∫( x->x[3]^2/2 )*dΩ.quad) / sum(∫( 1 )dΩ.quad)
@@ -303,7 +297,6 @@ i_save = 0
 plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
 save(ux, uy, uz, p, b, i_save)
 i_save += 1
-error()
 
 # evolution LHS
 function assemble_LHS_evolution()
