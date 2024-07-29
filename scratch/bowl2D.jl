@@ -11,9 +11,9 @@ set_out_folder("../output/bowl2D/")
 function run()
     # parameters
     ε² = 1e-4
-    μϱ = 1e-4
-    T = 1e-1
-    Δt = 1e-4
+    μϱ = 1e0
+    T = 1e1
+    Δt = 1e-2
     f = 1.
     L = 1.
     nξ = 2^8 
@@ -41,7 +41,8 @@ function run()
     κ_func(ξ, σ) = ε²/μϱ*(1e-2 + exp(-H_func(ξ)*(σ + 1)/0.1))
 
     # viscosity
-    ν_func(ξ, σ) = μϱ*κ_func(ξ, σ)
+    # ν_func(ξ, σ) = μϱ*κ_func(ξ, σ)
+    ν_func(ξ, σ) = ε²
 
     # stratification
     N2 = 1
@@ -170,6 +171,20 @@ function plot2D(m::ModelSetup2D, s::ModelState2D, field; cb_label, filename)
     plt.close()
 end
 
-m2D, s2D = run()
+# m2D, s2D = run()
+
+# save profile
+using HDF5
+u, v, w = transform_from_TF(m2D, s2D)
+bz = ∂z(m2D, s2D.b)
+iξ = argmin(abs.(m2D.ξ .- 0.5))
+h5open("gamma0.h5", "w") do file
+    write(file, "u", u[iξ, :])
+    write(file, "v", v[iξ, :])
+    write(file, "w", w[iξ, :])
+    write(file, "bz", bz[iξ, :])
+    write(file, "z", m2D.z[iξ, :])
+end
+println("gamma0.h5")
 
 println("Done.")
