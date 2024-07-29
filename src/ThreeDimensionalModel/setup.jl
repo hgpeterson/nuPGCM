@@ -92,7 +92,7 @@ end
     geom = Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
 """
 function Geometry(basin_shape, H_func::Function; res=2, nσ=0, chebyshev=false)
-    if basin_shape ∉ [:circle, :rectangle]
+    if basin_shape ∉ [:circle, :square, :rectangle]
         error("Unsupported basin shape: $basin_shape.")
     end
     g_sfc1 = Grid(Triangle(order=1), "$(@__DIR__)/../../meshes/$(string(basin_shape))/mesh$res.h5")
