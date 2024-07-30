@@ -1,234 +1,353 @@
 using NonhydroPG
-using Gridap
-using GridapGmsh
-using Gmsh: gmsh
+using Gridap, GridapGmsh
+using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
+using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
+using SparseArrays, LinearAlgebra
 using Printf
-using LinearAlgebra
-using IterativeSolvers
-using HDF5
 using PyPlot
 
 pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-function run()
-    # model
-    # model = GmshDiscreteModel("bowl2D.msh")
-    model = GmshDiscreteModel("mesh.msh")
-    # model = GmshDiscreteModel("pydistmesh/mesh_uniform_0.01.msh")
-    # model = GmshDiscreteModel("pydistmesh/mesh_linear_0.01_2_0.3.msh")
-    # model = GmshDiscreteModel("pydistmesh/mesh_exp_0.005_4_0.1.msh")
+out_folder = "out"
 
-    # for plotting
-    g = MyGrid(model)
+if !isdir(out_folder)
+    mkdir(out_folder)
+    mkdir("$out_folder/images")
+    mkdir("$out_folder/data")
+end
 
-    # depth
-    # H(x) = 1 - x[1]^2
-    H(x) = 1 - (x[1]/L)^2
+# define CPU and GPU architectures
+abstract type AbstractArchitecture end
 
-    # reference FE 
-    order = 2
-    reffe_ux = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_uy = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_uz = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_p  = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-    reffe_b  = ReferenceFE(lagrangian, Float64, order;   space=:P)
+struct CPU <: AbstractArchitecture end
+struct GPU <: AbstractArchitecture end
 
-    # test FESpaces
-    Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot"])
-    Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot"])
-    Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bot", "sfc"])
-    Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
-    D  = TestFESpace(model, reffe_b,  conformity=:H1, dirichlet_tags=["sfc"])
-    Y  = MultiFieldFESpace([Vx, Vy, Vz, Q])
+# convert types from one architecture to another
+on_architecture(::CPU, a::Array) = a
+on_architecture(::GPU, a::Array) = CuArray(a)
 
-    # trial FESpaces with Dirichlet values
-    Ux = TrialFESpace(Vx, [0])
-    Uy = TrialFESpace(Vy, [0])
-    Uz = TrialFESpace(Vz, [0, 0])
-    P  = TrialFESpace(Q)
-    B  = TrialFESpace(D, [0])
-    X  = MultiFieldFESpace([Ux, Uy, Uz, P])
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
+on_architecture(::CPU, a::CuArray) = Array(a)
+on_architecture(::GPU, a::CuArray) = a
 
-    # triangulation and integration measure
-    degree = order^2
-    Ω = Triangulation(model)
-    dΩ = Measure(Ω, degree)
+on_architecture(::CPU, a::SparseMatrixCSC) = a
+on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
 
-    # gradients 
-    ∂x(u) = VectorValue(1.0, 0.0)⋅∇(u)
-    ∂z(u) = VectorValue(0.0, 1.0)⋅∇(u)
+on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
+on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
-    # forcing
-    ν(x) = 1
-    κ(x) = 1e-2 + exp(-(x[2] + H(x))/0.1)
+# choose architecture
+# arch = CPU()
+arch = GPU()
 
-    # params
-    ε² = 1e-4
-    println("δ = ", √(2ε²))
-    pts, conns = get_p_t(model)
-    h1 = [norm(pts[conns[i, 1], :] - pts[conns[i, 2], :]) for i ∈ axes(conns, 1)]
-    h2 = [norm(pts[conns[i, 2], :] - pts[conns[i, 3], :]) for i ∈ axes(conns, 1)]
-    h3 = [norm(pts[conns[i, 3], :] - pts[conns[i, 1], :]) for i ∈ axes(conns, 1)]
-    hmin = minimum([h1; h2; h3])
-    hmax = maximum([h1; h2; h3])
-    println("hmin = ", hmin)
-    println("hmax = ", hmax)
-    μϱ = 1e0
-    γ = 1
-    f = 1
-    Δt = 1e-2
+# Float type on CPU and GPU
+# FT = typeof(arch) == CPU ? Float64 : Float32
+FT = Float64
 
-    # bilinear form for inversion
-    ainv((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        # ∫(γ*ε²*∂x(ux)*∂x(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - f*uy*vx + ∂x(p)*vx +
-        #   γ*ε²*∂x(uy)*∂x(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + f*ux*vy            +
-        # γ*γ*ε²*∂x(uz)*∂x(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-        #                          ∂x(ux)*q + ∂z(uz)*q )dΩ
-        ∫(   ε²*∂z(ux)*∂z(vx)*ν - f*uy*vx + ∂x(p)*vx +
-             ε²*∂z(uy)*∂z(vy)*ν + f*ux*vy            +
-           γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                 ∂x(ux)*q + ∂z(uz)*q )dΩ
-    Ainv = assemble_matrix(ainv, X, Y)
-    Ainv_factored = lu(Ainv)
+# Vector type on CPU and GPU
+VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
 
-    # inversion function
-    # sol = zeros(size(Ainv, 2))
-    # function invert!(sol, b)
-    #     linv((vx, vy, vz, q)) = ∫( b*vz )dΩ
-    #     rhsinv = assemble_vector(linv, Y)
-    #     # sol = Ainv_factored \ rhsinv
-    #     @time bicgstabl!(sol, Ainv, rhsinv)
-    # end
-    # function update_state!(ux, uy, uz, p, sol)
-    #     ux.free_values .= sol[1:nx]
-    #     uy.free_values .= sol[nx+1:nx+ny]
-    #     uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-    #     p = FEFunction(P, sol[nx+ny+nz+1:end])
-    #     return ux, uy, uz, p
-    # end
-    function invert!(ux, uy, uz, p, b)
-        linv((vx, vy, vz, q)) = ∫( b*vz )dΩ
-        rhsinv = assemble_vector(linv, Y)
-        sol = Ainv_factored \ rhsinv
-        ux.free_values .= sol[1:nx]
-        uy.free_values .= sol[nx+1:nx+ny]
-        uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-        p = FEFunction(P, sol[nx+ny+nz+1:end])
-        return ux, uy, uz, p
-    end
-
-    # initial condition
-    b0(x) = x[2]
-    # b0(x) = x[2] + 0.1*exp(-(x[2] + H(x))/0.1)
-    b  = interpolate_everywhere(b0, B)
-    ux = interpolate_everywhere(0, Ux)
-    uy = interpolate_everywhere(0, Uy)
-    uz = interpolate_everywhere(0, Uz)
-    p  = interpolate_everywhere(0, P)
-    ux, uy, uz, p = invert!(ux, uy, uz, p, b)
-    i_img = 0
-    plots(g, ux, uy, uz, p, b, i_img)
-    # writevtk(Ω, @sprintf("out/nonhydro2D%03d", i_img), cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
-    profile_plot(ux, uy, uz, b, L/2, 0.0, H, @sprintf("images/profiles%03d.png", i_img))
-    i_img += 1
-    # error("stop")
-
-    # b^n+1 - Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n+1)) = b^n - Δt*u^n⋅∇b^n + Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n))
-    # evolution LHS
-    alhs(b, d) = ∫( b*d + Δt/2*ε²/μϱ*∂z(b)*∂z(d)*κ )dΩ
-    LHS = assemble_matrix(alhs, B, D)
-    LHS_factored = lu(LHS)
-    for i ∈ 1:1000
-        # evolution RHS
-        lrhs(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt/2*ε²/μϱ*∂z(b)*∂z(d)*κ )dΩ
-        rhs = assemble_vector(lrhs, D)
-        b.free_values .= LHS_factored \ rhs
-        # @time cg!(b.free_values, LHS, rhs)
-        ux, uy, uz, p = invert!(ux, uy, uz, p, b)
-        # invert!(sol, b)
-        # ux, uy, uz, p = update_state!(ux, uy, uz, p, sol)
-        if mod(i, 10) == 0
-            @printf("% 5d  %1.2e\n", i, min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uz.free_values))))
-        end
-        if mod(i, 100) == 0
-            plots(g, ux, uy, uz, p, b, i_img)
-            # writevtk(Ω, @sprintf("out/nonhydro2D%03d", i_img), cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
-            # profile_plot(ux, uy, uz, b, 0.5, i*Δt, H, @sprintf("images/profiles%03d.png", i_img))
-            profile_plot(ux, uy, uz, b, L/2, i*Δt, H, @sprintf("images/profiles%03d.png", i_img))
-            i_img += 1
-        end
-    end
-
-    return ux, uy, uz, p, b
+# save to vtu
+function save(ux, uy, uz, p, b, i)
+    fname = @sprintf("%s/data/nonhydro2D%03d.vtu", out_folder, i)
+    writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
+    println(fname)
 end
 
 function plots(g, ux, uy, uz, p, b, i)
-    quick_plot(ux, g, b=b, label=L"u", fname=@sprintf("images/u%03d.png", i))
-    quick_plot(uy, g, b=b, label=L"v", fname=@sprintf("images/v%03d.png", i))
-    quick_plot(uz, g, b=b, label=L"w", fname=@sprintf("images/w%03d.png", i))
-    quick_plot(p,  g, b=b, label=L"p", fname=@sprintf("images/p%03d.png", i))
+    quick_plot(ux, g, b=b, label=L"u", fname=@sprintf("out/images/u%03d.png", i))
+    quick_plot(uy, g, b=b, label=L"v", fname=@sprintf("out/images/v%03d.png", i))
+    quick_plot(uz, g, b=b, label=L"w", fname=@sprintf("out/images/w%03d.png", i))
+    quick_plot(p,  g, b=b, label=L"p", fname=@sprintf("out/images/p%03d.png", i))
 end
 
-function profile_plot(ux, uy, uz, b, x, t, H, fname)
-    z = H([x])*(chebyshev_nodes(2^6) .- 1)/2
+# model
+hres = 0.01
+model = GmshDiscreteModel(@sprintf("meshes/bowl2D_%0.2f_thin.msh", hres))
+g = MyGrid(model)
 
-    uxs = [nan_eval(ux, Point(x, zᵢ)) for zᵢ ∈ z]
-    uys = [nan_eval(uy, Point(x, zᵢ)) for zᵢ ∈ z]
-    uzs = [nan_eval(uz, Point(x, zᵢ)) for zᵢ ∈ z]
-    bz = VectorValue(0.0, 1.0)⋅∇(b)
-    bzs = [nan_eval(bz, Point(x, zᵢ)) for zᵢ ∈ z]
-    uxs[1] = 0
-    uys[1] = 0
-    uzs[1] = 0
-    bzs[1] = 0
+# mesh res
+pts, conns = get_p_t(model)
+h1 = [norm(pts[conns[i, 1], :] - pts[conns[i, 2], :]) for i ∈ axes(conns, 1)]
+h2 = [norm(pts[conns[i, 2], :] - pts[conns[i, 3], :]) for i ∈ axes(conns, 1)]
+h3 = [norm(pts[conns[i, 3], :] - pts[conns[i, 1], :]) for i ∈ axes(conns, 1)]
+hmin = minimum([h1; h2; h3])
+hmax = maximum([h1; h2; h3])
 
-    # gamma = 0 solution
-    # file = h5open("gamma0_Ek1e-3.h5", "r")
-    file = h5open("gamma0_Ek1e-4.h5", "r")
-    u0 = read(file, "u")
-    v0 = read(file, "v")
-    w0 = read(file, "w")
-    bz0 = read(file, "bz")
-    z0 = read(file, "z")
-    close(file)
+# reference FE 
+order = 2
+reffe_ux = ReferenceFE(lagrangian, Float64, order;   space=:P)
+reffe_uy = ReferenceFE(lagrangian, Float64, order;   space=:P)
+reffe_uz = ReferenceFE(lagrangian, Float64, order;   space=:P)
+reffe_p  = ReferenceFE(lagrangian, Float64, order-1; space=:P)
+reffe_b  = ReferenceFE(lagrangian, Float64, order;   space=:P)
 
-    fig, ax = plt.subplots(1, 4, figsize=(8, 3.2))
-    ax[1].set_ylabel(L"z")
-    ax[1].set_xlabel(L"u")
-    ax[2].set_xlabel(L"v")
-    ax[3].set_xlabel(L"w")
-    ax[4].set_xlabel(L"\partial_z b")
-    ax[2].set_yticklabels([])
-    ax[3].set_yticklabels([])
-    ax[4].set_yticklabels([])
-    for a ∈ ax 
-        a.set_ylim(-H([x]), 0) 
-        a.ticklabel_format(axis="x", style="sci", scilimits=(-2,2))
+# test FESpaces
+Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot"])
+Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot"])
+Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bot", "sfc"])
+Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
+D  = TestFESpace(model, reffe_b,  conformity=:H1, dirichlet_tags=["sfc"])
+Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
+
+# trial FESpaces with Dirichlet values
+Ux = TrialFESpace(Vx, [0])
+Uy = TrialFESpace(Vy, [0])
+Uz = TrialFESpace(Vz, [0, 0])
+P  = TrialFESpace(Q)
+B  = TrialFESpace(D, [0])
+X  = MultiFieldFESpace([Ux, Uy, Uz, P])
+nx = Ux.space.nfree
+ny = Uy.space.nfree
+nz = Uz.space.nfree
+nu = nx + ny + nz
+np = P.space.space.nfree
+nb = B.space.nfree
+N = nu + np - 1
+@printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
+
+# initialize vectors
+ux = interpolate_everywhere(0, Ux)
+uy = interpolate_everywhere(0, Uy)
+uz = interpolate_everywhere(0, Uz)
+p  = interpolate_everywhere(0, P)
+
+# triangulation and integration measure
+degree = order^2
+Ω = Triangulation(model)
+dΩ = Measure(Ω, degree)
+
+# gradients 
+∂x(u) = VectorValue(1.0, 0.0)⋅∇(u)
+∂z(u) = VectorValue(0.0, 1.0)⋅∇(u)
+
+# depth
+H(x) = sqrt(2 - x[1]^2) - 1
+
+# forcing
+ν(x) = 1
+κ(x) = 1e-2 + exp(-(x[2] + H(x))/0.1)
+
+# params
+ε² = 1e-2
+γ = 1
+f = 1
+μϱ = 1e0
+Δt = 1e-4*μϱ/ε²
+α = Δt/2*ε²/μϱ # for timestep
+println("\n---")
+println("Parameters:\n")
+@printf("ε² = %.1e (δ = %.1e, %.1e ≤ h ≤ %.1e)\n", ε², √(2ε²), hmin, hmax)
+@printf(" f = %.1e\n", f)
+@printf(" γ = %.1e\n", γ)
+@printf("μϱ = %.1e\n", μϱ)
+@printf("Δt = %.1e\n", Δt)
+println("---\n")
+
+# filenames for LHS matrices
+LHS_inversion_fname = @sprintf("matrices/LHS_inversion_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_2D_%e_%e.h5", hres, α)
+# println(LHS_inversion_fname)
+# println(LHS_evolution_fname)
+
+# inversion LHS
+γε² = γ*ε²
+γ²ε² = γ^2*ε²
+function assemble_LHS_inversion()
+    a_inversion((ux, uy, uz, p), (vx, vy, vz, q)) = 
+        ∫( γε²*∂x(ux)*∂x(vx)*ν +  ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           γε²*∂x(uy)*∂x(vy)*ν +  ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f +
+          γ²ε²*∂x(uz)*∂x(vz)*ν + γε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                      ∂x(ux)*q + ∂z(uz)*q )dΩ
+    @time "assemble LHS_inversion" LHS_inversion = assemble_matrix(a_inversion, X, Y)
+    write_sparse_matrix(LHS_inversion_fname, LHS_inversion)
+    return LHS_inversion
+end
+
+if isfile(LHS_inversion_fname)
+    LHS_inversion = read_sparse_matrix(LHS_inversion_fname)
+else
+    LHS_inversion = assemble_LHS_inversion()
+end
+
+# Cuthill-McKee DOF reordering
+@time "RCM perm" begin 
+a_m(u, v) = ∫( u*v )dΩ
+M_ux = assemble_matrix(a_m, Ux, Vx)
+M_uy = assemble_matrix(a_m, Uy, Vy)
+M_uz = assemble_matrix(a_m, Uz, Vz)
+M_p  = assemble_matrix(a_m, P, Q)
+if typeof(arch) == GPU
+    perm_ux = CUSOLVER.symrcm(M_ux) .+ 1
+    perm_uy = CUSOLVER.symrcm(M_uy) .+ 1
+    perm_uz = CUSOLVER.symrcm(M_uz) .+ 1
+    perm_p  = CUSOLVER.symrcm(M_p)  .+ 1
+else
+    perm_ux = CuthillMcKee.symrcm(M_ux)
+    perm_uy = CuthillMcKee.symrcm(M_uy)
+    perm_uz = CuthillMcKee.symrcm(M_uz)
+    perm_p  = CuthillMcKee.symrcm(M_p) 
+end
+perm_inversion = [perm_ux; 
+                  perm_uy .+ nx; 
+                  perm_uz .+ nx .+ ny; 
+                  perm_p  .+ nx .+ ny .+ nz]
+inv_perm_inversion = invperm(perm_inversion)
+# plot_sparsity_pattern(LHS_inversion, fname="out/images/LHS_inversion.png")
+LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
+# plot_sparsity_pattern(LHS_inversion, fname="out/images/LHS_inversion_symrcm.png")
+end
+
+# put on GPU, if needed
+LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
+if typeof(arch) == GPU
+    CUDA.memory_status()
+    println()
+end
+
+# Krylov solver for inversion
+if typeof(arch) == GPU
+    solver_inversion = DqgmresSolver(N, N, 20, VT)
+else
+    solver_inversion = GmresSolver(N, N, 20, VT)
+end
+solver_inversion.x .= on_architecture(arch, zeros(FT, N))
+
+# inversion functions
+function invert!(arch::AbstractArchitecture, solver_inversion, b)
+    l_inversion((vx, vy, vz, q)) = ∫( b*vz )dΩ
+    @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
+                                     FT.(assemble_vector(l_inversion, Y)[perm_inversion])
+                                    )
+    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x)
+    return solver_inversion
+end
+function update_u_p!(ux, uy, uz, p, solver_inversion)
+    sol = on_architecture(CPU(), solver_inversion.x[inv_perm_inversion])
+    ux.free_values .= sol[1:nx]
+    uy.free_values .= sol[nx+1:nx+ny]
+    uz.free_values .= sol[nx+ny+1:nx+ny+nz]
+    p = FEFunction(P, sol[nx+ny+nz+1:end])
+    return ux, uy, uz, p
+end
+
+flush(stdout)
+flush(stderr)
+
+# initial condition
+b0(x) = x[2]
+b = interpolate_everywhere(b0, B)
+if typeof(arch) == CPU
+    p̄ = sum(∫( x->x[2]^2/2 )*dΩ.quad) / sum(∫( 1 )dΩ.quad)
+    p0(x) = x[2]^2/2 - p̄
+    p = interpolate_everywhere(p0, P)
+    solver_inversion.x[inv_perm_inversion[nx+ny+nz+1:end]] .= p.free_values[:]
+end
+solver_inversion = invert!(arch, solver_inversion, b)
+ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+i_save = 0
+plot_profiles(ux, uy, uz, b, 0.5, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+plots(g, ux, uy, uz, p, b, i_save)
+save(ux, uy, uz, p, b, i_save)
+i_save += 1
+
+# evolution LHS
+function assemble_LHS_evolution()
+    # b^n+1 - Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n+1)) = b^n - Δt*u^n⋅∇b^n + Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n))
+    a_evolution(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
+    @time "assemble LHS_evolution" LHS_evolution = assemble_matrix(a_evolution, B, D)
+    write_sparse_matrix(LHS_evolution_fname, LHS_evolution)
+    return LHS_evolution
+end
+
+if isfile(LHS_evolution_fname)
+    LHS_evolution = read_sparse_matrix(LHS_evolution_fname)
+else
+    LHS_evolution = assemble_LHS_evolution()
+end
+
+# Cuthill-McKee DOF reordering
+@time "RCM perm" begin
+M_b = assemble_matrix(a_m, B, D)
+if typeof(arch) == GPU
+    perm_evolution = CUSOLVER.symrcm(M_b) .+ 1
+else
+    perm_evolution = CuthillMcKee.symrcm(M_b)
+end
+end
+@time "inv_perm" inv_perm_evolution = invperm(perm_evolution)
+plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution.png")
+@time "LHS_evolution_perm" LHS_evolution = LHS_evolution[perm_evolution, perm_evolution]
+plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution_symrcm.png")
+
+# put on GPU, if needed
+LHS_evolution = on_architecture(arch, FT.(LHS_evolution))
+if typeof(arch) == GPU
+    CUDA.memory_status()
+    println()
+end
+
+# Krylov solver for evolution
+solver_evolution = CgSolver(nb, nb, VT)
+solver_evolution.x .= on_architecture(arch, copy(b.free_values))
+
+# evolution functions
+function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
+    l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
+    @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
+                                    FT.(assemble_vector(l_evolution, D)[perm_evolution])
+                                    )
+    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x)
+    return solver_evolution
+end
+function update_b!(b, solver_evolution)
+    b.free_values .= on_architecture(CPU(), solver_evolution.x[inv_perm_evolution])
+    return b
+end
+
+# solve function
+function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, n_steps)
+    t0 = time()
+    for i ∈ 1:n_steps
+        flush(stdout)
+        flush(stderr)
+
+        # evolve
+        solver_evolution = evolve!(arch, solver_evolution, ux, uy, uz, b)
+        b = update_b!(b, solver_evolution)
+
+        # invert
+        solver_inversion = invert!(arch, solver_inversion, b)
+        ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+
+        if any(isnan.(solver_inversion.x)) || any(isnan.(solver_evolution.x))
+            error("Solution diverged 🤯")
+        end
+
+        # info/save
+        if mod(i, 100) == 0
+            t1 = time()
+            println("\n---")
+            @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
+            @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
+            @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
+            @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
+            @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uz.free_values))))
+            println("---\n")
+
+            plot_profiles(ux, uy, uz, b, 0.5, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+            plots(g, ux, uy, uz, p, b, i_save)
+            save(ux, uy, uz, p, b, i_save)
+            i_save += 1
+        end
     end
-    ax[1].plot(u0,  z0, label=L"\gamma = 0")
-    ax[2].plot(v0,  z0)
-    ax[3].plot(w0,  z0)
-    ax[4].plot(bz0, z0)
-    ax[1].plot(uxs, z, label=L"\gamma = 1/8")
-    ax[2].plot(uys, z)
-    ax[3].plot(uzs, z)
-    ax[4].plot(bzs, z)
-    ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad t = "*@sprintf("%1.2f", t))
-    # ax[1].set_title(L"x = "*@sprintf("%1.2f", x))
-    ax[1].legend()
-    savefig(fname)
-    println(fname)
-    plt.close()
+    return ux, uy, uz, p, b
 end
 
-L = 1
-ux, uy, uz, p, b = run()
+function hrs_mins_secs(seconds)
+    return seconds ÷ 3600, (seconds % 3600) ÷ 60, seconds % 60
+end
 
-# model = GmshDiscreteModel("bowl2D.msh")
-# g = MyGrid(model)
-# profile_plot(ux, uy, uz, b, 0.5, 10.0, x->1-x[1]^2, "images/profiles010.png")
+# run
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 500)
