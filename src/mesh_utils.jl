@@ -15,7 +15,9 @@ end
 
 """
     g = MyGrid(model)
+    g = MyGrid(model, bdy_name)
     g = MyGrid(fname)
+    g = MyGrid(p, t)
     g = MyGrid(p, t, p_to_t)
 
 A simple custom struct to hold a mesh. `p` defines the node coordinates, 
@@ -23,12 +25,34 @@ A simple custom struct to hold a mesh. `p` defines the node coordinates,
 """
 function MyGrid(model::Gridap.Geometry.UnstructuredDiscreteModel)
     p, t = get_p_t(model)
+    return MyGrid(p, t)
+end
+function MyGrid(p, t)
     p_to_t = get_p_to_t(t, size(p, 1))
     return MyGrid(p, t, p_to_t)
 end
 function MyGrid(fname::String)
     model = GmshDiscreteModel(fname)
     return MyGrid(model)
+end
+function MyGrid(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
+    # determine entity tags on boundary called `bdy_name`
+    tag = findfirst(model.face_labeling.tag_to_name .== bdy_name)
+    entities = model.face_labeling.tag_to_entities[tag]
+
+    # get indices of boundary triangles
+    tri_tags = model.face_labeling.d_to_dface_to_entity[3]
+    k_bdy = findall(k -> tri_tags[k] ∈ entities, 1:size(tri_tags, 1))
+
+    # `t` data structure for boundary (note: these are still the global indices)
+    tris = model.grid_topology.n_m_to_nface_to_mfaces[3, 1] # all triangles in the mesh
+    t = [tris[k][i] for k ∈ k_bdy, i ∈ 1:3]
+
+    # make `p` data structure for boundary (note: this is still _all_ of the nodes in the mesh)
+    nc = model.grid.node_coordinates
+    p = [nc[i][j] for i ∈ 1:size(nc, 1), j ∈ 1:length(nc[1])]
+
+    return MyGrid(p, t)
 end
 
 """
@@ -96,4 +120,8 @@ Unpack a `FEFunction` `u` into a vector of values `u` at the nodes of the mesh.
 function unpack_fefunction(u, g::MyGrid)
     u_cell_values = get_cell_dof_values(u)
     return [u_cell_values[g.p_to_t[i][1][1]][g.p_to_t[i][1][2]] for i ∈ 1:size(g.p, 1)]
+
+    # this works for order 1 spaces
+    # return sortslices([U.space.metadata.free_dof_to_node       u.free_values
+    #                    U.space.metadata.dirichlet_dof_to_node  U.dirichlet_values], dims=1)[:, 2]
 end
