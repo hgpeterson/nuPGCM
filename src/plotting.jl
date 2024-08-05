@@ -4,7 +4,17 @@
 Plot a scalar field `u` on a mesh `g`.
 """
 function quick_plot(u::AbstractVector, g::MyGrid; b=nothing, label="", fname="image.png")
-    fig, ax = plt.subplots(1)
+    # get aspect ratio right
+    xL = minimum(g.p[:, 1])
+    xR = maximum(g.p[:, 1])
+    L = xR - xL
+    yB = minimum(g.p[:, 2])
+    yT = maximum(g.p[:, 2])
+    H = yT - yB
+    γ = H/L
+
+    # plot
+    fig, ax = plt.subplots(1, figsize=(3.2, 3.2*γ))
     umax = maximum(abs.(u))
     img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
     if b !== nothing
@@ -16,8 +26,8 @@ function quick_plot(u::AbstractVector, g::MyGrid; b=nothing, label="", fname="im
     ax.axis("equal")
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
-    ax.set_xticks(-1:0.5:1)
-    ax.set_yticks(-1:0.5:0)
+    ax.set_xticks([xL, xR])
+    ax.set_yticks([yB, yT])
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     savefig(fname)
@@ -148,6 +158,33 @@ function plot_sparsity_pattern(A; fname="sparsity_pattern.png")
     ax.set_yticks([])
     ax.spines["top"].set_visible(true)
     ax.spines["right"].set_visible(true)
+    plt.savefig(fname)
+    println(fname)
+    plt.close()
+end
+
+function plot_u_sfc(ux, uy, g, g_sfc; t=nothing, fname="u_sfc.png")
+    u = unpack_fefunction(ux, g)
+    v = unpack_fefunction(uy, g)
+    speed = @. sqrt(u^2 + v^2)
+    i_sfc = unique(g_sfc.t[:])
+    vmax = maximum(abs.(speed[i_sfc]))
+    fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
+    img = ax.tripcolor(g_sfc.p[:, 1], g_sfc.p[:, 2], g_sfc.t[:, 1:3] .- 1, speed, shading="gouraud", cmap="Reds", vmin=0, vmax=vmax, rasterized=true)
+    n = 1000
+    i_show = i_sfc[1:div(length(i_sfc), n):end]
+    ax.quiver(g_sfc.p[i_show, 1], g_sfc.p[i_show, 2], u[i_show], v[i_show], color="k")
+    plt.colorbar(img, ax=ax, label=L"Surface speed $\sqrt{u^2 + v^2}$")
+    ax.axis("equal")
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    if t === nothing
+        ax.set_title("Surface velocity")
+    else
+        ax.set_title(L"Surface velocity at $t = $"*@sprintf("%1.2f", t))
+    end
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
     plt.savefig(fname)
     println(fname)
     plt.close()
