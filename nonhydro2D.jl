@@ -130,7 +130,7 @@ H(x) = sqrt(2 - x[1]^2) - 1
 κ(x) = 1e-2 + exp(-(x[2] + H(x))/0.1)
 
 # params
-ε² = 1e-2
+ε² = 1e-3
 γ = 1
 f = 1
 μϱ = 1e0
@@ -170,6 +170,7 @@ if isfile(LHS_inversion_fname)
 else
     LHS_inversion = assemble_LHS_inversion()
 end
+@assert size(LHS_inversion) == (N, N)
 
 # Cuthill-McKee DOF reordering
 @time "RCM perm" begin 
@@ -266,6 +267,7 @@ if isfile(LHS_evolution_fname)
 else
     LHS_evolution = assemble_LHS_evolution()
 end
+@assert size(LHS_evolution) == (nb, nb)
 
 # Cuthill-McKee DOF reordering
 @time "RCM perm" begin
@@ -275,11 +277,11 @@ if typeof(arch) == GPU
 else
     perm_evolution = CuthillMcKee.symrcm(M_b)
 end
+inv_perm_evolution = invperm(perm_evolution)
+# plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution.png")
+LHS_evolution = LHS_evolution[perm_evolution, perm_evolution]
+# plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution_symrcm.png")
 end
-@time "inv_perm" inv_perm_evolution = invperm(perm_evolution)
-plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution.png")
-@time "LHS_evolution_perm" LHS_evolution = LHS_evolution[perm_evolution, perm_evolution]
-plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution_symrcm.png")
 
 # put on GPU, if needed
 LHS_evolution = on_architecture(arch, FT.(LHS_evolution))
