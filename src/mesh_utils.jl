@@ -103,7 +103,7 @@ end
 
 Evaluate `u(x)` and return `NaN` if an error occurs.
 """
-function nan_eval(u::Gridap.CellField, x)
+function nan_eval(u, x)
     try 
         u(x) 
     catch 
