@@ -155,7 +155,7 @@ println("---\n")
 # filenames for LHS matrices
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
 # LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
-LHS_evolution_fname = @sprintf("matrices/LHS_evolution_horiz_diff_%e_%e.h5", hres, α)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_horiz_diff_%e_%e_%e.h5", hres, α, γ)
 
 # inversion LHS
 γε² = γ*ε²
@@ -302,9 +302,9 @@ end
 solver_inversion = invert!(arch, solver_inversion, b)
 ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 i_save = 0
-plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-plot_u_sfc(ux, uy, g, g_sfc; t=0, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
-save(ux, uy, uz, p, b, i_save)
+@time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+@time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=0, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+@time "save" save(ux, uy, uz, p, b, i_save)
 i_save += 1
 
 # evolution LHS
@@ -402,7 +402,7 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
 
         # info/save
         if mod(i, 50) == 0
-            save(ux, uy, uz, p, b, i_save)
+            @time "save" save(ux, uy, uz, p, b, i_save)
         end
         if mod(i, 1) == 0
             t1 = time()
@@ -413,9 +413,9 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
             @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
             println("---\n")
-
-            plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-            plot_u_sfc(ux, uy, g, g_sfc; t=i*Δt, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+            
+            @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+            @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=i*Δt, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
             i_save += 1
         end
     end
