@@ -10,12 +10,14 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "res1e-2_eps1e-3_gam0.125_horiz_diff"
+out_folder = "sim012"
 
 if !isdir(out_folder)
     mkdir(out_folder)
     mkdir("$out_folder/images")
     mkdir("$out_folder/data")
+# else
+#     error("$out_folder already exists")
 end
 
 # define CPU and GPU architectures
@@ -45,9 +47,12 @@ arch = GPU()
 FT = Float64
 
 # tolerance and max iterations for iterative solvers
-tol = FT(1e-7)
+tol = FT(1e-8)
+# tol = FT(1e-7)
 @printf("tol = %.1e\n", tol)
-itmax = 0
+# itmax = 0
+itmax = 500
+@printf("itmax = %d\n", itmax)
 
 # Vector type on CPU and GPU
 VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
@@ -60,7 +65,8 @@ function save(ux, uy, uz, p, b, i)
 end
 
 # model
-hres = 0.01
+hres = 0.02
+# model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f_thin.msh", hres))
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # full grid
@@ -127,14 +133,15 @@ dΩ = Measure(Ω, degree)
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 # depth
-H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
+# H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
+H(x) = 1 - x[1]^2 - x[2]^2
 
 # forcing
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-3
+ε² = 1e-2
 γ = 1/8
 f₀ = 1
 β = 0
@@ -153,19 +160,17 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
+# LHS_inversion_fname = @sprintf("matrices/LHS_inversion_thin_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
+# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_thin_%e_%e.h5", hres, α)
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
-# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
-LHS_evolution_fname = @sprintf("matrices/LHS_evolution_horiz_diff_%e_%e_%e.h5", hres, α, γ)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
+# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_horiz_diff_%e_%e_%e.h5", hres, α, γ)
 
 # inversion LHS
 γε² = γ*ε²
 γ²ε² = γ^2*ε²
 function assemble_LHS_inversion()
     a_inversion((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        # ∫(∂z(ux)*∂z(vx)*ν*ε² - uy*vx*f + ∂x(p)*vx +
-        #   ∂z(uy)*∂z(vy)*ν*ε² + ux*vy*f + ∂y(p)*vy +
-        #   ∂z(uz)*∂z(vz)*ν*ε² +           ∂z(p)*vz +
-        #   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
         ∫( γε²*∂x(ux)*∂x(vx)*ν +  γε²*∂y(ux)*∂y(vx)*ν +  ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
            γε²*∂x(uy)*∂x(vy)*ν +  γε²*∂y(uy)*∂y(vy)*ν +  ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
           γ²ε²*∂x(uz)*∂x(vz)*ν + γ²ε²*∂y(uz)*∂y(vz)*ν + γε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
@@ -216,54 +221,13 @@ if typeof(arch) == GPU
     println()
 end
 
-# preconditioners for inversion LHS
-struct LUPreconditioner{L,U}
-    L::L
-    U::U
-end
-function compute_P_inversion(::CPU, LHS_inversion)
-    return I
-    # @time "LHS_inversion_ilu" P_inversion = ilu(LHS_inversion, τ=1e-6)
-end
-function compute_P_inversion(::GPU, LHS_inversion)
-    return I
-
-    # @time "LHS_inversion_ilu" F = ilu(on_architecture(CPU(), LHS_inversion), τ=1e-4)
-    # L = UnitLowerTriangular(on_architecture(GPU(), F.L))
-    # U = UpperTriangular(on_architecture(GPU(), SparseMatrixCSC(F.U')))
-    # return LUPreconditioner(L, U)
-
-    # @time "P_inversion" P_inversion = ilu(on_architecture(CPU(), LHS_inversion), τ=0.1) 
-    # L = on_architecture(GPU(), P_inversion.L)
-    # U = on_architecture(GPU(), SparseMatrixCSC(P_inversion.U'))
-    # temp = CUDA.zeros(FT, N)
-    # function ldiv_ilu!(L, U, x, y, temp)
-    #     ldiv!(temp, L, y)  # forward substitution with L
-    #     ldiv!(x, U, temp)  # backward substitution with U
-    #     return x
-    # end
-    # P_inversion_op = LinearOperator(FT, N, N, false, false, (x, y) -> ldiv_ilu!(L, U, x, y, temp))
-    # return P_inversion_op
-end
-
-P_inversion = compute_P_inversion(arch, LHS_inversion)
-
-import LinearAlgebra: ldiv!
-temp = on_architecture(arch, zeros(FT, N))
-function ldiv!(x, P::LUPreconditioner, y)
-    ldiv!(temp, P.L, y)
-    ldiv!(x, P.U, temp)
-    return x
-end
-
 # Krylov solver for inversion
 if typeof(arch) == GPU
     solver_inversion = DqgmresSolver(N, N, 20, VT)
-    # solver_inversion = GmresSolver(N, N, 20, VT)
+    # solver_inversion = BicgstabSolver(N, N, VT)
 else
     solver_inversion = GmresSolver(N, N, 20, VT)
 end
-# solver_inversion = BicgstabSolver(N, N, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
 # inversion functions
@@ -272,9 +236,9 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, M=P_inversion, 
-                                  ldiv=true, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    # println(solver_inversion.stats)
+    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    println(solver_inversion.stats)
     return solver_inversion
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -310,8 +274,8 @@ i_save += 1
 # evolution LHS
 function assemble_LHS_evolution()
     # b^n+1 - Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n+1)) = b^n - Δt*u^n⋅∇b^n + Δt/2*ε²/μϱ ∂z(κ(x) ∂z(b^n))
-    a_evolution(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
-    # a_evolution(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
+    # a_evolution(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    a_evolution(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
     @time "assemble LHS_evolution" LHS_evolution = assemble_matrix(a_evolution, B, D)
     write_sparse_matrix(LHS_evolution_fname, LHS_evolution)
     return LHS_evolution
@@ -344,36 +308,20 @@ if typeof(arch) == GPU
     println()
 end
 
-# preconditioners for evolution LHS
-function compute_P_evolution(::CPU)
-    return I
-    # @time "LHS_evolution_ilu" P_evolution = ilu(LHS_evolution, τ=1e-10)
-    # @time "LHS_evolution_ilu" P_evolution = lu(LHS_evolution)
-    # return P_evolution
-end
-function compute_P_evolution(::GPU)
-    return I
-end
-
-P_evolution = compute_P_evolution(arch)
-
 # Krylov solver for evolution
-# solver_evolution = GmresSolver(nb, nb, 20, VT)
-# solver_evolution = BicgstabSolver(nb, nb, VT)
 solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 
 # evolution functions
 function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
-    l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    # l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
     # l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
-    # l_evolution(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
+    l_evolution(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
                                     FT.(assemble_vector(l_evolution, D)[perm_evolution])
                                     )
-    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, M=P_evolution, 
-                                  ldiv=true, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    # println(solver_evolution.stats)
+    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)

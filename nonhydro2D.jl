@@ -42,11 +42,25 @@ on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 arch = GPU()
 
 # Float type on CPU and GPU
-# FT = typeof(arch) == CPU ? Float64 : Float32
 FT = Float64
+
+# tolerance and max iterations for iterative solvers
+tol = FT(1e-8)
+# tol = FT(1e-7)
+@printf("tol = %.1e\n", tol)
+# itmax = 0
+itmax = 500
+@printf("itmax = %d\n", itmax)
 
 # Vector type on CPU and GPU
 VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
+# tolerance and max iterations for iterative solvers
+tol = FT(1e-8)
+# tol = FT(1e-7)
+@printf("tol = %.1e\n", tol)
+# itmax = 0
+itmax = 500
+@printf("itmax = %d\n", itmax)
 
 # save to vtu
 function save(ux, uy, uz, p, b, i)
@@ -64,7 +78,8 @@ end
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("meshes/bowl2D_%0.2f_thin.msh", hres))
+# model = GmshDiscreteModel(@sprintf("meshes/bowl2D_%0.2f_thin.msh", hres))
+model = GmshDiscreteModel(@sprintf("meshes/bowl2D_%0.2f.msh", hres))
 g = MyGrid(model)
 
 # mesh res
@@ -123,15 +138,16 @@ dΩ = Measure(Ω, degree)
 ∂z(u) = VectorValue(0.0, 1.0)⋅∇(u)
 
 # depth
-H(x) = sqrt(2 - x[1]^2) - 1
+# H(x) = sqrt(2 - x[1]^2) - 1
+H(x) = 1 - x[1]^2
 
 # forcing
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[2] + H(x))/0.1)
 
 # params
-ε² = 1e-3
-γ = 1
+ε² = 1e-2
+γ = 1/8
 f = 1
 μϱ = 1e0
 Δt = 1e-4*μϱ/ε²
@@ -148,8 +164,8 @@ println("---\n")
 # filenames for LHS matrices
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
 LHS_evolution_fname = @sprintf("matrices/LHS_evolution_2D_%e_%e.h5", hres, α)
-# println(LHS_inversion_fname)
-# println(LHS_evolution_fname)
+# LHS_inversion_fname = @sprintf("matrices/LHS_inversion_thin_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
+# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_thin_2D_%e_%e.h5", hres, α)
 
 # inversion LHS
 γε² = γ*ε²
@@ -185,10 +201,10 @@ if typeof(arch) == GPU
     perm_uz = CUSOLVER.symrcm(M_uz) .+ 1
     perm_p  = CUSOLVER.symrcm(M_p)  .+ 1
 else
-    perm_ux = CuthillMcKee.symrcm(M_ux)
-    perm_uy = CuthillMcKee.symrcm(M_uy)
-    perm_uz = CuthillMcKee.symrcm(M_uz)
-    perm_p  = CuthillMcKee.symrcm(M_p) 
+    perm_ux = CuthillMcKee.symrcm(M_ux, true, false)
+    perm_uy = CuthillMcKee.symrcm(M_uy, true, false)
+    perm_uz = CuthillMcKee.symrcm(M_uz, true, false)
+    perm_p  = CuthillMcKee.symrcm(M_p, true, false) 
 end
 perm_inversion = [perm_ux; 
                   perm_uy .+ nx; 
@@ -221,7 +237,9 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x)
+    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    println(solver_inversion.stats)
     return solver_inversion
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -275,7 +293,7 @@ M_b = assemble_matrix(a_m, B, D)
 if typeof(arch) == GPU
     perm_evolution = CUSOLVER.symrcm(M_b) .+ 1
 else
-    perm_evolution = CuthillMcKee.symrcm(M_b)
+    perm_evolution = CuthillMcKee.symrcm(M_b, true, false)
 end
 inv_perm_evolution = invperm(perm_evolution)
 # plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution.png")
@@ -300,7 +318,8 @@ function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
     @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
                                     FT.(assemble_vector(l_evolution, D)[perm_evolution])
                                     )
-    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x)
+    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)

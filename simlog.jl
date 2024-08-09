@@ -84,23 +84,25 @@ Timestep:
     • Δt = 1e-4*μϱ/ε²
     • T = 500Δt
 Iterative Solvers:
-    • Inversion → DQGMRES, memory=20, tol=1e-7, P=I
-    • Evolution → CG, tol=1e-7, P=I
+    • Inversion → DQGMRES, memory=20, tol=1e-8, P=I
+    • Evolution → CG, tol=1e-8, P=I
 Simulation Info:
     • Hardware = One 80G h100 GPU
     • Simulation time = 16 hrs
 Notes:
     • Only profiles were saved, but it seems like a wave develops before the 
       solution crashes at about t = 25.
+    • See sim009: this was probably just a CFL blow up and not a real 
+      instability.
 
 ################################################################################
 
 sim004
 
-Same as sim003 but with horizontal diffusion.
+Same as sim003 but with horizontal diffusion and tol=1e-7.
 Notes:
-    • With γ = 1, the horizontal diffusion is strong enough to completely
-      stabilize the solution (no waves).
+    • Solution is stable (not sure if it's because of the diffusion or the 
+      lower tolerance - based on sim007, it's the tol). 
 
 ################################################################################
 
@@ -117,12 +119,89 @@ Notes:
 sim006
 
 Redo sim005, this time with γ actually equal to 1/8.
+Notes:
+    • Solution is stable and qualitatively similar to sim007.
 
 ################################################################################
 
 sim007
 
 Same as sim006 but without horizontal diffusion.
+Notes:
+    • Solution is stable even without horizontal diffusion. Must have been the
+      lower tolerance that made the difference in sim004.
+
+################################################################################
+
+sim008
+
+Redo sim003 to see exactly how instability forms.
+Notes:
+    • No instability! Only difference is tol=1e-8 in sim003.
+
+################################################################################
+
+sim009
+
+Same as sim008 but with tol=1e-8. (This is the same as sim003.)
+Notes:
+    • I don't think the "instability" was really an instability at all. It just
+      looks like a CFL blow up or something in a particular spot.
+
+################################################################################
+
+sim010
+
+Mesh:
+    • 3D bowl h=0.02 
+Parameters:
+    • ε² = 1e-2
+    • μϱ = 1
+    • γ = 1
+    • f = 1
+Forcing:
+    • ν = 1
+    • κ = 1e-2 + exp(-(z + H)/0.1)
+Horizontal Diffusion: FALSE
+Timestep:
+    • Diffusion → Crank-Nicolson
+    • Advection → Forward Euler
+    • Δt = 1e-4*μϱ/ε²
+    • T = 500Δt
+Iterative Solvers:
+    • Inversion → BiCgStab, tol=1e-8, P=I
+    • Evolution → CG, tol=1e-8, P=I
+Simulation Info:
+    • Hardware = One 16G p100 GPU
+    # • Simulation time = ?? hrs
+Notes:
+    • This should now be a direct comparison to ../sim002 with the νPGCM 
+      (except with ν = 1).
+    • No instability...
+
+################################################################################
+
+sim011
+
+Same as sim010 but with γ = 1/8, DQGMRES, itmax=500.
+Notes:
+    • Also no instability!!!
+
+################################################################################
+
+sim012
+
+Same as sim011 but without advection.
+Notes:
+    • Clearly a difference in buoyancy profiles (just looking at last frame).
+
+################################################################################
+
+sim013 
+
+Same setup as sim011 but in 2D bowl.
+Notes:
+    • 
 
 ################################################################################
 """
