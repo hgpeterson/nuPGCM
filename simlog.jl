@@ -201,7 +201,16 @@ sim013
 
 Same setup as sim011 but in 2D bowl.
 Notes:
-    • 
+    • Profiles between 2D and 3D are very similar! Good sign.
+    • But looking at the global 2D solution, there is clearly a bit of
+      gridscale noise.
+
+################################################################################
+
+sim014
+Same as sim013 but using exact LU factorization for inversion.
+Notes:
+    • Gridscale noise goes away → iterative solver is not fully converged.
 
 ################################################################################
 """
