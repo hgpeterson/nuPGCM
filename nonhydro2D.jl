@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "sim014"
 
 if !isdir(out_folder)
     mkdir(out_folder)
@@ -38,8 +38,8 @@ on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
 # choose architecture
-# arch = CPU()
-arch = GPU()
+arch = CPU()
+# arch = GPU()
 
 # Float type on CPU and GPU
 FT = Float64
@@ -223,6 +223,9 @@ if typeof(arch) == GPU
     println()
 end
 
+# preconditioner
+P_inversion = lu(LHS_inversion)
+
 # Krylov solver for inversion
 if typeof(arch) == GPU
     solver_inversion = DqgmresSolver(N, N, 20, VT)
@@ -237,8 +240,11 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
+    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
+    #                               atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+                                  M=P_inversion, ldiv=true,
+                                  atol=tol, rtol=tol, verbose=1, itmax=itmax)
     println(solver_inversion.stats)
     return solver_inversion
 end
@@ -308,6 +314,9 @@ if typeof(arch) == GPU
     println()
 end
 
+# preconditioner
+P_evolution = lu(LHS_evolution)
+
 # Krylov solver for evolution
 solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
@@ -318,8 +327,11 @@ function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
     @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
                                     FT.(assemble_vector(l_evolution, D)[perm_evolution])
                                     )
+    # @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
+    #                               atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
-                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+                                  M=P_evolution, ldiv=true,
+                                  atol=tol, rtol=tol, verbose=1, itmax=itmax)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)
