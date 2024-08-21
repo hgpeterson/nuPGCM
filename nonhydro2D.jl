@@ -3,19 +3,23 @@ using Gridap, GridapGmsh
 using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using SparseArrays, LinearAlgebra
-using Printf
+using Printf, HDF5
 using PyPlot
 
 pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim014"
+out_folder = "sim017/gam16"
 
 if !isdir(out_folder)
+    println("creating folder: ", out_folder)
     mkdir(out_folder)
+    println("creating subfolder: ", out_folder, "/images")
     mkdir("$out_folder/images")
+    println("creating subfolder: ", out_folder, "/data")
     mkdir("$out_folder/data")
+    println()
 end
 
 # define CPU and GPU architectures
@@ -38,42 +42,43 @@ on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
 # choose architecture
-arch = CPU()
-# arch = GPU()
+# arch = CPU()
+arch = GPU()
 
 # Float type on CPU and GPU
 FT = Float64
 
 # tolerance and max iterations for iterative solvers
 tol = FT(1e-8)
-# tol = FT(1e-7)
 @printf("tol = %.1e\n", tol)
-# itmax = 0
-itmax = 500
+itmax = 0
 @printf("itmax = %d\n", itmax)
 
 # Vector type on CPU and GPU
 VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
-# tolerance and max iterations for iterative solvers
-tol = FT(1e-8)
-# tol = FT(1e-7)
-@printf("tol = %.1e\n", tol)
-# itmax = 0
-itmax = 500
-@printf("itmax = %d\n", itmax)
 
 # save to vtu
 function save(ux, uy, uz, p, b, i)
-    fname = @sprintf("%s/data/nonhydro2D%03d.vtu", out_folder, i)
-    writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
+    # fname = @sprintf("%s/data/nonhydro2D%03d.vtu", out_folder, i)
+    # writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
+    # println(fname)
+
+    fname = @sprintf("%s/data/nonhydro2D%03d.h5", out_folder, i)
+    h5open(fname, "w") do file
+        write(file, "ux", ux.free_values)
+        write(file, "uy", uy.free_values)
+        write(file, "uz", uz.free_values)
+        write(file, "p", Vector(p.free_values))
+        write(file, "b", b.free_values)
+    end
     println(fname)
 end
 
 function plots(g, ux, uy, uz, p, b, i)
-    quick_plot(ux, g, b=b, label=L"u", fname=@sprintf("out/images/u%03d.png", i))
-    quick_plot(uy, g, b=b, label=L"v", fname=@sprintf("out/images/v%03d.png", i))
-    quick_plot(uz, g, b=b, label=L"w", fname=@sprintf("out/images/w%03d.png", i))
-    quick_plot(p,  g, b=b, label=L"p", fname=@sprintf("out/images/p%03d.png", i))
+    quick_plot(ux, g, b=b, label=L"u", fname=@sprintf("%s/images/u%03d.png", out_folder, i))
+    quick_plot(uy, g, b=b, label=L"v", fname=@sprintf("%s/images/v%03d.png", out_folder, i))
+    quick_plot(uz, g, b=b, label=L"w", fname=@sprintf("%s/images/w%03d.png", out_folder, i))
+    quick_plot(p,  g, b=b, label=L"p", fname=@sprintf("%s/images/p%03d.png", out_folder, i))
 end
 
 # model
@@ -146,11 +151,12 @@ H(x) = 1 - x[1]^2
 κ(x) = 1e-2 + exp(-(x[2] + H(x))/0.1)
 
 # params
-ε² = 1e-2
-γ = 1/8
+ε² = 1e-4
+γ = 1/16
 f = 1
 μϱ = 1e0
-Δt = 1e-4*μϱ/ε²
+# Δt = 1e-4*μϱ/ε²
+Δt = 0.1
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
 println("Parameters:\n")
@@ -162,10 +168,10 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("matrices/LHS_inversion_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
-LHS_evolution_fname = @sprintf("matrices/LHS_evolution_2D_%e_%e.h5", hres, α)
 # LHS_inversion_fname = @sprintf("matrices/LHS_inversion_thin_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
 # LHS_evolution_fname = @sprintf("matrices/LHS_evolution_thin_2D_%e_%e.h5", hres, α)
+LHS_inversion_fname = @sprintf("matrices/LHS_inversion_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_2D_%e_%e.h5", hres, α)
 
 # inversion LHS
 γε² = γ*ε²
@@ -223,15 +229,8 @@ if typeof(arch) == GPU
     println()
 end
 
-# preconditioner
-P_inversion = lu(LHS_inversion)
-
 # Krylov solver for inversion
-if typeof(arch) == GPU
-    solver_inversion = DqgmresSolver(N, N, 20, VT)
-else
-    solver_inversion = GmresSolver(N, N, 20, VT)
-end
+solver_inversion = GmresSolver(N, N, 20, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
 # inversion functions
@@ -240,12 +239,9 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
     @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
-    # @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-    #                               atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                                  M=P_inversion, ldiv=true,
-                                  atol=tol, rtol=tol, verbose=1, itmax=itmax)
-    println(solver_inversion.stats)
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
+    @printf("niter: %d, solved: %s\n", solver_inversion.stats.niter, solver_inversion.stats.solved)
     return solver_inversion
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -263,12 +259,6 @@ flush(stderr)
 # initial condition
 b0(x) = x[2]
 b = interpolate_everywhere(b0, B)
-if typeof(arch) == CPU
-    p̄ = sum(∫( x->x[2]^2/2 )*dΩ.quad) / sum(∫( 1 )dΩ.quad)
-    p0(x) = x[2]^2/2 - p̄
-    p = interpolate_everywhere(p0, P)
-    solver_inversion.x[inv_perm_inversion[nx+ny+nz+1:end]] .= p.free_values[:]
-end
 solver_inversion = invert!(arch, solver_inversion, b)
 ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 i_save = 0
@@ -314,9 +304,6 @@ if typeof(arch) == GPU
     println()
 end
 
-# preconditioner
-P_evolution = lu(LHS_evolution)
-
 # Krylov solver for evolution
 solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
@@ -327,11 +314,9 @@ function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
     @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
                                     FT.(assemble_vector(l_evolution, D)[perm_evolution])
                                     )
-    # @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
-    #                               atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
-                                  M=P_evolution, ldiv=true,
-                                  atol=tol, rtol=tol, verbose=1, itmax=itmax)
+                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("niter: %d, solved: %s\n", solver_evolution.stats.niter, solver_evolution.stats.solved)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)
@@ -359,7 +344,7 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
         end
 
         # info/save
-        if mod(i, 100) == 0
+        if mod(i, 1) == 0
             t1 = time()
             println("\n---")
             @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
@@ -368,7 +353,8 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
             @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uz.free_values))))
             println("---\n")
-
+        end
+        if mod(i, 10) == 0
             plot_profiles(ux, uy, uz, b, 0.5, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
             plots(g, ux, uy, uz, p, b, i_save)
             save(ux, uy, uz, p, b, i_save)
@@ -383,4 +369,4 @@ function hrs_mins_secs(seconds)
 end
 
 # run
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 500)
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 5000)
