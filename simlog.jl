@@ -173,7 +173,7 @@ Iterative Solvers:
     • Evolution → CG, tol=1e-8, P=I
 Simulation Info:
     • Hardware = One 16G p100 GPU
-    # • Simulation time = ?? hrs
+    • Simulation time = 4 hrs
 Notes:
     • This should now be a direct comparison to ../sim002 with the νPGCM 
       (except with ν = 1).
@@ -185,6 +185,7 @@ sim011
 
 Same as sim010 but with γ = 1/8, DQGMRES, itmax=500.
 Notes:
+    • Sim time: 4 hrs
     • Also no instability!!!
 
 ################################################################################
@@ -211,6 +212,60 @@ sim014
 Same as sim013 but using exact LU factorization for inversion.
 Notes:
     • Gridscale noise goes away → iterative solver is not fully converged.
+
+################################################################################
+
+sim015
+Same as sim011 but with GMRES, restart=true, itmax=0.
+Notes:
+    • Sim time: 5 hrs
+    • Looks almost exactly the same as sim011.
+
+################################################################################
+
+sim016
+Mesh:
+    • 3D bowl h=0.01
+Parameters:
+    • ε² = 1e-4
+    • μϱ = 1
+    • γ = 1/8
+    • f = 1
+Forcing:
+    • ν = 1
+    • κ = 1e-2 + exp(-(z + H)/0.1)
+Horizontal Diffusion: FALSE
+Timestep:
+    • Diffusion → Crank-Nicolson
+    • Advection → Forward Euler
+    • Δt = 0.1
+    • T = 500Δt
+Iterative Solvers:
+    • Inversion → GMRES, memory=20, restart=true, tol=1e-8, P=I
+    • Evolution → CG, tol=1e-8, P=I
+Simulation Info:
+    • Hardware = One 80G h100 GPU
+    • Simulation time = ???
+Notes:
+
+################################################################################
+
+sim017
+
+2D simulations equivalent to sim016 for varying γ to look at convergence.
+
+################################################################################
+
+sim018
+
+Same as sim016 but only diffusion. Want to see why nothing was happening with
+Δt = 0.01.
+
+################################################################################
+
+sim019
+
+Same as sim016 but with γ = 1.
 
 ################################################################################
 """
