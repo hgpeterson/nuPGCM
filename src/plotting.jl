@@ -60,26 +60,28 @@ function plot_yslice(u, b, y, H; t=nothing, cb_label="", fname="yslice.png")
 end
 
 function plot_profiles(ux, uy, uz, b, x, H; t=nothing, fname="profiles.png")
-    z = H([x])*(chebyshev_nodes(2^6) .- 1)/2
+    H0 = H([x])
+    nz = Int64(round(H0/0.01)) + 1
+    z = range(-H0, 0, length=nz)
+    dz = z[2] - z[1]
 
     uxs = [nan_eval(ux, Point(x, zᵢ)) for zᵢ ∈ z]
     uys = [nan_eval(uy, Point(x, zᵢ)) for zᵢ ∈ z]
     uzs = [nan_eval(uz, Point(x, zᵢ)) for zᵢ ∈ z]
-    # bz = VectorValue(0.0, 0.0, 1.0)⋅∇(b)
-    # bzs = [nan_eval(bz, Point(x, y, zᵢ)) for zᵢ ∈ z]
     bs = [nan_eval(b, Point(x, zᵢ)) for zᵢ ∈ z]
     uxs[1] = 0
     uys[1] = 0
     uzs[1] = 0
-    # bzs[1] = 0
+    bzs = (bs[3:end] - bs[1:end-2])/(2dz)
+    bzs = [0; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
 
     fig, ax = plt.subplots(1, 4, figsize=(8, 3.2))
     ax[1].set_ylabel(L"z")
     ax[1].set_xlabel(L"u")
     ax[2].set_xlabel(L"v")
     ax[3].set_xlabel(L"w")
-    # ax[4].set_xlabel(L"\partial_z b")
-    ax[4].set_xlabel(L"b")
+    ax[4].set_xlabel(L"\partial_z b")
+    # ax[4].set_xlabel(L"b")
     ax[2].set_yticklabels([])
     ax[3].set_yticklabels([])
     ax[4].set_yticklabels([])
@@ -90,8 +92,8 @@ function plot_profiles(ux, uy, uz, b, x, H; t=nothing, fname="profiles.png")
     ax[1].plot(uxs, z)
     ax[2].plot(uys, z)
     ax[3].plot(uzs, z)
-    # ax[4].plot(bzs, z)
-    ax[4].plot(bs, z)
+    ax[4].plot(bzs, z)
+    # ax[4].plot(bs, z)
     if t === nothing
         ax[1].set_title(L"x = "*@sprintf("%1.2f", x))
     else
@@ -135,6 +137,37 @@ function plot_profiles(ux, uy, uz, b, x, y, H; t=nothing, fname="profiles.png")
     ax[3].plot(uzs, z)
     # ax[4].plot(bzs, z)
     ax[4].plot(bs, z)
+    if t === nothing
+        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
+    else
+        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y)*L", \quad t = "*@sprintf("%1.2f", t))
+    end
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
+function plot_profiles(b, x, y, H; t=nothing, fname="profiles.png")
+    H0 = H([x, y])
+    nz = Int64(round(H0/0.01)) + 1
+    z = range(-H0, 0, length=nz)
+    dz = z[2] - z[1]
+
+    bs = [nan_eval(b, Point(x, y, zᵢ)) for zᵢ ∈ z]
+    bzs = (bs[3:end] - bs[1:end-2])/(2dz)
+    bzs = [0; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
+
+    fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
+    ax[1].set_ylabel(L"z")
+    ax[1].set_xlabel(L"b")
+    ax[2].set_xlabel(L"\partial_z b")
+    ax[2].set_yticklabels([])
+    for a ∈ ax
+        a.set_ylim(-H0, 0) 
+        a.ticklabel_format(axis="x", style="sci", scilimits=(-2,2))
+    end
+    ax[1].plot(bs, z)
+    ax[2].plot(bzs, z)
     if t === nothing
         ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
     else
