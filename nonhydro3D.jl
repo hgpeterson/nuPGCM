@@ -10,14 +10,12 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim019"
+out_folder = "sim020"
 
 if !isdir(out_folder)
     mkdir(out_folder)
     mkdir("$out_folder/images")
     mkdir("$out_folder/data")
-# else
-#     error("$out_folder already exists")
 end
 
 # define CPU and GPU architectures
@@ -148,7 +146,8 @@ f₀ = 1
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # Δt = 1e-4*μϱ/ε²
-Δt = 0.1
+Δt = 0.05
+T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
 println("Parameters:\n")
@@ -158,6 +157,7 @@ println("Parameters:\n")
 @printf(" γ = %.1e\n", γ)
 @printf("μϱ = %.1e\n", μϱ)
 @printf("Δt = %.1e\n", Δt)
+@printf(" T = %.1e\n", T)
 println("---\n")
 
 # filenames for LHS matrices
@@ -215,8 +215,16 @@ LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
 # plot_sparsity_pattern(LHS_inversion, fname="images/LHS_inversion_symrcm.png")
 end
 
+# preconditioner
+P_inversion = I
+# P_inversion = Diagonal([Vector(1 ./ diag(M_ux[perm_ux, perm_ux])); 
+#                         Vector(1 ./ diag(M_uy[perm_uy, perm_uy])); 
+#                         Vector(1 ./ diag(M_uz[perm_uz, perm_uz])); 
+#                         Vector(1 ./ diag(M_p[perm_p, perm_p]))])
+
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
+# P_inversion = Diagonal(on_architecture(arch, FT.(diag(P_inversion))))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -233,7 +241,7 @@ function invert!(arch::AbstractArchitecture, solver_inversion, b)
                                      FT.(assemble_vector(l_inversion, Y)[perm_inversion])
                                     )
     Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true, M=P_inversion)
     @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver_inversion.stats.solved, solver_inversion.stats.niter, solver_inversion.stats.timer)
     return solver_inversion
 end
@@ -348,21 +356,21 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             error("Solution diverged 🤯")
         end
 
-        # info/save
-        if mod(i, 1000) == 0
+        # info
+        t1 = time()
+        println("\n---")
+        @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
+        @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
+        @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
+        @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
+        @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
+        println("---\n")
+
+        # save/plot
+        if mod(i, n_steps ÷ 5) == 0
             @time "save" save(ux, uy, uz, p, b, i_save)
         end
-        if mod(i, 1) == 0
-            t1 = time()
-            println("\n---")
-            @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
-            @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-            @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
-            @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
-            @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
-            println("---\n")
-        end
-        if mod(i, 10) == 0  
+        if mod(i, n_steps ÷ 500) == 0  
             @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
             @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=i*Δt, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
             i_save += 1
@@ -376,4 +384,4 @@ function hrs_mins_secs(seconds)
 end
 
 # run
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 5000)
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, Int64(T/Δt))
