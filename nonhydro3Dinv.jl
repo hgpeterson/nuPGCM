@@ -1,7 +1,7 @@
 using NonhydroPG
 using Gridap, GridapGmsh
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using Krylov, SparseArrays, LinearAlgebra
+using Krylov, SparseArrays, LinearAlgebra, IncompleteLU, LinearOperators
 using HDF5, Printf
 using PyPlot
 
@@ -18,9 +18,10 @@ if !isdir(out_folder)
 end
 
 function save(ux, uy, uz, p, b)
-    # fname = "$out_folder/data/nonhydro3D.vtu"
-    # writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
-    # println(fname)
+    fname = "$out_folder/data/nonhydro3D.vtu"
+    writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
+    println(fname)
+
     fname = "$out_folder/data/nonhydro3D.h5"
     h5open(fname, "w") do file
         write(file, "ux", ux.free_values)
@@ -148,26 +149,75 @@ LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
 # plot_sparsity_pattern(LHS_inversion, fname="$out_folder/images/LHS_inversion_symrcm.png")
 end
 
+# preconditioner
+P_inversion = Diagonal(1 / hres^3 * ones(N)) 
+# P_inversion = Diagonal([Vector(1 ./ diag(M_ux)[perm_ux]); 
+#                         Vector(1 ./ diag(M_uy)[perm_uy]); 
+#                         Vector(1 ./ diag(M_uz)[perm_uz]); 
+#                         Vector(1 ./ diag(M_p)[perm_p])])
+
+# # blocks
+# A = LHS_inversion[1:nu, 1:nu]
+# BT = LHS_inversion[1:nu, nu+1:end]
+# B = LHS_inversion[nu+1:end, 1:nu]
+# D = LHS_inversion[nu+1:end, nu+1:end]
+# @assert nnz(D) == 0
+
+# # preconditioner
+# @time "ilu" F = ilu(A, τ=1e-4) 
+# display(F.L)
+# display(F.U)
+# L = UnitLowerTriangular(CuSparseMatrixCSR(F.L))
+# U = UpperTriangular(CuSparseMatrixCSR(SparseMatrixCSC(F.U')))
+# temp = CUDA.zeros(Float64, nu)
+# function ldiv_ilu!(L, U, x, y, temp)
+#     ldiv!(temp, L, y)  # forward substitution with L
+#     ldiv!(x, U, temp)  # backward substitution with U
+#     # temp = L\y[1:nu]
+#     # x[1:nu] = U\temp
+#     # x[nu+1:end] = y[nu+1:end]
+#     return x
+# end
+# PA = LinearOperator(Float64, nu, nu, false, false, (x, y) -> ldiv_ilu!(L, U, x, y, temp))
+# A_gpu = CuSparseMatrixCSR(A)
+# Ainv = LinearOperator(Float64, nu, nu, false, false, (x, y) -> Krylov.gmres(A_gpu, y, x, M=PA, verbose=1, memory=20, restart=true))
+
+# @time "ilu" F = ilu(M_p/ε², τ=1e-4) 
+# display(F.L)
+# display(F.U)
+# L_M = UnitLowerTriangular(CuSparseMatrixCSR(F.L))
+# U_M = UpperTriangular(CuSparseMatrixCSR(SparseMatrixCSC(F.U')))
+# temp_M = CUDA.zeros(Float64, np)
+# PM = LinearOperator(Float64, np, np, false, false, (x, y) -> ldiv_ilu!(L_M, U_M, x, y, temp_M))
+# M_gpu = CuSparseMatrixCSR(M_p/ε²)
+# Minv = LinearOperator(Float64, np, np, false, false, (x, y) -> Krylov.cg(M_gpu, y, x, M=PM, verbose=1))
+
+# function ldiv_A_M!(Ainv, Minv, x, y)
+#     x[1:nu] = Ainv*y[1:nu]
+#     x[nu+1:end] = Minv*y[nu+1:end]
+#     return x
+# end
+# P_inversion = LinearOperator(Float64, N, N, false, false, (x, y) -> ldiv_A_M!(Ainv, Minv, x, y))
+
 # put on GPU
 LHS_inversion = CuSparseMatrixCSR(LHS_inversion)
+P_inversion = Diagonal(CuVector(diag(P_inversion)))
 CUDA.memory_status()
 
 # Krylov solver
-# solver_inversion = DqgmresSolver(N, N, 20, CuVector{Float64})
 solver_inversion = GmresSolver(N, N, 20, CuVector{Float64})
 solver_inversion.x .= 0
-tol = 1e-8
+tol = 1e-7
 itmax = 0
-# tol = 1e-7
-# itmax = 2000
 @printf("tol = %.1e, itmax = %d\n", tol, itmax)
 
 # inversion functions
 function invert!(solver_inversion, b)
     l_inversion((vx, vy, vz, q)) = ∫( b*vz )dΩ
     @time "build RHS_inversion" RHS_inversion = CuVector(assemble_vector(l_inversion, Y)[perm_inversion])
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                                  verbose=1, atol=tol, rtol=tol, itmax=itmax, restart=true)
+    Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
+                  atol=tol, rtol=tol, verbose=1, itmax=itmax, restart=true, M=P_inversion)
+    @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver_inversion.stats.solved, solver_inversion.stats.niter, solver_inversion.stats.timer)
     return solver_inversion
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -184,3 +234,6 @@ solver_inversion = invert!(solver_inversion, b)
 ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname="$out_folder/images/profiles.png")
 @time "save" save(ux, uy, uz, p, b)
+
+# tol=1e-7, P=I
+# inversion GMRES solve: solved=true, niter=5913, time=57.676821
