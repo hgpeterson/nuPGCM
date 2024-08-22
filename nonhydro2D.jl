@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim017/gam16"
+out_folder = "out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -152,7 +152,7 @@ H(x) = 1 - x[1]^2
 
 # params
 ε² = 1e-4
-γ = 1/16
+γ = 1
 f = 1
 μϱ = 1e0
 # Δt = 1e-4*μϱ/ε²
@@ -222,8 +222,13 @@ LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
 # plot_sparsity_pattern(LHS_inversion, fname="out/images/LHS_inversion_symrcm.png")
 end
 
+# matrix for computing RHS of inversion
+a_rhs_inversion(b, vz) = ∫( b*vz )dΩ
+RHS_inversion = assemble_matrix(a_rhs_inversion, B, Vz)[perm_uz, :]
+
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
+RHS_inversion = on_architecture(arch, FT.(RHS_inversion))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -234,15 +239,17 @@ solver_inversion = GmresSolver(N, N, 20, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
 # inversion functions
-function invert!(arch::AbstractArchitecture, solver_inversion, b)
-    l_inversion((vx, vy, vz, q)) = ∫( b*vz )dΩ
-    @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
-                                     FT.(assemble_vector(l_inversion, Y)[perm_inversion])
-                                    )
-    @time "invert!" Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
-    @printf("niter: %d, solved: %s\n", solver_inversion.stats.niter, solver_inversion.stats.solved)
-    return solver_inversion
+function invert!(arch::AbstractArchitecture, solver, b)
+    b_arch = on_architecture(arch, b.free_values)
+    if typeof(arch) == GPU
+        @time "RHS_inversion" RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
+    else
+        @time "RHS_inversion" RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
+    end
+    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, 
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
+    @printf("inversion GMRES: solved=%s, niter=%d, time=%f,\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    return solver
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
     sol = on_architecture(CPU(), solver_inversion.x[inv_perm_inversion])
@@ -297,8 +304,12 @@ LHS_evolution = LHS_evolution[perm_evolution, perm_evolution]
 # plot_sparsity_pattern(LHS_evolution, fname="out/images/LHS_evolution_symrcm.png")
 end
 
+# preconditioner
+P_evolution = Diagonal(Vector(1 ./ diag(LHS_evolution)))
+
 # put on GPU, if needed
 LHS_evolution = on_architecture(arch, FT.(LHS_evolution))
+P_evolution = Diagonal(on_architecture(arch, FT.(diag(P_evolution))))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -309,14 +320,14 @@ solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 
 # evolution functions
-function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
-    l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
-    @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
-                                    FT.(assemble_vector(l_evolution, D)[perm_evolution])
-                                    )
-    @time "evolve!" Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
-                                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    @printf("niter: %d, solved: %s\n", solver_evolution.stats.niter, solver_evolution.stats.solved)
+function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
+    @time "RHS_evolution" RHS = on_architecture(arch, 
+                                FT.(assemble_vector(l, D)[perm_evolution])
+                                )
+    Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("evolution CG: solved=%s, niter=%d, time=%f,\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)
