@@ -245,8 +245,13 @@ Iterative Solvers:
     • Evolution → CG, tol=1e-8, P=I
 Simulation Info:
     • Hardware = One 80G h100 GPU
-    • Simulation time = ???
+    • Simulation time = 24+ hrs
 Notes:
+    • Working on a 3D sim that's close to the parameters we want.
+    • Looks like CG starts taking only 1 or even 0 iterations after a while...
+      I think this is because the norm of the residual is small due to the 
+      small timestep. Maybe preconditioning would fix this, because it changes
+      the norm. (see sim018)
 
 ################################################################################
 
@@ -260,12 +265,23 @@ sim018
 
 Same as sim016 but only diffusion. Want to see why nothing was happening with
 Δt = 0.01.
+Notes:
+    • It does seem like it has to do with the norm of the residual being small.
+      Using a preconditioner of P = diag(M) fixes things!
 
 ################################################################################
 
 sim019
 
 Same as sim016 but with γ = 1.
+Notes:
+    • CFL blow up at around t = 37.
+
+################################################################################
+
+sim020
+
+Same as sim016 but with P_evolution = diag(M_b).
 
 ################################################################################
 """
