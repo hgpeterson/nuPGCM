@@ -281,7 +281,7 @@ Notes:
 
 sim020
 
-Same as sim016 but with P_evolution = diag(M_b).
+Same as sim016 but with P_evolution = diag(M_b) and Δt = 0.05.
 
 ################################################################################
 """
