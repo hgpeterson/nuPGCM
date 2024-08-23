@@ -10,17 +10,22 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "sim017/gam16"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
     mkdir(out_folder)
+end
+if !isdir("$out_folder/images")
     println("creating subfolder: ", out_folder, "/images")
     mkdir("$out_folder/images")
+end
+if !isdir("$out_folder/data")
     println("creating subfolder: ", out_folder, "/data")
     mkdir("$out_folder/data")
-    println()
 end
+flush(stdout)
+flush(stderr)
 
 # define CPU and GPU architectures
 abstract type AbstractArchitecture end
@@ -53,6 +58,8 @@ tol = FT(1e-8)
 @printf("tol = %.1e\n", tol)
 itmax = 0
 @printf("itmax = %d\n", itmax)
+flush(stdout)
+flush(stderr)
 
 # Vector type on CPU and GPU
 VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
@@ -72,6 +79,8 @@ function save(ux, uy, uz, p, b, i)
         write(file, "b", b.free_values)
     end
     println(fname)
+    flush(stdout)
+    flush(stderr)
 end
 
 function plots(g, ux, uy, uz, p, b, i)
@@ -126,6 +135,8 @@ np = P.space.space.nfree
 nb = B.space.nfree
 N = nu + np - 1
 @printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
+flush(stdout)
+flush(stderr)
 
 # initialize vectors
 ux = interpolate_everywhere(0, Ux)
@@ -143,7 +154,6 @@ dΩ = Measure(Ω, degree)
 ∂z(u) = VectorValue(0.0, 1.0)⋅∇(u)
 
 # depth
-# H(x) = sqrt(2 - x[1]^2) - 1
 H(x) = 1 - x[1]^2
 
 # forcing
@@ -152,12 +162,13 @@ H(x) = 1 - x[1]^2
 
 # params
 ε² = 1e-4
-γ = 1
+γ = 1/16
 f = 1
 μϱ = 1e0
 # Δt = 1e-4*μϱ/ε²
-Δt = 0.1
+Δt = 0.05
 α = Δt/2*ε²/μϱ # for timestep
+T = 5e-2*μϱ/ε²
 println("\n---")
 println("Parameters:\n")
 @printf("ε² = %.1e (δ = %.1e, %.1e ≤ h ≤ %.1e)\n", ε², √(2ε²), hmin, hmax)
@@ -165,11 +176,12 @@ println("Parameters:\n")
 @printf(" γ = %.1e\n", γ)
 @printf("μϱ = %.1e\n", μϱ)
 @printf("Δt = %.1e\n", Δt)
+@printf(" T = %.1e\n", T)
 println("---\n")
+flush(stdout)
+flush(stderr)
 
 # filenames for LHS matrices
-# LHS_inversion_fname = @sprintf("matrices/LHS_inversion_thin_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
-# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_thin_2D_%e_%e.h5", hres, α)
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_2D_%e_%e_%e_%e.h5", hres, ε², γ, f)
 LHS_evolution_fname = @sprintf("matrices/LHS_evolution_2D_%e_%e.h5", hres, α)
 
@@ -248,7 +260,7 @@ function invert!(arch::AbstractArchitecture, solver, b)
     end
     Krylov.solve!(solver, LHS_inversion, RHS, solver.x, 
                   atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
-    @printf("inversion GMRES: solved=%s, niter=%d, time=%f,\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    @printf("inversion GMRES: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver
 end
 function update_u_p!(ux, uy, uz, p, solver_inversion)
@@ -259,9 +271,6 @@ function update_u_p!(ux, uy, uz, p, solver_inversion)
     p = FEFunction(P, sol[nx+ny+nz+1:end])
     return ux, uy, uz, p
 end
-
-flush(stdout)
-flush(stderr)
 
 # initial condition
 b0(x) = x[2]
@@ -327,7 +336,7 @@ function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
                                 )
     Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
                   atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    @printf("evolution CG: solved=%s, niter=%d, time=%f,\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    @printf("evolution CG: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver_evolution
 end
 function update_b!(b, solver_evolution)
@@ -339,6 +348,7 @@ end
 function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, n_steps)
     t0 = time()
     for i ∈ 1:n_steps
+        t1 = time()
         flush(stdout)
         flush(stderr)
 
@@ -354,18 +364,18 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             error("Solution diverged 🤯")
         end
 
-        # info/save
-        if mod(i, 1) == 0
-            t1 = time()
-            println("\n---")
-            @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
-            @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-            @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
-            @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
-            @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uz.free_values))))
-            println("---\n")
-        end
-        if mod(i, 10) == 0
+        # info
+        t2 = time()
+        println("\n---")
+        @printf("t = %f (i = %d/%d, Δt = %f)\n\n", i*Δt, i, n_steps, Δt)
+        @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t2-t0)...)
+        @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t2-t1)*(n_steps-i))...)
+        @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
+        @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uz.free_values))))
+        println("---\n")
+
+        # save
+        if mod(i, n_steps ÷ 500) == 0
             plot_profiles(ux, uy, uz, b, 0.5, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
             plots(g, ux, uy, uz, p, b, i_save)
             save(ux, uy, uz, p, b, i_save)
@@ -380,4 +390,4 @@ function hrs_mins_secs(seconds)
 end
 
 # run
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, 5000)
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, Int64(T/Δt))
