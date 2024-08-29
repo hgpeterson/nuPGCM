@@ -61,7 +61,7 @@ end
 
 function plot_profiles(ux, uy, uz, b, x, H; t=nothing, fname="profiles.png")
     H0 = H([x])
-    nz = Int64(round(H0/0.01)) + 1
+    nz = 2*Int64(round(H0/0.01)) + 1
     z = range(-H0, 0, length=nz)
     dz = z[2] - z[1]
 
@@ -106,7 +106,7 @@ end
 
 function plot_profiles(ux, uy, uz, b, x, y, H; t=nothing, fname="profiles.png")
     H0 = H([x, y])
-    nz = Int64(round(H0/0.01)) + 1
+    nz = 2*Int64(round(H0/0.01)) + 1
     z = range(-H0, 0, length=nz)
     dz = z[2] - z[1]
 
@@ -149,7 +149,7 @@ end
 
 function plot_profiles(b, x, y, H; t=nothing, fname="profiles.png")
     H0 = H([x, y])
-    nz = Int64(round(H0/0.01)) + 1
+    nz = 2*Int64(round(H0/0.01)) + 1
     z = range(-H0, 0, length=nz)
     dz = z[2] - z[1]
 
