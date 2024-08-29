@@ -281,7 +281,18 @@ Notes:
 
 sim020
 
-Same as sim016 but with P_evolution = diag(M_b) and Δt = 0.05.
+Same as sim019 but with P_evolution = diag(M_b) and Δt = 0.05.
+Notes:
+    • Looking pretty good, although for some reason there is quite a bit of 
+      noise in the interior. Perhaps a better quality mesh would help?
+    • Sim makes it to t = 64 after 24 hrs. Main bottleneck now is RHS setup
+      for both inversion and evolution.
+
+################################################################################
+
+sim021
+
+Same as sim021 but with β = 1.
 
 ################################################################################
 """
