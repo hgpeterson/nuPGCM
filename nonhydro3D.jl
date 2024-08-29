@@ -10,13 +10,22 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim020"
+out_folder = "sim021"
 
 if !isdir(out_folder)
+    println("creating folder: ", out_folder)
     mkdir(out_folder)
+end
+if !isdir("$out_folder/images")
+    println("creating subfolder: ", out_folder, "/images")
     mkdir("$out_folder/images")
+end
+if !isdir("$out_folder/data")
+    println("creating subfolder: ", out_folder, "/data")
     mkdir("$out_folder/data")
 end
+flush(stdout)
+flush(stderr)
 
 # define CPU and GPU architectures
 abstract type AbstractArchitecture end
@@ -46,10 +55,8 @@ FT = Float64
 
 # tolerance and max iterations for iterative solvers
 tol = FT(1e-8)
-# tol = FT(1e-7)
 @printf("tol = %.1e\n", tol)
 itmax = 0
-# itmax = 500
 @printf("itmax = %d\n", itmax)
 
 # Vector type on CPU and GPU
@@ -142,7 +149,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ε² = 1e-4
 γ = 1
 f₀ = 1
-β = 0
+β = 1
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # Δt = 1e-4*μϱ/ε²
@@ -215,15 +222,16 @@ LHS_inversion = LHS_inversion[perm_inversion, perm_inversion]
 # plot_sparsity_pattern(LHS_inversion, fname="images/LHS_inversion_symrcm.png")
 end
 
+# matrix for computing RHS of inversion
+a_rhs_inversion(b, vz) = ∫( b*vz )dΩ
+@time "RHS_inversion" RHS_inversion = assemble_matrix(a_rhs_inversion, B, Vz)[perm_uz, :]
+
 # preconditioner
 P_inversion = I
-# P_inversion = Diagonal([Vector(1 ./ diag(M_ux[perm_ux, perm_ux])); 
-#                         Vector(1 ./ diag(M_uy[perm_uy, perm_uy])); 
-#                         Vector(1 ./ diag(M_uz[perm_uz, perm_uz])); 
-#                         Vector(1 ./ diag(M_p[perm_p, perm_p]))])
 
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
+RHS_inversion = on_architecture(arch, FT.(RHS_inversion))
 # P_inversion = Diagonal(on_architecture(arch, FT.(diag(P_inversion))))
 if typeof(arch) == GPU
     CUDA.memory_status()
@@ -235,18 +243,20 @@ solver_inversion = GmresSolver(N, N, 20, VT)
 solver_inversion.x .= on_architecture(arch, zeros(FT, N))
 
 # inversion functions
-function invert!(arch::AbstractArchitecture, solver_inversion, b)
-    l_inversion((vx, vy, vz, q)) = ∫( b*vz )dΩ
-    @time "build RHS_inversion" RHS_inversion = on_architecture(arch, 
-                                     FT.(assemble_vector(l_inversion, Y)[perm_inversion])
-                                    )
-    Krylov.solve!(solver_inversion, LHS_inversion, RHS_inversion, solver_inversion.x, 
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true, M=P_inversion)
-    @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver_inversion.stats.solved, solver_inversion.stats.niter, solver_inversion.stats.timer)
-    return solver_inversion
+function invert!(arch::AbstractArchitecture, solver, b)
+    b_arch = on_architecture(arch, b.free_values)
+    if typeof(arch) == GPU
+        @time "RHS_inversion" RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
+    else
+        @time "RHS_inversion" RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
+    end
+    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, 
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
+    @printf("inversion GMRES: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    return solver
 end
-function update_u_p!(ux, uy, uz, p, solver_inversion)
-    sol = on_architecture(CPU(), solver_inversion.x[inv_perm_inversion])
+function update_u_p!(ux, uy, uz, p, solver)
+    sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
     ux.free_values .= sol[1:nx]
     uy.free_values .= sol[nx+1:nx+ny]
     uz.free_values .= sol[nx+ny+1:nx+ny+nz]
@@ -320,20 +330,18 @@ solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 
 # evolution functions
-function evolve!(arch::AbstractArchitecture, solver_evolution, ux, uy, uz, b)
-    # l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
-    l_evolution(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
-    # l_evolution(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
-    @time "build RHS_evolution" RHS_evolution = on_architecture(arch, 
-                                    FT.(assemble_vector(l_evolution, D)[perm_evolution])
-                                    )
-    Krylov.solve!(solver_evolution, LHS_evolution, RHS_evolution, solver_evolution.x, 
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax, M=P_evolution)
-    @printf("evolution CG solve: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
-    return solver_evolution
+function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
+    @time "build RHS_evolution" RHS = on_architecture(arch, FT.(assemble_vector(l, D)[perm_evolution]))
+    Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("evolution CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    return solver
 end
-function update_b!(b, solver_evolution)
-    b.free_values .= on_architecture(CPU(), solver_evolution.x[inv_perm_evolution])
+function update_b!(b, solver)
+    b.free_values .= on_architecture(CPU(), solver.x[inv_perm_evolution])
     return b
 end
 
@@ -359,18 +367,18 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
         # info
         t1 = time()
         println("\n---")
-        @printf("t = %.1f (i = %d, Δt = %f)\n\n", i*Δt, i, Δt)
+        @printf("t = %f (i = %d/%d, Δt = %f)\n\n", i*Δt, i, n_steps, Δt)
         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
         @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
         @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
-        @printf("CFL ≈ %.5f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
+        @printf("CFL ≈ %f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
         println("---\n")
 
         # save/plot
         if mod(i, n_steps ÷ 5) == 0
             @time "save" save(ux, uy, uz, p, b, i_save)
         end
-        if mod(i, n_steps ÷ 500) == 0  
+        if mod(i, n_steps ÷ 50) == 0  
             @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
             @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=i*Δt, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
             i_save += 1
