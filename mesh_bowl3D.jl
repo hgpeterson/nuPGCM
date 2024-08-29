@@ -77,10 +77,33 @@ function generate_bowl_mesh(h)
     gmsh.model.addPhysicalGroup(2, [3], 2, "bot")
     gmsh.model.addPhysicalGroup(3, [1], 3, "int")
 
+    # gmsh.option.setNumber("Mesh.QualityType", 3)
+    # gmsh.option.setNumber("Mesh.Smoothing", 10)
+    # gmsh.option.setNumber("Mesh.Algorithm3D", 7)
+    # gmsh.option.setNumber("Mesh.QualityType", 0)
+    # gmsh.option.setNumber("Mesh.OptimizeNetgen", 1)
+    # gmsh.option.setNumber("Mesh.OptimizeThreshold", 0.4)
+    gmsh.option.setNumber("Mesh.AllowSwapAngle", 25)
+
     # generate and save mesh
+    gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
     gmsh.model.mesh.generate(3)
+    # gmsh.model.mesh.optimize("Netgen")
+    # gmsh.model.mesh.optimize("HighOrder")
+    # gmsh.model.mesh.optimize("HighOrderElastic")
     gmsh.write("bowl3D.msh")
     gmsh.finalize()
 end
 
 generate_bowl_mesh(0.05)
+
+# Info    : 0.00 < quality < 0.10 :         0 elements
+# Info    : 0.10 < quality < 0.20 :         0 elements
+# Info    : 0.20 < quality < 0.30 :         1 elements
+# Info    : 0.30 < quality < 0.40 :      1108 elements
+# Info    : 0.40 < quality < 0.50 :      1613 elements
+# Info    : 0.50 < quality < 0.60 :      2691 elements
+# Info    : 0.60 < quality < 0.70 :      5769 elements
+# Info    : 0.70 < quality < 0.80 :     13796 elements
+# Info    : 0.80 < quality < 0.90 :     22042 elements
+# Info    : 0.90 < quality < 1.00 :     10666 elements
