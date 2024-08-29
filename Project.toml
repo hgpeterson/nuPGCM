@@ -1,11 +1,12 @@
-authors = ["hgpeterson <hgpeterson@caltech.edu>"]
 name = "NonhydroPG"
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
+authors = ["hgpeterson <hgpeterson@caltech.edu>"]
 version = "0.1.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CuthillMcKee = "17f17636-5e38-52e3-a803-7ae3aaaf3da9"
+DistMesh = "f7ee28b6-bfbf-11e9-3e31-8961b86f052c"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 GridapGmsh = "3025c34a-b394-11e9-2a55-3fee550c04c8"
@@ -17,6 +18,7 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [extras]
 CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
