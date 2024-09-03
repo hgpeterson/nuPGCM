@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim021"
+out_folder = "out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -70,8 +70,7 @@ function save(ux, uy, uz, p, b, i)
 end
 
 # model
-hres = 0.01
-# model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f_thin.msh", hres))
+hres = 0.05
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # full grid
@@ -121,12 +120,6 @@ nb = B.space.nfree
 N = nu + np - 1
 @printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
 
-# initialize vectors
-ux = interpolate_everywhere(0, Ux)
-uy = interpolate_everywhere(0, Uy)
-uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P)
-
 # triangulation and integration measure
 degree = order^2
 Ω = Triangulation(model)
@@ -138,7 +131,6 @@ dΩ = Measure(Ω, degree)
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 # depth
-# H(x) = sqrt(2 - x[1]^2 - x[2]^2) - 1
 H(x) = 1 - x[1]^2 - x[2]^2
 
 # forcing
@@ -146,14 +138,14 @@ H(x) = 1 - x[1]^2 - x[2]^2
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-4
+ε² = 1e-2
 γ = 1
 f₀ = 1
-β = 1
+β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
-# Δt = 1e-4*μϱ/ε²
-Δt = 0.05
+Δt = 1e-4*μϱ/ε²
+# Δt = 0.05
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -168,8 +160,6 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-# LHS_inversion_fname = @sprintf("matrices/LHS_inversion_thin_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
-# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_thin_%e_%e.h5", hres, α)
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
 LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
 # LHS_evolution_fname = @sprintf("matrices/LHS_evolution_horiz_diff_%e_%e_%e.h5", hres, α, γ)
@@ -267,21 +257,32 @@ end
 flush(stdout)
 flush(stderr)
 
-# initial condition
-b0(x) = x[3]
-b = interpolate_everywhere(b0, B)
-if typeof(arch) == CPU
-    p̄ = sum(∫( x->x[3]^2/2 )*dΩ.quad) / sum(∫( 1 )dΩ.quad)
-    p0(x) = x[3]^2/2 - p̄
-    p = interpolate_everywhere(p0, P)
-    solver_inversion.x[inv_perm_inversion[nx+ny+nz+1:end]] .= p.free_values[:]
-end
-solver_inversion = invert!(arch, solver_inversion, b)
-ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
-i_save = 0
-@time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=0, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-@time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=0, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
-@time "save" save(ux, uy, uz, p, b, i_save)
+# # initial condition: b = z, t = 0
+# i_save = 0
+# b = interpolate_everywhere(x->x[3], B)
+# t = 0.
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P)
+# solver_inversion = invert!(arch, solver_inversion, b)
+# ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+
+# initial condition: load from file
+i_save = 5
+statefile = @sprintf("%s/data/state%03d.h5", out_folder, 5)
+ux, uy, uz, p, b, t = load_state(statefile)
+solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
+ux = FEFunction(Ux, ux)
+uy = FEFunction(Uy, uy)
+uz = FEFunction(Uz, uz)
+p  = FEFunction(P, p)
+b  = FEFunction(B, b)
+
+# plot initial condition
+@time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+@time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
 i_save += 1
 
 # evolution LHS
@@ -346,7 +347,7 @@ function update_b!(b, solver)
 end
 
 # solve function
-function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, n_steps)
+function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, n_steps)
     t0 = time()
     for i ∈ 1:n_steps
         flush(stdout)
@@ -364,10 +365,13 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
             error("Solution diverged 🤯")
         end
 
+        # time
+        t += Δt
+
         # info
         t1 = time()
         println("\n---")
-        @printf("t = %f (i = %d/%d, Δt = %f)\n\n", i*Δt, i, n_steps, Δt)
+        @printf("t = %f (i = %d/%d, Δt = %f)\n\n", t, i, n_steps, Δt)
         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
         @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
         @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
@@ -375,12 +379,10 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, solver_inversion, 
         println("---\n")
 
         # save/plot
-        if mod(i, n_steps ÷ 5) == 0
-            @time "save" save(ux, uy, uz, p, b, i_save)
-        end
-        if mod(i, n_steps ÷ 50) == 0  
-            @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=i*Δt, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-            @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=i*Δt, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+        if mod(i, n_steps ÷ 50) == 0
+            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+            @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+            @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
             i_save += 1
         end
     end
@@ -392,4 +394,5 @@ function hrs_mins_secs(seconds)
 end
 
 # run
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, solver_inversion, solver_evolution, i_save, Int64(T/Δt))
+n_steps = Int64((T - t)/Δt)
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, n_steps)

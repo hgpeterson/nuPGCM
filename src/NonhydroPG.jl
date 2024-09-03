@@ -25,6 +25,8 @@ plot_profiles,
 plot_sparsity_pattern,
 plot_u_sfc,
 write_sparse_matrix,
-read_sparse_matrix
+read_sparse_matrix,
+save_state,
+load_state
 
 end # module
