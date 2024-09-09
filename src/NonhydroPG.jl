@@ -3,15 +3,11 @@ module NonhydroPG
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
+using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using PyPlot
 using SparseArrays
 using HDF5
 using Printf
-
-include("utils.jl")
-include("meshes.jl")
-include("plotting.jl")
-include("IO.jl")
 
 # define CPU and GPU architectures (credit: Oceananigans.jl)
 abstract type AbstractArchitecture end
@@ -32,9 +28,16 @@ on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
 on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
+include("utils.jl")
+include("meshes.jl")
+include("plotting.jl")
+include("IO.jl")
+include("matrices.jl")
+
 export 
 chebyshev_nodes,
 hrs_mins_secs,
+AbstractArchitecture,
 CPU,
 GPU,
 on_architecture,
@@ -51,6 +54,9 @@ plot_u_sfc,
 write_sparse_matrix,
 read_sparse_matrix,
 save_state,
-load_state
+load_state,
+assemble_LHS_inversion,
+assemble_RHS_inversion,
+assemble_LHS_evolution
 
 end # module
