@@ -8,13 +8,37 @@ using SparseArrays
 using HDF5
 using Printf
 
-include("mesh_utils.jl")
+include("utils.jl")
+include("meshes.jl")
 include("plotting.jl")
 include("IO.jl")
 
+# define CPU and GPU architectures (credit: Oceananigans.jl)
+abstract type AbstractArchitecture end
+
+struct CPU <: AbstractArchitecture end
+struct GPU <: AbstractArchitecture end
+
+# convert types from one architecture to another (credit: Oceananigans.jl)
+on_architecture(::CPU, a::Array) = a
+on_architecture(::GPU, a::Array) = CuArray(a)
+
+on_architecture(::CPU, a::CuArray) = Array(a)
+on_architecture(::GPU, a::CuArray) = a
+
+on_architecture(::CPU, a::SparseMatrixCSC) = a
+on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
+
+on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
+on_architecture(::GPU, a::CuSparseMatrixCSR) = a
+
 export 
 chebyshev_nodes,
-MyGrid,
+hrs_mins_secs,
+CPU,
+GPU,
+on_architecture,
+Mesh,
 get_p_t,
 get_p_to_t,
 nan_eval,

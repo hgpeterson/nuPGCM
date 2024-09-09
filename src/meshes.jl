@@ -1,41 +1,32 @@
-"""
-    x = chebyshev_nodes(n)
-
-Return `n` Chebyshev nodes in the interval `[-1, 1]`.
-"""
-function chebyshev_nodes(n)
-    return [-cos((i - 1)*π/(n - 1)) for i ∈ 1:n]
-end
-
-struct MyGrid{P, T, PT}
+struct Mesh{P, T, PT}
     p::P
     t::T
     p_to_t::PT
 end
 
 """
-    g = MyGrid(model)
-    g = MyGrid(model, bdy_name)
-    g = MyGrid(fname)
-    g = MyGrid(p, t)
-    g = MyGrid(p, t, p_to_t)
+    m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
+    m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
+    m = Mesh(fname::String)
+    m = Mesh(p, t)
+    m = Mesh(p, t, p_to_t)
 
 A simple custom struct to hold a mesh. `p` defines the node coordinates, 
 `t` defines the connectivities, and `p_to_t` maps nodes to cells.
 """
-function MyGrid(model::Gridap.Geometry.UnstructuredDiscreteModel)
+function Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
     p, t = get_p_t(model)
-    return MyGrid(p, t)
+    return Mesh(p, t)
 end
-function MyGrid(p, t)
+function Mesh(p, t)
     p_to_t = get_p_to_t(t, size(p, 1))
-    return MyGrid(p, t, p_to_t)
+    return Mesh(p, t, p_to_t)
 end
-function MyGrid(fname::String)
+function Mesh(fname::String)
     model = GmshDiscreteModel(fname)
-    return MyGrid(model)
+    return Mesh(model)
 end
-function MyGrid(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
+function Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
     # determine entity tags on boundary called `bdy_name`
     tag = findfirst(model.face_labeling.tag_to_name .== bdy_name)
     entities = model.face_labeling.tag_to_entities[tag]
@@ -50,14 +41,14 @@ function MyGrid(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
 
     # make `p` data structure for boundary (note: this is still _all_ of the nodes in the mesh)
     nc = model.grid.node_coordinates
-    p = [nc[i][j] for i ∈ 1:size(nc, 1), j ∈ 1:length(nc[1])]
+    p = [nc[i][j] for i ∈ axes(nc, 1), j ∈ 1:length(nc[1])]
 
-    return MyGrid(p, t)
+    return Mesh(p, t)
 end
 
 """
-    p, t = get_p_t(model)
-    p, t = get_p_t(fname)
+    p, t = get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
+    p, t = get_p_t(fname::String)
 
 Return the node coordinates `p` and the connectivities `t` of a mesh.
 """
@@ -112,14 +103,14 @@ function nan_eval(u, x)
 end
 
 """
-    u = unpack_fefunction(u, g)
+    u = unpack_fefunction(u, m::Mesh)
 
-Unpack a `FEFunction` `u` into a vector of values `u` at the nodes of the mesh.
-(Assumes `u` is continuous).
+Unpack Gridap finite element function `u` into a vector of values at the nodes 
+of the mesh. (Assumes `u` is continuous).
 """
-function unpack_fefunction(u, g::MyGrid)
+function unpack_fefunction(u, m::Mesh)
     u_cell_values = get_cell_dof_values(u)
-    return [u_cell_values[g.p_to_t[i][1][1]][g.p_to_t[i][1][2]] for i ∈ 1:size(g.p, 1)]
+    return [u_cell_values[m.p_to_t[i][1][1]][m.p_to_t[i][1][2]] for i ∈ 1:size(m.p, 1)]
 
     # this works for order 1 spaces
     # return sortslices([U.space.metadata.free_dof_to_node       u.free_values
