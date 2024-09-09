@@ -1,25 +1,25 @@
 """
-    quick_plot(u, g; b, label, fname)
+    quick_plot(u::AbstractVector, m::Mesh; b=nothing, label="", fname="image.png")
 
-Plot a scalar field `u` on a mesh `g`.
+Plot a scalar field `u` on a mesh `m`.
 """
-function quick_plot(u::AbstractVector, g::MyGrid; b=nothing, label="", fname="image.png")
+function quick_plot(u::AbstractVector, m::Mesh; b=nothing, label="", fname="image.png")
     # get aspect ratio right
-    xL = minimum(g.p[:, 1])
-    xR = maximum(g.p[:, 1])
+    xL = minimum(m.p[:, 1])
+    xR = maximum(m.p[:, 1])
     L = xR - xL
-    yB = minimum(g.p[:, 2])
-    yT = maximum(g.p[:, 2])
+    yB = minimum(m.p[:, 2])
+    yT = maximum(m.p[:, 2])
     H = yT - yB
     γ = H/L
 
     # plot
     fig, ax = plt.subplots(1, figsize=(3.2, 3.2*γ))
     umax = maximum(abs.(u))
-    img = ax.tripcolor(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
+    img = ax.tripcolor(m.p[:, 1], m.p[:, 2], m.t[:, 1:3] .- 1, u, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
     if b !== nothing
-        b = unpack_fefunction(b, g)
-        ax.tricontour(g.p[:, 1], g.p[:, 2], g.t[:, 1:3] .- 1, b, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
+        b = unpack_fefunction(b, m)
+        ax.tricontour(m.p[:, 1], m.p[:, 2], m.t[:, 1:3] .- 1, b, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
     end
     cb = plt.colorbar(img, ax=ax, label=label)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
@@ -34,26 +34,41 @@ function quick_plot(u::AbstractVector, g::MyGrid; b=nothing, label="", fname="im
     println(fname)
     plt.close()
 end
-function quick_plot(u::FEFunction, g::MyGrid; kwargs...)
-    u = unpack_fefunction(u, g)
-    quick_plot(u, g; kwargs...)
+function quick_plot(u::FEFunction, m::Mesh; kwargs...)
+    u = unpack_fefunction(u, m)
+    quick_plot(u, m; kwargs...)
 end
 
 function plot_yslice(u, b, y, H; t=nothing, cb_label="", fname="yslice.png")
-    σ = (chebyshev_nodes(2^6) .- 1)/2
-    xs = range(-1, 1, length=2^3)
-    Hs = [H([x, y]) for x ∈ xs]
+    nx = 2^5
+    nσ = 2^6
+    σ = (chebyshev_nodes(nσ) .- 1)/2
+    σσ = repeat(σ', nx, 1)
+    x = range(-1, 1, length=nx)
+    xx = repeat(x, 1, nσ)
+    HH = [H([xx[i, j], y]) for i ∈ 1:nx, j ∈ 1:nσ]
+    zz = σσ.*HH
 
-    println("evaling")
-    @time us = [nan_eval(u, Point(xs[i], y, Hs[i]*σ[j])) for i ∈ eachindex(xs), j ∈ eachindex(σ)]
-    # bs = [nan_eval(b, Point(xs[i], y, Hs[i]*σ[j])) for i ∈ eachindex(xs), j ∈ eachindex(σ)]
+    @time us = [nan_eval(u, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
+    @time bs = [nan_eval(b, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
     us[:, 1] .= 0
 
     fig, ax = plt.subplots(1)
-    img = ax.pcolormesh(xs, σ, us', shading="gouraud", cmap="RdBu_r", rasterized=true)
+    img = ax.pcolormesh(xx, zz, us, shading="gouraud", cmap="RdBu_r", rasterized=true)
     plt.colorbar(img, ax=ax, label=cb_label)
+    ax.contour(xx, zz, bs, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"z")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.axis("equal")
+    ax.set_xticks(-1:0.5:1)
+    ax.set_yticks(-1:0.5:0)
+    if t === nothing
+        ax.set_title("Slice at "*L"y = "*@sprintf("%1.2f", y))
+    else
+        ax.set_title("Slice at "*L"y = "*@sprintf("%1.2f", y)*L", \; t = "*@sprintf("%1.2f", t))
+    end
     savefig(fname)
     println(fname)
     plt.close()
@@ -196,17 +211,17 @@ function plot_sparsity_pattern(A; fname="sparsity_pattern.png")
     plt.close()
 end
 
-function plot_u_sfc(ux, uy, g, g_sfc; t=nothing, fname="u_sfc.png")
-    u = unpack_fefunction(ux, g)
-    v = unpack_fefunction(uy, g)
+function plot_u_sfc(ux, uy, m, m_sfc; t=nothing, fname="u_sfc.png")
+    u = unpack_fefunction(ux, m)
+    v = unpack_fefunction(uy, m)
     speed = @. sqrt(u^2 + v^2)
-    i_sfc = unique(g_sfc.t[:])
+    i_sfc = unique(m_sfc.t[:])
     vmax = maximum(abs.(speed[i_sfc]))
     fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
-    img = ax.tripcolor(g_sfc.p[:, 1], g_sfc.p[:, 2], g_sfc.t[:, 1:3] .- 1, speed, shading="gouraud", cmap="Reds", vmin=0, vmax=vmax, rasterized=true)
+    img = ax.tripcolor(m_sfc.p[:, 1], m_sfc.p[:, 2], m_sfc.t[:, 1:3] .- 1, speed, shading="gouraud", cmap="Reds", vmin=0, vmax=vmax, rasterized=true)
     n = 1000
     i_show = i_sfc[1:div(length(i_sfc), n):end]
-    ax.quiver(g_sfc.p[i_show, 1], g_sfc.p[i_show, 2], u[i_show], v[i_show], color="k")
+    ax.quiver(m_sfc.p[i_show, 1], m_sfc.p[i_show, 2], u[i_show], v[i_show], color="k")
     plt.colorbar(img, ax=ax, label=L"Surface speed $\sqrt{u^2 + v^2}$")
     ax.axis("equal")
     ax.set_xlabel(L"x")
