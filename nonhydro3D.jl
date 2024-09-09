@@ -27,64 +27,34 @@ end
 flush(stdout)
 flush(stderr)
 
-# define CPU and GPU architectures
-abstract type AbstractArchitecture end
-
-struct CPU <: AbstractArchitecture end
-struct GPU <: AbstractArchitecture end
-
-# convert types from one architecture to another
-on_architecture(::CPU, a::Array) = a
-on_architecture(::GPU, a::Array) = CuArray(a)
-
-on_architecture(::CPU, a::CuArray) = Array(a)
-on_architecture(::GPU, a::CuArray) = a
-
-on_architecture(::CPU, a::SparseMatrixCSC) = a
-on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
-
-on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
-on_architecture(::GPU, a::CuSparseMatrixCSR) = a
-
 # choose architecture
 # arch = CPU()
 arch = GPU()
 
-# Float type
-FT = Float64
-
 # tolerance and max iterations for iterative solvers
-tol = FT(1e-8)
+tol = 1e-8
 @printf("tol = %.1e\n", tol)
 itmax = 0
 @printf("itmax = %d\n", itmax)
 
-# Vector type on CPU and GPU
-VT = typeof(arch) == CPU ? Vector{FT} : CuVector{FT}
-
-# save to vtu
-function save(ux, uy, uz, p, b, i)
-    fname = @sprintf("%s/data/nonhydro3D%03d.vtu", out_folder, i)
-    writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
-    println(fname)
-end
+# Vector type 
+VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.05
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # full grid
-g = MyGrid(model)
+m = Mesh(model)
 
 # surface grid
-g_sfc = MyGrid(model, "sfc")
+m_sfc = Mesh(model, "sfc")
 
 # mesh res
-pts, conns = get_p_t(model)
-h1 = [norm(pts[conns[i, 1], :] - pts[conns[i, 2], :]) for i ∈ axes(conns, 1)]
-h2 = [norm(pts[conns[i, 2], :] - pts[conns[i, 3], :]) for i ∈ axes(conns, 1)]
-h3 = [norm(pts[conns[i, 3], :] - pts[conns[i, 4], :]) for i ∈ axes(conns, 1)]
-h4 = [norm(pts[conns[i, 4], :] - pts[conns[i, 1], :]) for i ∈ axes(conns, 1)]
+h1 = [norm(m.p[m.t[i, 1], :] - m.p[m.t[i, 2], :]) for i ∈ axes(m.t, 1)]
+h2 = [norm(m.p[m.t[i, 2], :] - m.p[m.t[i, 3], :]) for i ∈ axes(m.t, 1)]
+h3 = [norm(m.p[m.t[i, 3], :] - m.p[m.t[i, 4], :]) for i ∈ axes(m.t, 1)]
+h4 = [norm(m.p[m.t[i, 4], :] - m.p[m.t[i, 1], :]) for i ∈ axes(m.t, 1)]
 hmin = minimum([h1; h2; h3; h4])
 hmax = maximum([h1; h2; h3; h4])
 
@@ -220,9 +190,9 @@ a_rhs_inversion(b, vz) = ∫( b*vz )dΩ
 P_inversion = I
 
 # put on GPU, if needed
-LHS_inversion = on_architecture(arch, FT.(LHS_inversion))
-RHS_inversion = on_architecture(arch, FT.(RHS_inversion))
-# P_inversion = Diagonal(on_architecture(arch, FT.(diag(P_inversion))))
+LHS_inversion = on_architecture(arch, LHS_inversion)
+RHS_inversion = on_architecture(arch, RHS_inversion)
+# P_inversion = Diagonal(on_architecture(arch, diag(P_inversion)))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -230,7 +200,7 @@ end
 
 # Krylov solver for inversion
 solver_inversion = GmresSolver(N, N, 20, VT)
-solver_inversion.x .= on_architecture(arch, zeros(FT, N))
+solver_inversion.x .= on_architecture(arch, zeros(N))
 
 # inversion functions
 function invert!(arch::AbstractArchitecture, solver, b)
@@ -282,7 +252,7 @@ b  = FEFunction(B, b)
 
 # plot initial condition
 @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-@time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+@time "u_sfc" plot_u_sfc(ux, uy, m, m_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
 i_save += 1
 
 # evolution LHS
@@ -319,8 +289,8 @@ end
 P_evolution = Diagonal(Vector(1 ./ diag(LHS_evolution)))
 
 # put on GPU, if needed
-LHS_evolution = on_architecture(arch, FT.(LHS_evolution))
-P_evolution = Diagonal(on_architecture(arch, FT.(diag(P_evolution))))
+LHS_evolution = on_architecture(arch, LHS_evolution)
+P_evolution = Diagonal(on_architecture(arch, diag(P_evolution)))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -335,7 +305,7 @@ function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
     # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
     l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
-    @time "build RHS_evolution" RHS = on_architecture(arch, FT.(assemble_vector(l, D)[perm_evolution]))
+    @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
     Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
                   atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @printf("evolution CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
@@ -382,15 +352,11 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         if mod(i, n_steps ÷ 50) == 0
             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
             @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-            @time "u_sfc" plot_u_sfc(ux, uy, g, g_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+            @time "u_sfc" plot_u_sfc(ux, uy, m, m_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
             i_save += 1
         end
     end
     return ux, uy, uz, p, b
-end
-
-function hrs_mins_secs(seconds)
-    return seconds ÷ 3600, (seconds % 3600) ÷ 60, seconds % 60
 end
 
 # run
