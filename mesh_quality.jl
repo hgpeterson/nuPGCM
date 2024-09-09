@@ -69,7 +69,7 @@ plt.close("all")
 Compute angle (in degrees) between two vectors `v1` and `v2`.
 """
 function angle(v1, v2)
-    return 90/π*acos(dot(v1, v2) / (norm(v1) * norm(v2)))
+    return 180/π*acos(dot(v1, v2) / (norm(v1) * norm(v2)))
 end
 
 """
@@ -136,32 +136,32 @@ function print_stats(θ)
     @printf("  std(θ):    %f\n", std(θ))
 end
 
-# # distmesh
-# h = 0.05
-# fname = @sprintf("bowl3D_%0.2fdm.h5", h)
-# p = h5read(fname, "p")
-# t = h5read(fname, "t")
-# @time θ_dm = inner_angles(p, t)
-# println("DistMesh:")
-# print_stats(θ_dm)
+# distmesh
+h = 0.02
+fname = @sprintf("bowl3D_%0.2fdm.h5", h)
+p = h5read(fname, "p")
+t = h5read(fname, "t")
+@time θ_dm = inner_angles(p, t)
+println("DistMesh:")
+print_stats(θ_dm)
 
-# # gmsh
-# fname = @sprintf("meshes/bowl3D_%0.2f.msh", h)
-# p, t = get_p_t(fname)
-# @time θ_gm = inner_angles(p, t)
-# println("Gmsh:")
-# print_stats(θ_gm)
+# gmsh
+fname = @sprintf("meshes/bowl3D_%0.2f.msh", h)
+p, t = get_p_t(fname)
+@time θ_gm = inner_angles(p, t)
+println("Gmsh:")
+print_stats(θ_gm)
 
-# # plot
-# fig, ax = plt.subplots(1)
-# ax.hist(θ_dm, bins=100, density=true, alpha=0.5, label="DistMesh")
-# ax.hist(θ_gm, bins=100, density=true, alpha=0.5, label="Gmsh")
-# ax.legend()
-# ax.set_xlabel("Inner angle (degrees)")
-# ax.set_ylabel("Density")
-# ax.set_xlim(0, 90)
-# ax.set_xticks(0:30:90)
-# ax.set_ylim(0, 0.1)
-# savefig(@sprintf("out/inner_angles_%.2f.png", h))
-# println(@sprintf("out/inner_angles_%.2f.png", h))
-# plt.close()
+# plot
+fig, ax = plt.subplots(1)
+ax.hist(θ_dm, bins=100, density=true, alpha=0.5, label="DistMesh")
+ax.hist(θ_gm, bins=100, density=true, alpha=0.5, label="Gmsh")
+ax.legend()
+ax.set_xlabel("Inner angle (degrees)")
+ax.set_ylabel("Density")
+ax.set_xlim(0, 120)
+ax.set_xticks(0:30:120)
+ax.set_ylim(0, 0.05)
+savefig(@sprintf("out/inner_angles_%.2f.png", h))
+println(@sprintf("out/inner_angles_%.2f.png", h))
+plt.close()
