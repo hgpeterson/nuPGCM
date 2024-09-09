@@ -7,7 +7,7 @@ end
 """
     m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
     m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
-    m = Mesh(fname::String)
+    m = Mesh(fname::AbstractString)
     m = Mesh(p, t)
     m = Mesh(p, t, p_to_t)
 
@@ -22,7 +22,7 @@ function Mesh(p, t)
     p_to_t = get_p_to_t(t, size(p, 1))
     return Mesh(p, t, p_to_t)
 end
-function Mesh(fname::String)
+function Mesh(fname::AbstractString)
     model = GmshDiscreteModel(fname)
     return Mesh(model)
 end
@@ -48,7 +48,7 @@ end
 
 """
     p, t = get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
-    p, t = get_p_t(fname::String)
+    p, t = get_p_t(fname::AbstractString)
 
 Return the node coordinates `p` and the connectivities `t` of a mesh.
 """
@@ -67,7 +67,7 @@ function get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
 
     return p, t
 end
-function get_p_t(fname::String)
+function get_p_t(fname::AbstractString)
     # load model
     model = GmshDiscreteModel(fname)
     return get_p_t(model)
