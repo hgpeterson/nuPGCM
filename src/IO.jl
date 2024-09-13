@@ -98,6 +98,14 @@ function save_state(ux, uy, uz, p, b, t; fname="state.h5")
 end
 
 """
+    save_state_vtu(ux, uy, uz, p, b, Ω; fname="state.vtu")
+"""
+function save_state_vtu(ux, uy, uz, p, b, Ω; fname="state.vtu")
+    writevtk(Ω, fname, cellfields=["u"=>ux, "v"=>uy, "w"=>uz, "p"=>p, "b"=>b])
+    @printf("State saved to '%s'.\n", fname)
+end
+
+"""
     ux, uy, uz, p, b, t = load_state(fname::AbstractString)
 """
 function load_state(fname::AbstractString)
