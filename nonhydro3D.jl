@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim022"
+out_folder = "sim023"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -58,29 +58,9 @@ h4 = [norm(m.p[m.t[i, 4], :] - m.p[m.t[i, 1], :]) for i ∈ axes(m.t, 1)]
 hmin = minimum([h1; h2; h3; h4])
 hmax = maximum([h1; h2; h3; h4])
 
-# reference FE 
-order = 2
-reffe_ux = ReferenceFE(lagrangian, Float64, order;   space=:P)
-reffe_uy = ReferenceFE(lagrangian, Float64, order;   space=:P)
-reffe_uz = ReferenceFE(lagrangian, Float64, order;   space=:P)
-reffe_p  = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-reffe_b  = ReferenceFE(lagrangian, Float64, order;   space=:P)
-
-# test FESpaces
-Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot"])
-Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot"])
-Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bot", "sfc"])
-Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
-D  = TestFESpace(model, reffe_b,  conformity=:H1, dirichlet_tags=["sfc"])
-Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
-
-# trial FESpaces with Dirichlet values
-Ux = TrialFESpace(Vx, [0])
-Uy = TrialFESpace(Vy, [0])
-Uz = TrialFESpace(Vz, [0, 0])
-P  = TrialFESpace(Q)
-B  = TrialFESpace(D, [0])
-X  = MultiFieldFESpace([Ux, Uy, Uz, P])
+# FE spaces
+X, Y, B, D = setup_FESpaces(model)
+Ux, Uy, Uz, P = unpack_spaces(X)
 nx = Ux.space.nfree
 ny = Uy.space.nfree
 nz = Uz.space.nfree
@@ -91,9 +71,8 @@ N = nu + np - 1
 @printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
 
 # triangulation and integration measure
-degree = order^2
 Ω = Triangulation(model)
-dΩ = Measure(Ω, degree)
+dΩ = Measure(Ω, 4)
 
 # depth
 H(x) = 1 - x[1]^2 - x[2]^2
@@ -108,9 +87,10 @@ H(x) = 1 - x[1]^2 - x[2]^2
 f₀ = 1
 β = 1
 f(x) = f₀ + β*x[2]
-μϱ = 1e0
-# Δt = 1e-4*μϱ/ε²
-Δt = 0.05
+# μϱ = 1e0
+μϱ = 1e-4
+Δt = 1e-4*μϱ/ε²
+# Δt = 0.05
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -159,9 +139,9 @@ solver_inversion.x .= on_architecture(arch, zeros(N))
 function invert!(arch::AbstractArchitecture, solver, b)
     b_arch = on_architecture(arch, b.free_values)
     if typeof(arch) == GPU
-        @time "RHS_inversion" RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
+        RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
     else
-        @time "RHS_inversion" RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
+        RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
     end
     Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, 
                   atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
@@ -193,8 +173,8 @@ ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
-# i_save = 5
-# statefile = @sprintf("%s/data/state%03d.h5", out_folder, 5)
+# i_save = 18
+# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
 # ux, uy, uz, p, b, t = load_state(statefile)
 # solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
 # ux = FEFunction(Ux, ux)
@@ -230,11 +210,18 @@ solver_evolution = CgSolver(nb, nb, VT)
 solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 
 # evolution functions
+∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
+∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
+∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
+assembler = SparseMatrixAssembler(D, D)
+RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
     l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
-    @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
+    # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
+    @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
+    RHS = on_architecture(arch, RHS_evolution[perm_evolution])
     Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
                   atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @printf("evolution CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
@@ -246,9 +233,9 @@ function update_b!(b, solver)
 end
 
 # solve function
-function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, n_steps)
+function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
     t0 = time()
-    for i ∈ 1:n_steps
+    for i ∈ i_step:n_steps
         flush(stdout)
         flush(stderr)
 
@@ -272,7 +259,7 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         println("\n---")
         @printf("t = %f (i = %d/%d, Δt = %f)\n\n", t, i, n_steps, Δt)
         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-        @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/i)...)
+        @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
         @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
         @printf("CFL ≈ %f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
         println("---\n")
@@ -289,5 +276,6 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
 end
 
 # run
-n_steps = Int64((T - t)/Δt)
-ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, n_steps)
+i_step = Int64(round(t/Δt)) + 1
+n_steps = Int64(round(T/Δt))
+ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
