@@ -49,8 +49,14 @@ function plot_yslice(u, b, y, H; t=nothing, cb_label="", fname="yslice.png")
     HH = [H([xx[i, j], y]) for i ∈ 1:nx, j ∈ 1:nσ]
     zz = σσ.*HH
 
-    @time us = [nan_eval(u, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
-    @time bs = [nan_eval(b, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
+    us = zeros(nx, nσ)
+    bs = zeros(nx, nσ)
+    @showprogress "Evaluating..." for i ∈ 1:nx, j ∈ 1:nσ
+        us[i, j] = nan_eval(u, Point(xx[i, j], y, zz[i, j]))
+        bs[i, j] = nan_eval(b, Point(xx[i, j], y, zz[i, j]))
+    end
+    # @time us = [nan_eval(u, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
+    # @time bs = [nan_eval(b, Point(xx[i, j], y, zz[i, j])) for i ∈ 1:nx, j ∈ 1:nσ]
     us[:, 1] .= 0
 
     fig, ax = plt.subplots(1)
@@ -152,37 +158,6 @@ function plot_profiles(ux, uy, uz, b, x, y, H; t=nothing, fname="profiles.png")
     ax[2].plot(uys, z)
     ax[3].plot(uzs, z)
     ax[4].plot(bzs, z)
-    if t === nothing
-        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
-    else
-        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y)*L", \quad t = "*@sprintf("%1.2f", t))
-    end
-    savefig(fname)
-    println(fname)
-    plt.close()
-end
-
-function plot_profiles(b, x, y, H; t=nothing, fname="profiles.png")
-    H0 = H([x, y])
-    nz = 2*Int64(round(H0/0.01)) + 1
-    z = range(-H0, 0, length=nz)
-    dz = z[2] - z[1]
-
-    bs = [nan_eval(b, Point(x, y, zᵢ)) for zᵢ ∈ z]
-    bzs = (bs[3:end] - bs[1:end-2])/(2dz)
-    bzs = [0; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
-
-    fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
-    ax[1].set_ylabel(L"z")
-    ax[1].set_xlabel(L"b")
-    ax[2].set_xlabel(L"\partial_z b")
-    ax[2].set_yticklabels([])
-    for a ∈ ax
-        a.set_ylim(-H0, 0) 
-        a.ticklabel_format(axis="x", style="sci", scilimits=(-2,2))
-    end
-    ax[1].plot(bs, z)
-    ax[2].plot(bzs, z)
     if t === nothing
         ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
     else
