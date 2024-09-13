@@ -4,6 +4,7 @@ authors = ["hgpeterson <hgpeterson@caltech.edu>"]
 version = "0.1.0"
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CuthillMcKee = "17f17636-5e38-52e3-a803-7ae3aaaf3da9"
 DistMesh = "f7ee28b6-bfbf-11e9-3e31-8961b86f052c"
@@ -15,6 +16,7 @@ IncompleteLU = "40713840-3770-5561-ab4c-a76e7d0d7895"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
