@@ -159,12 +159,3 @@ end
 function RCM_perm(arch::CPU, M)
     return CuthillMcKee.symrcm(M, true, false)
 end
-
-"""
-    spaces = unpack_spaces(X::MultiFieldFESpace)
-
-Return the individual field spaces of the multi-field FE space `X`.
-"""
-function unpack_spaces(X::MultiFieldFESpace)
-    return [X.spaces[i] for i in eachindex(X.spaces)] 
-end

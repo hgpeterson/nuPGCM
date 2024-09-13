@@ -7,6 +7,7 @@ using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using PyPlot
 using SparseArrays
 using HDF5
+using ProgressMeter
 using Printf
 
 # define CPU and GPU architectures (credit: Oceananigans.jl)
@@ -32,6 +33,7 @@ include("utils.jl")
 include("meshes.jl")
 include("plotting.jl")
 include("IO.jl")
+include("spaces.jl")
 include("matrices.jl")
 
 export 
@@ -54,7 +56,10 @@ plot_u_sfc,
 write_sparse_matrix,
 read_sparse_matrix,
 save_state,
+save_state_vtu,
 load_state,
+setup_FESpaces,
+unpack_spaces,
 assemble_LHS_inversion,
 assemble_RHS_inversion,
 assemble_LHS_evolution
