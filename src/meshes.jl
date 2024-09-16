@@ -88,31 +88,3 @@ function get_p_to_t(t, np)
     end
     return p_to_t
 end
-
-"""
-    u(x) = nan_eval(u, x)
-
-Evaluate `u(x)` and return `NaN` if an error occurs.
-"""
-function nan_eval(u, x)
-    try 
-        u(x) 
-    catch 
-        NaN 
-    end
-end
-
-"""
-    u = unpack_fefunction(u, m::Mesh)
-
-Unpack Gridap finite element function `u` into a vector of values at the nodes 
-of the mesh. (Assumes `u` is continuous).
-"""
-function unpack_fefunction(u, m::Mesh)
-    u_cell_values = get_cell_dof_values(u)
-    return [u_cell_values[m.p_to_t[i][1][1]][m.p_to_t[i][1][2]] for i ∈ 1:size(m.p, 1)]
-
-    # this works for order 1 spaces
-    # return sortslices([U.space.metadata.free_dof_to_node       u.free_values
-    #                    U.space.metadata.dirichlet_dof_to_node  U.dirichlet_values], dims=1)[:, 2]
-end
