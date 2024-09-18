@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim023"
+out_folder = "out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -41,7 +41,7 @@ itmax = 0
 VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
-hres = 0.01
+hres = 0.05
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # full grid
@@ -82,13 +82,13 @@ H(x) = 1 - x[1]^2 - x[2]^2
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-4
+ε² = 1e-1
 γ = 1/4
 f₀ = 1
-β = 1
+β = 0
 f(x) = f₀ + β*x[2]
-# μϱ = 1e0
-μϱ = 1e-4
+μϱ = 1e0
+# μϱ = 1e-4
 Δt = 1e-4*μϱ/ε²
 # Δt = 0.05
 T = 5e-2*μϱ/ε²
@@ -184,8 +184,7 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 # b  = FEFunction(B, b)
 
 # plot initial condition
-@time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-@time "u_sfc" plot_u_sfc(ux, uy, m, m_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
 i_save += 1
 
 if isfile(LHS_evolution_fname)
@@ -267,8 +266,7 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         # save/plot
         if mod(i, n_steps ÷ 50) == 0
             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
-            @time "profiles" plot_profiles(ux, uy, uz, b, 0.5, 0.0, H; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-            @time "u_sfc" plot_u_sfc(ux, uy, m, m_sfc; t=t, fname=@sprintf("%s/images/u_sfc%03d.png", out_folder, i_save))
+            sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_folder)
             i_save += 1
         end
     end
