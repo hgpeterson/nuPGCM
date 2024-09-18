@@ -8,8 +8,6 @@ font.size:             8.0
 font.family:           serif
 font.serif:            STIXGeneral
 mathtext.fontset:      stix
-# text.usetex:           True
-# text.latex.preamble:   \usepackage{stix2}
 
 axes.facecolor:        white
 axes.edgecolor:        black

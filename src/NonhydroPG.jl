@@ -7,7 +7,6 @@ using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using PyPlot
 using SparseArrays
 using HDF5
-using ProgressMeter
 using Printf
 
 # define CPU and GPU architectures (credit: Oceananigans.jl)
@@ -37,29 +36,33 @@ include("spaces.jl")
 include("matrices.jl")
 
 export 
-chebyshev_nodes,
-hrs_mins_secs,
 AbstractArchitecture,
 CPU,
 GPU,
 on_architecture,
+# utils.jl
+chebyshev_nodes,
+hrs_mins_secs,
+# meshes.jl
 Mesh,
 get_p_t,
 get_p_to_t,
-quick_plot,
+# plotting.jl
+nan_eval,
 plot_slice,
 plot_profiles,
+sim_plots,
 plot_sparsity_pattern,
-plot_u_sfc,
-nan_eval,
-unpack_fefunction,
+# IO.jl
 write_sparse_matrix,
 read_sparse_matrix,
 save_state,
 save_state_vtu,
 load_state,
+# spaces.jl
 setup_FESpaces,
 unpack_spaces,
+# matrices.jl
 assemble_LHS_inversion,
 assemble_RHS_inversion,
 assemble_LHS_evolution
