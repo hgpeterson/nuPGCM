@@ -71,7 +71,8 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
 
     # evaluate
     us = [nan_eval(cache_u, u, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    # bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     # us[isnan.(us)] .= 0
 
     # plot
@@ -159,7 +160,8 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
     # evaluate
     us = [nan_eval(cache_u, u, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     vs = [nan_eval(cache_v, v, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    # bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     speed = @. sqrt(us^2 + vs^2)
 
     # plot
@@ -260,6 +262,7 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     dz = z[2] - z[1]
     bzs = (bs[3:end] - bs[1:end-2])/(2dz)
     bzs = [(-3/2*bs[1] + 2*bs[2] - 1/2*bs[3])/dz; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
+    bzs .+= 1
     uxs[1] = 0
     uys[1] = 0
     uzs[1] = 0
@@ -297,18 +300,22 @@ end
     sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
 """
 function sim_plots(ux::CellField, uy::CellField, uz::CellField, b::CellField, H::Function, t::Real, i_save::Int, out_folder::String)
-    @time "profiles" cache_profiles = plot_profiles(ux, uy, uz, b, H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-    @time "u_slice"   cache_u_slice = plot_slice(ux,     b; y=0.0, t=t, cb_label=L"Zonal flow $u$",                      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-    @time "v_slice"   cache_v_slice = plot_slice(uy,     b; y=0.0, t=t, cb_label=L"Meridional flow $v$",                 fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
-    @time "u_sfc"       cache_u_sfc = plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+    @time "plotting" begin
+    cache_profiles = plot_profiles(ux, uy, uz, b, H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+    cache_u_slice  =    plot_slice(ux,     b; y=0.0, t=t, cb_label=L"Zonal flow $u$",                      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+    cache_v_slice  =    plot_slice(uy,     b; y=0.0, t=t, cb_label=L"Meridional flow $v$",                 fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    cache_u_sfc    =    plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+    end
     return cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc
 end
 function sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
     cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc = cache
-    @time "profiles" plot_profiles(cache_profiles, ux, uy, uz, b; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-    @time "u_slice"  plot_slice(cache_u_slice, ux,     b; t=t, fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-    @time "v_slice"  plot_slice(cache_v_slice, uy,     b; t=t, fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
-    @time "u_sfc"    plot_slice(cache_u_sfc,   ux, uy, b; t=t, fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+    @time "plotting" begin
+    plot_profiles(cache_profiles, ux, uy, uz, b; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+    plot_slice(cache_u_slice,     ux,     b; t=t, fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+    plot_slice(cache_v_slice,     uy,     b; t=t, fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    plot_slice(cache_u_sfc,       ux, uy, b; t=t, fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+    end
 end
 
 function plot_sparsity_pattern(A; fname="sparsity_pattern.png")

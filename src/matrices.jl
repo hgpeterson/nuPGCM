@@ -13,9 +13,12 @@ inverse `inv_perm`. The matrix is saved to a file `fname`.
 function assemble_LHS_inversion(arch::AbstractArchitecture, γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-           γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-         γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+        ∫(   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+             ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+           γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+        # ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+        #    γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+        #  γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
                                                                       ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
@@ -66,8 +69,8 @@ inverse `inv_perm`. The matrix is saved to a file `fname`.
 """
 function assemble_LHS_evolution(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
     # bilinear form
-    # a(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
-    a(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    a(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
+    # a(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
 
     # assemble
     @time "assemble LHS_evolution" LHS = assemble_matrix(a, B, D)
