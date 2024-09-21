@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "sim028"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -41,7 +41,7 @@ itmax = 0
 VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
-hres = 0.05
+hres = 0.01
 model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
 
 # full grid
@@ -82,15 +82,15 @@ H(x) = 1 - x[1]^2 - x[2]^2
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-1
+ε² = 1e-4
 γ = 1/4
 f₀ = 1
-β = 0
+β = 1
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # μϱ = 1e-4
-Δt = 1e-4*μϱ/ε²
-# Δt = 0.05
+# Δt = 1e-4*μϱ/ε²
+Δt = 0.05
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -110,17 +110,19 @@ LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres,
 LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e_%e.h5", hres, α, γ)
 
 # inversion LHS
-if isfile(LHS_inversion_fname)
-    LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
-else
-    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
-end
+# if isfile(LHS_inversion_fname)
+#     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+# else
+#     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+# end
+LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 
 # inversion RHS
 RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
 # preconditioner
 P_inversion = I
+# P_inversion = Diagonal(1/hres^3*ones(N))
 
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, LHS_inversion)
@@ -162,14 +164,15 @@ flush(stderr)
 
 # initial condition: b = z, t = 0
 i_save = 0
-b = interpolate_everywhere(x->x[3], B)
+# b = interpolate_everywhere(x->x[3], B)
+b = interpolate_everywhere(0, B)
 t = 0.
 ux = interpolate_everywhere(0, Ux)
 uy = interpolate_everywhere(0, Uy)
 uz = interpolate_everywhere(0, Uz)
 p  = interpolate_everywhere(0, P)
-solver_inversion = invert!(arch, solver_inversion, b)
-ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+# solver_inversion = invert!(arch, solver_inversion, b)
+# ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
@@ -187,11 +190,12 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
 i_save += 1
 
-if isfile(LHS_evolution_fname)
-    LHS_evolution, perm_evolution, inv_perm_evolution  = read_sparse_matrix(LHS_evolution_fname)
-else
-    LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
-end
+# if isfile(LHS_evolution_fname)
+#     LHS_evolution, perm_evolution, inv_perm_evolution  = read_sparse_matrix(LHS_evolution_fname)
+# else
+#     LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
+# end
+LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
 
 # preconditioner
 P_evolution = Diagonal(Vector(1 ./ diag(LHS_evolution)))
@@ -206,7 +210,7 @@ end
 
 # Krylov solver for evolution
 solver_evolution = CgSolver(nb, nb, VT)
-solver_evolution.x .= on_architecture(arch, copy(b.free_values))
+solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
 
 # evolution functions
 ∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
@@ -215,7 +219,10 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values))
 assembler = SparseMatrixAssembler(D, D)
 RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*(1 + ∂z(b))*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*(1 + ∂z(b))*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])

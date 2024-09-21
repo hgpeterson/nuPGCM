@@ -292,7 +292,7 @@ Notes:
 
 sim021
 
-Same as sim021 but with β = 1.
+Same as sim020 but with β = 1.
 
 ################################################################################
 
@@ -320,6 +320,41 @@ h = 0.05, ε² = 1e-1, μϱ = 1, γ = 1/4, f = 1, β = 1.
 sim025
 
 Same as sim024 but with β = 0.
+
+################################################################################
+
+sim026
+
+Same as sim022 but with β = 0.
+
+Notes:
+    • CFL blow up at around t = 37 again (cf sim019). Difference between this
+      sim and sim020 is γ = 1/4 here.
+    • Sort of makes sense that CFL blow up happens when β = 0 since the flow is
+      stronger.
+
+################################################################################
+
+sim027
+
+Re-running sim025 but with `b` as the buoyancy _perturbation_ about a background
+linear profile.
+
+Notes:
+    • Leads to is much smoother inversions and no wait time at the beginning!
+
+################################################################################
+
+sim028
+
+Re-running sim022 but with `b` as perturbation to background and no horizontal
+diffusion in inversion _or_ evolution.
+
+################################################################################
+
+sim029 
+
+Same as sim027 but with no horizontal diffusion in inversion _or_ evolution.
 
 ################################################################################
 """
