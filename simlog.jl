@@ -350,11 +350,22 @@ sim028
 Re-running sim022 but with `b` as perturbation to background and no horizontal
 diffusion in inversion _or_ evolution.
 
+Notes:
+    • Beautiful, smooth solution, but it blows up at t = 10... perhaps horiz.
+      diff. is needed after all. (should look in to smaller/higher-order time
+      steps, too, though)
+
 ################################################################################
 
 sim029 
 
 Same as sim027 but with no horizontal diffusion in inversion _or_ evolution.
+
+################################################################################
+
+sim030
+
+Same as sim028 but putting the horizontal diffusion back in.
 
 ################################################################################
 """

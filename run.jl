@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim028"
+out_folder = "out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -27,6 +27,10 @@ end
 flush(stdout)
 flush(stderr)
 
+# choose dimensions
+dim = TwoD()
+# dim = ThreeD()
+
 # choose architecture
 # arch = CPU()
 arch = GPU()
@@ -42,7 +46,7 @@ VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
+model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, hres))
 
 # full grid
 m = Mesh(model)
@@ -51,12 +55,9 @@ m = Mesh(model)
 m_sfc = Mesh(model, "sfc")
 
 # mesh res
-h1 = [norm(m.p[m.t[i, 1], :] - m.p[m.t[i, 2], :]) for i ∈ axes(m.t, 1)]
-h2 = [norm(m.p[m.t[i, 2], :] - m.p[m.t[i, 3], :]) for i ∈ axes(m.t, 1)]
-h3 = [norm(m.p[m.t[i, 3], :] - m.p[m.t[i, 4], :]) for i ∈ axes(m.t, 1)]
-h4 = [norm(m.p[m.t[i, 4], :] - m.p[m.t[i, 1], :]) for i ∈ axes(m.t, 1)]
-hmin = minimum([h1; h2; h3; h4])
-hmax = maximum([h1; h2; h3; h4])
+hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axes(m.t, 1), j ∈ 1:dim.n+1]
+hmin = minimum(hs)
+hmax = maximum(hs)
 
 # FE spaces
 X, Y, B, D = setup_FESpaces(model)
@@ -85,7 +86,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ε² = 1e-4
 γ = 1/4
 f₀ = 1
-β = 1
+β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # μϱ = 1e-4
@@ -105,17 +106,15 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%e_%e_%e_%e_%e.h5", hres, ε², γ, f₀, β)
-# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e.h5", hres, α)
-LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%e_%e_%e.h5", hres, α, γ)
+LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%s_%e_%e_%e.h5", dim, hres, α, γ)
 
 # inversion LHS
-# if isfile(LHS_inversion_fname)
-#     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
-# else
-#     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
-# end
-LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+if isfile(LHS_inversion_fname)
+    LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+else
+    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+end
 
 # inversion RHS
 RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
@@ -164,15 +163,12 @@ flush(stderr)
 
 # initial condition: b = z, t = 0
 i_save = 0
-# b = interpolate_everywhere(x->x[3], B)
 b = interpolate_everywhere(0, B)
 t = 0.
 ux = interpolate_everywhere(0, Ux)
 uy = interpolate_everywhere(0, Uy)
 uz = interpolate_everywhere(0, Uz)
 p  = interpolate_everywhere(0, P)
-# solver_inversion = invert!(arch, solver_inversion, b)
-# ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
@@ -190,12 +186,11 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
 i_save += 1
 
-# if isfile(LHS_evolution_fname)
-#     LHS_evolution, perm_evolution, inv_perm_evolution  = read_sparse_matrix(LHS_evolution_fname)
-# else
-#     LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
-# end
-LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
+if isfile(LHS_evolution_fname)
+    LHS_evolution, perm_evolution, inv_perm_evolution  = read_sparse_matrix(LHS_evolution_fname)
+else
+    LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, dim, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
+end
 
 # preconditioner
 P_evolution = Diagonal(Vector(1 ./ diag(LHS_evolution)))
@@ -219,12 +214,8 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
 assembler = SparseMatrixAssembler(D, D)
 RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*(1 + ∂z(b))*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*(1 + ∂z(b))*∂z(d)*κ )dΩ
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
     # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - α*∂z(b)*∂z(d)*κ )dΩ
-    # l(d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
     @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     RHS = on_architecture(arch, RHS_evolution[perm_evolution])
@@ -253,22 +244,37 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         solver_inversion = invert!(arch, solver_inversion, b)
         ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
+        # blow up
         if any(isnan.(solver_inversion.x)) || any(isnan.(solver_evolution.x))
-            error("Solution diverged 🤯")
+            # save and kill
+            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+            sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_folder)
+            error("Solution diverged: NaN(s) found.")
         end
 
         # time
         t += Δt
 
         # info
+        ux_max = maximum(abs.(ux.free_values))
+        uy_max = maximum(abs.(uy.free_values))
+        uz_max = maximum(abs.(uz.free_values))
         t1 = time()
         println("\n---")
         @printf("t = %f (i = %d/%d, Δt = %f)\n\n", t, i, n_steps, Δt)
         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
         @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
-        @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(maximum(abs.(ux.free_values)), maximum(abs.(uy.free_values)), maximum(abs.(uz.free_values))), minimum(b.free_values), maximum([b.free_values; 0]))
-        @printf("CFL ≈ %f\n", min(hmin/maximum(abs.(ux.free_values)), hmin/maximum(abs.(uy.free_values)), hmin/maximum(abs.(uz.free_values))))
+        @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(ux_max, uy_max, uz_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+        @printf("CFL ≈ %f\n", min(hmin/ux_max, hmin/uy_max, hmin/uz_max))
         println("---\n")
+
+        # blow up
+        if max(ux_max, uy_max, uz_max) > 10
+            # save and kill
+            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+            sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_folder)
+            error("Solution diverged: |u|ₘₐₓ > 10.")
+        end
 
         # save/plot
         if mod(i, n_steps ÷ 50) == 0
