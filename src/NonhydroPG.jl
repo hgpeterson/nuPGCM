@@ -4,10 +4,12 @@ using Gridap
 using GridapGmsh
 using Gmsh: gmsh
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using PyPlot
+using CuthillMcKee
 using SparseArrays
+using PyPlot
 using HDF5
 using Printf
+import Base.string
 
 # define CPU and GPU architectures (credit: Oceananigans.jl)
 abstract type AbstractArchitecture end
@@ -28,6 +30,19 @@ on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
 on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
+# physical dimension of the problem
+abstract type AbstractDimension end
+struct TwoD <: AbstractDimension 
+    n::Int
+end
+struct ThreeD <: AbstractDimension 
+    n::Int
+end
+TwoD() = TwoD(2)
+ThreeD() = ThreeD(3)
+string(::TwoD) = "2D"
+string(::ThreeD) = "3D"
+
 include("utils.jl")
 include("meshes.jl")
 include("plotting.jl")
@@ -40,6 +55,9 @@ AbstractArchitecture,
 CPU,
 GPU,
 on_architecture,
+AbstractDimension,
+TwoD,
+ThreeD,
 # utils.jl
 chebyshev_nodes,
 hrs_mins_secs,

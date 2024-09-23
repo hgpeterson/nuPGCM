@@ -4,24 +4,32 @@
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 """
-    LHS, perm, inv_perm = assemble_LHS_inversion(arch::AbstractArchitecture, γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
+    LHS, perm, inv_perm = assemble_LHS_inversion(arch::AbstractArchitecture, dim::AbstractDimension, 
+                                                 γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
 
-Assemble the LHS of the inversion problem for the Non-Hydrostatic PG equations 
-and return the matrix `LHS` along with the permutation `perm` and its
-inverse `inv_perm`. The matrix is saved to a file `fname`.
+Assemble the LHS of the inversion problem for the `dim`-dimensional 
+Non-Hydrostatic PG equations and return the matrix `LHS` along with the 
+permutation `perm` and its inverse `inv_perm`. The matrix is saved to a file 
+`fname`.
 """
-function assemble_LHS_inversion(arch::AbstractArchitecture, γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
+function assemble_LHS_inversion(arch::AbstractArchitecture, dim::AbstractDimension, 
+                                γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
     # bilinear form
-    a((ux, uy, uz, p), (vx, vy, vz, q)) = 
-        ∫(   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-             ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-           γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-        # ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-        #    γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-        #  γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+    function weak_form(dim::TwoD, (ux, uy, uz, p), (vx, vy, vz, q)) 
+        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +    ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           γ*ε²*∂x(uy)*∂x(vy)*ν +    ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + 
+         γ^2*ε²*∂x(uz)*∂x(vz)*ν +  γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                         ∂x(ux)*q + ∂z(uz)*q )dΩ
+    end
+    function weak_form(dim::ThreeD, (ux, uy, uz, p), (vx, vy, vz, q))
+        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+         γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
                                                                       ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    end
 
     # assemble 
+    a(x, y) = weak_form(dim, x, y)
     @time "assemble LHS_inversion" LHS = assemble_matrix(a, X, Y)
 
     # Cuthill-McKee DOF reordering
@@ -61,19 +69,27 @@ function assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFE
 end
 
 """
-    LHS, perm, inv_perm = assemble_LHS_evolution(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
+    LHS, perm, inv_perm = assemble_LHS_evolution(arch::AbstractArchitecture, dim::AbstractDimension, 
+                                                 α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
 
-Assemble the LHS of the evolution problem for the Non-Hydrostatic PG equations
-and return the matrix `LHS` along with the permutation `perm` and its
-inverse `inv_perm`. The matrix is saved to a file `fname`.
+Assemble the LHS of the evolution problem for the `dim`-dimensional 
+Non-Hydrostatic PG equations and return the matrix `LHS` along with the 
+permutation `perm` and its inverse `inv_perm`. The matrix is saved to a file 
+`fname`.
 """
-function assemble_LHS_evolution(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
+function assemble_LHS_evolution(arch::AbstractArchitecture, dim::AbstractDimension, 
+                                α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
     # bilinear form
-    a(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
-    # a(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    function weak_form(dim::TwoD, b, d)
+        ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    end
+    function weak_form(dim::ThreeD, b, d)
+        ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    end
 
     # assemble
-    @time "assemble LHS_evolution" LHS = assemble_matrix(a, B, D)
+    a(b, d) = weak_form(dim, b, d)
+    @time "assemble LHS_evolution" LHS = assemble_matrix(weak_form, B, D)
 
     # Cuthill-McKee DOF reordering
     @time "RCM perm" perm, inv_perm = RCM_perm(arch, B, D, dΩ)
