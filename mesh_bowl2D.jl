@@ -28,20 +28,29 @@ function generate_bowl_mesh(h)
     gmsh.model.addPhysicalGroup(1, [2], 2, "sfc")
     gmsh.model.addPhysicalGroup(2, [1], 3, "int")
 
-    # # H = √(2 - x^2) - 1
-    # gmsh.model.occ.addDisk(0, 1, 0, √2, √2)
-    # gmsh.model.occ.addRectangle(-4, 0, 0, 8, 8)
-    # gmsh.model.occ.synchronize()
-    # gmsh.model.occ.cut([(2, 1)], [(2, 2)])
-    # gmsh.model.occ.synchronize()
-    # gmsh.model.addPhysicalGroup(0, 1:2, 1, "bot")
-    # gmsh.model.addPhysicalGroup(1, [2], 1, "bot")
-    # gmsh.model.addPhysicalGroup(1, [1], 2, "sfc")
-    # gmsh.model.addPhysicalGroup(2, [1], 3, "int")
-    # gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
+    # refine near boundary
+    rf = 10
+    Δ = 0.2
+    gmsh.model.mesh.field.add("Distance", 1)
+    gmsh.model.mesh.field.setNumbers(1, "CurvesList", [d[2] for d in gmsh.model.getEntities(1)])
+    gmsh.model.mesh.field.setNumber(1, "Sampling", rf/h)
+    # gmsh.model.mesh.field.add("Threshold", 2)
+    # gmsh.model.mesh.field.setNumber(2, "InField", 1)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMin", h/4)
+    # gmsh.model.mesh.field.setNumber(2, "SizeMax", h)
+    # gmsh.model.mesh.field.setNumber(2, "DistMin", h)
+    # gmsh.model.mesh.field.setNumber(2, "DistMax", 4h)
+    gmsh.model.mesh.field.add("MathEval", 2)
+    gmsh.model.mesh.field.setString(2, "F", "$h*(1 - $((rf - 1)/rf)*exp(-F1/$Δ))")
+    gmsh.model.mesh.field.setAsBackgroundMesh(2)
+    gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+    gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+    gmsh.option.setNumber("Mesh.Algorithm", 5)
 
     # generate and save
     gmsh.model.mesh.generate(2)
+    # gmsh.model.mesh.optimize("Netgen")
     gmsh.write(@sprintf("bowl2D_%0.2f.msh", h))
     gmsh.finalize()
 end
@@ -57,7 +66,7 @@ function mesh_plot(p, t)
     plt.close()
 end
 
-h = 0.01
+h = 0.05
 generate_bowl_mesh(h)
 p, t = get_p_t(@sprintf("bowl2D_%0.2f.msh", h))
 mesh_plot(p, t)
