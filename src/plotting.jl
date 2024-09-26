@@ -199,7 +199,7 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
         scale = nothing
         scale_units = nothing
     else
-        scale = cb_max/0.15 # speed of `cb_max` corresponds to 0.15 inch arrow
+        scale = cb_max/0.1 # speed of `cb_max` corresponds to 0.1 inch arrow
         scale_units = "inches"
     end
     img = ax.pcolormesh(x1, x2, speed', shading="gouraud", cmap="Reds", vmin=0, vmax=cb_max, rasterized=true)
@@ -207,7 +207,7 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
     n = length(x1)
-    slice = 1:2^4:n
+    slice = 1:2^3:n
     ax.quiver(x1[slice], x2[slice], us[slice, slice]', vs[slice, slice]', color="k", pivot="mid", scale=scale, scale_units=scale_units)
     if t === nothing
         ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
@@ -280,6 +280,10 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
         a.set_ylim(z[1], 0) 
         a.ticklabel_format(axis="x", style="sci", scilimits=(-2,2))
     end
+    for a ∈ ax[1:3]
+        a.spines["left"].set_visible(false)
+        a.axvline(0, color="k", linewidth=0.5, linestyle="-")
+    end
     ax[4].set_xlim(0, 1.1*nan_max(abs.(bzs)))
     ax[1].plot(uxs, z)
     ax[2].plot(uys, z)
@@ -307,6 +311,7 @@ function sim_plots(ux::CellField, uy::CellField, uz::CellField, b::CellField, H:
     cache_u_sfc    =    plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
     end
     return cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc
+    # return cache_profiles, cache_u_slice, cache_v_slice, nothing
 end
 function sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
     cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc = cache
