@@ -89,7 +89,7 @@ function assemble_LHS_evolution(arch::AbstractArchitecture, dim::AbstractDimensi
 
     # assemble
     a(b, d) = weak_form(dim, b, d)
-    @time "assemble LHS_evolution" LHS = assemble_matrix(weak_form, B, D)
+    @time "assemble LHS_evolution" LHS = assemble_matrix(a, B, D)
 
     # Cuthill-McKee DOF reordering
     @time "RCM perm" perm, inv_perm = RCM_perm(arch, B, D, dΩ)
