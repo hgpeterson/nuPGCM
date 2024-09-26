@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "sim030"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -28,8 +28,8 @@ flush(stdout)
 flush(stderr)
 
 # choose dimensions
-dim = TwoD()
-# dim = ThreeD()
+# dim = TwoD()
+dim = ThreeD()
 
 # choose architecture
 # arch = CPU()
@@ -46,13 +46,12 @@ VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, hres))
+mesh_file = @sprintf("meshes/bowl%s_%0.2f.msh", dim, hres)
+# mesh_file = "bowl2D_exp.msh"
+model = GmshDiscreteModel(mesh_file)
 
 # full grid
 m = Mesh(model)
-
-# surface grid
-m_sfc = Mesh(model, "sfc")
 
 # mesh res
 hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axes(m.t, 1), j ∈ 1:dim.n+1]
@@ -86,7 +85,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ε² = 1e-4
 γ = 1/4
 f₀ = 1
-β = 0
+β = 1
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # μϱ = 1e-4
@@ -108,6 +107,8 @@ println("---\n")
 # filenames for LHS matrices
 LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
 LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%s_%e_%e_%e.h5", dim, hres, α, γ)
+# LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%s_exp_%e_%e_%e_%e.h5", dim, ε², γ, f₀, β)
+# LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%s_exp_%e_%e.h5", dim, α, γ)
 
 # inversion LHS
 if isfile(LHS_inversion_fname)
@@ -161,26 +162,26 @@ end
 flush(stdout)
 flush(stderr)
 
-# initial condition: b = z, t = 0
-i_save = 0
-b = interpolate_everywhere(0, B)
-t = 0.
-ux = interpolate_everywhere(0, Ux)
-uy = interpolate_everywhere(0, Uy)
-uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P)
-save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+# # initial condition: b = z, t = 0
+# i_save = 0
+# b = interpolate_everywhere(0, B)
+# t = 0.
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P)
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
-# # initial condition: load from file
-# i_save = 18
-# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
-# ux, uy, uz, p, b, t = load_state(statefile)
-# solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
-# ux = FEFunction(Ux, ux)
-# uy = FEFunction(Uy, uy)
-# uz = FEFunction(Uz, uz)
-# p  = FEFunction(P, p)
-# b  = FEFunction(B, b)
+# initial condition: load from file
+i_save = 20
+statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+ux, uy, uz, p, b, t = load_state(statefile)
+solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
+ux = FEFunction(Ux, ux)
+uy = FEFunction(Uy, uy)
+uz = FEFunction(Uz, uz)
+p  = FEFunction(P, p)
+b  = FEFunction(B, b)
 
 # plot initial condition
 plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
@@ -214,8 +215,8 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
 assembler = SparseMatrixAssembler(D, D)
 RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
     # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
     @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     RHS = on_architecture(arch, RHS_evolution[perm_evolution])

@@ -30,6 +30,10 @@ on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
 on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 
+# vector type for iterative solvers
+vector_type(::CPU) = Vector{Float64} 
+vector_type(::GPU) = CuVector{Float64}
+
 # physical dimension of the problem
 abstract type AbstractDimension end
 struct TwoD <: AbstractDimension 
@@ -43,8 +47,28 @@ ThreeD() = ThreeD(3)
 string(::TwoD) = "2D"
 string(::ThreeD) = "3D"
 
+# output folder
+global out_folder = ""
+function set_out_folder!(folder::AbstractString)
+    global out_folder = folder
+    if !isdir(out_folder)
+        println("creating folder: ", out_folder)
+        mkdir(out_folder)
+    end
+    if !isdir("$out_folder/images")
+        println("creating subfolder: ", out_folder, "/images")
+        mkdir("$out_folder/images")
+    end
+    if !isdir("$out_folder/data")
+        println("creating subfolder: ", out_folder, "/data")
+        mkdir("$out_folder/data")
+    end
+    flush(stdout)
+    flush(stderr)
+end
+
+include("model.jl")
 include("utils.jl")
-include("meshes.jl")
 include("plotting.jl")
 include("IO.jl")
 include("spaces.jl")
@@ -58,6 +82,8 @@ on_architecture,
 AbstractDimension,
 TwoD,
 ThreeD,
+out_folder,
+set_out_folder!,
 # utils.jl
 chebyshev_nodes,
 hrs_mins_secs,
