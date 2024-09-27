@@ -368,4 +368,55 @@ sim030
 Same as sim028 but putting the horizontal diffusion back in.
 
 ################################################################################
+
+sim031 
+
+2D simulation equivalent to sim030 testing out new `run.jl` script that can
+handle 2D/3D and also looking at b as perturbation.
+
+################################################################################
+
+sim032 
+
+Same as sim031 but with a non-uniform mesh.
+
+Note:
+    • I was hoping that with the new buoyancy perturbation setup we would be
+      able to use a mesh with a higher resolution near the bottom, but it seems
+      like we still get some noise in the interior.
+    • The solution was stable, though, but it actually took longer to run (3.5
+      hrs) than sim031 (2.5 hrs), presumably because GMRES had to take more
+      iterations.
+
+################################################################################
+
+sim033
+
+Same as sim030 but with β = 0.5.
+
+################################################################################
+
+sim034
+
+Same as sim030 but with β = 0.
+
+################################################################################
+
+sim035
+
+Same as sim034 but with μϱ = 1e-4, Δt = 1e-4*μϱ/ε² = 1e-4. 
+
+################################################################################
+
+sim036
+
+Same as sim033 but with μϱ = 1e-4, Δt = 1e-4*μϱ/ε² = 1e-4.
+
+################################################################################
+
+sim037
+
+Same as sim030 but with μϱ = 1e-4, Δt = 1e-4*μϱ/ε² = 1e-4.
+
+################################################################################
 """
