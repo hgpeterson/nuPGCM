@@ -290,9 +290,9 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     ax[3].plot(uzs, z)
     ax[4].plot(bzs, z)
     if t === nothing
-        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y))
+        ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f", x, y)))
     else
-        ax[1].set_title(L"x = "*@sprintf("%1.2f", x)*L", \quad y = "*@sprintf("%1.2f", y)*L", \quad t = "*@sprintf("%1.2f", t))
+        ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f, \\quad t = %1.2f", x, y, t)))
     end
     savefig(fname)
     println(fname)
