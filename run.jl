@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "sim038"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -28,8 +28,8 @@ flush(stdout)
 flush(stderr)
 
 # choose dimensions
-dim = TwoD()
-# dim = ThreeD()
+# dim = TwoD()
+dim = ThreeD()
 
 # choose architecture
 # arch = CPU()
@@ -91,7 +91,8 @@ f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # μϱ = 1e-4
 # Δt = 1e-4*μϱ/ε²
-Δt = 0.05
+# Δt = 0.05
+Δt = 0.01
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -214,8 +215,8 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
 assembler = SparseMatrixAssembler(D, D)
 RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
     # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
     @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     RHS = on_architecture(arch, RHS_evolution[perm_evolution])
