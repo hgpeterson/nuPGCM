@@ -1,4 +1,4 @@
-using NonhydroPG
+using nuPGCM
 using Gridap, GridapGmsh
 using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
@@ -7,10 +7,10 @@ using Printf
 using PyPlot
 
 pygui(false)
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-out_folder = "out"
+out_folder = "../out"
 
 function compute_error(hres)
     # choose dimensions
@@ -32,7 +32,7 @@ function compute_error(hres)
 
     # model
     # hres = 0.02
-    model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, hres))
+    model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
 
     # full grid
     m = Mesh(model)
@@ -82,7 +82,7 @@ function compute_error(hres)
     println("---\n")
 
     # filenames for LHS matrices
-    LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+    LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
 
     # inversion LHS
     if isfile(LHS_inversion_fname)

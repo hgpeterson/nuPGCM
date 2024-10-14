@@ -1,4 +1,4 @@
-using NonhydroPG
+using nuPGCM
 using Gridap, GridapGmsh
 using Printf
 using PyPlot
@@ -8,11 +8,11 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 
 # simulation folder
-out_folder = "sim034"
+out_folder = "../sims/sim034"
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("meshes/bowl3D_%0.2f.msh", hres))
+model = GmshDiscreteModel(@sprintf("../meshes/bowl3D_%0.2f.msh", hres))
 
 # # full grid
 # m = Mesh(model)
@@ -106,7 +106,7 @@ function profile_comparison(out_folders, labels, i_save)
     ax[4].set_xlim(0, 1.1)
     for i ∈ eachindex(out_folders)
         out_folder = out_folders[i]
-        statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+        statefile = @sprintf("../sims/%s/data/state%03d.h5", out_folder, i_save)
         ux, uy, uz, p, b, t = load_state(statefile)
         ux = FEFunction(Ux, ux)
         uy = FEFunction(Uy, uy)
@@ -165,7 +165,7 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
     points = [Point(x, y, zᵢ) for zᵢ ∈ z]
 
     # load state file
-    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+    statefile = @sprintf("../sims/%s/data/state%03d.h5", out_folder, i_save)
     u, v, w, p, b, t = load_state(statefile)
 
     # define functions

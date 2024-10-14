@@ -1,4 +1,4 @@
-using NonhydroPG
+using nuPGCM
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
@@ -6,7 +6,7 @@ using PyPlot
 using Printf
 
 pygui(false)
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 
 function generate_bowl_mesh(h)
