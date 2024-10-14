@@ -1,10 +1,10 @@
 using LinearAlgebra, Statistics, HDF5, Printf
-using Gridap, GridapGmsh, NonhydroPG
+using Gridap, GridapGmsh, nuPGCM
 using Gmsh: gmsh
 using PyPlot
 
 pygui(false)
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 
 """
@@ -88,9 +88,9 @@ end
 # print_stats(θ_dm)
 
 # gmsh
-# fname = @sprintf("meshes/bowl2D_%0.2f.msh", h)
-# fname = "meshes/bowl2D_exp.msh"
-fname = "meshes/bowl2D_0.01.msh"
+# fname = @sprintf("bowl2D_%0.2f.msh", h)
+# fname = "bowl2D_exp.msh"
+fname = "bowl2D_0.01.msh"
 p, t = get_p_t(fname)
 @time θ_gm = inner_angles(p, t)
 println("Gmsh:")
@@ -108,8 +108,8 @@ ax.set_xticks(0:30:120)
 ax.set_ylim(0, 0.05)
 # ax.set_yscale("log")
 # ax.set_ylim(1e-5, 1e0)
-# savefig(@sprintf("out/inner_angles_%.2f.png", h))
-# println(@sprintf("out/inner_angles_%.2f.png", h))
-savefig(@sprintf("out/inner_angles_%s.png", fname[8:end-4]))
-println(@sprintf("out/inner_angles_%s.png", fname[8:end-4]))
+# savefig(@sprintf("../out/inner_angles_%.2f.png", h))
+# println(@sprintf("../out/inner_angles_%.2f.png", h))
+savefig(@sprintf("../out/inner_angles_%s.png", fname[8:end-4]))
+println(@sprintf("../out/inner_angles_%s.png", fname[8:end-4]))
 plt.close()

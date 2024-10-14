@@ -1,4 +1,4 @@
-module NonhydroPG
+module nuPGCM
 
 using Gridap
 using GridapGmsh

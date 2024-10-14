@@ -1,4 +1,4 @@
-using NonhydroPG
+using nuPGCM
 using Gridap, GridapGmsh
 using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-out_folder = "sim038"
+out_folder = "../out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -86,13 +86,10 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ε² = 1e-4
 γ = 1/4
 f₀ = 1
-β = 0
+β = 0.5
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
-# μϱ = 1e-4
-# Δt = 1e-4*μϱ/ε²
-# Δt = 0.05
-Δt = 0.01
+Δt = 0.05
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -107,8 +104,8 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-LHS_evolution_fname = @sprintf("matrices/LHS_evolution_%s_%e_%e_%e.h5", dim, hres, α, γ)
+LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+LHS_evolution_fname = @sprintf("../matrices/LHS_evolution_%s_%e_%e_%e.h5", dim, hres, α, γ)
 
 # inversion LHS
 if isfile(LHS_inversion_fname)
