@@ -73,10 +73,26 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     us = [nan_eval(cache_u, u, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     # bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    # us[isnan.(us)] .= 0
+
+    # fill NaNs
+    nx = size(points, 1)
+    nz = size(points, 2)
+    for i ∈ 1:nx, j ∈ 1:nz 
+        if isnan(bs[i, j])
+            if !isnan(bs[max(i-1, 1), j]) && !isnan(bs[min(i+1, nx), j]) && !isnan(bs[i, max(j-1, 1)]) && !isnan(bs[i, min(j+1, nz)])
+                bs[i, j] = (bs[max(i-1, 1), j] + bs[min(i+1, nx), j] + bs[i, max(j-1, 1)] + bs[i, min(j+1, nz)])/4
+            end
+        end
+        if isnan(us[i, j])
+            if !isnan(us[max(i-1, 1), j]) && !isnan(us[min(i+1, nx), j]) && !isnan(us[i, max(j-1, 1)]) && !isnan(us[i, min(j+1, nz)])
+                us[i, j] = (us[max(i-1, 1), j] + us[min(i+1, nx), j] + us[i, max(j-1, 1)] + us[i, min(j+1, nz)])/4
+            end
+        end
+    end
 
     # plot
     fig, ax = plt.subplots(1)
+    ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
     ax.axis("equal")
@@ -108,14 +124,14 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     if cb_max == 0.
         cb_max = nan_max(abs.(us))
     end
-    img = ax.pcolormesh(x1, x2, us', shading="gouraud", cmap="RdBu_r", vmin=-cb_max, vmax=cb_max, rasterized=true)
-    cb = plt.colorbar(img, ax=ax, label=cb_label)
+    img = ax.pcolormesh(x1, x2, us', shading="nearest", cmap="RdBu_r", vmin=-cb_max, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
+    cb = plt.colorbar(img, ax=ax, label=cb_label, fraction=0.025)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
     if t === nothing
         ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
     else
-        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %1.2f\$", slice_dir, slice_coord, t)))
+        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %s\$", slice_dir, slice_coord, sci_notation(t))))
     end
     savefig(fname)
     println(fname)
@@ -164,11 +180,27 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
     bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     speed = @. sqrt(us^2 + vs^2)
 
+    # fill NaNs
+    nx = size(points, 1)
+    nz = size(points, 2)
+    for i ∈ 1:nx, j ∈ 1:nz 
+        if isnan(bs[i, j])
+            if !isnan(bs[max(i-1, 1), j]) && !isnan(bs[min(i+1, nx), j]) && !isnan(bs[i, max(j-1, 1)]) && !isnan(bs[i, min(j+1, nz)])
+                bs[i, j] = (bs[max(i-1, 1), j] + bs[min(i+1, nx), j] + bs[i, max(j-1, 1)] + bs[i, min(j+1, nz)])/4
+            end
+        end
+        if isnan(us[i, j])
+            if !isnan(us[max(i-1, 1), j]) && !isnan(us[min(i+1, nx), j]) && !isnan(us[i, max(j-1, 1)]) && !isnan(us[i, min(j+1, nz)])
+                us[i, j] = (us[max(i-1, 1), j] + us[min(i+1, nx), j] + us[i, max(j-1, 1)] + us[i, min(j+1, nz)])/4
+            end
+        end
+    end
+
     # plot
     fig, ax = plt.subplots(1)
+    ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    ax.axis("equal")
     if slice_dir == "x"
         slice_coord = x
         x1 = y 
@@ -202,7 +234,7 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
         scale = cb_max/0.1 # speed of `cb_max` corresponds to 0.1 inch arrow
         scale_units = "inches"
     end
-    img = ax.pcolormesh(x1, x2, speed', shading="gouraud", cmap="Reds", vmin=0, vmax=cb_max, rasterized=true)
+    img = ax.pcolormesh(x1, x2, speed', shading="nearest", cmap="Reds", vmin=0, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
     cb = plt.colorbar(img, ax=ax, label=cb_label)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
     ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
@@ -212,7 +244,7 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
     if t === nothing
         ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
     else
-        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %1.2f\$", slice_dir, slice_coord, t)))
+        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %s\$", slice_dir, slice_coord, sci_notation(t))))
     end
     savefig(fname)
     println(fname)
@@ -285,14 +317,14 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
         a.axvline(0, color="k", linewidth=0.5, linestyle="-")
     end
     ax[4].set_xlim(0, 1.1*nan_max(abs.(bzs)))
-    ax[1].plot(uxs, z)
-    ax[2].plot(uys, z)
-    ax[3].plot(uzs, z)
-    ax[4].plot(bzs, z)
+    ax[1].plot(uxs[isnan.(uxs) .== 0], z[isnan.(uxs) .== 0])
+    ax[2].plot(uys[isnan.(uys) .== 0], z[isnan.(uys) .== 0])
+    ax[3].plot(uzs[isnan.(uzs) .== 0], z[isnan.(uzs) .== 0])
+    ax[4].plot(bzs[isnan.(bzs) .== 0], z[isnan.(bzs) .== 0])
     if t === nothing
         ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f", x, y)))
     else
-        ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f, \\quad t = %1.2f", x, y, t)))
+        ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f, \\quad t = %s", x, y, sci_notation(t))))
     end
     savefig(fname)
     println(fname)
