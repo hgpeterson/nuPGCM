@@ -31,19 +31,7 @@ function compute_error(hres)
     VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
     # model
-    # hres = 0.02
     model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
-
-    # full grid
-    m = Mesh(model)
-
-    # surface grid
-    m_sfc = Mesh(model, "sfc")
-
-    # mesh res
-    hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axes(m.t, 1), j ∈ 1:dim.n+1]
-    hmin = minimum(hs)
-    hmax = maximum(hs)
 
     # FE spaces
     X, Y, B, D = setup_FESpaces(model)
@@ -75,7 +63,7 @@ function compute_error(hres)
     f(x) = f₀ + β*x[2]
     println("\n---")
     println("Parameters:\n")
-    @printf("ε² = %.1e (δ = %.1e, %.1e ≤ h ≤ %.1e)\n", ε², √(2ε²), hmin, hmax)
+    @printf("ε² = %.1e (δ = %.1e, h = %.1e)\n", ε², √(2ε²), hres)
     @printf("f₀ = %.1e\n", f₀)
     @printf(" β = %.1e\n", β)
     @printf(" γ = %.1e\n", γ)
@@ -85,11 +73,12 @@ function compute_error(hres)
     LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
 
     # inversion LHS
-    if isfile(LHS_inversion_fname)
-        LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
-    else
-        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
-    end
+    # if isfile(LHS_inversion_fname)
+    #     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+    # else
+    #     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    # end
+    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 
     # inversion RHS
     RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
@@ -162,38 +151,56 @@ function compute_error(hres)
     ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
     p0 = interpolate_everywhere(x->x[3]^2/2, P) # since P is a zero-mean space, Gridap will automatically subtract the mean
     ep_L2 = sqrt(sum( ∫( (p - p0)*(p - p0) )*dΩ ))
-    eu_H1 = sqrt(sum( ∫( ux*ux + uy*uy + uz*uz + ∂x(ux)*∂x(ux) + ∂y(uy)*∂y(uy) + ∂z(uz)*∂z(uz) )*dΩ ))
+    eu_H1 = sqrt(sum( ∫( ux*ux + uy*uy + uz*uz + 
+                         ∂x(ux)*∂x(ux) + ∂y(ux)*∂y(ux) + ∂z(ux)*∂z(ux) +
+                         ∂x(uy)*∂x(uy) + ∂y(uy)*∂y(uy) + ∂z(uy)*∂z(uy) +
+                         ∂x(uz)*∂x(uz) + ∂y(uz)*∂y(uz) + ∂z(uz)*∂z(uz) 
+                         )*dΩ ))
     @printf("error = %e\n", ep_L2 + eu_H1)
-    h = 1/sqrt(size(m.p, 1))
+    h = 1/sqrt(np)
+
+    # plot error
+    b.free_values .= 0
+    plot_slice(ux*ux + uy*uy + uz*uz + 
+               ∂x(ux)*∂x(ux) + ∂y(ux)*∂y(ux) + ∂z(ux)*∂z(ux) +     
+               ∂x(uy)*∂x(uy) + ∂y(uy)*∂y(uy) + ∂z(uy)*∂z(uy) +     
+               ∂x(uz)*∂x(uz) + ∂y(uz)*∂y(uz) + ∂z(uz)*∂z(uz),
+               b; y=0, cb_label=L"$|\mathbf{u}|^2 + |\nabla\mathbf{u}|^2$", 
+               fname=@sprintf("%s/images/u_H1_err_%1.2f.png", out_folder, hres))
+    plot_slice((p - p0)*(p - p0), b; y=0, cb_label=L"$|p - p_a|^2$", fname=@sprintf("%s/images/p_err_%1.2f.png", out_folder, hres))
     return h, ep_L2 + eu_H1
 end
 
 function plot_convergence()
-    hs = [0.01, 0.02, 0.05]
-    # hs = [7.96667e-03, 1.57642e-02, 3.80418e-02]
+    # hs = [0.01, 0.02, 0.05]
+    hs = [7.96667e-03, 1.57642e-02, 3.80418e-02]
 
-    err_f0 = [5.785239e-07, 3.201639e-06, 3.118399e-05]
-    err_f0_diri = [5.80427e-07, 3.21156e-06, 3.12326e-05]
-    err_L2s = [2.914997e-04, 1.575368e-03, 9.549553e-03]
-    err_H1s = [8.961786e-03, 4.652045e-02, 4.170913e-01]
-    err_L2s_direct = [1.863660e-05, 1.986254e-04, 4.864734e-03]
-    err_H1s_direct = [8.915641e-03, 4.635080e-02, 4.161722e-01]
-    err_L2s_γ1_ε1 = [4.172885e-10, 4.406407e-09, 1.061986e-07]
-    err_H1s_γ1_ε1 = [2.090514e-07, 1.107825e-06, 1.053157e-05]
-    err_L2s_f0 = [4.172884e-10, 4.406407e-09, 1.061986e-07]
-    err_H1s_f0 = [2.090514e-07, 1.107825e-06, 1.053157e-05]
+    err1 = [5.785239e-07, 3.201639e-06, 3.118399e-05]
+    err2 = [6.221112e-07, 3.427847e-06, 3.353035e-05]
 
-    err = err_f0_diri
+    # err_f0 = [5.785239e-07, 3.201639e-06, 3.118399e-05]
+    # err_f0_diri = [5.80427e-07, 3.21156e-06, 3.12326e-05]
+    # err_L2s = [2.914997e-04, 1.575368e-03, 9.549553e-03]
+    # err_H1s = [8.961786e-03, 4.652045e-02, 4.170913e-01]
+    # err_L2s_direct = [1.863660e-05, 1.986254e-04, 4.864734e-03]
+    # err_H1s_direct = [8.915641e-03, 4.635080e-02, 4.161722e-01]
+    # err_L2s_γ1_ε1 = [4.172885e-10, 4.406407e-09, 1.061986e-07]
+    # err_H1s_γ1_ε1 = [2.090514e-07, 1.107825e-06, 1.053157e-05]
+    # err_L2s_f0 = [4.172884e-10, 4.406407e-09, 1.061986e-07]
+    # err_H1s_f0 = [2.090514e-07, 1.107825e-06, 1.053157e-05]
+
+    # err = err_f0_diri
 
     fig, ax = plt.subplots(1)
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||\mathbf{u}||_{H^1} + ||p - p_a||_{L^2}$")
-    ax.plot(hs, err, "o-")
+    ax.plot(hs, err1, "o-")
+    ax.plot(hs, err2, "o-")
     h = [hs[1], hs[end]]
-    ax.plot(h, err[end]/h[end]^2*h.^2, "k--", alpha=0.5, label=L"$O(h^2)$")
-    ax.plot(h, err[end]/h[end]^3*h.^3, "k--", alpha=1.0, label=L"$O(h^3)$")
+    ax.plot(h, err1[end]/h[end]^2*h.^2, "k--", alpha=0.5, label=L"$O(h^2)$")
+    ax.plot(h, err1[end]/h[end]^3*h.^3, "k--", alpha=1.0, label=L"$O(h^3)$")
     # ax.legend(ncol=3, loc=(0.05, 1.05))
     ax.legend()
     ax.set_title("Bowl (Gridap)")
@@ -204,10 +211,10 @@ function plot_convergence()
     plt.close()
 end
 
-# h5, err5 = compute_error(0.05)
+h5, err5 = compute_error(0.05)
 # h2, err2 = compute_error(0.02)
 # h1, err1 = compute_error(0.01)
 # @printf("[%1.5e, %1.5e, %1.5e]\n", h1, h2, h5)
 # @printf("[%1.5e, %1.5e, %1.5e]\n", err1, err2, err5)
 
-plot_convergence()
+# plot_convergence()
