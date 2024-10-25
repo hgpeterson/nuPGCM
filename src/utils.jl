@@ -33,3 +33,17 @@ Returns the minimum value of `u`, ignoring `NaN`s.
 function nan_min(u)
     return minimum(i -> isnan(u[i]) ? Inf : u[i], 1:length(u))
 end
+
+"""
+    s = sci_notation(x)
+
+Returns a string representation of `x` in scientific notation.
+"""
+function sci_notation(x)
+    if x == 0
+        return "0.0"
+    end
+    exp = floor(log10(abs(x)))
+    mant = x / 10^exp
+    return @sprintf("%1.1f \\times 10^{%d}", mant, exp)
+end
