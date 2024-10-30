@@ -10,7 +10,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-out_folder = "../sims/sim038"
+out_folder = "../out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -28,15 +28,15 @@ flush(stdout)
 flush(stderr)
 
 # choose dimensions
-# dim = TwoD()
-dim = ThreeD()
+dim = TwoD()
+# dim = ThreeD()
 
 # choose architecture
 # arch = CPU()
 arch = GPU()
 
 # tolerance and max iterations for iterative solvers
-tol = 1e-8
+tol = 1e-6
 @printf("tol = %.1e\n", tol)
 itmax = 0
 @printf("itmax = %d\n", itmax)
@@ -59,6 +59,16 @@ hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axe
 hmin = minimum(hs)
 hmax = maximum(hs)
 
+using Statistics
+println()
+@printf("min(h)    = %e\n", hmin)
+@printf("mean(h)   = %e (<- using this one)\n", mean(hs))
+@printf("median(h) = %e\n", median(hs))
+@printf("std(h)    = %e\n", std(hs))
+@printf("max(h)    = %e\n", hmax)
+println()
+h = mean(hs)
+
 # FE spaces
 X, Y, B, D = setup_FESpaces(model)
 Ux, Uy, Uz, P = unpack_spaces(X)
@@ -70,6 +80,11 @@ np = P.space.space.nfree
 nb = B.space.nfree
 N = nu + np - 1
 @printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
+if typeof(dim) == TwoD
+    @printf("\th ~ %e\n", 1/sqrt(np))
+else
+    @printf("\th ~ %e\n", 1/cbrt(np))
+end
 
 # triangulation and integration measure
 Ω = Triangulation(model)
@@ -88,11 +103,12 @@ H(x) = 1 - x[1]^2 - x[2]^2
 f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
-μϱ = 1e0
+# μϱ = 1e0
+μϱ = 1e-2
 # μϱ = 1e-4
-# Δt = 1e-4*μϱ/ε²
+Δt = 1e-4*μϱ/ε²
 # Δt = 0.05
-Δt = 0.01
+# Δt = 0.01
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
@@ -121,13 +137,12 @@ end
 RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
 # preconditioner
-P_inversion = I
-# P_inversion = Diagonal(1/hres^3*ones(N))
+P_inversion = Diagonal(1/h^3*ones(N))
 
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, LHS_inversion)
 RHS_inversion = on_architecture(arch, RHS_inversion)
-# P_inversion = Diagonal(on_architecture(arch, diag(P_inversion)))
+P_inversion = Diagonal(on_architecture(arch, diag(P_inversion)))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -173,7 +188,7 @@ p  = interpolate_everywhere(0, P)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
-# i_save = 18
+# i_save = 1
 # statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
 # ux, uy, uz, p, b, t = load_state(statefile)
 # solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
@@ -184,7 +199,7 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 # b  = FEFunction(B, b)
 
 # plot initial condition
-plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
+plots_cache = sim_plots(dim, ux, uy, uz, b, H, t, i_save, out_folder)
 i_save += 1
 
 if isfile(LHS_evolution_fname)
@@ -215,8 +230,13 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
 assembler = SparseMatrixAssembler(D, D)
 RHS_evolution = zeros(nb)
 function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+    function l(d)
+        if typeof(dim) == TwoD
+            return ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+        else
+            return ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
+        end
+    end
     # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
     @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     RHS = on_architecture(arch, RHS_evolution[perm_evolution])
