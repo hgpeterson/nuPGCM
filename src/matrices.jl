@@ -69,38 +69,59 @@ function assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFE
 end
 
 """
-    LHS, perm, inv_perm = assemble_LHS_evolution(arch::AbstractArchitecture, dim::AbstractDimension, 
-                                                 α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
+    LHS_adv, LHS_diff, perm, inv_perm = assemble_LHS_adv_diff(arch::AbstractArchitecture, 
+                    α, γ, κ, B, D, dΩ; fname_adv="LHS_adv.h5", fname_diff="LHS_diff.h5")
 
-Assemble the LHS of the evolution problem for the `dim`-dimensional 
-Non-Hydrostatic PG equations and return the matrix `LHS` along with the 
-permutation `perm` and its inverse `inv_perm`. The matrix is saved to a file 
-`fname`.
+Assemble the LHSs for the advection and diffusion components of the evolution
+problem for the PG equations. Return the sparse matrices `LHS_adv` and
+`LHS_diff` along with the permutation `perm` and its inverse `inv_perm`. Save
+the matrices to separate files `fname_adv` and `fname_diff`.
 """
-function assemble_LHS_evolution(arch::AbstractArchitecture, dim::AbstractDimension, 
-                                α, γ, κ, B, D, dΩ; fname="LHS_evolution.h5")
-    # bilinear form
-    function weak_form(dim::TwoD, b, d)
-        ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
-    end
-    function weak_form(dim::ThreeD, b, d)
-        ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
-    end
+function assemble_LHS_adv_diff(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ; fname_adv="LHS_adv.h5", fname_diff="LHS_diff.h5")
+    # mass matrix
+    a_m(b, d) = ∫( b*d )dΩ
+    @time "assemble mass matrix" M = assemble_matrix(a_m, B, D)
 
-    # assemble
-    a(b, d) = weak_form(dim, b, d)
-    @time "assemble LHS_evolution" LHS = assemble_matrix(a, B, D)
+    # diffusion matrix
+    a_d(b, d) = ∫( α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    @time "assemble diffusion matrix" K = assemble_matrix(a_d, B, D)
+
+    # LHS for advection problem = mass
+    LHS_adv = M
+
+    # LHS for diffusion problem = mass + diff
+    LHS_diff = M + K
 
     # Cuthill-McKee DOF reordering
     @time "RCM perm" perm, inv_perm = RCM_perm(arch, B, D, dΩ)
 
     # re-order DOFs
-    LHS = LHS[perm, perm]
+    LHS_adv = LHS_adv[perm, perm]
+    LHS_diff = LHS_diff[perm, perm]
 
     # save
-    write_sparse_matrix(LHS, perm, inv_perm; fname)
+    write_sparse_matrix(LHS_adv,  perm, inv_perm; fname=fname_adv)
+    write_sparse_matrix(LHS_diff, perm, inv_perm; fname=fname_diff)
 
-    return LHS, perm, inv_perm
+    return LHS_adv, LHS_diff, perm, inv_perm
+end
+
+"""
+    M, v = assemble_RHS_diff(perm, B, D, dΩ)
+
+Assemble the RHS matrix and vector for the diffusion part of the evolution
+problem for the PG equations.
+"""
+function assemble_RHS_diff(perm, α, γ, κ, B, D, dΩ)
+    # matrix
+    a(b, d) = ∫( b*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    @time "RHS_diff matrix" M = assemble_matrix(a, B, D)[perm, :]
+
+    # vector
+    l(d) = ∫( -2*α*∂z(d)*κ )dΩ
+    @time "RHS_diff vector" v = assemble_vector(l, D)[perm]
+
+    return M, v
 end
 
 """
