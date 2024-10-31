@@ -354,7 +354,7 @@ function sim_plots(dim::ThreeD, ux::CellField, uy::CellField, uz::CellField, b::
     return cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc
 end
 function sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
-    if len(cache) == 4
+    if length(cache) == 4
         # 3D
         cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc = cache
         plot_u_sfc = true
