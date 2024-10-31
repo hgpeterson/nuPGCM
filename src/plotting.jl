@@ -299,6 +299,18 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     uys[1] = 0
     uzs[1] = 0
 
+    # NaN masks
+    ux_mask = (isnan.(uxs) .== 0)
+    uy_mask = (isnan.(uys) .== 0)
+    uz_mask = (isnan.(uzs) .== 0)
+    bz_mask = (isnan.(bzs) .== 0)
+
+    # print integrals
+    @printf("∫ u dz = %e\n", trapz(uxs[ux_mask], z[ux_mask]))
+    @printf("∫ v dz = %e\n", trapz(uys[uy_mask], z[uy_mask]))
+    @printf("∫ w dz = %e\n", trapz(uzs[uz_mask], z[uz_mask]))
+
+    # plot
     fig, ax = plt.subplots(1, 4, figsize=(8, 3.2))
     ax[1].set_ylabel(L"z")
     ax[1].set_xlabel(L"u")
@@ -317,10 +329,10 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
         a.axvline(0, color="k", linewidth=0.5, linestyle="-")
     end
     ax[4].set_xlim(0, 1.1*nan_max(abs.(bzs)))
-    ax[1].plot(uxs[isnan.(uxs) .== 0], z[isnan.(uxs) .== 0])
-    ax[2].plot(uys[isnan.(uys) .== 0], z[isnan.(uys) .== 0])
-    ax[3].plot(uzs[isnan.(uzs) .== 0], z[isnan.(uzs) .== 0])
-    ax[4].plot(bzs[isnan.(bzs) .== 0], z[isnan.(bzs) .== 0])
+    ax[1].plot(uxs[ux_mask], z[ux_mask])
+    ax[2].plot(uys[uy_mask], z[uy_mask])
+    ax[3].plot(uzs[uz_mask], z[uz_mask])
+    ax[4].plot(bzs[bz_mask], z[bz_mask])
     if t === nothing
         ax[1].set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f", x, y)))
     else
