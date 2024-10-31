@@ -83,6 +83,7 @@ unpack_spaces,
 # matrices.jl
 assemble_LHS_inversion,
 assemble_RHS_inversion,
-assemble_LHS_evolution
+assemble_LHS_adv_diff,
+assemble_RHS_diff
 
 end # module
