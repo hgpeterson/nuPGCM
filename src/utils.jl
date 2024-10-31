@@ -8,6 +8,19 @@ function chebyshev_nodes(n)
 end
 
 """
+    F = trapz(f, z)
+
+Integrate the function `f` over the grid `z` using the trapezoidal rule.
+""" 
+function trapz(f, z)
+    F = 0.0
+    for i ∈ 1:length(z) - 1
+        F += 0.5*(z[i + 1] - z[i])*(f[i + 1] + f[i])
+    end
+    return F
+end
+
+"""
     hrs, mins, secs = hrs_mins_secs(seconds)
 
 Converts a number of seconds into hours, minutes, and seconds.
