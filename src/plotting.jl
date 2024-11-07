@@ -28,13 +28,13 @@ function nan_eval(cache, u::CellField, x::AbstractVector)
 end
 
 """
-    cache = plot_slice(u::CellField, b::CellField; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+    cache = plot_slice(u::CellField, b::CellField, N²::Real,; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="slice.png")
 
-    cache = plot_slice(u::CellField, v::CellField, b::CellField; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+    cache = plot_slice(u::CellField, v::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=nothing, fname="slice.png")
 """
-function plot_slice(u::CellField, b::CellField; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+function plot_slice(u::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     # setup grid and cache
     n = 2^8
     if x !== nothing
@@ -57,7 +57,7 @@ function plot_slice(u::CellField, b::CellField; x=nothing, y=nothing, z=nothing,
     end
     cache_u = Gridap.CellData.return_cache(u, points[:])
     cache_b = Gridap.CellData.return_cache(b, points[:])
-    cache = (slice_dir, x, y, z, points, cache_u, cache_b, cb_label, cb_max)
+    cache = (slice_dir, x, y, z, N², points, cache_u, cache_b, cb_label, cb_max)
 
     # plot
     plot_slice(cache, u, b; t, fname)
@@ -67,12 +67,11 @@ function plot_slice(u::CellField, b::CellField; x=nothing, y=nothing, z=nothing,
 end
 function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="slice.png")
     # unpack cache
-    slice_dir, x, y, z, points, cache_u, cache_b, cb_label, cb_max = cache
+    slice_dir, x, y, z, N², points, cache_u, cache_b, cb_label, cb_max = cache
 
     # evaluate
     us = [nan_eval(cache_u, u, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    # bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    bs = [N²*points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
 
     # fill NaNs
     nx = size(points, 1)
@@ -137,7 +136,7 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     println(fname)
     plt.close()
 end
-function plot_slice(u::CellField, v::CellField, b::CellField; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+function plot_slice(u::CellField, v::CellField, b::CellField, N²; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     # setup grid and cache
     n = 2^8
     if x !== nothing
@@ -161,7 +160,7 @@ function plot_slice(u::CellField, v::CellField, b::CellField; x=nothing, y=nothi
     cache_u = Gridap.CellData.return_cache(u, points[:])
     cache_v = Gridap.CellData.return_cache(v, points[:])
     cache_b = Gridap.CellData.return_cache(b, points[:])
-    cache = (slice_dir, x, y, z, points, cache_u, cache_v, cache_b, cb_label, cb_max)
+    cache = (slice_dir, x, y, z, points, N², cache_u, cache_v, cache_b, cb_label, cb_max)
 
     # plot
     plot_slice(cache, u, v, b; t, fname)
@@ -171,13 +170,12 @@ function plot_slice(u::CellField, v::CellField, b::CellField; x=nothing, y=nothi
 end
 function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=nothing, fname="slice.png")
     # unpack cache
-    slice_dir, x, y, z, points, cache_u, cache_v, cache_b, cb_label, cb_max = cache
+    slice_dir, x, y, z, N², points, cache_u, cache_v, cache_b, cb_label, cb_max = cache
 
     # evaluate
     us = [nan_eval(cache_u, u, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     vs = [nan_eval(cache_v, v, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    # bs = [nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
-    bs = [points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    bs = [N²*points[i, j][3] + nan_eval(cache_b, b, points[i, j]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
     speed = @. sqrt(us^2 + vs^2)
 
     # fill NaNs
@@ -252,12 +250,12 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
 end
 
 """
-    cache = plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, H::Function; 
+    cache = plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function; 
                           x::Real, y::Real, t=nothing, fname="profiles.png")
     plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField
                   t=nothing, fname="profiles.png") 
 """
-function plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, 
+function plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real,
                        H::Function; x::Real, y::Real, t=nothing, fname="profiles.png")
     # setup points
     H0 = H([x, y])
@@ -271,7 +269,7 @@ function plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField
     cache_b  = Gridap.CellData.return_cache(b,  points)
 
     # save plotting cache
-    cache = (x, y, z, points, cache_ux, cache_uy, cache_uz, cache_b)
+    cache = (x, y, z, N², points, cache_ux, cache_uy, cache_uz, cache_b)
 
     # plot
     plot_profiles(cache, ux, uy, uz, b; t, fname)
@@ -282,7 +280,7 @@ end
 function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField;
                        t=nothing, fname="profiles.png")
     # unpack cache
-    x, y, z, points, cache_ux, cache_uy, cache_uz, cache_b = cache
+    x, y, z, N², points, cache_ux, cache_uy, cache_uz, cache_b = cache
 
     # evaluate fields
     uxs = nan_eval(cache_ux, ux, points)
@@ -294,7 +292,7 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     dz = z[2] - z[1]
     bzs = (bs[3:end] - bs[1:end-2])/(2dz)
     bzs = [(-3/2*bs[1] + 2*bs[2] - 1/2*bs[3])/dz; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
-    bzs .+= 1
+    bzs .+= N²
     uxs[1] = 0
     uys[1] = 0
     uzs[1] = 0
@@ -305,10 +303,10 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     uz_mask = (isnan.(uzs) .== 0)
     bz_mask = (isnan.(bzs) .== 0)
 
-    # print integrals
-    @printf("∫ u dz = %e\n", trapz(uxs[ux_mask], z[ux_mask]))
-    @printf("∫ v dz = %e\n", trapz(uys[uy_mask], z[uy_mask]))
-    @printf("∫ w dz = %e\n", trapz(uzs[uz_mask], z[uz_mask]))
+    # # print integrals
+    # @printf("∫ u dz = %e\n", trapz(uxs[ux_mask], z[ux_mask]))
+    # @printf("∫ v dz = %e\n", trapz(uys[uy_mask], z[uy_mask]))
+    # @printf("∫ w dz = %e\n", trapz(uzs[uz_mask], z[uz_mask]))
 
     # plot
     fig, ax = plt.subplots(1, 4, figsize=(8, 3.2))
@@ -344,42 +342,45 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
 end
 
 """
-    cache = sim_plots(dim::AbstractDimension, ux::CellField, uy::CellField, uz::CellField, b::CellField, H::Function, t::Real, i_save::Int, out_folder::String)
+    cache = sim_plots(dim::AbstractDimension, ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function, t::Real, i_save::Int, out_folder::String)
     sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
 """
-function sim_plots(dim::TwoD, ux::CellField, uy::CellField, uz::CellField, b::CellField, H::Function, t::Real, i_save::Int, out_folder::String)
+function sim_plots(dim::TwoD, ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function, t::Real, i_save::Int, out_folder::String)
     # don't plot u_sfc in 2D
     @time "plotting" begin
-    cache_profiles = plot_profiles(ux, uy, uz, b, H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-    cache_u_slice  =    plot_slice(ux,     b; y=0.0, t=t, cb_label=L"Zonal flow $u$",                      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-    cache_v_slice  =    plot_slice(uy,     b; y=0.0, t=t, cb_label=L"Meridional flow $v$",                 fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    cache_profiles = plot_profiles(ux, uy, uz, b, N², H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+    cache_u_slice  = plot_slice(ux, b, N²; y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+    cache_v_slice  = plot_slice(uy, b, N²; y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    cache_w_slice  = plot_slice(uz, b, N²; y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_folder, i_save))
     end
-    return cache_profiles, cache_u_slice, cache_v_slice
+    return cache_profiles, cache_u_slice, cache_v_slice, cache_w_slice
 end
-function sim_plots(dim::ThreeD, ux::CellField, uy::CellField, uz::CellField, b::CellField, H::Function, t::Real, i_save::Int, out_folder::String)
+function sim_plots(dim::ThreeD, ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function, t::Real, i_save::Int, out_folder::String)
     @time "plotting" begin
-    cache_profiles = plot_profiles(ux, uy, uz, b, H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-    cache_u_slice  =    plot_slice(ux,     b; y=0.0, t=t, cb_label=L"Zonal flow $u$",                      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-    cache_v_slice  =    plot_slice(uy,     b; y=0.0, t=t, cb_label=L"Meridional flow $v$",                 fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
-    cache_u_sfc    =    plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+    cache_profiles = plot_profiles(ux, uy, uz, b, N², H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
+    cache_u_slice  = plot_slice(ux, b, N²; y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+    cache_v_slice  = plot_slice(uy, b, N²; y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    cache_w_slice  = plot_slice(uz, b, N²; y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_folder, i_save))
+    cache_u_sfc    = plot_slice(ux, uy, b, N²; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
     end
-    return cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc
+    return cache_profiles, cache_u_slice, cache_v_slice, cache_w_slice, cache_u_sfc
 end
 function sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int, out_folder::String)
-    if length(cache) == 4
+    if length(cache) == 5
         # 3D
-        cache_profiles, cache_u_slice, cache_v_slice, cache_u_sfc = cache
+        cache_profiles, cache_u_slice, cache_v_slice, cache_w_slice, cache_u_sfc = cache
         plot_u_sfc = true
     else
         # 2D
-        cache_profiles, cache_u_slice, cache_v_slice = cache
+        cache_profiles, cache_u_slice, cache_v_slice, cache_w_slice = cache
         plot_u_sfc = false
     end
 
     @time "plotting" begin
     plot_profiles(cache_profiles, ux, uy, uz, b; t=t, fname=@sprintf("%s/images/profiles%03d.png", out_folder, i_save))
-    plot_slice(cache_u_slice,     ux,     b; t=t, fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-    plot_slice(cache_v_slice,     uy,     b; t=t, fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    plot_slice(cache_u_slice, ux, b; t=t, fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+    plot_slice(cache_v_slice, uy, b; t=t, fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+    plot_slice(cache_w_slice, uz, b; t=t, fname=@sprintf("%s/images/w_yslice_%03d.png", out_folder, i_save))
     if plot_u_sfc
         plot_slice(cache_u_sfc,   ux, uy, b; t=t, fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
     end
