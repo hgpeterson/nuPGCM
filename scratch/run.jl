@@ -10,7 +10,8 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-out_folder = "../out"
+# out_folder = "../sim040"
+out_folder = "../sims/sim040"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -46,7 +47,8 @@ VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
 
 # full grid
 m = Mesh(model)
@@ -104,12 +106,11 @@ f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
-# μϱ = 1e-2
-# μϱ = 1e-4
 # Δt = 1e-4*μϱ/ε²
 Δt = 0.05
-# Δt = 0.01
-T = 5e-2*μϱ/ε²
+# T = 5e-2*μϱ/ε²
+# T = 0.5
+T = 500
 α = Δt/2*ε²/μϱ # for timestep
 println("\n---")
 println("Parameters:\n")
@@ -123,9 +124,9 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, hres, α, γ)
-LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, hres)
+LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_dm_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_dm_%e_%e_%e.h5", dim, hres, α, γ)
+LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_dm_%e.h5", dim, hres)
 
 # inversion LHS
 if isfile(LHS_inversion_fname)
@@ -187,6 +188,9 @@ end
 flush(stdout)
 flush(stderr)
 
+# background state \partial_z b = N^2
+N² = 1.
+
 # initial condition: b = z, t = 0
 i_save = 0
 b = interpolate_everywhere(0, B)
@@ -196,6 +200,19 @@ uy = interpolate_everywhere(0, Uy)
 uz = interpolate_everywhere(0, Uz)
 p  = interpolate_everywhere(0, P) 
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+
+# # initial condition: b = gaussian, t = 0
+# i_save = 0
+# b = interpolate_everywhere(x -> -exp(-100*(x[1]^2 + x[2]^2 + (x[3] + 0.5)^2)), B)
+# t = 0.
+# ux = interpolate_everywhere(0, Ux)
+# # ux = interpolate_everywhere(0.1, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P)
+# solver_inversion = invert!(arch, solver_inversion, b)
+# ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
 # i_save = 1
@@ -213,7 +230,7 @@ sol = [ux.free_values; uy.free_values; uz.free_values; p.free_values]
 solver_inversion.x .= on_architecture(arch, sol[perm_inversion])
 
 # plot initial condition
-plots_cache = sim_plots(dim, ux, uy, uz, b, H, t, i_save, out_folder)
+plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save, out_folder)
 i_save += 1
 
 # evolution LHSs
@@ -225,7 +242,7 @@ else
 end
 
 # diffusion RHS matrix and vector
-RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, B, D, dΩ)
+RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
 
 # preconditioners
 if typeof(dim) == TwoD
@@ -268,7 +285,7 @@ solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_b])
 b_half = interpolate_everywhere(0, B)
 function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolution, ux, uy, uz, p, b)
     # half step
-    l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(1 + ∂z(b)))*d )dΩ
+    l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(N² + ∂z(b)))*d )dΩ
     @time "build RHS_evolution 1" RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
     # @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     # RHS = on_architecture(arch, RHS_evolution[perm_b])
@@ -278,11 +295,11 @@ function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolut
 
     # u, v, w, p, b at half step
     update_b!(b_half, solver_evolution)
-    solver_inversion = invert!(arch, solver_inversion, b_half)
+    @time "invert" solver_inversion = invert!(arch, solver_inversion, b_half)
     ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
     # full step
-    l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(1 + ∂z(b_half)))*d )dΩ
+    l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
     @time "build RHS_evolution 2" RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
     # Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
     # @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
@@ -330,7 +347,6 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         solver_inversion = invert!(arch, solver_inversion, b)
         ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
-
         # blow up
         if any(isnan.(solver_inversion.x)) || any(isnan.(solver_evolution.x))
             # save and kill
@@ -377,3 +393,60 @@ end
 i_step = Int64(round(t/Δt)) + 1
 n_steps = Int64(round(T/Δt))
 ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
+
+# # compute error
+# b_final = interpolate_everywhere(x -> -exp(-100*((x[1] - 0.1*T)^2 + x[2]^2 + (x[3] + 0.5)^2)), B)
+# err_L2 = sum(∫( (b - b_final)*(b - b_final) )dΩ)
+# err_Linf = maximum(abs.(b.free_values - b_final.free_values))
+# @printf("L2 error = %.1e\n", err_L2)
+# @printf("Max error = %.1e\n", err_Linf)
+# plot_slice(abs(b - b_final), b; y=0, t=T, cb_label=L"Error $|b - b_a|$", fname=@sprintf("%s/images/error.png", out_folder))
+
+# dts = [5e-1, 2.5e-1, 1e-1, 5e-2, 2.5e-2, 1.25e-2]
+# errors = [7.9e-2, 2.1e-2, 3.6e-3, 1.0e-3, 4.4e-4, 3.4e-4]
+# fig, ax = subplots(1, figsize=(3.2, 3.2))
+# ax.spines["top"].set_visible(true)
+# ax.spines["right"].set_visible(true)
+# ax.loglog(dts, errors, "o-")
+# ax.loglog(dts, errors[3]/dts[3]^2*dts.^2, "k--", label=L"O(\Delta t^2)")
+# ax.legend()
+# ax.set_xlabel(L"Timestep $\Delta t$")
+# ax.set_xlim(1e-2, 1e0)
+# ax.set_ylim(1e-4, 5e-1)
+# ax.set_ylabel(L"Error $||b - b_a||_\infty$")
+# ax.grid(true, which="both", color="k", alpha=0.5, linestyle=":", linewidth=0.25)
+# ax.set_axisbelow(true)
+# ax.set_title("Global Trucation Error After 10 Steps")
+# savefig("../out/images/convergence.png")
+# println("../out/images/convergence.png")
+# plt.close()
+
+# dt_min = 0.005
+# statefile = @sprintf("%s/data/state_%.3f.h5", out_folder, dt_min)
+# ux0, uy0, uz0, p0, b0, t = load_state(statefile)
+# dts = [0.1, 0.05, 0.04, 0.02, 0.01]
+# errors = zeros(size(dts))
+# for i in eachindex(dts)
+#     statefile = @sprintf("%s/data/state_%.3f.h5", out_folder, dts[i])
+#     ux, uy, uz, p, b, t = load_state(statefile)
+#     errors[i] = maximum(abs.(b - b0))
+# end
+# fig, ax = subplots(1, figsize=(3.2, 3.2))
+# ax.spines["top"].set_visible(true)
+# ax.spines["right"].set_visible(true)
+# ax.loglog(dts, errors[4]/dts[4]^2*dts.^2, "k--", label=L"O(\Delta t^2)", lw=1.0)
+# ax.loglog(dts, errors[3]/dts[3]^1*dts.^1, "k--", alpha=0.5, label=L"O(\Delta t)", lw=1.0)
+# ax.loglog(dts, errors, "o-")
+# ax.legend()
+# ax.set_xlabel(L"Timestep $\Delta t$")
+# ax.set_xlim(9e-3, 2e-1)
+# ax.set_ylim(1e-6, 1e-3)
+# ax.set_ylabel(L"Error $||b - b_a||_\infty$")
+# ax.grid(true, which="both", color="k", alpha=0.5, linestyle=":", linewidth=0.25)
+# ax.set_axisbelow(true)
+# ax.set_title(L"Global Trucation Error at $T = 5$")
+# savefig("../out/images/convergence_spinup.png")
+# println("../out/images/convergence_spinup.png")
+# plt.close()
+
+println("Done.")
