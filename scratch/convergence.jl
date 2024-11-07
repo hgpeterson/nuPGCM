@@ -14,8 +14,8 @@ plt.close("all")
 out_folder = "../out"
 
 # choose architecture
-arch = CPU()
-# arch = GPU()
+# arch = CPU()
+arch = GPU()
 
 # tolerance and max iterations for iterative solvers
 tol = 1e-5
@@ -31,7 +31,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ν(x) = 1
 
 # params
-ε² = 1e-4
+ε² = 1e-2
 γ = 1/4
 f₀ = 1
 β = 0
@@ -39,8 +39,9 @@ f(x) = f₀ + β*x[2]
 
 function compute_error(dim::AbstractDimension, hres; showplots=false)
     # model
-    # model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
-    model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_exp.msh", dim))
+    model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+    # model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
+    # model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_exp.msh", dim))
 
     # FE spaces
     X, Y, B, D = setup_FESpaces(model)
@@ -65,8 +66,9 @@ function compute_error(dim::AbstractDimension, hres; showplots=false)
     dΩ = Measure(Ω, 4)
 
     # filenames for LHS matrices
-    # LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-    LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_exp_%e_%e_%e_%e.h5", dim, ε², γ, f₀, β)
+    LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+    # LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_dm_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+    # LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_exp_%e_%e_%e_%e.h5", dim, ε², γ, f₀, β)
 
     # inversion LHS
     if isfile(LHS_inversion_fname)
@@ -230,6 +232,12 @@ function plot_convergence_2D()
         ax.plot(hs, errs[i], "o-", label=labels[i])
     end
     ax.plot(hs, errs[1][2]/hs[2]^2*hs.^2, "k--", label=L"$O(h^2)$")
+    ax.plot(hs, errs[4][2]/hs[2]^2*hs.^2, "k--")
+    ax.plot(hs, errs[7][2]/hs[2]^2*hs.^2, "k--")
+    hs = [1.00810e-02, 2.04083e-02, 5.16216e-02]
+    ax.plot(hs, [7.91502e-03, 4.37259e-02, 4.04744e-01], "o-")
+    ax.plot(hs, [7.94755e-05, 4.43226e-04, 4.27666e-03], "o-")
+    ax.plot(hs, [7.17254e-04, 5.77746e-04, 4.31530e-03], "o-")
     ax.legend(loc=(1.05, 0.0))
     ax.set_title("2D Bowl (Gridap)")
     savefig(@sprintf("%s/images/convergence2D.png", out_folder))
@@ -283,21 +291,21 @@ function plot_convergence_3D()
     plt.close()
 end
 
-# showplots = false
-showplots = true
+showplots = false
+# showplots = true
 
 dim = TwoD()
-# # dim = ThreeD()
+# dim = ThreeD()
 
 h5, eu5_L2, eu5_H1, ep5_L2 = compute_error(dim, 0.05; showplots)
-# h2, eu2_L2, eu2_H1, ep2_L2 = compute_error(dim, 0.02; showplots)
-# h1, eu1_L2, eu1_H1, ep1_L2 = compute_error(dim, 0.01; showplots)
+h2, eu2_L2, eu2_H1, ep2_L2 = compute_error(dim, 0.02; showplots)
+h1, eu1_L2, eu1_H1, ep1_L2 = compute_error(dim, 0.01; showplots)
 
-# @printf("[%1.5e, %1.5e, %1.5e]\n", h1, h2, h5)
-# @printf("[%1.5e, %1.5e, %1.5e]\n", eu1_L2, eu2_L2, eu5_L2)
-# @printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1, eu2_H1, eu5_H1)
-# @printf("[%1.5e, %1.5e, %1.5e]\n", ep1_L2, ep2_L2, ep5_L2)
-# @printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1 + ep1_L2, eu2_H1 + ep2_L2, eu5_H1 + ep5_L2)
+@printf("[%1.5e, %1.5e, %1.5e]\n", h1, h2, h5)
+@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_L2, eu2_L2, eu5_L2)
+@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1, eu2_H1, eu5_H1)
+@printf("[%1.5e, %1.5e, %1.5e]\n", ep1_L2, ep2_L2, ep5_L2)
+@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1 + ep1_L2, eu2_H1 + ep2_L2, eu5_H1 + ep5_L2)
 
 # plot_convergence_2D()
 # plot_convergence_3D()
