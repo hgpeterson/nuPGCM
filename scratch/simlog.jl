@@ -425,4 +425,39 @@ sim038
 Same as sim034 (β = 0, μϱ = 1) but with Δt = 0.01.
 
 ################################################################################
+
+sim039
+
+2D simulation using new time integration scheme: Strang splitting with CN for 
+diffusion and midpoint method for adv. 
+
+    • Parameters: μϱ = 1, ε² = 1e-4, Δt = 0.05, γ = 1/4
+    • Direct solvers for inversion, evolution
+    • T = 500, h = 0.01, sim time = 1.5 hrs
+     
+###############################################################################
+
+sim040 
+
+Redo 2D sim031 with new time integration scheme and direct solvers.
+
+###############################################################################
+
+sim041 
+
+Redo beta-plane sim030 with new time integration scheme.
+
+###############################################################################
+
+sim042
+
+Redo f-plane sim034 (Δt = 0.05) with new time integration scheme.
+
+###############################################################################
+
+sim043
+
+Redo f-plane sim038 (Δt = 0.01) with new time integration scheme.
+
+###############################################################################
 """

@@ -10,8 +10,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-# out_folder = "../sim040"
-out_folder = "../sims/sim040"
+out_folder = "../sims/sim041"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -29,17 +28,17 @@ flush(stdout)
 flush(stderr)
 
 # choose dimensions
-dim = TwoD()
-# dim = ThreeD()
+# dim = TwoD()
+dim = ThreeD()
 
 # choose architecture
-arch = CPU()
-# arch = GPU()
+# arch = CPU()
+arch = GPU()
 
 # tolerance and max iterations for iterative solvers
 tol = 1e-6
 @printf("tol = %.1e\n", tol)
-itmax = 10000
+itmax = 0
 @printf("itmax = %d\n", itmax)
 
 # Vector type 
@@ -47,8 +46,8 @@ VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
-model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
+model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
 
 # full grid
 m = Mesh(model)
@@ -103,7 +102,7 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ε² = 1e-4
 γ = 1/4
 f₀ = 1
-β = 0
+β = 1
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
 # Δt = 1e-4*μϱ/ε²
@@ -170,10 +169,10 @@ function invert!(arch::AbstractArchitecture, solver, b)
     else
         RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
     end
-    # Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
-    #               atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
-    # @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
-    solver.x = P_inversion \ RHS
+    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
+    @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    # solver.x = P_inversion \ RHS
     return solver
 end
 function update_u_p!(ux, uy, uz, p, solver)
@@ -289,9 +288,9 @@ function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolut
     @time "build RHS_evolution 1" RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
     # @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
     # RHS = on_architecture(arch, RHS_evolution[perm_b])
-    # Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    # @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
-    solver_evolution.x .= P_adv \ RHS
+    Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
+    # solver_evolution.x .= P_adv \ RHS
 
     # u, v, w, p, b at half step
     update_b!(b_half, solver_evolution)
@@ -301,18 +300,18 @@ function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolut
     # full step
     l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
     @time "build RHS_evolution 2" RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
-    # Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    # @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
-    solver_evolution.x .= P_adv \ RHS
+    Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
+    # solver_evolution.x .= P_adv \ RHS
 
     return solver_inversion, solver_evolution
 end
 function evolve_diff!(arch::AbstractArchitecture, solver, b)
     b_arch= on_architecture(arch, b.free_values)
     RHS = RHS_diff*b_arch + rhs_diff
-    # Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    # @printf("diffusion CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
-    solver.x .= P_diff \ RHS
+    Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("diffusion CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    # solver.x .= P_diff \ RHS
     return solver
 end
 function update_b!(b, solver)
@@ -326,14 +325,6 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
     for i ∈ i_step:n_steps
         flush(stdout)
         flush(stderr)
-
-        # # evolve
-        # solver_evolution = evolve!(arch, solver_evolution, ux, uy, uz, b)
-        # b = update_b!(b, solver_evolution)
-
-        # # invert
-        # solver_inversion = invert!(arch, solver_inversion, b)
-        # ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
         # advection step
         solver_inversion, solver_evolution = evolve_adv!(arch, solver_inversion, solver_evolution, ux, uy, uz, p, b)
