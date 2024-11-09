@@ -136,7 +136,7 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     println(fname)
     plt.close()
 end
-function plot_slice(u::CellField, v::CellField, b::CellField, N²; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+function plot_slice(u::CellField, v::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     # setup grid and cache
     n = 2^8
     if x !== nothing
@@ -160,7 +160,7 @@ function plot_slice(u::CellField, v::CellField, b::CellField, N²; x=nothing, y=
     cache_u = Gridap.CellData.return_cache(u, points[:])
     cache_v = Gridap.CellData.return_cache(v, points[:])
     cache_b = Gridap.CellData.return_cache(b, points[:])
-    cache = (slice_dir, x, y, z, points, N², cache_u, cache_v, cache_b, cb_label, cb_max)
+    cache = (slice_dir, x, y, z, N², points, cache_u, cache_v, cache_b, cb_label, cb_max)
 
     # plot
     plot_slice(cache, u, v, b; t, fname)
