@@ -61,6 +61,7 @@ ThreeD,
 # utils.jl
 chebyshev_nodes,
 hrs_mins_secs,
+sci_notation,
 # meshes.jl
 Mesh,
 get_p_t,
