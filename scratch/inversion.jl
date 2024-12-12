@@ -88,9 +88,9 @@ H(x) = 1 - x[1]^2 - x[2]^2
 ν(x) = 1
 
 # params
-ε² = 1
+ε² = 1e-4
 γ = 1
-f₀ = 0
+f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
 println("\n---")
@@ -110,45 +110,156 @@ if isfile(LHS_inversion_fname)
 else
     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 end
+perm_u = perm_inversion[1:nu]
 perm_p = perm_inversion[nu+1:end] .- nu
 
 ### preconditioners
 
+# ldiv functions (Ay = v)
+z = on_architecture(arch, zeros(nu))
+function ldiv_chol!(y, P, v, z) 
+    ldiv!(z, LowerTriangular(P), v)   # Forward substitution with L
+    ldiv!(y, LowerTriangular(P)', z)  # Backward substitution with Lᴴ
+    return y
+end
+function ldiv_chol!(y, P, v)
+    y .= P \ v
+    return y
+end
+function ldiv_lu!(y, P, v, z)
+    ldiv!(z, UnitLowerTriangular(P), v)  # Forward substitution with L
+    ldiv!(y, UpperTriangular(P), z)      # Backward substitution with U
+    return y
+end
+function ldiv_lu!(y, L, U, v, z)
+    ldiv!(z, L, v)  # Forward substitution with L
+    ldiv!(y, U, z)  # Backward substitution with U
+    return y
+end
+
 # blocks
 dropzeros!(LHS_inversion)
 A = LHS_inversion[1:nu, 1:nu]
-println("\nA is symmetric: ", issymmetric(A))
-println("A is posdef: ", isposdef(A), "\n")
-# B = LHS_inversion[nu+1:end, 1:nu]
-BT = LHS_inversion[1:nu, nu+1:end]
-# C = -LHS_inversion[nu+1:end, nu+1:end]
+# println("\nA is symmetric: ", issymmetric(A))
+# println("A is posdef: ", isposdef(A), "\n")
+C = LHS_inversion[nu+1:end, 1:nu]
+CT = LHS_inversion[1:nu, nu+1:end]
 
 # approximation of A matrix \sim -\nabla \cdot (K_\nu\nabla _) + fz \times _
-@time "factorize A" MA = lu(A)
-# @time "factorize A" MA = ilu(A, τ=1e-7)
-op_MA = LinearOperator(Float64, nu, nu, true, true, (y, v) -> ldiv!(y, MA, v))
 
-# pressure mass matrix
-a_mp(p, q) = ∫( p*q )dΩ
-M_p = assemble_matrix(a_mp, P, Q) 
-M_p = M_p[perm_p, perm_p]
-P_M_p = Diagonal(on_architecture(arch, Vector(1 ./ diag(M_p))))
+# @time "factorize A" MA = lu(A)
+# @time "factorize A" MA = ilu(A, τ=1e-3)
 
-# pressure A matrix
-a_ap(p, q) = ∫( γ*ε²*∂x(p)*∂x(q)*ν + γ*ε²*∂y(p)*∂y(q)*ν + ε²*∂z(p)*∂z(q)*ν + p*q*f )dΩ
-A_p = assemble_matrix(a_ap, P, Q) 
-A_p = A_p[perm_p, perm_p]
+# a_ma((ux, uy, uz), (vx, vy, vz)) = ∫(# -uy*vx*f 
+#                                      #+ ux*vy*f 
+#                                      + γ*ε²*∂x(ux)*∂z(vx)*ν 
+#                                      + γ*ε²*∂y(ux)*∂z(vx)*ν 
+#                                      +   ε²*∂z(ux)*∂z(vx)*ν 
+#                                      + γ*ε²*∂x(uy)*∂z(vy)*ν 
+#                                      + γ*ε²*∂y(uy)*∂z(vy)*ν 
+#                                      +   ε²*∂z(uy)*∂z(vy)*ν 
+#                                      + γ^2*ε²*∂x(uz)*∂z(vz)*ν 
+#                                      + γ^2*ε²*∂y(uz)*∂z(vz)*ν 
+#                                      +   γ*ε²*∂z(uz)*∂z(vz)*ν )dΩ
+# U = MultiFieldFESpace([Ux, Uy, Uz])
+# V = MultiFieldFESpace([Vx, Vy, Vz])
+# MA = assemble_matrix(a_ma, U, V) 
+# MA = MA[perm_u, perm_u]
+# @time "lu(MA)" MA = lu(MA)
 
-# pressure K matrix
-a_kp(p, q) = ∫( ∂x(p)*∂x(q) + ∂y(p)*∂y(q)+ ∂z(p)*∂z(q) )dΩ
+# a_mu(u, v) = ∫( u*v*f )dΩ
+# M_u = assemble_matrix(a_mu, Ux, Vx)
+# M_u = M_u[perm_u[1:nx], perm_u[1:nx]]
+# @assert norm(M_u - A[nx+1:nx+ny, 1:nx]) == 0.0
+# @assert norm(M_u + A[1:nx, nx+1:nx+ny]) == 0.0
+M_u = A[nx+1:nx+ny, 1:nx]
+@assert norm(M_u + A[1:nx, nx+1:nx+ny]) == 0.0
+M_u = lu(M_u)
+K_u = A[1:nx, 1:nx]
+@assert norm(K_u - A[nx+1:nx+ny, nx+1:nx+ny]) == 0.0
+K_u = lu(K_u)
+K_w = A[nx+ny+1:end, nx+ny+1:end]
+K_w = lu(K_w)
+function prod_MA!(y, v)
+    # y[1:nx]        .=   M_u \ v[nx+1:nx+ny]
+    # y[nx+1:nx+ny]  .= -(M_u \ v[1:nx])
+    y[1:nx]        .= K_u \ v[1:nx]
+    y[nx+1:nx+ny]  .= K_u \ v[nx+1:nx+ny]
+    y[nx+ny+1:end] .= K_w \ v[nx+ny+1:end]
+    return y
+end
+op_MA = LinearOperator(Float64, nu, nu, false, false, (y, v) -> prod_MA!(y, v))
+
+# K_u = A[1:nx, 1:nx]
+# K_u = lu(K_u)
+# K_w = A[nx+ny+1:end, nx+ny+1:end]
+# K_w = lu(K_w)
+# M_f = A[nx+1:nx+ny, 1:nx]
+# M_f = lu(M_f)
+# op_u = LinearOperator(Float64, nx, nx, true, true, (y, v) -> ldiv!(y, K_u, v))
+# op_v = LinearOperator(Float64, nx, nx, true, true, (y, v) -> ldiv!(y, K_u, v))
+# op_w = LinearOperator(Float64, nz, nz, true, true, (y, v) -> ldiv!(y, K_w, v))
+
+# MA_L = on_architecture(arch, sparse(MA.L + I))
+# MA_L = UnitLowerTriangular(on_architecture(arch, MA.L))
+# MA_U = on_architecture(arch, sparse(MA.U'))
+# MA_U = UpperTriangular(on_architecture(arch, sparse(MA.U')))
+
+# op_MA = LinearOperator(Float64, nu, nu, false, false, (y, v) -> ldiv!(y, MA, v))
+# op_MA = LinearOperator(Float64, nu, nu, false, false, (y, v) -> ldiv_lu!(y, MA_L, MA_U, v, z))
+
+# P_A = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+# A = on_architecture(arch, A)
+# function mul_A!(y, v)
+#     # z, stats = gmres(A, v, M=P_A, restart=true, memory=20, atol=atol, rtol=rtol, itmax=1000)
+#     z, stats = gmres(A, v, restart=true, memory=20, atol=atol, rtol=rtol, itmax=1000)
+#     y .= z
+#     return y
+# end
+# op_MA = LinearOperator(Float64, nu, nu, true, true, (y, v) -> mul_A!(y, v))
+
+# # pressure mass matrix
+# a_mp(p, q) = ∫( p*q )dΩ
+# M_p = assemble_matrix(a_mp, P, Q) 
+# M_p = M_p[perm_p, perm_p]
+# P_M_p = Diagonal(on_architecture(arch, Vector(1 ./ diag(M_p))))
+
+# # pressure A matrix
+# a_ap(p, q) = ∫( γ*ε²*∂x(p)*∂x(q)*ν + γ*ε²*∂y(p)*∂y(q)*ν + ε²*∂z(p)*∂z(q)*ν + p*q*f )dΩ
+# A_p = assemble_matrix(a_ap, P, Q) 
+# A_p = A_p[perm_p, perm_p]
+
+# pressure K matrix over f
+a_kp(p, q) = ∫( (∂x(p)*∂x(q) + ∂y(p)*∂y(q) + ∂z(p)*∂z(q))/f )dΩ
 K_p = assemble_matrix(a_kp, P, Q) 
 K_p = K_p[perm_p, perm_p]
 P_K_p = lu(K_p)
+# P_K_p = Diagonal(on_architecture(arch, Vector(1 ./ diag(K_p))))
+# println("\nK_p is symmetric: ", issymmetric(K_p))
+# println("K_p is posdef: ", isposdef(K_p), "\n")
+# K_p = on_architecture(arch, K_p)
 
-# approximation of Schur complement S = B*A^{-1}*BT as M_p*A_p^{-1}*K_p
-solver = CgSolver(np-1, np-1, VT)
-solver.x .= 0
-M_p = on_architecture(arch, M_p)
+# # velocity mass matrix
+# a_mu((ux, uy, uz), (vx, vy, vz)) = ∫( ux*vx + uy*vy + uz*vz )dΩ
+# U = MultiFieldFESpace([Ux, Uy, Uz])
+# V = MultiFieldFESpace([Vx, Vy, Vz])
+# M_u = assemble_matrix(a_mu, U, V) 
+# M_u = M_u[perm_u, perm_u]
+# T_u = Diagonal(on_architecture(arch, Vector(1 ./ diag(M_u))))
+
+# approximation of Schur complement S = C*A^{-1}*C^T
+# solver = CgSolver(np-1, np-1, VT)
+# solver.x .= 0
+# L = C*T_u*CT
+# L = C*T_u*C'
+# println("\nL is symmetric: ", issymmetric(L))
+# println("L is posdef: ", isposdef(L), "\n")
+# # P_L = lu(L)
+# P_L = Diagonal(on_architecture(arch, Vector(1 ./ diag(L))))
+# L = on_architecture(arch, L)
+# C = on_architecture(arch, C)
+# CT = on_architecture(arch, CT)
+# A = on_architecture(arch, A)
 function MS_solve!(y, v)
     # Krylov.solve!(solver, M_p, ε²*v, M=P_M_p, ldiv=false)
 
@@ -156,15 +267,34 @@ function MS_solve!(y, v)
     # solver.x .= A_p*solver.x
     # Krylov.solve!(solver, K_p, solver.x, M=P_K_p, ldiv=true)
 
-    y .= Krylov.cg(M_p, v, M=P_M_p, ldiv=false)
-    y .= Krylov.cg(K_p, A_p*y, M=P_K_p, ldiv=true)
+    # z, stats = Krylov.cg(M_p, v, M=P_M_p, ldiv=false)
+    # z, stats = Krylov.cg(K_p, A_p*z, M=P_K_p, ldiv=true)
+    # y .= z
+
+    # z1, stats = Krylov.cg(M_p, ε²*v, M=P_M_p, ldiv=false)
+    # z2, stats = Krylov.cg(K_p,    v, M=P_K_p, ldiv=true)
+    # y .= z1 + z2
+
+    # v, stats = Krylov.cg(L, v, M=P_L)
+    # # v .= P_L \ v
+    # # v .= C*T_u*A*T_u*CT*v
+    # v .= C*T_u*A*T_u*C'*v
+    # v, stats = Krylov.cg(L, v, M=P_L)
+    # # v .= P_L \ v
+    # y .= v
+
+    y .= P_K_p \ v
+    # z, stats = Krylov.cg(K_p, v, M=P_K_p)
+    # y .= z
+
     return y
 end
 op_MS = LinearOperator(Float64, np-1, np-1, true, true, (y, v) -> MS_solve!(y, v))
 
 # full preconditioner = [MA BT; 0 -MS] -> inverse [MA^{-1} MA^{-1}*BT*MS^{-1}; 0 -MS^{-1}]
+CT = on_architecture(arch, CT)
 function mul_P!(y, v)
-    y[1:nu] .= op_MA*(v[1:nu] + BT*op_MS*v[nu+1:end])
+    y[1:nu] .= op_MA*(v[1:nu] + CT*op_MS*v[nu+1:end])
     y[nu+1:end] .= -op_MS*v[nu+1:end]
     return y
 end
@@ -176,28 +306,6 @@ ldiv_P_inversion = false
 # L_p = assemble_matrix(a_lp, P, Q) 
 # L_p = L_p[perm_p, perm_p]
 # MS = Diagonal(on_architecture(arch, Vector(1 ./ diag(M_p + L_p))))
-
-# ldiv functions
-z = on_architecture(arch, zeros(nu))
-function ldiv_ic0!(P::CuSparseMatrixCSR, x, y, z) 
-    ldiv!(z, LowerTriangular(P), x)   # Forward substitution with L
-    ldiv!(y, LowerTriangular(P)', z)  # Backward substitution with Lᴴ
-    return y
-end
-function ldiv_ilu0!(y, P::CuSparseMatrixCSR, v, z) # LUy = x
-    ldiv!(z, UnitLowerTriangular(P), v)  # Forward substitution with L
-    ldiv!(y, UpperTriangular(P), z)      # Backward substitution with U
-    return y
-end
-function ldiv_ilu!(y, L, U, v, z) # LUy = x
-    ldiv!(z, L, v)  # Forward substitution with L
-    ldiv!(y, U, z)  # Backward substitution with U
-    return y
-end
-function ldiv_chol!(y, P::SparseArrays.CHOLMOD.Factor, v)
-    y .= P \ v
-    return y
-end
 
 # # linear operators of the form `LinearOperator(type, nrows, ncols, symmetric, hermitian, prod, tprod, ctprod)`
 # # op1 = LinearOperator(Float64, nu, nu, true, true, (y, v) -> mul!(y, MA, v))

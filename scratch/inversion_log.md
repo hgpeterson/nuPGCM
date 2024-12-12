@@ -59,14 +59,30 @@ See `*5.png` for images of solution.
     - not actually converged to true solution (see `*5a.png`)
 - no blocks, just `1/h^2` normalization: __308,990__ iterations (steady slope)
 
-### PG Thin BL, Aspect Ratio ($\varepsilon^2 = 10^{-4}$, $\gamma = 1/4$, $f = 1$)
-
 ---
 
-Now try $P = \left(\begin{array}{c c} \tilde A^{-1} & B^T\\0 & -\varepsilon^{2} \tilde M_p^{-1} \end{array}\right)$
+Now try $P = \left(\begin{array}{c c} \tilde A & B^T\\0 & -\tilde S \end{array}\right)$ with $\tilde S = \tilde M_p/\varepsilon^{2}$ and the same scheme for $\tilde M_p^{-1}$ as above.
 
 - Classic Stokes: __7__ iterations 
 - Aspect Ratio Stokes: __11__ iterations 
 - Less Diff Stokes: __10__ iterations 
 -  PG Thick BL: __7__ iterations 
 - PG Thin BL: __1,281__ iterations (same failure)
+
+---
+
+Same tridiagonal $P$ as above but with $\tilde S^{-1} = L^{-1} B T A T B^T L^{-1}$ where $T = ($ diag $M_u)^{-1}$ and $L = B T B^T$ (Least-Squares Commutator method).
+
+- PG Thin BL: 
+    - using `lu(A)` and `lu(L)`: about __2,000__ iterations, no failure! (see `*6.png`)
+    - using `ilu(A, τ=1e-3)`, `lu(L)`: __5,966__ iterations
+
+---
+
+Tridiagonal $P$ with $\tilde S^{-1} = K_p^{-1}$ where $K_p$ is just the ($1/f$-weighted) pressure stiffness matrix.
+
+- PG Thin BL:
+    - using `lu(A)` and `lu(K_p)`: __1,819__ iterations, no failure!
+
+Different forms of $\tilde A^{-1}$:
+- $\tilde A^{-1} = \left(\begin{array}{c c c} 0 & -M^{-1} & 0 \\ M^{-1} & 0 & 0 \\ 0 & 0 & K^{-1} \end{array}\right)$
