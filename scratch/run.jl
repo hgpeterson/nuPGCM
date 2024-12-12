@@ -33,8 +33,8 @@ dim = TwoD()
 # dim = ThreeD()
 
 # choose architecture
-# arch = CPU()
-arch = GPU()
+arch = CPU()
+# arch = GPU()
 
 # tolerance and max iterations for iterative solvers
 tol = 1e-6
@@ -47,8 +47,7 @@ VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
-model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
+model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
 
 # full grid
 m = Mesh(model)
@@ -87,10 +86,9 @@ H(x) = 1 - x[1]^2 - x[2]^2
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-4
-γ = 1/4
-f₀ = 1
-# f₀ = 0
+ε² = 1
+γ = 1
+f₀ = 0
 β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e0
@@ -110,15 +108,15 @@ println("Parameters:\n")
 println("---\n")
 
 # filenames for LHS matrices
-LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_dm_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_dm_%e_%e_%e.h5", dim, hres, α, γ)
-LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_dm_%e.h5", dim, hres)
+LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
+LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, hres, α, γ)
+LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, hres)
 
 # inversion LHS
 if isfile(LHS_inversion_fname)
     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
 else
-    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 end
 
 # inversion RHS
