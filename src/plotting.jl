@@ -404,3 +404,124 @@ function plot_sparsity_pattern(A; fname="sparsity_pattern.png")
     println(fname)
     plt.close()
 end
+
+# for eigen.jl
+function plot_slice_wave(u::CellField, b::CellField, N²::Real, k::Real, ω::Complex; 
+                         x=nothing, y=nothing, z=nothing, cb_label="", cb_max=0., fname="slice.png", 
+                         fig=nothing, ax=nothing)
+    # setup grid and cache
+    n = 2^8
+    if x !== nothing
+        y = range(-1, 1, length=n)
+        z = range(-1, 0, length=n)
+        points = [Point(x, yᵢ, zᵢ) for yᵢ ∈ y, zᵢ ∈ z]
+        slice_dir = "x"
+    elseif y !== nothing
+        x = range(-pi/k, pi/k, length=n)
+        z = range(-1, 0, length=n)
+        points = [Point(xᵢ, y, zᵢ) for xᵢ ∈ x, zᵢ ∈ z]
+        slice_dir = "y"
+    elseif z !== nothing
+        x = range(-pi/k, pi/k, length=n)
+        y = range(-1, 1, length=n)
+        points = [Point(xᵢ, yᵢ, z) for xᵢ ∈ x, yᵢ ∈ y]
+        slice_dir = "z"
+    else
+        error("One of x, y, or z must be specified for slice.")
+    end
+    cache_u = Gridap.CellData.return_cache(u, points[:])
+    cache_b = Gridap.CellData.return_cache(b, points[:])
+    cache = (slice_dir, x, y, z, N², k, ω, points, cache_u, cache_b, cb_label, cb_max)
+
+    # plot
+    plot_slice_wave(cache, u, b; fname, fig, ax)
+    
+    # return cache for future use
+    return cache
+end
+function plot_slice_wave(cache::Tuple, u::CellField, b::CellField; fname="slice.png", fig=nothing, ax=nothing)
+    # unpack cache
+    slice_dir, x, y, z, N², k, ω, points, cache_u, cache_b, cb_label, cb_max = cache
+
+    # evaluate
+    us = [nan_eval(cache_u, u, points[i, j])*exp(im*k*points[i, j][1]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+    bs = [N²*points[i, j][3] + nan_eval(cache_b, b, points[i, j])*exp(im*k*points[i, j][1]) for i ∈ axes(points, 1), j ∈ axes(points, 2)]
+
+    # fill NaNs
+    nx = size(points, 1)
+    nz = size(points, 2)
+    for i ∈ 1:nx, j ∈ 1:nz 
+        if isnan(bs[i, j])
+            if !isnan(bs[max(i-1, 1), j]) && !isnan(bs[min(i+1, nx), j]) && !isnan(bs[i, max(j-1, 1)]) && !isnan(bs[i, min(j+1, nz)])
+                bs[i, j] = (bs[max(i-1, 1), j] + bs[min(i+1, nx), j] + bs[i, max(j-1, 1)] + bs[i, min(j+1, nz)])/4
+            end
+        end
+        if isnan(us[i, j])
+            if !isnan(us[max(i-1, 1), j]) && !isnan(us[min(i+1, nx), j]) && !isnan(us[i, max(j-1, 1)]) && !isnan(us[i, min(j+1, nz)])
+                us[i, j] = (us[max(i-1, 1), j] + us[min(i+1, nx), j] + us[i, max(j-1, 1)] + us[i, min(j+1, nz)])/4
+            end
+        end
+    end
+
+    # real part
+    us = real(us)
+    bs = real(bs)
+
+    # plot
+    if fig === nothing && ax === nothing
+        fig, ax = plt.subplots(1)
+        save_plot = true
+    else
+        save_plot = false
+    end
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    if slice_dir == "x"
+        slice_coord = x
+        x1 = y 
+        x2 = z
+        ax.set_xlabel(L"y")
+        ax.set_ylabel(L"z")
+        ax.set_xticks(-1:0.5:1)
+        ax.set_yticks(-1:0.5:0)
+    elseif slice_dir == "y"
+        slice_coord = y
+        x1 = x
+        x2 = z
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"z")
+        ax.set_xticks([-pi/k, 0, pi/k])
+        ax.set_xticklabels([L"-\pi/k", L"0", L"\pi/k"])
+        ax.set_yticks(-1:0.5:0)
+    elseif slice_dir == "z"
+        slice_coord = z
+        x1 = x
+        x2 = y
+        ax.set_xlabel(L"x")
+        ax.set_ylabel(L"y")
+        ax.set_xticks([-pi/k, 0, pi/k])
+        ax.set_xticklabels([L"-\pi/k", L"0", L"\pi/k"])
+        ax.set_yticks(-0.5:0.5:0.5)
+    end
+    ax.axis("equal")
+    if cb_max == 0.
+        cb_max = nan_max(abs.(us))
+    end
+    img = ax.pcolormesh(x1, x2, us', shading="nearest", cmap="RdBu_r", vmin=-cb_max, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
+    if save_plot
+        cb = plt.colorbar(img, ax=ax, label=cb_label, fraction=0.025)
+        cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
+        if imag(ω) >= 0
+            ax.annotate(latexstring(@sprintf("\$\\omega = %0.2f + %0.2f i\$", real(ω), +imag(ω))), xy=(0.05, 0.9), xycoords="axes fraction")
+        else
+            ax.annotate(latexstring(@sprintf("\$\\omega = %0.2f - %0.2f i\$", real(ω), -imag(ω))), xy=(0.05, 0.9), xycoords="axes fraction")
+        end
+    end
+    # ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
+    if save_plot
+        savefig(fname)
+        println(fname)
+        plt.close()
+    end
+end
