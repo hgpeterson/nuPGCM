@@ -8,7 +8,7 @@ plt.style.use("../plots.mplstyle")
 plt.close("all")
 
 # simulation folder
-out_folder = "../sims/sim035"
+out_folder = "../sims/sim037"
 
 # # model
 # hres = 0.01
@@ -21,47 +21,174 @@ out_folder = "../sims/sim035"
 # # triangulation
 # Ω = Triangulation(model)
 
-# depth
-H(x) = 1 - x[1]^2 - x[2]^2
+# # depth
+# H(x) = 1 - x[1]^2 - x[2]^2
 
-# load state file
-i_save = 3
-statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
-ux, uy, uz, p, b, t = load_state(statefile)
-ux = FEFunction(Ux, ux)
-uy = FEFunction(Uy, uy)
-uz = FEFunction(Uz, uz)
-p  = FEFunction(P, p)
-b  = FEFunction(B, b)
+# # load state file
+# i_save = 14
+# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+# ux, uy, uz, p, b, t = load_state(statefile)
+# ux = FEFunction(Ux, ux)
+# uy = FEFunction(Uy, uy)
+# uz = FEFunction(Uz, uz)
+# p  = FEFunction(P, p)
+# b  = FEFunction(B, b)
 
 # # save vtu
 # save_state_vtu(ux, uy, uz, p, b, Ω; fname=@sprintf("%s/data/state%03d.vtu", out_folder, i_save))
 
 # plot_slice(ux, b; x=0,    t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_xslice_%03d.png", out_folder, i_save))
-plot_slice(ux, b; y=0,    t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
+# plot_slice(ux, b; y=0,    t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
 # plot_slice(ux, b; z=-0.5, t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_zslice_%03d.png", out_folder, i_save))
 # plot_slice(uy, b; x=0,    t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_xslice_%03d.png", out_folder, i_save))
-plot_slice(uy, b; y=0,    t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
+# plot_slice(uy, b; y=0,    t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
 # plot_slice(uy, b; z=-0.5, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_zslice_%03d.png", out_folder, i_save))
 # plot_slice(uz, b; x=0,    t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_xslice_%03d.png", out_folder, i_save))
 # plot_slice(uz, b; y=0,    t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_yslice_%03d.png", out_folder, i_save))
 # plot_slice(uz, b; z=-0.5, t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_zslice_%03d.png", out_folder, i_save))
-plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/uv_zslice_%03d.png", out_folder, i_save))
+# plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/uv_zslice_%03d.png", out_folder, i_save))
 # plot_slice(ux, uz, b; y=0.0, t=t, cb_label=L"Speed $\sqrt{u^2 + w^2}$", fname=@sprintf("%s/images/uw_yslice_%03d.png", out_folder, i_save))
 # println()
 
 function plot_animation()
-    for i_save ∈ [50]
+    # for i_save ∈ 1:50
+    for i_save ∈ [10]
         statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
         ux, uy, uz, p, b, t = load_state(statefile)
         ux = FEFunction(Ux, ux)
         uy = FEFunction(Uy, uy)
-        # uz = FEFunction(Uz, uz)
-        b  = FEFunction(B, b)
-        plot_slice(ux, b;     y=0, t=t, cb_label=L"Zonal flow $u$",                      cb_max=6e-3,   fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-        plot_slice(uy, b;     y=0, t=t, cb_label=L"Meridional flow $v$",                 cb_max=1.5e-1, fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
-        plot_slice(ux, uy, b; z=0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", cb_max=2e-1,   fname=@sprintf("%s/images/u_sfc_%03d.png", out_folder, i_save))
+        x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
+        Psi = compute_barotropic_streamfunction(U, y)
+        plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
     end
+end
+
+function compute_barotropic_velocities(ux, uy)
+    # resolution
+    nx = 2^6
+    ny = nx
+    nz = 2^6
+
+    # 3D grid
+    x = range(-1, 1, length=nx)
+    y = range(-1, 1, length=ny)
+    z = range(-1, 0, length=nz)
+
+    # points 
+    points = [Point(x[i], y[j], z[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
+
+    # evaluation caches
+    cache_ux = Gridap.CellData.return_cache(ux, points)
+    cache_uy = Gridap.CellData.return_cache(uy, points)
+
+    # evaluate fields
+    @time "evals" begin
+    uxs = reshape(nan_eval(cache_ux, ux, points), nx, ny, nz)
+    uys = reshape(nan_eval(cache_uy, uy, points), nx, ny, nz)
+    end
+
+    # barotropic velocities
+    Ux = [nuPGCM.trapz(uxs[i, j, :], z) for i ∈ 1:nx, j ∈ 1:ny]
+    Uy = [nuPGCM.trapz(uys[i, j, :], z) for i ∈ 1:nx, j ∈ 1:ny]
+
+    # NaNs outside of domain
+    mask = ones(nx, ny)
+    for i ∈ 1:nx, j ∈ 1:ny
+        if all(isnan.(uxs[i, j, :]))
+            mask[i, j] = NaN
+        end
+    end
+
+    return x, y, Ux, Uy, mask
+end
+
+function compute_barotropic_streamfunction(Ux, y)
+    Psi = zeros(size(Ux))
+    for i in axes(Ux, 1)
+        Psi[i, :] = -nuPGCM.cumtrapz(Ux[i, :], y)
+    end
+    return Psi
+end
+# function compute_barotropic_streamfunction(Uy, x)
+#     Psi = zeros(size(Uy))
+#     for i in axes(Uy, 2)
+#         Psi[:, i] = nuPGCM.cumtrapz(Uy[:, i], x)
+#     end
+#     return Psi
+# end
+
+function plot_barotropic(x, y, Ux, Uy, Psi; i=0, t=nothing)
+    if t === nothing
+        title = ""
+    else
+        title = latexstring(@sprintf("t = %s", sci_notation(t)))
+    end
+
+    get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
+
+    # plot UV
+    if i == 0
+        fname = @sprintf("%s/images/UV.png", out_folder)
+    else
+        fname = @sprintf("%s/images/UV%03d.png", out_folder, i)
+    end
+    fig, ax = plt.subplots(1, 2, figsize=(3.2*2, 2))
+    ax[1].set_xlabel(L"x")
+    ax[1].set_ylabel(L"y")
+    ax[2].set_xlabel(L"x")
+    ax[2].set_ylabel(L"y")
+    ax[1].axis("equal")
+    ax[2].axis("equal")
+    ax[1].spines["left"].set_visible(false)
+    ax[1].spines["bottom"].set_visible(false)
+    ax[2].spines["left"].set_visible(false)
+    ax[2].spines["bottom"].set_visible(false)
+    ax[1].set_xticks(-1:1:1)
+    ax[1].set_yticks(-1:1:1)
+    ax[2].set_xticks(-1:1:1)
+    ax[2].set_yticks(-1:1:1)
+    ax[1].set_title(title)
+    ax[2].set_title(title)
+
+    vmax = nuPGCM.nan_max(abs.(Ux))
+    img = ax[1].pcolormesh(x, y, Ux', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true) 
+    cb = plt.colorbar(img, ax=ax[1], label=L"U")
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    ax[1].contour(x, y, Ux', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
+
+    vmax = nuPGCM.nan_max(abs.(Uy))
+    img = ax[2].pcolormesh(x, y, Uy', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true) 
+    cb = plt.colorbar(img, ax=ax[2], label=L"V")
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    ax[2].contour(x, y, Uy', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
+    subplots_adjust(wspace=0.4)
+    savefig(fname)
+    println(fname)
+    plt.close()
+
+    # plot Psi
+    if i == 0
+        fname = @sprintf("%s/images/psi.png", out_folder)
+    else
+        fname = @sprintf("%s/images/psi%03d.png", out_folder, i)
+    end
+    fig, ax = plt.subplots(1)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"y")
+    ax.axis("equal")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks(-1:1:1)
+    ax.set_yticks(-1:1:1)
+    ax.set_title(title)
+    vmax = nuPGCM.nan_max(abs.(Psi))
+    img = ax.pcolormesh(x, y, Psi', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    cb = plt.colorbar(img, ax=ax, label=L"\Psi")
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    ax.contour(x, y, Psi', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
+    savefig(fname)
+    println(fname)
+    plt.close()
 end
 
 function profile_comparison(out_folders, labels, i_save)
@@ -132,10 +259,6 @@ function profile_comparison(out_folders, labels, i_save)
     println(fname)
     plt.close()
 end
-
-∂x(u) = VectorValue(1, 0, 0)⋅∇(u)
-∂y(u) = VectorValue(0, 1, 0)⋅∇(u)
-∂z(u) = VectorValue(0, 0, 1)⋅∇(u)
 
 function momentum_and_buoyancy_balance(out_folder, i_save)
     # parameters
@@ -263,7 +386,10 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
     plt.close()
 end
 
-# plot_animation()
+# x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
+# Psi = compute_barotropic_streamfunction(U, y)
+# plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i_save, t)
+plot_animation()
 # profile_comparison(["sim038", "sim033", "sim030"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
 # profile_comparison(["sim035", "sim036", "sim037"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
 # momentum_and_buoyancy_balance("sim033", 4)
