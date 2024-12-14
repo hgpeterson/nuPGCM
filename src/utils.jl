@@ -14,9 +14,40 @@ Integrate the function `f` over the grid `z` using the trapezoidal rule.
 """ 
 function trapz(f, z)
     F = 0.0
-    for i ∈ 1:length(z) - 1
-        F += 0.5*(z[i + 1] - z[i])*(f[i + 1] + f[i])
+    i = 1
+    while i < length(z)
+        # skip NaNs
+        if isnan(f[i])
+            i += 1
+            continue
+        end
+        j = i + 1
+        while isnan(f[j]) && j < length(z)
+            j += 1
+        end
+        if isnan(f[j])
+            break
+        end
+
+        # area of trapezoid
+        F += 0.5*(z[j] - z[i])*(f[j] + f[i])
+
+        # next
+        i = j
     end
+    return F
+end
+
+"""
+    F = cumtrapz(f, z)
+
+Cumulatively integrate the function `f` over the grid `z` using the trapezoidal rule.
+"""
+function cumtrapz(f, z)
+    F = zeros(length(z))
+    for i ∈ 2:length(z)
+        F[i] = F[i-1] + 0.5*(z[i] - z[i-1])*(f[i] + f[i-1])
+    end 
     return F
 end
 
