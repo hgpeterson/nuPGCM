@@ -16,7 +16,7 @@ arch = CPU()
 
 # params
 hres = 0.04
-ε² = 1e-2
+ε² = 1e-4
 γ = 1/4
 f₀ = 1
 β = 1.0
@@ -144,7 +144,8 @@ K, M, M_wb = assemble_system()
 @time "lu(M)" M = lu(M)
 
 # solve B^-1 A X = ω X where A = -i*ε²/μϱ*K - i*M_wb*L and B = M
-which = EigSorter(abs; rev = false) # smallest magnitude
+# which = EigSorter(abs; rev = false) # smallest magnitude
+which = EigSorter(x -> abs(imag(x)); rev = false) # smallest mag imaginary part
 @time vals, vecs, info = eigsolve(x -> M\(-im*ε²/μϱ*K*x - im*M_wb*L(x)), nb, 1, which, ComplexF64, verbosity=2, maxiter=300)
 fname = @sprintf("%s/data/eigs_k%0.2f_beta%0.1f.jld2", out_folder, k, β)
 jldsave(fname; vals, vecs)
