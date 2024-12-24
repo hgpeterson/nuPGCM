@@ -7,11 +7,8 @@
 Evaluate `CellField` `u` at point(s) `x` and return `NaN` if an error occurs.
 """
 function nan_eval(u::CellField, x::VectorValue)
-    try 
-        evaluate(u, x) 
-    catch 
-        NaN 
-    end
+    cache = Gridap.CellData.return_cache(u, x)
+    return nan_eval(cache, u, x)
 end
 function nan_eval(cache, u::CellField, x::VectorValue)
     try 
@@ -21,7 +18,8 @@ function nan_eval(cache, u::CellField, x::VectorValue)
     end
 end
 function nan_eval(u::CellField, x::AbstractVector)
-    return [nan_eval(u, xᵢ) for xᵢ ∈ x]
+    cache = Gridap.CellData.return_cache(u, x)
+    return nan_eval(cache, u, x)
 end
 function nan_eval(cache, u::CellField, x::AbstractVector)
     return [nan_eval(cache, u, x[i]) for i ∈ eachindex(x)]
