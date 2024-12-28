@@ -137,6 +137,18 @@ function plot_profiles(datafiles; labels=nothing, fname="profiles.png")
     y = 0.
     z = nothing
     t = nothing
+    jldopen("data/1D.jld2") do file
+        z = file["z"]
+        u = file["u"]
+        v = file["v"]
+        w = file["w"]
+        b = file["b"]
+        bz = differentiate(b, z)
+        ax[1].plot(u,       z, "k--", lw=0.5, label="1D", zorder=length(datafiles)+1)
+        ax[2].plot(v,       z, "k--", lw=0.5, label="1D", zorder=length(datafiles)+1)
+        ax[3].plot(w,       z, "k--", lw=0.5, label="1D", zorder=length(datafiles)+1)
+        ax[4].plot(1 .+ bz, z, "k--", lw=0.5, label="1D", zorder=length(datafiles)+1)
+    end
     for i ∈ eachindex(datafiles)
         d = datafiles[i]
         jldopen(d) do file
@@ -153,9 +165,9 @@ function plot_profiles(datafiles; labels=nothing, fname="profiles.png")
             bz_mask = file["bz_mask"]
             label = labels === nothing ? d : labels[i]
             ax[1].plot(uxs[ux_mask], z[ux_mask], label=label)
-            ax[2].plot(uys[uy_mask], z[uy_mask], label=label)
-            ax[3].plot(uzs[uz_mask], z[uz_mask], label=label)
-            ax[4].plot(bzs[bz_mask], z[bz_mask], label=label)
+            ax[2].plot(uys[uy_mask], z[uy_mask])
+            ax[3].plot(uzs[uz_mask], z[uz_mask])
+            ax[4].plot(bzs[bz_mask], z[bz_mask])
         end
     end
     for a ∈ ax
@@ -567,17 +579,18 @@ end
 # for i_save ∈ 0:50
 #     extract_profile_data(0.5, 0.0; i_save)
 # end
-plot_profiles(["../sims/sim044/data/profiles010.jld2", 
-               "../sims/sim044/data/profiles020.jld2",
-               "../sims/sim044/data/profiles030.jld2",
-               "../sims/sim044/data/profiles040.jld2",
-               "../sims/sim035/data/profiles050.jld2"]; 
-               labels = ["010", "020", "030", "040", "050"],
-               fname="profiles_sim044.png")
-for i_save ∈ 0:50
+# plot_profiles(["../sims/sim044/data/profiles010.jld2", 
+#                "../sims/sim044/data/profiles020.jld2",
+#                "../sims/sim044/data/profiles030.jld2",
+#                "../sims/sim044/data/profiles040.jld2",
+#                "../sims/sim035/data/profiles050.jld2"]; 
+#                labels = ["010", "020", "030", "040", "050"],
+#                fname="images/profiles_sim044.png")
+# for i_save ∈ 0:50
+for i_save ∈ [3]
     plot_profiles([@sprintf("../sims/sim044/data/profiles%03d.jld2", i_save), 
                    @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
-                labels=["2D", "3D"], fname=@sprintf("profiles%03d.png", i_save))
+                labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
 end
 # x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
 # Psi = compute_barotropic_streamfunction(U, y)
