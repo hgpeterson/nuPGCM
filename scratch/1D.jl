@@ -3,11 +3,14 @@ using LinearAlgebra
 using SparseArrays
 using Printf
 using PyPlot
+using PyCall
 using JLD2
 
 pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
+
+pl = pyimport("matplotlib.pylab")
 
 include("../plots/derivatives.jl")
 
@@ -203,7 +206,7 @@ function uvw(χ, z, ν, params)
     return u, v, w
 end
 
-function plot(u, v, w, b, z)
+function plot_setup()
     fig, ax = plt.subplots(1, 4, figsize=(8, 3.2), sharey=true)
     ax[1].set_ylabel(L"z")
     ax[1].set_xlabel(L"u")
@@ -216,43 +219,41 @@ function plot(u, v, w, b, z)
         a.axvline(0, color="k", lw=0.5)
     end
     for a ∈ ax 
-        a.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
+        a.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
     end
+    return fig, ax
+end
+
+function plot(u, v, w, b, z; fig, ax, label="", color="C0")
     bz = differentiate(b, z)
-    ax[1].plot(u, z)
-    ax[2].plot(v, z)
-    ax[3].plot(w, z)
-    ax[4].plot(1 .+ bz, z)
-    savefig("images/1D.png")
-    println("images/1D.png")
+    ax[1].plot(u,       z, c=color, label=label)
+    ax[2].plot(v,       z, c=color, label=label)
+    ax[3].plot(w,       z, c=color, label=label)
+    ax[4].plot(1 .+ bz, z, c=color, label=label)
+end
+
+function plot_finish(; fig, ax, t=nothing, filename="images/1D.png")
+    ax[1].legend()
+    if t !== nothing
+        ax[1].set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(t))))
+    end
+    savefig(filename)
+    println(filename)
     plt.close()
 end
 
-function save(u, v, w, b, params, t, z)
-    filename = "data/1D.jld2"
+function save(u, v, w, b, params, t, z; filename="data/1D.jld2")
     jldsave(filename; u, v, w, b, params.μϱ, params.γ, params.θ, params.ε, params.Δt, t, z) 
     println(filename)
 end
 
-function main()
-    # parameters
-    μϱ = 1e-4
-    γ = 1/4
-    θ = π/4
-    ε = 1e-2
-    Δt = 1e-5
-    U = 0
-    H = 0.75
-    f = 1
-    params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f)
-
+function sim_setup(params)
     # grid
-    nz = 2^8
-    z = range(-H, 0, length=nz)
+    z = chebyshev_grid(params.nz, params.H)
 
     # forcing
-    ν = ones(nz)
-    κ = @. 1e-2 + exp(-(z + H)/0.1)
+    ν = ones(params.nz)
+    κ = @. 1e-2 + exp(-(z + params.H)/0.1)
 
     # build matrices
     LHS_b, RHS_b, rhs_b = build_b(z, κ, params)
@@ -261,14 +262,22 @@ function main()
     LHS_χ = lu(LHS_χ)
 
     # initial condition
-    b = zeros(nz)
-    χ = zeros(nz)
+    b = zeros(params.nz)
+    χ = zeros(params.nz)
     t = 0
 
+    return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t
+end
+
+function solve(params)
+    # setup 
+    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params)
+
     # run
-    for i ∈ 1:300
+    n_steps = Int(round(params.T/params.Δt))
+    for i ∈ 1:n_steps
         # timestep
-        step!(b, LHS_b, RHS_b*b + rhs_b - Δt*differentiate(χ, z)*tan(params.θ))
+        step!(b, LHS_b, RHS_b*b + rhs_b - params.Δt*differentiate(χ, z)*tan(params.θ))
         t += params.Δt
 
         # inversion
@@ -278,11 +287,54 @@ function main()
     # compute u, v, w
     u, v, w = uvw(χ, z, ν, params)
 
-    # plot
-    plot(u, v, w, b, z)
-
-    # save
-    save(u, v, w, b, params, t, z)
+    return u, v, w, b, t, z
 end
 
-main()
+function main(; T)
+    # parameters
+    μϱ = 1e-4
+    # γ = 1/4
+    θ = π/4
+    ε = 1e-2
+    Δt = 1e-5
+    U = 0
+    H = 0.75
+    f = 1
+    nz = 2^8
+    # T = 1e-3
+
+    # start plot
+    fig, ax = plot_setup()
+
+    # loop over γ
+    γs = 0:0.1:1
+    colors = pl.cm.viridis(range(0, 1, length=length(γs)))
+    t = 0
+    for i ∈ eachindex(γs)
+        γ = γs[i]
+        color = colors[i, :]
+        label = L"\gamma = "*@sprintf("%.2f", γ)
+        println("γ = ", γs[i])
+
+        # parameters
+        params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f, nz=nz, T=T)
+
+        # solve
+        u, v, w, b, t, z = solve(params)
+
+        # plot
+        plot(u, v, w, b, z; fig, ax, label, color)
+    end
+
+    # finish plot
+    plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
+
+    # # save
+    # save(u, v, w, b, params, t, z; filename="data/1D.jld2")
+end
+
+for T ∈ 1e-3:1e-3:5e-2
+    main(; T)
+end
+
+# main()
