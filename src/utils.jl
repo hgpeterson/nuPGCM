@@ -8,6 +8,15 @@ function chebyshev_nodes(n)
 end
 
 """
+    z = chebyshev_grid(n, H)
+
+Return `n` Chebyshev nodes in the interval `[-H, 0]`.
+"""
+function chebyshev_grid(n, H)
+    return H*(chebyshev_nodes(n) .- 1)/2
+end
+
+"""
     F = trapz(f, z)
 
 Integrate the function `f` over the grid `z` using the trapezoidal rule.
