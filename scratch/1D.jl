@@ -19,7 +19,7 @@ Build matrix representations of
     b^(n+1) - α dz(κ (1 + β dz(b^(n+1)))) = b^(n) + α dz(κ (1 + β dz(b^(n))))
 so that LHS*b[n+1] = RHS*b[n] + rhs where α = ε²/μϱ * Δt/2 and β = 1 + γ*tan(θ)^2.
 """
-function build_b(z, κ, params)
+function build_b(z, κ, params; horiz_diff=true)
     # unpack
     μϱ = params.μϱ
     γ = params.γ
@@ -29,7 +29,11 @@ function build_b(z, κ, params)
 
     # coeffs
     α = ε^2/μϱ * Δt/2
-    β = 1 + γ*tan(θ)^2
+    if horiz_diff 
+        β = 1 + γ*tan(θ)^2
+    else
+        β = 1
+    end
 
     # initialize
     N = length(z)
@@ -247,16 +251,17 @@ function save(u, v, w, b, params, t, z; filename="data/1D.jld2")
     println(filename)
 end
 
-function sim_setup(params)
+function sim_setup(params; horiz_diff=true)
     # grid
     z = chebyshev_grid(params.nz, params.H)
 
     # forcing
     ν = ones(params.nz)
+    # ν = @. 1e-2 + exp(-(z + params.H)/0.1)
     κ = @. 1e-2 + exp(-(z + params.H)/0.1)
 
     # build matrices
-    LHS_b, RHS_b, rhs_b = build_b(z, κ, params)
+    LHS_b, RHS_b, rhs_b = build_b(z, κ, params; horiz_diff)
     LHS_b = lu(LHS_b)
     LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
     LHS_χ = lu(LHS_χ)
@@ -269,9 +274,9 @@ function sim_setup(params)
     return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t
 end
 
-function solve(params)
+function solve(params; horiz_diff=true)
     # setup 
-    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params)
+    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params; horiz_diff)
 
     # run
     n_steps = Int(round(params.T/params.Δt))
@@ -292,15 +297,16 @@ end
 
 function main(; T)
     # parameters
-    μϱ = 1e-4
+    μϱ = 1e0
     # γ = 1/4
     θ = π/4
     ε = 1e-2
-    Δt = 1e-5
+    Δt = 1e-5*μϱ/ε^2
     U = 0
     H = 0.75
     f = 1
     nz = 2^8
+    horiz_diff = false
     # T = 1e-3
 
     # start plot
@@ -320,7 +326,7 @@ function main(; T)
         params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f, nz=nz, T=T)
 
         # solve
-        u, v, w, b, t, z = solve(params)
+        u, v, w, b, t, z = solve(params; horiz_diff)
 
         # plot
         plot(u, v, w, b, z; fig, ax, label, color)
@@ -333,8 +339,8 @@ function main(; T)
     # save(u, v, w, b, params, t, z; filename="data/1D.jld2")
 end
 
-for T ∈ 1e-3:1e-3:5e-2
-    main(; T)
-end
+# for T ∈ 1e1:1e1:5e2
+#     main(; T)
+# end
 
-# main()
+main(T=5e2)
