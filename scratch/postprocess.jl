@@ -8,8 +8,8 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-# # simulation folder
-# out_folder = "../sims/sim035"
+# simulation folder
+out_folder = "../sims/sim035"
 
 # # dimensions
 # dim = ThreeD()
@@ -27,19 +27,21 @@ plt.close("all")
 
 # # depth
 # H(x) = 1 - x[1]^2 - x[2]^2
+Hx(x) = -2x[1]
+Hy(x) = -2x[2]
 
 # # stratification
 # N² = 1
 
-# # load state file
-# i_save = 3
-# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
-# ux, uy, uz, p, b, t = load_state(statefile)
-# ux = FEFunction(Ux, ux)
-# uy = FEFunction(Uy, uy)
-# uz = FEFunction(Uz, uz)
-# p  = FEFunction(P, p)
-# b  = FEFunction(B, b)
+# load state file
+i_save = 3
+statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+ux, uy, uz, p, b, t = load_state(statefile)
+ux = FEFunction(Ux, ux)
+uy = FEFunction(Uy, uy)
+uz = FEFunction(Uz, uz)
+p  = FEFunction(P, p)
+b  = FEFunction(B, b)
 
 # plot_profiles(ux, uy, uz, b, 1, H; x=0.5, y=0.0, t=t, fname="profiles.png")
 
@@ -58,6 +60,9 @@ plt.close("all")
 # plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/uv_zslice_%03d.png", out_folder, i_save))
 # plot_slice(ux, uz, b; y=0.0, t=t, cb_label=L"Speed $\sqrt{u^2 + w^2}$", fname=@sprintf("%s/images/uw_yslice_%03d.png", out_folder, i_save))
 # println()
+
+# for contour lines
+get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
 
 function plot_animation()
     # for i_save ∈ 1:50
@@ -194,7 +199,7 @@ function compute_barotropic_velocities(ux, uy)
     x = range(-1, 1, length=nx)
     y = range(-1, 1, length=ny)
     # z = range(-1, 0, length=nz)
-    σ = (chebyshev_nodes(nz) .- 1)/2
+    σ = chebyshev_nodes(nz)
 
     # # horizontal grid
     # p, t = get_p_t("../meshes/circle.msh")
@@ -243,64 +248,10 @@ function compute_barotropic_streamfunction(Ux, y)
     return Psi
 end
 
-function plot_barotropic(x, y, Ux, Uy, Psi; i=0, t=nothing)
-    if t === nothing
-        title = ""
-    else
-        title = latexstring(@sprintf("t = %s", sci_notation(t)))
+function plot_barotropic(x, y, F; fig=nothing, ax=nothing, label=L"F")
+    if ax === nothing
+        fig, ax = plt.subplots(1)
     end
-
-    get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
-
-    # plot UV
-    if i == 0
-        fname = @sprintf("%s/images/UV.png", out_folder)
-    else
-        fname = @sprintf("%s/images/UV%03d.png", out_folder, i)
-    end
-    fname = "UV.png"
-    fig, ax = plt.subplots(1, 2, figsize=(3.2*2, 2))
-    ax[1].set_xlabel(L"x")
-    ax[1].set_ylabel(L"y")
-    ax[2].set_xlabel(L"x")
-    ax[2].set_ylabel(L"y")
-    ax[1].axis("equal")
-    ax[2].axis("equal")
-    ax[1].spines["left"].set_visible(false)
-    ax[1].spines["bottom"].set_visible(false)
-    ax[2].spines["left"].set_visible(false)
-    ax[2].spines["bottom"].set_visible(false)
-    ax[1].set_xticks(-1:1:1)
-    ax[1].set_yticks(-1:1:1)
-    ax[2].set_xticks(-1:1:1)
-    ax[2].set_yticks(-1:1:1)
-    ax[1].set_title(title)
-    ax[2].set_title(title)
-
-    vmax = nan_max(abs.(Ux))
-    img = ax[1].pcolormesh(x, y, Ux', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true) 
-    cb = plt.colorbar(img, ax=ax[1], label=L"U")
-    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    ax[1].contour(x, y, Ux', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
-
-    vmax = nan_max(abs.(Uy))
-    img = ax[2].pcolormesh(x, y, Uy', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true) 
-    cb = plt.colorbar(img, ax=ax[2], label=L"V")
-    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    ax[2].contour(x, y, Uy', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
-    subplots_adjust(wspace=0.4)
-    savefig(fname)
-    println(fname)
-    plt.close()
-
-    # plot Psi
-    if i == 0
-        fname = @sprintf("%s/images/psi.png", out_folder)
-    else
-        fname = @sprintf("%s/images/psi%03d.png", out_folder, i)
-    end
-    fname = "psi.png"
-    fig, ax = plt.subplots(1)
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"y")
     ax.axis("equal")
@@ -308,18 +259,92 @@ function plot_barotropic(x, y, Ux, Uy, Psi; i=0, t=nothing)
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks(-1:1:1)
     ax.set_yticks(-1:1:1)
-    ax.set_title(title)
-    vmax = nan_max(abs.(Psi))
-    img = ax.pcolormesh(x, y, Psi', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-    cb = plt.colorbar(img, ax=ax, label=L"\Psi")
+    vmax = nan_max(abs.(F))
+    img = ax.pcolormesh(x, y, F', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    cb = plt.colorbar(img, ax=ax, label=label)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    ax.contour(x, y, Psi', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
-    f_over_H = [(1 + 0*y[j])/H([x[i], y[j]]) for i ∈ eachindex(x), j ∈ eachindex(y)]
-    f_over_H = f_over_H.*mask
-    ax.contour(x, y, f_over_H', colors="k", linewidths=0.5, alpha=0.5, linestyles="--", levels=get_levels(6))
+    ax.contour(x, y, F', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
+    return fig, ax
+end
+
+function add_title(ax, t)
+    ax.set_title(latexstring(@sprintf("t = %s", sci_notation(t))))
+end
+
+function save_plot(fname_base; i=0)
+    if i == 0
+        fname = @sprintf("%s/images/%s.png", out_folder, fname_base)
+    else
+        fname = @sprintf("%s/images/%s%03d.png", out_folder, fname_base, i)
+    end
     savefig(fname)
     println(fname)
     plt.close()
+end
+
+function plot_UV_Psi(x, y, Ux, Uy, Psi; i=0, t=nothing)
+    # plot UV
+    fig, ax = plt.subplots(1, 2, figsize=(3.2*2, 2))
+    plot_barotropic(x, y, Ux', fig=fig, ax=ax[1], label=L"U")
+    plot_barotropic(x, y, Uy', fig=fig, ax=ax[2], label=L"V")
+    if t !== nothing
+        add_title(ax[1], t)
+        add_title(ax[2], t)
+    end
+    subplots_adjust(wspace=0.4)
+    save_plot("UV"; i)
+
+    # plot Psi
+    fig, ax = plot_barotropic(x, y, Psi', label=L"\Psi")
+    f_over_H = [(1 + 0*y[j])/H([x[i], y[j]]) for i ∈ eachindex(x), j ∈ eachindex(y)]
+    f_over_H = f_over_H.*mask
+    ax.contour(x, y, f_over_H', colors="k", linewidths=0.5, alpha=0.5, linestyles="--", levels=get_levels(6))
+    save_plot("Psi"; i)
+end
+
+function compute_γ(b)
+    # resolution
+    nx = 2^7
+    ny = nx
+    nz = 2^5
+
+    # 3D grid
+    x = range(-1, 1, length=nx)
+    y = range(-1, 1, length=ny)
+    σ = chebyshev_nodes(nz)
+
+    # points 
+    points = [Point(x[i], y[j], H([x[i], y[j]])*σ[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
+
+    # evaluate field
+    @time "evals" bs = reshape(nan_eval(b, points), nx, ny, nz)
+
+    # -∫ z*b dz
+    γ = -[trapz(H([x[i], y[j]])*σ.*bs[i, j, :], H([x[i], y[j]])*σ) for i ∈ 1:nx, j ∈ 1:ny]
+
+    # NaNs outside of domain
+    for i ∈ 1:nx, j ∈ 1:ny
+        if all(isnan.(bs[i, j, :]))
+            γ[i, j] = NaN
+        end
+    end
+
+    return x, y, γ
+end
+
+function compute_JEBAR(x, y, γ)
+    nx = length(x)
+    ny = length(y)
+    γx = zeros(nx, ny)
+    γy = zeros(nx, ny)
+    for i ∈ 1:nx
+        γy[i, :] = differentiate(γ[i, :], y)
+    end
+    for j ∈ 1:ny
+        γx[:, j] = differentiate(γ[:, j], x)
+    end
+    # -J(1/H, γ) = (Hx*γy - Hy*γx)/H^2
+    return [(Hx([x[i], y[j]])*γy[i, j] - Hy([x[i], y[j]])*γx[i, j])/H([x[i], y[j]])^2 for i ∈ 1:nx, j ∈ 1:ny]
 end
 
 function profile_comparison(out_folders, labels, i_save)
@@ -587,15 +612,26 @@ end
 #                labels = ["010", "020", "030", "040", "050"],
 #                fname="images/profiles_sim044.png")
 # for i_save ∈ 0:50
-for i_save ∈ [3]
-    plot_profiles([@sprintf("../sims/sim044/data/profiles%03d.jld2", i_save), 
-                   @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
-                labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
-end
+# for i_save ∈ [3]
+#     plot_profiles([@sprintf("../sims/sim044/data/profiles%03d.jld2", i_save), 
+#                    @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
+#                 labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
+# end
 # x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
 # Psi = compute_barotropic_streamfunction(U, y)
 # jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
 # plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
+
+x, y, γ = compute_γ(b)
+fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
+add_title(ax, t)
+save_plot("gamma"; i=i_save)
+
+JEBAR = compute_JEBAR(x, y, γ)
+fig, ax = plot_barotropic(x, y, JEBAR; label=L"-J(1/H, \gamma)")
+add_title(ax, t)
+save_plot("JEBAR"; i=i_save)
+
 # plot_animation()
 # profile_comparison(["sim038", "sim033", "sim030"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
 # profile_comparison(["sim035", "sim036", "sim037"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
