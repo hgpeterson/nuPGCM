@@ -1,19 +1,10 @@
 """
     x = chebyshev_nodes(n)
 
-Return `n` Chebyshev nodes in the interval `[-1, 1]`.
+Return `n` Chebyshev nodes in the interval `[-1, 0]`.
 """
 function chebyshev_nodes(n)
-    return [-cos((i - 1)*π/(n - 1)) for i ∈ 1:n]
-end
-
-"""
-    z = chebyshev_grid(n, H)
-
-Return `n` Chebyshev nodes in the interval `[-H, 0]`.
-"""
-function chebyshev_grid(n, H)
-    return H*(chebyshev_nodes(n) .- 1)/2
+    return ([-cos((i - 1)*π/(n - 1)) for i ∈ 1:n] .- 1)/2
 end
 
 """

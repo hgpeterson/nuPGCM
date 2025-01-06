@@ -60,7 +60,6 @@ TwoD,
 ThreeD,
 # utils.jl
 chebyshev_nodes,
-chebyshev_grid,
 hrs_mins_secs,
 sci_notation,
 trapz,

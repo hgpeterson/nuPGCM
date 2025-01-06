@@ -253,7 +253,7 @@ end
 
 function sim_setup(params; horiz_diff=true)
     # grid
-    z = chebyshev_grid(params.nz, params.H)
+    z = params.H*chebyshev_nodes(params.nz)
 
     # forcing
     ν = ones(params.nz)
