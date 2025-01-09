@@ -19,7 +19,7 @@ Build matrix representations of
     b^(n+1) - α dz(κ (1 + β dz(b^(n+1)))) = b^(n) + α dz(κ (1 + β dz(b^(n))))
 so that LHS*b[n+1] = RHS*b[n] + rhs where α = ε²/μϱ * Δt/2 and β = 1 + γ*tan(θ)^2.
 """
-function build_b(z, κ, params; horiz_diff=true)
+function build_b(z, κ, params)
     # unpack
     μϱ = params.μϱ
     γ = params.γ
@@ -29,7 +29,7 @@ function build_b(z, κ, params; horiz_diff=true)
 
     # coeffs
     α = ε^2/μϱ * Δt/2
-    if horiz_diff 
+    if params.horiz_diff 
         β = 1 + γ*tan(θ)^2
     else
         β = 1
@@ -247,11 +247,11 @@ function plot_finish(; fig, ax, t=nothing, filename="images/1D.png")
 end
 
 function save(u, v, w, b, params, t, z; filename="data/1D.jld2")
-    jldsave(filename; u, v, w, b, params.μϱ, params.γ, params.θ, params.ε, params.Δt, t, z) 
+    jldsave(filename; u, v, w, b, params, t, z) 
     println(filename)
 end
 
-function sim_setup(params; horiz_diff=true)
+function sim_setup(params)
     # grid
     z = params.H*chebyshev_nodes(params.nz)
 
@@ -261,7 +261,7 @@ function sim_setup(params; horiz_diff=true)
     κ = @. 1e-2 + exp(-(z + params.H)/0.1)
 
     # build matrices
-    LHS_b, RHS_b, rhs_b = build_b(z, κ, params; horiz_diff)
+    LHS_b, RHS_b, rhs_b = build_b(z, κ, params)
     LHS_b = lu(LHS_b)
     LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
     LHS_χ = lu(LHS_χ)
@@ -274,9 +274,9 @@ function sim_setup(params; horiz_diff=true)
     return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t
 end
 
-function solve(params; horiz_diff=true)
+function solve(params)
     # setup 
-    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params; horiz_diff)
+    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params)
 
     # run
     n_steps = Int(round(params.T/params.Δt))
@@ -297,17 +297,17 @@ end
 
 function main(; T)
     # parameters
-    μϱ = 1e0
+    μϱ = 1e-4
     # γ = 1/4
     θ = π/4
     ε = 1e-2
-    Δt = 1e-5*μϱ/ε^2
+    Δt = 1e-4*μϱ/ε^2
     U = 0
     H = 0.75
     f = 1
     nz = 2^8
-    horiz_diff = false
-    # T = 1e-3
+    horiz_diff = true
+    # T = 5e-2*μϱ/ε^2
 
     # start plot
     fig, ax = plot_setup()
@@ -319,14 +319,17 @@ function main(; T)
     for i ∈ eachindex(γs)
         γ = γs[i]
         color = colors[i, :]
-        label = L"\gamma = "*@sprintf("%.2f", γ)
+        label = L"\alpha = "*@sprintf("%.2f", γ)
         println("γ = ", γs[i])
 
         # parameters
-        params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f, nz=nz, T=T)
+        params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
 
         # solve
-        u, v, w, b, t, z = solve(params; horiz_diff)
+        u, v, w, b, t, z = solve(params)
+
+        # save
+        save(u, v, w, b, params, t, z; filename=@sprintf("data/1D_%0.2f.jld2", γ))
 
         # plot
         plot(u, v, w, b, z; fig, ax, label, color)
@@ -334,13 +337,10 @@ function main(; T)
 
     # finish plot
     plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
-
-    # # save
-    # save(u, v, w, b, params, t, z; filename="data/1D.jld2")
 end
 
 # for T ∈ 1e1:1e1:5e2
 #     main(; T)
 # end
 
-main(T=5e2)
+# main(T=3e-3)
