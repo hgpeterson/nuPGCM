@@ -1,15 +1,15 @@
-using nuPGCM
-using Gridap, GridapGmsh
-using Printf
-using PyPlot
-using JLD2
+# using nuPGCM
+# using Gridap, GridapGmsh
+# using Printf
+# using PyPlot
+# using JLD2
 
-pygui(false)
-plt.style.use("../plots.mplstyle")
-plt.close("all")
+# pygui(false)
+# plt.style.use("../plots.mplstyle")
+# plt.close("all")
 
-# simulation folder
-out_folder = "../sims/sim035"
+# # simulation folder
+# out_folder = "../sims/sim035"
 
 # # dimensions
 # dim = ThreeD()
@@ -27,39 +27,53 @@ out_folder = "../sims/sim035"
 
 # # depth
 # H(x) = 1 - x[1]^2 - x[2]^2
-Hx(x) = -2x[1]
-Hy(x) = -2x[2]
+# Hx(x) = -2x[1]
+# Hy(x) = -2x[2]
 
 # # stratification
 # N² = 1
 
-# load state file
-i_save = 3
-statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
-ux, uy, uz, p, b, t = load_state(statefile)
-ux = FEFunction(Ux, ux)
-uy = FEFunction(Uy, uy)
-uz = FEFunction(Uz, uz)
-p  = FEFunction(P, p)
-b  = FEFunction(B, b)
+# # load state file
+# i_save = 3
+# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+# ux, uy, uz, p, b, t = load_state(statefile)
+# ux = FEFunction(Ux, ux)
+# uy = FEFunction(Uy, uy)
+# uz = FEFunction(Uz, uz)
+# p  = FEFunction(P, p)
+# b  = FEFunction(B, b)
 
-# plot_profiles(ux, uy, uz, b, 1, H; x=0.5, y=0.0, t=t, fname="profiles.png")
+################################################################################
 
-# # save vtu
-# save_state_vtu(ux, uy, uz, p, b, Ω; fname=@sprintf("%s/data/state%03d.vtu", out_folder, i_save))
+function save_gridded_data(out_folder, i_save)
+    # load state file
+    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+    ux, uy, uz, p, b, t = load_state(statefile)
+    ux = FEFunction(Ux, ux)
+    uy = FEFunction(Uy, uy)
+    uz = FEFunction(Uz, uz)
+    p  = FEFunction(P, p)
+    b  = FEFunction(B, b)
 
-# plot_slice(ux, b; x=0,    t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_xslice_%03d.png", out_folder, i_save))
-# plot_slice(ux, b; y=0,    t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_yslice_%03d.png", out_folder, i_save))
-# plot_slice(ux, b; z=-0.5, t=t, cb_label=L"Zonal flow $u$", fname=@sprintf("%s/images/u_zslice_%03d.png", out_folder, i_save))
-# plot_slice(uy, b; x=0,    t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_xslice_%03d.png", out_folder, i_save))
-# plot_slice(uy, b; y=0,    t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_folder, i_save))
-# plot_slice(uy, b; z=-0.5, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_zslice_%03d.png", out_folder, i_save))
-# plot_slice(uz, b; x=0,    t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_xslice_%03d.png", out_folder, i_save))
-# plot_slice(uz, b; y=0,    t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_yslice_%03d.png", out_folder, i_save))
-# plot_slice(uz, b; z=-0.5, t=t, cb_label=L"Vertical flow $w$", fname=@sprintf("%s/images/w_zslice_%03d.png", out_folder, i_save))
-# plot_slice(ux, uy, b; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/uv_zslice_%03d.png", out_folder, i_save))
-# plot_slice(ux, uz, b; y=0.0, t=t, cb_label=L"Speed $\sqrt{u^2 + w^2}$", fname=@sprintf("%s/images/uw_yslice_%03d.png", out_folder, i_save))
-# println()
+    # cartesian grid
+    nx = 2^6
+    ny = 2^6
+    nz = 2^6
+    x = range(-1, 1, length=nx)
+    y = range(-1, 1, length=ny)
+    z = range(-1, 0, length=nz)
+    points = [Point(x[i], y[j], z[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
+
+    # evaluate fields
+    @time "evaluate u" u = reshape(nan_eval(ux, points), nx, ny, nz)
+    @time "evaluate v" v = reshape(nan_eval(uy, points), nx, ny, nz)
+    @time "evaluate w" w = reshape(nan_eval(uz, points), nx, ny, nz)
+    @time "evaluate b" b = reshape(nan_eval(b,  points), nx, ny, nz)
+
+    # save data
+    jldsave(@sprintf("%s/data/gridded%03d.jld2", out_folder, i_save); x, y, z, u, v, w, b)
+    println(@sprintf("%s/data/gridded%03d.jld2", out_folder, i_save))
+end
 
 # for contour lines
 get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
@@ -601,6 +615,10 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
     plt.close()
 end
 
+# save_gridded_data("../sims/sim035", 3)
+save_gridded_data("../sims/sim036", 3)
+save_gridded_data("../sims/sim037", 3)
+
 # for i_save ∈ 0:50
 #     extract_profile_data(0.5, 0.0; i_save)
 # end
@@ -622,15 +640,15 @@ end
 # jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
 # plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
 
-x, y, γ = compute_γ(b)
-fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
-add_title(ax, t)
-save_plot("gamma"; i=i_save)
+# x, y, γ = compute_γ(b)
+# fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
+# add_title(ax, t)
+# save_plot("gamma"; i=i_save)
 
-JEBAR = compute_JEBAR(x, y, γ)
-fig, ax = plot_barotropic(x, y, JEBAR; label=L"-J(1/H, \gamma)")
-add_title(ax, t)
-save_plot("JEBAR"; i=i_save)
+# JEBAR = compute_JEBAR(x, y, γ)
+# fig, ax = plot_barotropic(x, y, JEBAR; label=L"-J(1/H, \gamma)")
+# add_title(ax, t)
+# save_plot("JEBAR"; i=i_save)
 
 # plot_animation()
 # profile_comparison(["sim038", "sim033", "sim030"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
