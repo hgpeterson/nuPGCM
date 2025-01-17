@@ -2,12 +2,12 @@ using nuPGCM
 using Gridap, GridapGmsh
 using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using SparseArrays, LinearAlgebra
+using SparseArrays, LinearAlgebra, Statistics
 using Printf
 using PyPlot
 
 pygui(false)
-plt.style.use("plots.mplstyle")
+plt.style.use("../plots.mplstyle")
 plt.close("all")
 
 out_folder = "../out"
@@ -39,14 +39,14 @@ arch = GPU()
 tol = 1e-8
 @printf("tol = %.1e\n", tol)
 itmax = 0
-@printf("itmax = %d\n", itmax)
+@printf("itmax = %d\n\n", itmax)
 
 # Vector type 
 VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
 # model
 hres = 0.01
-model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, hres))
+model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
 
 # full grid
 m = Mesh(model)
@@ -58,6 +58,8 @@ m_sfc = Mesh(model, "sfc")
 hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axes(m.t, 1), j ∈ 1:dim.n+1]
 hmin = minimum(hs)
 hmax = maximum(hs)
+h = mean(hs)
+@printf("\n%.1e < h < %.1e (mean = %.1e)\n", hmin, hmax, h)
 
 # FE spaces
 X, Y, B, D = setup_FESpaces(model)
@@ -105,26 +107,32 @@ println("---\n")
 
 # filenames for LHS matrices
 LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-LHS_evolution_fname = @sprintf("../matrices/LHS_evolution_%s_%e_%e_%e.h5", dim, hres, α, γ)
+LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, hres, α, γ)
+LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, hres)
 
 # inversion LHS
 if isfile(LHS_inversion_fname)
     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
 else
-    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 end
 
 # inversion RHS
 RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
 # preconditioner
-P_inversion = I
-# P_inversion = Diagonal(1/hres^3*ones(N))
+if typeof(dim) == TwoD && typeof(arch) == CPU
+    @time "lu(LHS_inversion)" P_inversion = lu(LHS_inversion)
+    ldiv_P_inversion = true
+else
+    # P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
+    P_inversion = I
+    ldiv_P_inversion = false
+end
 
 # put on GPU, if needed
 LHS_inversion = on_architecture(arch, LHS_inversion)
 RHS_inversion = on_architecture(arch, RHS_inversion)
-# P_inversion = Diagonal(on_architecture(arch, diag(P_inversion)))
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -132,7 +140,7 @@ end
 
 # Krylov solver for inversion
 solver_inversion = GmresSolver(N, N, 20, VT)
-solver_inversion.x .= on_architecture(arch, zeros(N))
+solver_inversion.x .= 0.
 
 # inversion functions
 function invert!(arch::AbstractArchitecture, solver, b)
@@ -142,9 +150,10 @@ function invert!(arch::AbstractArchitecture, solver, b)
     else
         RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
     end
-    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, 
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
-    @printf("inversion GMRES: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
+                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true,
+                  history=true)
+    @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver
 end
 function update_u_p!(ux, uy, uz, p, solver)
@@ -159,18 +168,21 @@ end
 flush(stdout)
 flush(stderr)
 
-# initial condition: b = z, t = 0
+# background state \partial_z b = N^2
+N² = 1.
+
+# initial condition: b = N^2 z, t = 0
 i_save = 0
 b = interpolate_everywhere(0, B)
 t = 0.
 ux = interpolate_everywhere(0, Ux)
 uy = interpolate_everywhere(0, Uy)
 uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P)
+p  = interpolate_everywhere(0, P) 
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
-# i_save = 18
+# i_save = 1
 # statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
 # ux, uy, uz, p, b, t = load_state(statefile)
 # solver_inversion.x .= on_architecture(arch, [ux; uy; uz; p][perm_inversion])
@@ -181,21 +193,38 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 # b  = FEFunction(B, b)
 
 # plot initial condition
-plots_cache = sim_plots(ux, uy, uz, b, H, t, i_save, out_folder)
+plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save, out_folder)
 i_save += 1
 
-if isfile(LHS_evolution_fname)
-    LHS_evolution, perm_evolution, inv_perm_evolution  = read_sparse_matrix(LHS_evolution_fname)
+# evolution LHSs
+if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
+    LHS_adv,  perm_b, inv_perm_b = read_sparse_matrix(LHS_adv_fname)
+    LHS_diff, perm_b, inv_perm_b = read_sparse_matrix(LHS_diff_fname)
 else
-    LHS_evolution, perm_evolution, inv_perm_evolution = assemble_LHS_evolution(arch, dim, α, γ, κ, B, D, dΩ; fname=LHS_evolution_fname)
+    LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
 end
 
-# preconditioner
-P_evolution = Diagonal(Vector(1 ./ diag(LHS_evolution)))
+# diffusion RHS matrix and vector
+RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
+
+# preconditioners
+if typeof(dim) == TwoD && typeof(arch) == CPU
+    @time "lu(LHS_diff)" P_diff = lu(LHS_diff)
+    @time "lu(LHS_adv)"  P_adv  = lu(LHS_adv)
+    ldiv_P_diff = true
+    ldiv_P_adv  = true
+else
+    P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
+    P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
+    ldiv_P_diff = false
+    ldiv_P_adv  = false
+end
 
 # put on GPU, if needed
-LHS_evolution = on_architecture(arch, LHS_evolution)
-P_evolution = Diagonal(on_architecture(arch, diag(P_evolution)))
+LHS_diff = on_architecture(arch, LHS_diff)
+RHS_diff = on_architecture(arch, RHS_diff)
+rhs_diff = on_architecture(arch, rhs_diff)
+LHS_adv = on_architecture(arch, LHS_adv)
 if typeof(arch) == GPU
     CUDA.memory_status()
     println()
@@ -203,27 +232,39 @@ end
 
 # Krylov solver for evolution
 solver_evolution = CgSolver(nb, nb, VT)
-solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_evolution])
+solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_b])
 
 # evolution functions
-∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
-∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
-∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
-assembler = SparseMatrixAssembler(D, D)
-RHS_evolution = zeros(nb)
-function evolve!(arch::AbstractArchitecture, solver, ux, uy, uz, b)
-    # l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    l(d) = ∫( b*d - Δt*ux*∂x(b)*d - Δt*uy*∂y(b)*d - Δt*uz*∂z(b)*d - Δt*uz*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ - 2α*∂z(d)*κ )dΩ
-    # @time "build RHS_evolution" RHS = on_architecture(arch, assemble_vector(l, D)[perm_evolution])
-    @time "build RHS_evolution" Gridap.FESpaces.assemble_vector!(l, RHS_evolution, assembler, D)
-    RHS = on_architecture(arch, RHS_evolution[perm_evolution])
-    Krylov.solve!(solver, LHS_evolution, RHS, solver.x, M=P_evolution,
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax)
-    @printf("evolution CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+b_half = interpolate_everywhere(0, B)
+function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolution, ux, uy, uz, p, b)
+    # half step
+    l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(N² + ∂z(b)))*d )dΩ
+    @time "build RHS_evolution 1" RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
+    Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
+
+    # u, v, w, p, b at half step
+    update_b!(b_half, solver_evolution)
+    solver_inversion = invert!(arch, solver_inversion, b_half)
+    ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+
+    # full step
+    l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
+    @time "build RHS_evolution 2" RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
+    Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
+
+    return solver_inversion, solver_evolution
+end
+function evolve_diff!(arch::AbstractArchitecture, solver, b)
+    b_arch= on_architecture(arch, b.free_values)
+    RHS = RHS_diff*b_arch + rhs_diff
+    Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+    @printf("diffusion CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver
 end
 function update_b!(b, solver)
-    b.free_values .= on_architecture(CPU(), solver.x[inv_perm_evolution])
+    b.free_values .= on_architecture(CPU(), solver.x[inv_perm_b])
     return b
 end
 
@@ -234,8 +275,12 @@ function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversio
         flush(stdout)
         flush(stderr)
 
-        # evolve
-        solver_evolution = evolve!(arch, solver_evolution, ux, uy, uz, b)
+        # advection step
+        solver_inversion, solver_evolution = evolve_adv!(arch, solver_inversion, solver_evolution, ux, uy, uz, p, b)
+        b = update_b!(b, solver_evolution)
+
+        # diffusion step
+        solver_evolution = evolve_diff!(arch, solver_evolution, b)
         b = update_b!(b, solver_evolution)
 
         # invert
@@ -288,3 +333,5 @@ end
 i_step = Int64(round(t/Δt)) + 1
 n_steps = Int64(round(T/Δt))
 ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
+
+println("Done.")
