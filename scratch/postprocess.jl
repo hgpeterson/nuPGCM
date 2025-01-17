@@ -75,6 +75,44 @@ function save_gridded_data(out_folder, i_save)
     println(@sprintf("%s/data/gridded%03d.jld2", out_folder, i_save))
 end
 
+function save_gridded_sigma_data(out_folder, i_save)
+    # load state file
+    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+    ux, uy, uz, p, b, t = load_state(statefile)
+    ux = FEFunction(Ux, ux)
+    uy = FEFunction(Uy, uy)
+    uz = FEFunction(Uz, uz)
+    p  = FEFunction(P, p)
+    b  = FEFunction(B, b)
+
+    # depth function
+    H(x) = 1 - x[1]^2 - x[2]^2
+
+    # horizontal grid
+    nx = 2^8
+    x = range(-1, 1, length=nx)
+    ny = 1
+    y = [0.0]
+    H = [H([x[i], y[j]]) for i ∈ 1:nx, j ∈ 1:ny]
+
+    # vertical sigma grid
+    nσ = 2^8
+    σ = range(-1, 0, length=nσ)
+
+    # points
+    points = [Point(x[i], y[j], σ[k]*H[i, j]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nσ][:]
+
+    # evaluate fields
+    @time "evaluate u" u = reshape(nan_eval(ux, points), nx, ny, nσ)
+    @time "evaluate v" v = reshape(nan_eval(uy, points), nx, ny, nσ)
+    @time "evaluate w" w = reshape(nan_eval(uz, points), nx, ny, nσ)
+    @time "evaluate b" b = reshape(nan_eval(b,  points), nx, ny, nσ)
+
+    # save data
+    jldsave(@sprintf("%s/data/gridded_sigma%03d.jld2", out_folder, i_save); x, y, σ, u, v, w, b, H)
+    println(@sprintf("%s/data/gridded_sigma%03d.jld2", out_folder, i_save))
+end
+
 # for contour lines
 get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
 
@@ -616,8 +654,11 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
 end
 
 # save_gridded_data("../sims/sim035", 3)
-save_gridded_data("../sims/sim036", 3)
-save_gridded_data("../sims/sim037", 3)
+# save_gridded_data("../sims/sim036", 3)
+# save_gridded_data("../sims/sim037", 3)
+save_gridded_sigma_data("../sims/sim035", 3)
+save_gridded_sigma_data("../sims/sim036", 3)
+save_gridded_sigma_data("../sims/sim037", 3)
 
 # for i_save ∈ 0:50
 #     extract_profile_data(0.5, 0.0; i_save)
