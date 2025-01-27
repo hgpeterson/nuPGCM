@@ -2,5 +2,9 @@ using nuPGCM
 using Test
 
 @testset "nuPGCM Tests" begin
-    include("numerics.jl")
+
+    @testset "Utils tests" begin
+        include("utils_tests.jl")
+    end
+
 end
