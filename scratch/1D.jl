@@ -295,6 +295,45 @@ function solve(params)
     return u, v, w, b, t, z
 end
 
+function quick_invert()
+    # parameters
+    γ = 1/4
+    θ = π/4
+    ε = 1e-2
+    # U = 0
+    U = 3.224674363931937e-7
+    H = 0.75
+    f = 1
+    nz = 2^8
+    params = (γ=γ, θ=θ, ε=ε, U=U, H=H, f=f, nz=nz)
+
+    # grid
+    z = params.H*chebyshev_nodes(params.nz)
+
+    # forcing
+    ν = ones(params.nz)
+
+    # buoyancy
+    b = @. 1/(1 + γ*tan(θ)^2)*0.1*exp(-(z + params.H)/0.1)
+
+    # build matrices
+    LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
+    LHS_χ = lu(LHS_χ)
+
+    # inversion
+    χ = zeros(params.nz)
+    invert!(χ, LHS_χ, RHS_χ*b + rhs_χ)
+
+    # compute u, v, w
+    u, v, w = uvw(χ, z, ν, params)
+
+    # save
+    jldsave("../out/data/state1D_U.jld2"; u, v, w, b, params, z)
+    println("../out/data/state1D_U.jld2")
+
+    return u, v, w, b, z
+end
+
 function main(; T)
     # parameters
     μϱ = 1e-4
@@ -313,12 +352,13 @@ function main(; T)
     fig, ax = plot_setup()
 
     # loop over γ
-    γs = 0:0.1:1
-    colors = pl.cm.viridis(range(0, 1, length=length(γs)))
+    # γs = 0:0.1:1
+    γs = [0.25]
+    # colors = pl.cm.viridis(range(0, 1, length=length(γs)))
     t = 0
     for i ∈ eachindex(γs)
         γ = γs[i]
-        color = colors[i, :]
+        # color = colors[i, :]
         label = L"\alpha = "*@sprintf("%.2f", γ)
         println("γ = ", γs[i])
 
@@ -332,11 +372,11 @@ function main(; T)
         save(u, v, w, b, params, t, z; filename=@sprintf("data/1D_%0.2f.jld2", γ))
 
         # plot
-        plot(u, v, w, b, z; fig, ax, label, color)
+        # plot(u, v, w, b, z; fig, ax, label, color)
     end
 
     # finish plot
-    plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
+    # plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
 end
 
 # for T ∈ 1e1:1e1:5e2
@@ -344,3 +384,5 @@ end
 # end
 
 # main(T=3e-3)
+
+quick_invert()
