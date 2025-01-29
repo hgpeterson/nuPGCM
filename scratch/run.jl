@@ -10,8 +10,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-out_folder = "../sims/sim044"
-# out_folder = "../out"
+out_folder = "../out"
 
 if !isdir(out_folder)
     println("creating folder: ", out_folder)
@@ -29,12 +28,12 @@ flush(stdout)
 flush(stderr)
 
 # choose dimensions
-dim = TwoD()
-# dim = ThreeD()
+# dim = TwoD()
+dim = ThreeD()
 
 # choose architecture
-arch = CPU()
-# arch = GPU()
+# arch = CPU()
+arch = GPU()
 
 # tolerance and max iterations for iterative solvers
 tol = 1e-6
@@ -92,7 +91,6 @@ f₀ = 1
 β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e-4
-# Δt = 1e-2
 Δt = 1e-4*μϱ/ε²
 T = 5e-2*μϱ/ε²
 α = Δt/2*ε²/μϱ # for timestep
@@ -128,6 +126,7 @@ if typeof(dim) == TwoD && typeof(arch) == CPU
     ldiv_P_inversion = true
 else
     P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
+    # P_inversion = I
     ldiv_P_inversion = false
 end
 
@@ -152,7 +151,7 @@ function invert!(arch::AbstractArchitecture, solver, b)
         RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
     end
     Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
-                  atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true,
+                  atol=tol, rtol=tol, verbose=1, itmax=itmax, restart=true,
                   history=true)
     @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
     return solver
@@ -172,15 +171,26 @@ flush(stderr)
 # background state \partial_z b = N^2
 N² = 1.
 
-# initial condition: b = N^2 z, t = 0
+# # initial condition: b = N^2 z, t = 0
+# i_save = 0
+# b = interpolate_everywhere(0, B)
+# t = 0.
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P) 
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
+
+# initial condition: b = N^2 z + some exponential
 i_save = 0
-b = interpolate_everywhere(0, B)
+Hx(x) = -2*x[1]
+Hy(x) = -2*x[2]
+b = interpolate_everywhere(x -> 1/(1 + γ*Hx(x)^2 + γ*Hy(x)^2)*0.1*exp(-(x[3] + H(x))/0.1), B)
 t = 0.
 ux = interpolate_everywhere(0, Ux)
 uy = interpolate_everywhere(0, Uy)
 uz = interpolate_everywhere(0, Uz)
 p  = interpolate_everywhere(0, P) 
-save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folder, i_save))
 
 # # initial condition: load from file
 # i_save = 1
@@ -193,9 +203,41 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_folde
 # p  = FEFunction(P, p)
 # b  = FEFunction(B, b)
 
+# # initial condition: load from diffusion
+# file = jldopen(@sprintf("%s/data/B.jld2", out_folder), "r")
+# B_3D_diff = file["B"]
+# close(file)
+# i_save = 3
+# file = jldopen(@sprintf("%s/data/b%03d.jld2", out_folder, i_save), "r")
+# b = FEFunction(B_3D_diff, file["b"])
+# function b_func(x) 
+#     try 
+#         b(x) 
+#     catch 
+#         0 
+#     end
+# end
+# t = file["t"]
+# close(file)
+# b = interpolate_everywhere(b_func, B) # map to this grid
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P) 
+invert!(arch, solver_inversion, b)
+ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+save_state(ux, uy, uz, p, b, t; fname="../out/data/state2D.h5")
+
+z = chebyshev_nodes(2^8)*H([0.5, 0.0])
+points = [Point(0.5, 0.0, z[i]) for i ∈ eachindex(z)]
+using JLD2
+jldsave("../out/data/state3D_column.jld2"; x=0.5, y=0.0, z=z, u=nan_eval(ux, points), v=nan_eval(uy, points), w=nan_eval(uz, points), b=nan_eval(b, points))
+
 # plot initial condition
 plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save, out_folder)
 i_save += 1
+
+error("done")
 
 # evolution LHSs
 if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
