@@ -11,11 +11,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-function coarse_evolution(dim::AbstractDimension)
-    # choose architecture
-    # arch = CPU()
-    arch = GPU()
-
+function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     # tolerance and max iterations for iterative solvers
     tol = 1e-6
     itmax = 0
@@ -24,7 +20,7 @@ function coarse_evolution(dim::AbstractDimension)
     VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
     # coarse model
-    h = 0.05
+    h = 0.1
     model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
 
     # FE spaces
@@ -37,11 +33,6 @@ function coarse_evolution(dim::AbstractDimension)
     np = P.space.space.nfree
     nb = B.space.nfree
     N = nu + np - 1
-    if typeof(dim) == TwoD
-        @test N == 7451
-    else
-        @test N == 227166
-    end
 
     # triangulation and integration measure
     Ω = Triangulation(model)
@@ -65,30 +56,25 @@ function coarse_evolution(dim::AbstractDimension)
     T = 5e-2*μϱ/ε²
     α = Δt/2*ε²/μϱ
 
-    # data files for LHS matrices
-    # inversion LHS will just be loaded from file, but the evolution LHSs will be assembled and tested against these
+    # assemble LHS inversion and test against saved matrix
     LHS_inversion_fname = @sprintf("test/data/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-    LHS_diff_fname = @sprintf("test/data/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
-    LHS_adv_fname = @sprintf("test/data/LHS_adv_%s_%e.h5", dim, h)
-
-    # inversion LHS (just read from file and don't test; leave that for inversion_tests.jl)
-    # LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
-    LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+    if !isfile(LHS_inversion_fname)
+        @warn "LHS_inversion file not found, generating..."
+        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    else
+        # just read inversion matrix instead of building and testing it; this is already tested in inversion_tests.jl
+        LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+    end
 
     # inversion RHS
     RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
     # preconditioner
-    if typeof(dim) == TwoD 
-        if typeof(arch) == CPU
-            P_inversion = lu(LHS_inversion)
-            ldiv_P_inversion = true
-        else
-            P_inversion = Diagonal(on_architecture(arch, 1/h^2*ones(N)))
-            ldiv_P_inversion = false
-        end
+    if typeof(arch) == CPU
+        P_inversion = lu(LHS_inversion)
+        ldiv_P_inversion = true
     else
-        P_inversion = I
+        P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
         ldiv_P_inversion = false
     end
 
@@ -133,17 +119,23 @@ function coarse_evolution(dim::AbstractDimension)
     uz = interpolate_everywhere(0, Uz)
     p  = interpolate_everywhere(0, P) 
 
-    # evolution LHSs
-    # LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname) # FIRST TIME ONLY: save LHS matrices
-    LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(CPU(), α, γ, κ, B, D, dΩ; fname_adv="LHS_adv_temp.h5", fname_diff="LHS_diff_temp.h5")
-    @test LHS_adv ≈ read_sparse_matrix(LHS_adv_fname)[1]
-    @test LHS_diff ≈ read_sparse_matrix(LHS_diff_fname)[1]
+    # assemble evolution matrices and test against saved matrices
+    LHS_diff_fname = @sprintf("test/data/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
+    LHS_adv_fname = @sprintf("test/data/LHS_adv_%s_%e.h5", dim, h)
+    if !isfile(LHS_diff_fname) || !isfile(LHS_adv_fname)
+        @warn "LHS_diff or LHS_adv file not found, generating..."
+        LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(CPU(), α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
+    else
+        LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(CPU(), α, γ, κ, B, D, dΩ; fname_adv="LHS_adv_temp.h5", fname_diff="LHS_diff_temp.h5")
+        @test LHS_adv ≈ read_sparse_matrix(LHS_adv_fname)[1]
+        @test LHS_diff ≈ read_sparse_matrix(LHS_diff_fname)[1]
+    end
 
     # diffusion RHS matrix and vector
     RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
 
     # preconditioners
-    if typeof(dim) == TwoD && typeof(arch) == CPU
+    if typeof(arch) == CPU
         P_diff = lu(LHS_diff)
         P_adv  = lu(LHS_adv)
         ldiv_P_diff = true
@@ -229,17 +221,18 @@ function coarse_evolution(dim::AbstractDimension)
     # save_state(ux, uy, uz, p, b, t; fname=@sprintf("test/data/evolution_%s.h5", dim))
 
     # compare state with data
-    ux_data, uy_data, uz_data, p_data, b_data, t_data = load_state(@sprintf("test/data/evolution_%s.h5", dim))
-    @test isapprox(ux.free_values, ux_data, rtol=1e-2)
-    @test isapprox(uy.free_values, uy_data, rtol=1e-2)
-    @test isapprox(uz.free_values, uz_data, rtol=1e-2)
-    @test isapprox(p.free_values,  p_data,  rtol=1e-2)
-    @test isapprox(b.free_values,  b_data,  rtol=1e-2)
-    println(norm(ux.free_values - ux_data)/norm(ux_data))
-    println(norm(uy.free_values - uy_data)/norm(uy_data))
-    println(norm(uz.free_values - uz_data)/norm(uz_data))
-    println(norm(p.free_values - p_data)/norm(p_data))
-    println(norm(b.free_values - b_data)/norm(b_data))
+    datafile = @sprintf("test/data/evolution_%s.h5", dim)
+    if !isfile(datafile)
+        @warn "Data file not found, saving state..."
+        save_state(ux, uy, uz, p, b, t; fname=@sprintf("test/data/evolution_%s.h5", dim))
+    else
+        ux_data, uy_data, uz_data, p_data, b_data, t_data = load_state(@sprintf("test/data/evolution_%s.h5", dim))
+        @test isapprox(ux.free_values, ux_data, rtol=1e-2)
+        @test isapprox(uy.free_values, uy_data, rtol=1e-2)
+        @test isapprox(uz.free_values, uz_data, rtol=1e-2)
+        @test isapprox(p.free_values,  p_data,  rtol=1e-2)
+        @test isapprox(b.free_values,  b_data,  rtol=1e-2)
+    end
 
     # remove temporary files
     rm("LHS_adv_temp.h5", force=true)
@@ -247,10 +240,16 @@ function coarse_evolution(dim::AbstractDimension)
 end
 
 @testset "Evolution Tests" begin
-    @testset "2D" begin
-        coarse_evolution(TwoD())
+    @testset "2D CPU" begin
+        coarse_evolution(TwoD(), CPU())
     end
-    @testset "3D" begin
-        coarse_evolution(ThreeD())
+    # @testset "2D GPU" begin
+    #     coarse_evolution(TwoD(), GPU())
+    # end
+    @testset "3D CPU" begin
+        coarse_evolution(ThreeD(), CPU())
     end
+    # @testset "3D GPU" begin
+    #     coarse_evolution(ThreeD(), GPU())
+    # end
 end

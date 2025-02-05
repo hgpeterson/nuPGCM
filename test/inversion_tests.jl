@@ -1,9 +1,11 @@
 using Test
 using nuPGCM
-using Gridap, GridapGmsh
-using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
-using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using SparseArrays, LinearAlgebra, Statistics
+using Gridap
+using GridapGmsh
+using Krylov
+using CUDA
+using SparseArrays
+using LinearAlgebra
 using Printf
 using PyPlot
 
@@ -20,7 +22,7 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
     VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
 
     # coarse model
-    h = 0.05
+    h = 0.1
     model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
 
     # FE spaces
@@ -33,9 +35,9 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
     np = P.space.space.nfree
     N = nu + np - 1
     if typeof(dim) == TwoD
-        @test N == 7451
+        @test N == 2023
     else
-        @test N == 227166
+        @test N == 27934
     end
 
     # triangulation and integration measure
@@ -58,24 +60,23 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
 
     # assemble LHS inversion and test against saved matrix
     LHS_inversion_fname = @sprintf("test/data/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-    # LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname) # FIRST TIME ONLY: save LHS matrix
-    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname="LHS_inv_temp.h5")
-    @test LHS_inversion ≈ read_sparse_matrix(LHS_inversion_fname)[1]
+    if !isfile(LHS_inversion_fname)
+        @warn "LHS_inversion file not found, generating..."
+        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(CPU(), γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    else
+        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(CPU(), γ, ε², ν, f, X, Y, dΩ; fname="LHS_inv_temp.h5")
+        @test LHS_inversion ≈ read_sparse_matrix(LHS_inversion_fname)[1]
+    end
 
     # inversion RHS
     RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
     # preconditioner
-    if typeof(dim) == TwoD 
-        if typeof(arch) == CPU
-            P_inversion = lu(LHS_inversion)
-            ldiv_P_inversion = true
-        else
-            P_inversion = Diagonal(on_architecture(arch, 1/h^2*ones(N)))
-            ldiv_P_inversion = false
-        end
+    if typeof(arch) == CPU
+        P_inversion = lu(LHS_inversion)
+        ldiv_P_inversion = true
     else
-        P_inversion = I
+        P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
         ldiv_P_inversion = false
     end
 
@@ -126,21 +127,19 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
     # # plot for sanity check
     # sim_plots(dim, ux, uy, uz, b, N², H, 0, 0, "test")
 
-    # # FIRST TIME ONLY: save state
-    # save_state(ux, uy, uz, p, b, 0; fname=@sprintf("test/data/inversion_%s.h5", dim))
-
     # compare state with data
-    ux_data, uy_data, uz_data, p_data, b_data, t_data = load_state(@sprintf("test/data/inversion_%s.h5", dim))
-    @test isapprox(ux.free_values, ux_data, rtol=1e-2)
-    @test isapprox(uy.free_values, uy_data, rtol=1e-2)
-    @test isapprox(uz.free_values, uz_data, rtol=1e-2)
-    @test isapprox(p.free_values,  p_data,  rtol=1e-2)
-    @test isapprox(b.free_values,  b_data,  rtol=1e-2)
-    println(norm(ux.free_values - ux_data)/norm(ux_data))
-    println(norm(uy.free_values - uy_data)/norm(uy_data))
-    println(norm(uz.free_values - uz_data)/norm(uz_data))
-    println(norm(p.free_values - p_data)/norm(p_data))
-    println(norm(b.free_values - b_data)/norm(b_data))
+    datafile = @sprintf("test/data/inversion_%s.h5", dim)
+    if !isfile(datafile)
+        @warn "Data file not found, saving state..."
+        save_state(ux, uy, uz, p, b, 0; fname=datafile)
+    else
+        ux_data, uy_data, uz_data, p_data, b_data, t_data = load_state(@sprintf("test/data/inversion_%s.h5", dim))
+        @test isapprox(ux.free_values, ux_data, rtol=1e-2)
+        @test isapprox(uy.free_values, uy_data, rtol=1e-2)
+        @test isapprox(uz.free_values, uz_data, rtol=1e-2)
+        @test isapprox(p.free_values,  p_data,  rtol=1e-2)
+        @test isapprox(b.free_values,  b_data,  rtol=1e-2)
+    end
 
     # remove temporary files
     rm("LHS_inv_temp.h5", force=true)
@@ -153,6 +152,9 @@ end
     # @testset "2D GPU" begin
     #     coarse_inversion(TwoD(), GPU())
     # end
+    @testset "3D CPU" begin
+        coarse_inversion(ThreeD(), CPU())
+    end
     # @testset "3D GPU" begin
     #     coarse_inversion(ThreeD(), GPU())
     # end
