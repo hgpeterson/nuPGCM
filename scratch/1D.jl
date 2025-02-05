@@ -90,8 +90,7 @@ end
 
 """
 Build matrix representations of
-    ε⁴*dzz(nu*β*dzz(χ)) + f²*(χ - U)/nu/β = -ε²*dz(b)*tan(θ)
-    ε⁴*dzz(nu*β*dzz(χ)) + f²*χ/nu/β = -ε²*dz(b)*tan(θ) + f²*U/nu/β
+    ε⁴*β²*dzz(nu*dzz(χ)) + f²*χ/(nu*β) = -ε²*dz(b)*tan(θ) + f²*U/(nu*β)
 so that LHS*χ = RHS*b.
 """
 function build_χ(z, ν, params)
@@ -127,30 +126,31 @@ function build_χ(z, ν, params)
         # dzzzz stencil
         fd_zzzz = mkfdstencil(z[j-2:j+2], z[j], 4)
         
-        # eqtn: ε⁴*dzz(nu*β*dzz(χ)) + f²*(χ - U)/nu/β = -ε²*dz(b)*tan(θ)
+        # eqtn: ε⁴*β²*dzz(nu*dzz(χ)) + f²*χ/(nu*β) = -ε²*dz(b)*tan(θ) + f²*U/(nu*β)
         # term 1 (product rule)
-        push!(LHS, (row, j-1, ε^4*ν_zz*fd_zz[1]))
-        push!(LHS, (row, j,   ε^4*ν_zz*fd_zz[2]))
-        push!(LHS, (row, j+1, ε^4*ν_zz*fd_zz[3]))
+        push!(LHS, (row, j-1, ε^4*β^2*ν_zz*fd_zz[1]))
+        push!(LHS, (row, j,   ε^4*β^2*ν_zz*fd_zz[2]))
+        push!(LHS, (row, j+1, ε^4*β^2*ν_zz*fd_zz[3]))
 
-        push!(LHS, (row, j-2, 2*ε^4*ν_z*fd_zzz[1]))
-        push!(LHS, (row, j-1, 2*ε^4*ν_z*fd_zzz[2]))
-        push!(LHS, (row, j,   2*ε^4*ν_z*fd_zzz[3]))
-        push!(LHS, (row, j+1, 2*ε^4*ν_z*fd_zzz[4]))
-        push!(LHS, (row, j+2, 2*ε^4*ν_z*fd_zzz[5]))
+        push!(LHS, (row, j-2, 2*ε^4*β^2*ν_z*fd_zzz[1]))
+        push!(LHS, (row, j-1, 2*ε^4*β^2*ν_z*fd_zzz[2]))
+        push!(LHS, (row, j,   2*ε^4*β^2*ν_z*fd_zzz[3]))
+        push!(LHS, (row, j+1, 2*ε^4*β^2*ν_z*fd_zzz[4]))
+        push!(LHS, (row, j+2, 2*ε^4*β^2*ν_z*fd_zzz[5]))
 
-        push!(LHS, (row, j-2, ε^4*ν[j]*fd_zzzz[1]))
-        push!(LHS, (row, j-1, ε^4*ν[j]*fd_zzzz[2]))
-        push!(LHS, (row, j,   ε^4*ν[j]*fd_zzzz[3]))
-        push!(LHS, (row, j+1, ε^4*ν[j]*fd_zzzz[4]))
-        push!(LHS, (row, j+2, ε^4*ν[j]*fd_zzzz[5]))
+        push!(LHS, (row, j-2, ε^4*β^2*ν[j]*fd_zzzz[1]))
+        push!(LHS, (row, j-1, ε^4*β^2*ν[j]*fd_zzzz[2]))
+        push!(LHS, (row, j,   ε^4*β^2*ν[j]*fd_zzzz[3]))
+        push!(LHS, (row, j+1, ε^4*β^2*ν[j]*fd_zzzz[4]))
+        push!(LHS, (row, j+2, ε^4*β^2*ν[j]*fd_zzzz[5]))
         # term 2
-        push!(LHS, (row, j,   f^2/(ν[j]*β)))
-        rhs[row] = f^2*U/(ν[j]*β)
+        push!(LHS, (row, j, f^2/(ν[j]*β)))
         # term 3
         push!(RHS, (row, j-1, -ε^2*fd_z[1]*tan(θ)))
         push!(RHS, (row, j,   -ε^2*fd_z[2]*tan(θ)))
         push!(RHS, (row, j+1, -ε^2*fd_z[3]*tan(θ)))
+        # term 4
+        rhs[row] = f^2*U/(ν[j]*β)
     end
 
     # for finite difference on the top and bottom boundary
@@ -300,8 +300,7 @@ function quick_invert()
     γ = 1/4
     θ = π/4
     ε = 1e-2
-    # U = 0
-    U = 3.224674363931937e-7
+    U = 0
     H = 0.75
     f = 1
     nz = 2^8
@@ -314,7 +313,11 @@ function quick_invert()
     ν = ones(params.nz)
 
     # buoyancy
-    b = @. 1/(1 + γ*tan(θ)^2)*0.1*exp(-(z + params.H)/0.1)
+    # b = @. 1/(1 + γ*tan(θ)^2)*0.1*exp(-(z + params.H)/0.1)
+    # b = @. 0.1*exp(-(z + params.H)/0.1)
+    file = jldopen(@sprintf("../out/data/state2D_diff_column_%.5f.jld2", γ), "r")
+    b = file["b"]
+    close(file)
 
     # build matrices
     LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
@@ -328,8 +331,12 @@ function quick_invert()
     u, v, w = uvw(χ, z, ν, params)
 
     # save
-    jldsave("../out/data/state1D_U.jld2"; u, v, w, b, params, z)
-    println("../out/data/state1D_U.jld2")
+    # jldsave(@sprintf("../out/data/state1D_%.5f.jld2", γ); u, v, w, b, params, z)
+    # println(@sprintf("../out/data/state1D_%.5f.jld2", γ))
+    # jldsave(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ); u, v, w, b, params, z)
+    # println(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ))
+    jldsave(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ); u, v, w, b, params, z)
+    println(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ))
 
     return u, v, w, b, z
 end
