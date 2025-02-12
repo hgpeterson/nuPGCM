@@ -13,8 +13,13 @@ end
 function nan_eval(cache, u::CellField, x::VectorValue)
     try 
         evaluate!(cache, u, x) 
-    catch 
-        NaN 
+    catch e
+        if isa(e, AssertionError) 
+            # catch "x is not inside any active cell" error
+            return NaN 
+        else 
+            rethrow(e)
+        end
     end
 end
 function nan_eval(u::CellField, x::AbstractVector)
