@@ -20,7 +20,8 @@ function main(γ)
     # load 2D profiles
     # file = jldopen(@sprintf("../out/data/state1D_%0.5f.jld2", γ), "r")
     # file = jldopen(@sprintf("../out/data/state1D_old_b_%0.5f.jld2", γ), "r")
-    file = jldopen(@sprintf("../out/data/state1D_diff_%0.5f.jld2", γ), "r")
+    # file = jldopen(@sprintf("../out/data/state1D_diff_%0.5f.jld2", γ), "r")
+    file = jldopen(@sprintf("../out/data/state1D_diff_0.005_%0.5f.jld2", γ), "r")
     u_dict["1D"] = file["u"]
     v_dict["1D"] = file["v"]
     w_dict["1D"] = file["w"]
@@ -31,7 +32,8 @@ function main(γ)
     # load 2D profiles
     # file = jldopen(@sprintf("../out/data/state2D_column_%0.5f.jld2", γ), "r")
     # file = jldopen(@sprintf("../out/data/state2D_old_b_column_%0.5f.jld2", γ), "r")
-    file = jldopen(@sprintf("../out/data/state2D_diff_column_%0.5f.jld2", γ), "r")
+    # file = jldopen(@sprintf("../out/data/state2D_diff_column_%0.5f.jld2", γ), "r")
+    file = jldopen(@sprintf("../out/data/state2D_diff_0.005_column_%0.5f.jld2", γ), "r")
     u_dict["2D"] = file["u"]
     v_dict["2D"] = file["v"]
     w_dict["2D"] = file["w"]
@@ -108,8 +110,10 @@ function main(γ)
     # println(@sprintf("../out/images/profiles_%.5f.png", γ))
     # savefig(@sprintf("../out/images/profiles_old_b_%.5f.png", γ))
     # println(@sprintf("../out/images/profiles_old_b_%.5f.png", γ))
-    savefig(@sprintf("../out/images/profiles_diff_%.5f.png", γ))
-    println(@sprintf("../out/images/profiles_diff_%.5f.png", γ))
+    # savefig(@sprintf("../out/images/profiles_diff_%.5f.png", γ))
+    # println(@sprintf("../out/images/profiles_diff_%.5f.png", γ))
+    savefig(@sprintf("../out/images/profiles_diff_0.005_%.5f.png", γ))
+    println(@sprintf("../out/images/profiles_diff_0.005_%.5f.png", γ))
     plt.close()
 end
 
