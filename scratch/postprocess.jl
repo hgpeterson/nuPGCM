@@ -1,15 +1,15 @@
-# using nuPGCM
-# using Gridap, GridapGmsh
-# using Printf
-# using PyPlot
-# using JLD2
+using nuPGCM
+using Gridap, GridapGmsh
+using Printf
+using PyPlot
+using JLD2
 
-# pygui(false)
-# plt.style.use("../plots.mplstyle")
-# plt.close("all")
+pygui(false)
+plt.style.use("../plots.mplstyle")
+plt.close("all")
 
-# # simulation folder
-# out_folder = "../sims/sim035"
+# simulation folder
+out_folder = "../sims/sim035"
 
 # # dimensions
 # dim = ThreeD()
@@ -45,7 +45,7 @@
 
 ################################################################################
 
-function save_gridded_data(out_folder, i_save)
+function save_gridded_data(out_folder, i_save; n=2^6)
     # load state file
     statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
     ux, uy, uz, p, b, t = load_state(statefile)
@@ -56,26 +56,23 @@ function save_gridded_data(out_folder, i_save)
     b  = FEFunction(B, b)
 
     # cartesian grid
-    nx = 2^6
-    ny = 2^6
-    nz = 2^6
-    x = range(-1, 1, length=nx)
-    y = range(-1, 1, length=ny)
-    z = range(-1, 0, length=nz)
-    points = [Point(x[i], y[j], z[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
+    x = range(-1, 1, length=n)
+    y = range(-1, 1, length=n)
+    z = range(-1, 0, length=n)
+    points = [Point(x[i], y[j], z[k]) for i ∈ 1:n, j ∈ 1:n, k ∈ 1:n][:]
 
     # evaluate fields
-    @time "evaluate u" u = reshape(nan_eval(ux, points), nx, ny, nz)
-    @time "evaluate v" v = reshape(nan_eval(uy, points), nx, ny, nz)
-    @time "evaluate w" w = reshape(nan_eval(uz, points), nx, ny, nz)
-    @time "evaluate b" b = reshape(nan_eval(b,  points), nx, ny, nz)
+    @time "evaluate u" u = reshape(nan_eval(ux, points), n, n, n)
+    @time "evaluate v" v = reshape(nan_eval(uy, points), n, n, n)
+    @time "evaluate w" w = reshape(nan_eval(uz, points), n, n, n)
+    @time "evaluate b" b = reshape(nan_eval(b,  points), n, n, n)
 
     # save data
-    jldsave(@sprintf("%s/data/gridded%03d.jld2", out_folder, i_save); x, y, z, u, v, w, b)
-    println(@sprintf("%s/data/gridded%03d.jld2", out_folder, i_save))
+    jldsave(@sprintf("%s/data/gridded_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, z, u, v, w, b, t)
+    println(@sprintf("%s/data/gridded_n%04d_i%03d.jld2", out_folder, n, i_save))
 end
 
-function save_gridded_sigma_data(out_folder, i_save)
+function save_gridded_sigma_data(out_folder, i_save; n=2^6)
     # load state file
     statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
     ux, uy, uz, p, b, t = load_state(statefile)
@@ -89,28 +86,26 @@ function save_gridded_sigma_data(out_folder, i_save)
     H(x) = 1 - x[1]^2 - x[2]^2
 
     # horizontal grid
-    nx = 2^8
-    x = range(-1, 1, length=nx)
-    ny = 1
-    y = [0.0]
-    H = [H([x[i], y[j]]) for i ∈ 1:nx, j ∈ 1:ny]
+    x = range(-1, 1, length=n)
+    y = range(-1, 1, length=n)
+    H = [H([x[i], y[j]]) for i ∈ 1:n, j ∈ 1:n]
 
     # vertical sigma grid
-    nσ = 2^8
-    σ = range(-1, 0, length=nσ)
+    σ = range(-1, 0, length=n)
 
     # points
-    points = [Point(x[i], y[j], σ[k]*H[i, j]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nσ][:]
+    points = [Point(x[i], y[j], σ[k]*H[i, j]) for i ∈ 1:n, j ∈ 1:n, k ∈ 1:n][:]
 
     # evaluate fields
-    @time "evaluate u" u = reshape(nan_eval(ux, points), nx, ny, nσ)
-    @time "evaluate v" v = reshape(nan_eval(uy, points), nx, ny, nσ)
-    @time "evaluate w" w = reshape(nan_eval(uz, points), nx, ny, nσ)
-    @time "evaluate b" b = reshape(nan_eval(b,  points), nx, ny, nσ)
+    # @time "evaluate u" u = reshape(nan_eval(ux, points), n, n, n)
+    # @time "evaluate v" v = reshape(nan_eval(uy, points), n, n, n)
+    # @time "evaluate w" w = reshape(nan_eval(uz, points), n, n, n)
+    @time "evaluate b" b = reshape(nan_eval(b,  points), n, n, n)
 
     # save data
-    jldsave(@sprintf("%s/data/gridded_sigma%03d.jld2", out_folder, i_save); x, y, σ, u, v, w, b, H)
-    println(@sprintf("%s/data/gridded_sigma%03d.jld2", out_folder, i_save))
+    # jldsave(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, σ, u, v, w, b, H, t)
+    jldsave(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, σ, b, H, t)
+    println(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save))
 end
 
 # for contour lines
@@ -356,7 +351,7 @@ end
 
 function compute_γ(b)
     # resolution
-    nx = 2^7
+    nx = 2^5
     ny = nx
     nz = 2^5
 
@@ -656,9 +651,9 @@ end
 # save_gridded_data("../sims/sim035", 3)
 # save_gridded_data("../sims/sim036", 3)
 # save_gridded_data("../sims/sim037", 3)
-save_gridded_sigma_data("../sims/sim035", 3)
-save_gridded_sigma_data("../sims/sim036", 3)
-save_gridded_sigma_data("../sims/sim037", 3)
+save_gridded_sigma_data("../sims/sim035", 3; n=2^8)
+# save_gridded_sigma_data("../sims/sim036", 3)
+# save_gridded_sigma_data("../sims/sim037", 3)
 
 # for i_save ∈ 0:50
 #     extract_profile_data(0.5, 0.0; i_save)
@@ -696,3 +691,111 @@ save_gridded_sigma_data("../sims/sim037", 3)
 # profile_comparison(["sim035", "sim036", "sim037"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
 # profile_2D_vs_3D("../../PGModels1Dand2D/output/profilesPB1e-4.jld2")
 # momentum_and_buoyancy_balance("sim033", 4)
+
+function compute_BVE_buoyancy_source(n)
+    # load data
+    i_save = 3
+    file = jldopen(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save))
+    x = file["x"]
+    y = file["y"]
+    σ = file["σ"]
+    # u = file["u"]
+    # v = file["v"]
+    # w = file["w"]
+    b = file["b"]
+    H = file["H"]
+    t = file["t"]
+    close(file)
+
+    # differentiate H
+    Hx = zeros(size(H))
+    Hy = zeros(size(H))
+    for i ∈ 1:n
+        Hx[:, i] = differentiate(H[:, i], x)
+        Hy[i, :] = differentiate(H[i, :], y)
+    end
+
+    # # debug: compare with analytical -2x and -2y
+    # Hx_error = [Hx[i, j] - (-2*x[i]) for i ∈ 1:n, j ∈ 1:n]
+    # Hy_error = [Hy[i, j] - (-2*y[j]) for i ∈ 1:n, j ∈ 1:n]
+    # fig, ax = plot_barotropic(x, y, Hx_error; label=L"\partial_x H")
+    # add_title(ax, t)
+    # save_plot("Hx_error"; i=i_save)
+    # fig, ax = plot_barotropic(x, y, Hy_error; label=L"\partial_y H")
+    # add_title(ax, t)
+    # save_plot("Hy_error"; i=i_save)
+
+    # differentiate b
+    bξ = zeros(n, n, n)
+    bη = zeros(n, n, n)
+    bσ = zeros(n, n, n)
+    for i ∈ 1:n, j ∈ 1:n 
+        bξ[:, i, j] = differentiate(b[:, i, j], x)
+        bη[i, :, j] = differentiate(b[i, :, j], y)
+        bσ[i, j, :] = differentiate(b[i, j, :], σ)
+    end
+    bx = [bξ[i, j, k] - σ[k]*Hx[i, j]/H[i, j]*bσ[i, j, k] for i ∈ 1:n, j ∈ 1:n, k ∈ 1:n]
+    by = [bη[i, j, k] - σ[k]*Hy[i, j]/H[i, j]*bσ[i, j, k] for i ∈ 1:n, j ∈ 1:n, k ∈ 1:n]
+
+    # compute drag coefficient
+    ν_bot = 1
+    β = 0
+    f = [1 + β*y[j] for i ∈ 1:n, j ∈ 1:n]
+    q = @. √(2ν_bot/f)
+    r = ν_bot*q./H
+
+    # compute terms 1 and 2
+    term1 = [r[i, j]/f[i, j]*H[i, j] * trapz(σ.*(bx[i, j, :] - by[i, j, :]), σ) for i ∈ 1:n, j ∈ 1:n]
+    term2 = [r[i, j]/f[i, j]*H[i, j] * trapz(σ.*(bx[i, j, :] + by[i, j, :]), σ) for i ∈ 1:n, j ∈ 1:n]
+
+    # plot terms 1 and 2
+    fig, ax = plot_barotropic(x, y, term1; label="term 1")
+    add_title(ax, t)
+    save_plot("term1_"; i=i_save)
+    fig, ax = plot_barotropic(x, y, term2; label="term 2")
+    add_title(ax, t)
+    save_plot("term2_"; i=i_save)
+
+    # compute convergence
+    BVE_buoyancy_source = zeros(n, n)
+    for i ∈ 1:n
+        BVE_buoyancy_source[:, i] .-= differentiate(term1[:, i], x)
+        BVE_buoyancy_source[i, :] .-= differentiate(term2[i, :], y)
+    end
+
+    # plot BVE buoyancy source
+    fig, ax = plot_barotropic(x, y, BVE_buoyancy_source; label=L"\mathcal{B}")
+    add_title(ax, t)
+    save_plot("BVE_buoyancy_source"; i=i_save)
+
+    # plot BVE buoyancy source just along y=0
+    fig, ax = plt.subplots(1)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"\mathcal{B}")
+    # ax.plot(x, BVE_buoyancy_source[:, n÷2])
+    ax.plot(x, BVE_buoyancy_source[:, n÷2] .* (sqrt(2)*(1 .- x.^2).^2))
+    println(y[n÷2])
+    savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
+    println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
+    plt.close()
+
+    return x, BVE_buoyancy_source
+end
+
+x_4, BVE_buoyancy_source_4 = compute_BVE_buoyancy_source(2^4)
+x_5, BVE_buoyancy_source_5 = compute_BVE_buoyancy_source(2^5)
+x_6, BVE_buoyancy_source_6 = compute_BVE_buoyancy_source(2^6)
+x_7, BVE_buoyancy_source_7 = compute_BVE_buoyancy_source(2^7)
+x_8, BVE_buoyancy_source_8 = compute_BVE_buoyancy_source(2^8)
+fig, ax = plt.subplots(1)
+ax.set_xlabel(L"x")
+ax.set_ylabel(L"\mathcal{B}")
+ax.plot(x_4, BVE_buoyancy_source_4[:, 2^3] .* (sqrt(2)*(1 .- x_4.^2).^2), label=L"n=2^4")
+ax.plot(x_5, BVE_buoyancy_source_5[:, 2^4] .* (sqrt(2)*(1 .- x_5.^2).^2), label=L"n=2^5")
+ax.plot(x_6, BVE_buoyancy_source_6[:, 2^5] .* (sqrt(2)*(1 .- x_6.^2).^2), label=L"n=2^6")
+ax.plot(x_7, BVE_buoyancy_source_7[:, 2^6] .* (sqrt(2)*(1 .- x_7.^2).^2), label=L"n=2^7")
+ax.plot(x_8, BVE_buoyancy_source_8[:, 2^7] .* (sqrt(2)*(1 .- x_8.^2).^2), label=L"n=2^8")
+ax.legend()
+savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
+println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
+plt.close()
