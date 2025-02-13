@@ -34,5 +34,5 @@ Activating project at `~/nuPGCM`
 To run the example:
 ```
 cd examples
-julia --project=../run.jl
+julia --project=../ run.jl
 ```
