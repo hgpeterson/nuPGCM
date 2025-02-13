@@ -315,7 +315,8 @@ function quick_invert()
     # buoyancy
     # b = @. 1/(1 + γ*tan(θ)^2)*0.1*exp(-(z + params.H)/0.1)
     # b = @. 0.1*exp(-(z + params.H)/0.1)
-    file = jldopen(@sprintf("../out/data/state2D_diff_column_%.5f.jld2", γ), "r")
+    # file = jldopen(@sprintf("../out/data/state2D_diff_column_%.5f.jld2", γ), "r")
+    file = jldopen(@sprintf("../out/data/state2D_diff_0.005_column_%.5f.jld2", γ), "r")
     b = file["b"]
     close(file)
 
@@ -335,8 +336,10 @@ function quick_invert()
     # println(@sprintf("../out/data/state1D_%.5f.jld2", γ))
     # jldsave(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ); u, v, w, b, params, z)
     # println(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ))
-    jldsave(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ); u, v, w, b, params, z)
-    println(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ))
+    # jldsave(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ); u, v, w, b, params, z)
+    # println(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ))
+    jldsave(@sprintf("../out/data/state1D_diff_0.005_%.5f.jld2", γ); u, v, w, b, params, z)
+    println(@sprintf("../out/data/state1D_diff_0.005_%.5f.jld2", γ))
 
     return u, v, w, b, z
 end
@@ -352,20 +355,21 @@ function main(; T)
     H = 0.75
     f = 1
     nz = 2^8
-    horiz_diff = true
+    # horiz_diff = true
+    horiz_diff = false
     # T = 5e-2*μϱ/ε^2
 
     # start plot
     fig, ax = plot_setup()
 
     # loop over γ
-    # γs = 0:0.1:1
-    γs = [0.25]
-    # colors = pl.cm.viridis(range(0, 1, length=length(γs)))
+    γs = 0:0.1:1
+    # γs = [0.25]
+    colors = pl.cm.viridis(range(0, 1, length=length(γs)))
     t = 0
     for i ∈ eachindex(γs)
         γ = γs[i]
-        # color = colors[i, :]
+        color = colors[i, :]
         label = L"\alpha = "*@sprintf("%.2f", γ)
         println("γ = ", γs[i])
 
@@ -379,17 +383,18 @@ function main(; T)
         save(u, v, w, b, params, t, z; filename=@sprintf("data/1D_%0.2f.jld2", γ))
 
         # plot
-        # plot(u, v, w, b, z; fig, ax, label, color)
+        plot(u, v, w, b, z; fig, ax, label, color)
     end
 
     # finish plot
-    # plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
+    plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
 end
 
 # for T ∈ 1e1:1e1:5e2
 #     main(; T)
 # end
 
-# main(T=3e-3)
+main(T=3e-3)
+# main(T=3e1)
 
-quick_invert()
+# quick_invert()
