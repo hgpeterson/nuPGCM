@@ -11,6 +11,35 @@ using HDF5
 using Printf
 import Base.string
 
+# directory where the output files will be saved
+global out_dir = ""
+
+"""
+    set_out_dir!(dir)
+
+Set the output directory where the results will be saved. The function creates 
+the directory and two subdirectory:
+- `dir`/images for plots, and 
+- `dir`/data for data files.
+"""
+function set_out_dir!(dir)
+    global out_dir = dir
+    @info "Output directory set to '$folder'"
+
+    if !isdir(out_dir)
+        @info "Creating directory '$out_dir'"
+        mkdir(out_dir)
+    end
+    if !isdir("$out_dir/images")
+        @info "Creating subdirectory '$out_dir/images'"
+        mkdir("$out_dir/images")
+    end
+    if !isdir("$out_dir/data")
+        @info "Creating subdirectory '$out_dir/data'"
+        mkdir("$out_dir/data")
+    end
+end
+
 # define CPU and GPU architectures (credit: Oceananigans.jl)
 abstract type AbstractArchitecture end
 
@@ -51,6 +80,8 @@ include("spaces.jl")
 include("matrices.jl")
 
 export 
+out_dir,
+set_out_dir!,
 AbstractArchitecture,
 CPU,
 GPU,
