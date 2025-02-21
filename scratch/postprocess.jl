@@ -1,5 +1,6 @@
 using nuPGCM
-using Gridap, GridapGmsh
+using Gridap
+using GridapGmsh
 using Printf
 using PyPlot
 using JLD2
@@ -8,34 +9,36 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
+include("../plots/derivatives.jl")
+
 # simulation folder
-out_folder = "../sims/sim035"
+set_out_dir!("../sims/sim048")
 
-# # dimensions
-# dim = ThreeD()
+# dimensions
+dim = ThreeD()
 
-# # model
-# hres = 0.01
-# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+# model
+hres = 0.01
+model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
 
-# # FE spaces
-# X, Y, B, D = setup_FESpaces(model)
-# Ux, Uy, Uz, P = unpack_spaces(X)
+# FE spaces
+X, Y, B, D = setup_FESpaces(model)
+Ux, Uy, Uz, P = unpack_spaces(X)
 
-# # triangulation
-# Ω = Triangulation(model)
+# triangulation
+Ω = Triangulation(model)
 
-# # depth
-# H(x) = 1 - x[1]^2 - x[2]^2
-# Hx(x) = -2x[1]
-# Hy(x) = -2x[2]
+# depth
+H(x) = 1 - x[1]^2 - x[2]^2
+Hx(x) = -2x[1]
+Hy(x) = -2x[2]
 
-# # stratification
-# N² = 1
+# stratification
+N² = 1
 
 # # load state file
 # i_save = 3
-# statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+# statefile = @sprintf("%s/data/state%03d.h5", out_dir, i_save)
 # ux, uy, uz, p, b, t = load_state(statefile)
 # ux = FEFunction(Ux, ux)
 # uy = FEFunction(Uy, uy)
@@ -45,9 +48,8 @@ out_folder = "../sims/sim035"
 
 ################################################################################
 
-function save_gridded_data(out_folder, i_save; n=2^6)
+function save_gridded_data(statefile; n=2^6, outfile="gridded.jld2")
     # load state file
-    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
     ux, uy, uz, p, b, t = load_state(statefile)
     ux = FEFunction(Ux, ux)
     uy = FEFunction(Uy, uy)
@@ -56,6 +58,10 @@ function save_gridded_data(out_folder, i_save; n=2^6)
     b  = FEFunction(B, b)
 
     # cartesian grid
+    if mod(n, 2) == 0 
+        @warn "n must be odd, incrementing to $n + 1"
+        n += 1
+    end
     x = range(-1, 1, length=n)
     y = range(-1, 1, length=n)
     z = range(-1, 0, length=n)
@@ -68,13 +74,12 @@ function save_gridded_data(out_folder, i_save; n=2^6)
     @time "evaluate b" b = reshape(nan_eval(b,  points), n, n, n)
 
     # save data
-    jldsave(@sprintf("%s/data/gridded_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, z, u, v, w, b, t)
-    println(@sprintf("%s/data/gridded_n%04d_i%03d.jld2", out_folder, n, i_save))
+    jldsave(outfile; x, y, z, u, v, w, b, t)
+    @info "Data saved to '$outfile'"
 end
 
-function save_gridded_sigma_data(out_folder, i_save; n=2^6)
+function save_gridded_sigma_data(statefile; n=2^6, outfile="gridded_sigma.jld2")
     # load state file
-    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
     ux, uy, uz, p, b, t = load_state(statefile)
     ux = FEFunction(Ux, ux)
     uy = FEFunction(Uy, uy)
@@ -86,6 +91,10 @@ function save_gridded_sigma_data(out_folder, i_save; n=2^6)
     H(x) = 1 - x[1]^2 - x[2]^2
 
     # horizontal grid
+    if mod(n, 2) == 0 
+        @warn "n must be odd, incrementing to $n + 1"
+        n += 1
+    end
     x = range(-1, 1, length=n)
     y = range(-1, 1, length=n)
     H = [H([x[i], y[j]]) for i ∈ 1:n, j ∈ 1:n]
@@ -97,15 +106,14 @@ function save_gridded_sigma_data(out_folder, i_save; n=2^6)
     points = [Point(x[i], y[j], σ[k]*H[i, j]) for i ∈ 1:n, j ∈ 1:n, k ∈ 1:n][:]
 
     # evaluate fields
-    # @time "evaluate u" u = reshape(nan_eval(ux, points), n, n, n)
-    # @time "evaluate v" v = reshape(nan_eval(uy, points), n, n, n)
-    # @time "evaluate w" w = reshape(nan_eval(uz, points), n, n, n)
+    @time "evaluate u" u = reshape(nan_eval(ux, points), n, n, n)
+    @time "evaluate v" v = reshape(nan_eval(uy, points), n, n, n)
+    @time "evaluate w" w = reshape(nan_eval(uz, points), n, n, n)
     @time "evaluate b" b = reshape(nan_eval(b,  points), n, n, n)
 
     # save data
-    # jldsave(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, σ, u, v, w, b, H, t)
-    jldsave(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save); x, y, σ, b, H, t)
-    println(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save))
+    jldsave(outfile; x, y, σ, u, v, w, b, H, t)
+    @info "Data saved to '$outfile'"
 end
 
 # for contour lines
@@ -114,7 +122,7 @@ get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, 
 function plot_animation()
     # for i_save ∈ 1:50
     for i_save ∈ [10]
-        statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+        statefile = @sprintf("%s/data/state%03d.h5", out_dir, i_save)
         ux, uy, uz, p, b, t = load_state(statefile)
         ux = FEFunction(Ux, ux)
         uy = FEFunction(Uy, uy)
@@ -126,7 +134,7 @@ end
 
 function extract_profile_data(x, y; i_save=0)
     # load state file
-    statefile = @sprintf("%s/data/state%03d.h5", out_folder, i_save)
+    statefile = @sprintf("%s/data/state%03d.h5", out_dir, i_save)
     ux, uy, uz, p, b, t = load_state(statefile)
     ux = FEFunction(Ux, ux)
     uy = FEFunction(Uy, uy)
@@ -163,8 +171,8 @@ function extract_profile_data(x, y; i_save=0)
     bz_mask = (isnan.(bzs) .== 0)
 
     # save data
-    jldsave(@sprintf("%s/data/profiles%03d.jld2", out_folder, i_save); x, y, z, t, uxs, uys, uzs, ps, bs, bzs, ux_mask, uy_mask, uz_mask, p_mask, bz_mask)
-    println(@sprintf("%s/data/profiles%03d.jld2", out_folder, i_save))
+    jldsave(@sprintf("%s/data/profiles%03d.jld2", out_dir, i_save); x, y, z, t, uxs, uys, uzs, ps, bs, bzs, ux_mask, uy_mask, uz_mask, p_mask, bz_mask)
+    println(@sprintf("%s/data/profiles%03d.jld2", out_dir, i_save))
 end
 
 function plot_profiles(datafiles; labels=nothing, fname="profiles.png")
@@ -320,9 +328,9 @@ end
 
 function save_plot(fname_base; i=0)
     if i == 0
-        fname = @sprintf("%s/images/%s.png", out_folder, fname_base)
+        fname = @sprintf("%s/images/%s.png", out_dir, fname_base)
     else
-        fname = @sprintf("%s/images/%s%03d.png", out_folder, fname_base, i)
+        fname = @sprintf("%s/images/%s%03d.png", out_dir, fname_base, i)
     end
     savefig(fname)
     println(fname)
@@ -394,9 +402,9 @@ function compute_JEBAR(x, y, γ)
     return [(Hx([x[i], y[j]])*γy[i, j] - Hy([x[i], y[j]])*γx[i, j])/H([x[i], y[j]])^2 for i ∈ 1:nx, j ∈ 1:ny]
 end
 
-function profile_comparison(out_folders, labels, i_save)
+function profile_comparison(out_dirs, labels, i_save)
     # plot name
-    fname = @sprintf("%s/profiles%03d.png", out_folder, i_save)
+    fname = @sprintf("%s/profiles%03d.png", out_dir, i_save)
 
     # setup points
     x = 0.5
@@ -425,9 +433,9 @@ function profile_comparison(out_folders, labels, i_save)
         a.axvline(0, color="k", linewidth=0.5, linestyle="-")
     end
     ax[3].set_xlim(0, 1.1)
-    for i ∈ eachindex(out_folders)
-        out_folder = out_folders[i]
-        statefile = @sprintf("../sims/%s/data/state%03d.h5", out_folder, i_save)
+    for i ∈ eachindex(out_dirs)
+        out_dir = out_dirs[i]
+        statefile = @sprintf("../sims/%s/data/state%03d.h5", out_dir, i_save)
         ux, uy, uz, p, b, t = load_state(statefile)
         ux = FEFunction(Ux, ux)
         uy = FEFunction(Uy, uy)
@@ -517,12 +525,12 @@ function profile_2D_vs_3D(fname2D)
     ax[4].plot(bz2D, z, "k--", lw=0.5)
     ax[1].legend()
     ax[1].set_title(latexstring(@sprintf("x = %1.1f, \\quad y = %1.1f, \\quad t = %s", x, y, sci_notation(t))))
-    savefig("$out_folder/images/profiles2Dvs3D.png")
-    println("$out_folder/images/profiles2Dvs3D.png")
+    savefig("$out_dir/images/profiles2Dvs3D.png")
+    println("$out_dir/images/profiles2Dvs3D.png")
     plt.close()
 end
 
-function momentum_and_buoyancy_balance(out_folder, i_save)
+function momentum_and_buoyancy_balance(out_dir, i_save)
     # parameters
     ε² = 1e-4
     f₀ = 1
@@ -540,7 +548,7 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
     points = [Point(x, y, zᵢ) for zᵢ ∈ z]
 
     # load state file
-    statefile = @sprintf("../sims/%s/data/state%03d.h5", out_folder, i_save)
+    statefile = @sprintf("../sims/%s/data/state%03d.h5", out_dir, i_save)
     u, v, w, p, b, t = load_state(statefile)
 
     # define functions
@@ -648,54 +656,11 @@ function momentum_and_buoyancy_balance(out_folder, i_save)
     plt.close()
 end
 
-# save_gridded_data("../sims/sim035", 3)
-# save_gridded_data("../sims/sim036", 3)
-# save_gridded_data("../sims/sim037", 3)
-save_gridded_sigma_data("../sims/sim035", 3; n=2^8)
-# save_gridded_sigma_data("../sims/sim036", 3)
-# save_gridded_sigma_data("../sims/sim037", 3)
-
-# for i_save ∈ 0:50
-#     extract_profile_data(0.5, 0.0; i_save)
-# end
-# plot_profiles(["../sims/sim044/data/profiles010.jld2", 
-#                "../sims/sim044/data/profiles020.jld2",
-#                "../sims/sim044/data/profiles030.jld2",
-#                "../sims/sim044/data/profiles040.jld2",
-#                "../sims/sim035/data/profiles050.jld2"]; 
-#                labels = ["010", "020", "030", "040", "050"],
-#                fname="images/profiles_sim044.png")
-# for i_save ∈ 0:50
-# for i_save ∈ [3]
-#     plot_profiles([@sprintf("../sims/sim044/data/profiles%03d.jld2", i_save), 
-#                    @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
-#                 labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
-# end
-# x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
-# Psi = compute_barotropic_streamfunction(U, y)
-# jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
-# plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
-
-# x, y, γ = compute_γ(b)
-# fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
-# add_title(ax, t)
-# save_plot("gamma"; i=i_save)
-
-# JEBAR = compute_JEBAR(x, y, γ)
-# fig, ax = plot_barotropic(x, y, JEBAR; label=L"-J(1/H, \gamma)")
-# add_title(ax, t)
-# save_plot("JEBAR"; i=i_save)
-
-# plot_animation()
-# profile_comparison(["sim038", "sim033", "sim030"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
-# profile_comparison(["sim035", "sim036", "sim037"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
-# profile_2D_vs_3D("../../PGModels1Dand2D/output/profilesPB1e-4.jld2")
-# momentum_and_buoyancy_balance("sim033", 4)
 
 function compute_BVE_buoyancy_source(n)
     # load data
     i_save = 3
-    file = jldopen(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_folder, n, i_save))
+    file = jldopen(@sprintf("%s/data/gridded_sigma_n%04d_i%03d.jld2", out_dir, n, i_save))
     x = file["x"]
     y = file["y"]
     σ = file["σ"]
@@ -775,27 +740,77 @@ function compute_BVE_buoyancy_source(n)
     # ax.plot(x, BVE_buoyancy_source[:, n÷2])
     ax.plot(x, BVE_buoyancy_source[:, n÷2] .* (sqrt(2)*(1 .- x.^2).^2))
     println(y[n÷2])
-    savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
-    println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
+    savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_dir, i_save))
+    println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_dir, i_save))
     plt.close()
 
     return x, BVE_buoyancy_source
 end
 
-x_4, BVE_buoyancy_source_4 = compute_BVE_buoyancy_source(2^4)
-x_5, BVE_buoyancy_source_5 = compute_BVE_buoyancy_source(2^5)
-x_6, BVE_buoyancy_source_6 = compute_BVE_buoyancy_source(2^6)
-x_7, BVE_buoyancy_source_7 = compute_BVE_buoyancy_source(2^7)
-x_8, BVE_buoyancy_source_8 = compute_BVE_buoyancy_source(2^8)
-fig, ax = plt.subplots(1)
-ax.set_xlabel(L"x")
-ax.set_ylabel(L"\mathcal{B}")
-ax.plot(x_4, BVE_buoyancy_source_4[:, 2^3] .* (sqrt(2)*(1 .- x_4.^2).^2), label=L"n=2^4")
-ax.plot(x_5, BVE_buoyancy_source_5[:, 2^4] .* (sqrt(2)*(1 .- x_5.^2).^2), label=L"n=2^5")
-ax.plot(x_6, BVE_buoyancy_source_6[:, 2^5] .* (sqrt(2)*(1 .- x_6.^2).^2), label=L"n=2^6")
-ax.plot(x_7, BVE_buoyancy_source_7[:, 2^6] .* (sqrt(2)*(1 .- x_7.^2).^2), label=L"n=2^7")
-ax.plot(x_8, BVE_buoyancy_source_8[:, 2^7] .* (sqrt(2)*(1 .- x_8.^2).^2), label=L"n=2^8")
-ax.legend()
-savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
-println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_folder, i_save))
-plt.close()
+sim_dir = "../sims/sim048"
+i_save = 3
+n = 2^8 + 1
+save_gridded_sigma_data(@sprintf("%s/data/state_beta0.0_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta0.0_n%04d_i%03d.jld2", sim_dir, n, i_save))
+# save_gridded_sigma_data(@sprintf("%s/data/state_beta0.5_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta0.5_n%04d_i%03d.jld2", sim_dir, n, i_save))
+# save_gridded_sigma_data(@sprintf("%s/data/state_beta1.0_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta1.0_n%04d_i%03d.jld2", sim_dir, n, i_save))
+
+# for i_save ∈ 0:50
+#     extract_profile_data(0.5, 0.0; i_save)
+# end
+# plot_profiles(["../sims/sim044/data/profiles010.jld2", 
+#                "../sims/sim044/data/profiles020.jld2",
+#                "../sims/sim044/data/profiles030.jld2",
+#                "../sims/sim044/data/profiles040.jld2",
+#                "../sims/sim035/data/profiles050.jld2"]; 
+#                labels = ["010", "020", "030", "040", "050"],
+#                fname="images/profiles_sim044.png")
+# for i_save ∈ 0:50
+# for i_save ∈ [3]
+#     plot_profiles([@sprintf("../sims/sim044/data/profiles%03d.jld2", i_save), 
+#                    @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
+#                 labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
+# end
+# x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
+# Psi = compute_barotropic_streamfunction(U, y)
+# jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
+# plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
+
+# x, y, γ = compute_γ(b)
+# fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
+# add_title(ax, t)
+# save_plot("gamma"; i=i_save)
+
+# JEBAR = compute_JEBAR(x, y, γ)
+# fig, ax = plot_barotropic(x, y, JEBAR; label=L"-J(1/H, \gamma)")
+# add_title(ax, t)
+# save_plot("JEBAR"; i=i_save)
+
+# plot_animation()
+# profile_comparison(["sim038", "sim033", "sim030"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
+# profile_comparison(["sim035", "sim036", "sim037"], [L"\beta = 0.0", L"\beta = 0.5", L"\beta = 1.0"], 3)
+# profile_2D_vs_3D("../../PGModels1Dand2D/output/profilesPB1e-4.jld2")
+# momentum_and_buoyancy_balance("sim033", 4)
+
+# x_4, BVE_buoyancy_source_4 = compute_BVE_buoyancy_source(2^4)
+# x_5, BVE_buoyancy_source_5 = compute_BVE_buoyancy_source(2^5)
+# x_6, BVE_buoyancy_source_6 = compute_BVE_buoyancy_source(2^6)
+# x_7, BVE_buoyancy_source_7 = compute_BVE_buoyancy_source(2^7)
+# x_8, BVE_buoyancy_source_8 = compute_BVE_buoyancy_source(2^8)
+
+# fig, ax = plt.subplots(1)
+# ax.set_xlabel(L"x")
+# ax.set_title(L"\mathcal{B}(x, 0) \sqrt{2} (1 - x^2)^2")
+# # ax.set_xlim(0, 1)
+# ax.set_ylim(-1, 1)
+# ax.spines["bottom"].set_visible(false)
+# ax.axhline(0, color="k", linewidth=0.5, linestyle="-")
+# ax.plot(x_4, BVE_buoyancy_source_4[:, 2^3] .* (sqrt(2)*(1 .- x_4.^2).^2), label=L"n=2^4")
+# ax.plot(x_5, BVE_buoyancy_source_5[:, 2^4] .* (sqrt(2)*(1 .- x_5.^2).^2), label=L"n=2^5")
+# ax.plot(x_6, BVE_buoyancy_source_6[:, 2^5] .* (sqrt(2)*(1 .- x_6.^2).^2), label=L"n=2^6")
+# ax.plot(x_7, BVE_buoyancy_source_7[:, 2^6] .* (sqrt(2)*(1 .- x_7.^2).^2), label=L"n=2^7")
+# ax.plot(x_8, BVE_buoyancy_source_8[:, 2^7] .* (sqrt(2)*(1 .- x_8.^2).^2), label=L"n=2^8")
+# ax.legend(ncol=2)
+# i_save = 3
+# savefig(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_dir, i_save))
+# println(@sprintf("%s/images/BVE_buoyancy_source_y0_%03d.png", out_dir, i_save))
+# plt.close()
