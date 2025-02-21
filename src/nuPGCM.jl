@@ -24,7 +24,7 @@ the directory and two subdirectory:
 """
 function set_out_dir!(dir)
     global out_dir = dir
-    @info "Output directory set to '$folder'"
+    @info "Output directory set to '$dir'"
 
     if !isdir(out_dir)
         @info "Creating directory '$out_dir'"
