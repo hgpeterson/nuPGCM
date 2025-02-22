@@ -89,29 +89,31 @@ function build_b(z, κ, params)
 end
 
 """
-Build matrix representations of
-    ε⁴*β²*dzz(nu*dzz(χ)) + f²*χ/(nu*β) = -ε²*dz(b)*tan(θ) + f²*U/(nu*β)
-so that LHS*χ = RHS*b.
+Build matrix representation of
+   ε²Γ²*dzz(ν*τˣ) + f*τʸ = F
+   ε²Γ *dzz(ν*τʸ) - f*τˣ = G
+where τˣ = dz(u) and τʸ = dz(v) and Γ = 1 + γ*tan(θ)^2.
+Boundary conditions:
+    τˣ = τʸ = 0 at z = 0
+    -∫ z τˣ dz = U
+    -∫ z τʸ dz = V or τʸ(-H) = 0 depending on params.set_V
 """
-function build_χ(z, ν, params)
+function build_LHS_τ(z, ν, params)
     # unpack
     ε = params.ε
     θ = params.θ
     γ = params.γ
     f = params.f
-    U = params.U
 
     # setup
-    N = length(z)
-    β = 1 + γ*tan(θ)^2
+    nz = length(z)
+    umap = 1:nz
+    vmap = nz+1:2nz
+    Γ = 1 + γ*tan(θ)^2
     LHS = Tuple{Int64,Int64,Float64}[]  
-    RHS = Tuple{Int64,Int64,Float64}[]  
-    rhs = zeros(N)
 
     # interior nodes
-    for j ∈ 3:N-2
-        row = j 
-
+    for j ∈ 2:nz-1
         # dz stencil
         fd_z = mkfdstencil(z[j-1:j+1], z[j], 1)
         ν_z = sum(fd_z.*ν[j-1:j+1])
@@ -119,94 +121,86 @@ function build_χ(z, ν, params)
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
         ν_zz = sum(fd_zz.*ν[j-1:j+1])
-
-        # dzzz stencil
-        fd_zzz = mkfdstencil(z[j-2:j+2], z[j], 3)
-
-        # dzzzz stencil
-        fd_zzzz = mkfdstencil(z[j-2:j+2], z[j], 4)
         
-        # eqtn: ε⁴*β²*dzz(nu*dzz(χ)) + f²*χ/(nu*β) = -ε²*dz(b)*tan(θ) + f²*U/(nu*β)
-        # term 1 (product rule)
-        push!(LHS, (row, j-1, ε^4*β^2*ν_zz*fd_zz[1]))
-        push!(LHS, (row, j,   ε^4*β^2*ν_zz*fd_zz[2]))
-        push!(LHS, (row, j+1, ε^4*β^2*ν_zz*fd_zz[3]))
+        # eq 1: ε²Γ²*dzz(ν*τˣ) + f*τʸ = F 
+        # term 1 = ε²Γ²*[dzz(ν)*τˣ + 2*dz(ν)*dz(τˣ) + ν*dzz(τˣ)] 
+        c = ε^2*Γ^2
+        push!(LHS, (umap[j], umap[j],     c*ν_zz))
+        push!(LHS, (umap[j], umap[j-1], 2*c*ν_z*fd_z[1]))
+        push!(LHS, (umap[j], umap[j],   2*c*ν_z*fd_z[2]))
+        push!(LHS, (umap[j], umap[j+1], 2*c*ν_z*fd_z[3]))
+        push!(LHS, (umap[j], umap[j-1],   c*ν[j]*fd_zz[1]))
+        push!(LHS, (umap[j], umap[j],     c*ν[j]*fd_zz[2]))
+        push!(LHS, (umap[j], umap[j+1],   c*ν[j]*fd_zz[3]))
+        # term 2 = f*τʸ
+        push!(LHS, (umap[j], vmap[j], f))
 
-        push!(LHS, (row, j-2, 2*ε^4*β^2*ν_z*fd_zzz[1]))
-        push!(LHS, (row, j-1, 2*ε^4*β^2*ν_z*fd_zzz[2]))
-        push!(LHS, (row, j,   2*ε^4*β^2*ν_z*fd_zzz[3]))
-        push!(LHS, (row, j+1, 2*ε^4*β^2*ν_z*fd_zzz[4]))
-        push!(LHS, (row, j+2, 2*ε^4*β^2*ν_z*fd_zzz[5]))
-
-        push!(LHS, (row, j-2, ε^4*β^2*ν[j]*fd_zzzz[1]))
-        push!(LHS, (row, j-1, ε^4*β^2*ν[j]*fd_zzzz[2]))
-        push!(LHS, (row, j,   ε^4*β^2*ν[j]*fd_zzzz[3]))
-        push!(LHS, (row, j+1, ε^4*β^2*ν[j]*fd_zzzz[4]))
-        push!(LHS, (row, j+2, ε^4*β^2*ν[j]*fd_zzzz[5]))
-        # term 2
-        push!(LHS, (row, j, f^2/(ν[j]*β)))
-        # term 3
-        push!(RHS, (row, j-1, -ε^2*fd_z[1]*tan(θ)))
-        push!(RHS, (row, j,   -ε^2*fd_z[2]*tan(θ)))
-        push!(RHS, (row, j+1, -ε^2*fd_z[3]*tan(θ)))
-        # term 4
-        rhs[row] = f^2*U/(ν[j]*β)
+        # eq 2: ε²Γ *dzz(ν*τʸ) - f*τˣ = G
+        # term 1 = ε²Γ*[dzz(ν)*τʸ + 2*dz(ν)*dz(τʸ) + ν*dzz(τʸ)]
+        c = ε^2*Γ
+        push!(LHS, (vmap[j], vmap[j],     c*ν_zz))
+        push!(LHS, (vmap[j], vmap[j-1], 2*c*ν_z*fd_z[1]))
+        push!(LHS, (vmap[j], vmap[j],   2*c*ν_z*fd_z[2]))
+        push!(LHS, (vmap[j], vmap[j+1], 2*c*ν_z*fd_z[3]))
+        push!(LHS, (vmap[j], vmap[j-1],   c*ν[j]*fd_zz[1]))
+        push!(LHS, (vmap[j], vmap[j],     c*ν[j]*fd_zz[2]))
+        push!(LHS, (vmap[j], vmap[j+1],   c*ν[j]*fd_zz[3]))
+        # term 2 = -f*τˣ
+        push!(LHS, (vmap[j], umap[j], -f))
     end
 
-    # for finite difference on the top and bottom boundary
-    fd_bot_z =  mkfdstencil(z[1:3], z[1],  1)
-    fd_top_zz = mkfdstencil(z[N-3:N], z[N], 2)
+    # surface boundary conditions: τˣ = τʸ = 0
+    push!(LHS, (umap[nz], umap[nz], 1))
+    push!(LHS, (vmap[nz], vmap[nz], 1))
 
-    # Lower boundary conditions 
-    # b.c. 1: dz(χ) = 0
-    push!(LHS, (1, 1, fd_bot_z[1]))
-    push!(LHS, (1, 2, fd_bot_z[2]))
-    push!(LHS, (1, 3, fd_bot_z[3]))
+    # integral boundary conditions: -∫ z τˣ dz = U, -∫ z τʸ dz = V
+    for j in 1:nz-1
+        # trapezoidal rule
+        dz = z[j+1] - z[j]
+        push!(LHS, (umap[1], umap[j],   -z[j]*dz/2))
+        push!(LHS, (umap[1], umap[j+1], -z[j]*dz/2))
+        if params.set_V
+            push!(LHS, (vmap[1], vmap[j],   -z[j]*dz/2))
+            push!(LHS, (vmap[1], vmap[j+1], -z[j]*dz/2))
+        end
+    end
 
-    # b.c. 2: χ = 0 
-    push!(LHS, (2, 1, 1.0))
-
-    # Upper boundary conditions
-    # b.c. 1: dzz(χ) = 0 
-    push!(LHS, (N, N-3, fd_top_zz[1]))
-    push!(LHS, (N, N-2, fd_top_zz[2]))
-    push!(LHS, (N, N-1, fd_top_zz[3]))
-    push!(LHS, (N, N,   fd_top_zz[4]))
-    # b.c. 2: χ = U
-    push!(LHS, (N-1, N,  1.0))
-    rhs[N-1] = U
+    # if V is not set, set τʸ = 0 at the bottom
+    if !params.set_V
+        push!(LHS, (vmap[1], vmap[1], 1))
+    end
 
     # Create CSC sparse matrix from matrix elements
-    LHS = sparse((x->x[1]).(LHS), (x->x[2]).(LHS), (x->x[3]).(LHS), N, N)
-    RHS = sparse((x->x[1]).(RHS), (x->x[2]).(RHS), (x->x[3]).(RHS), N, N)
+    LHS = sparse((x->x[1]).(LHS), (x->x[2]).(LHS), (x->x[3]).(LHS), 2nz, 2nz)
 
-    return LHS, RHS, rhs
+    return LHS
 end
 
-function step!(b, LHS, rhs)
-    ldiv!(b, LHS, rhs)
-    return b
+"""
+Update vector for RHS of baroclinic inversion 
+   ε²Γ²*dzz(ν*τˣ) + f*τʸ = -dz(b)*tan(θ)
+   ε²Γ *dzz(ν*τʸ) - f*τˣ = 0
+with integral constraints conditions
+    -∫ z τˣ dz = 0
+    -∫ z τʸ dz = 0
+"""
+function update_rhs_τ!(rhs_τ, z, b, params)
+    bz = differentiate(b, z)
+    rhs_τ[2:params.nz] = -bz[2:params.nz]*tan(params.θ)
+    rhs_τ[1] = 0
+    rhs_τ[params.nz+1] = 0
+    return rhs_τ
 end
 
-function invert!(χ, LHS, rhs)
-    ldiv!(χ, LHS, rhs)
-    return χ
-end
+function uvw(τ, z, params)
+    nz = params.nz
 
-function uvw(χ, z, ν, params)
-    # unpack
-    f = params.f
-    β = 1 + params.γ*tan(params.θ)^2
-    U = params.U
-    ε = params.ε
-    θ = params.θ
-
-    # compute u and v from χ
-    u = differentiate(χ, z)
-    v = cumtrapz((@. f*(χ - U)/ν/β/ε^2), z)
+    # compute u and v from τ
+    u = cumtrapz(τ[1:nz], z)
+    v = cumtrapz(τ[nz+1:end], z)
 
     # transform
-    w = u*tan(θ)
+    w = u*tan(params.θ)
     return u, v, w
 end
 
@@ -242,13 +236,28 @@ function plot_finish(; fig, ax, t=nothing, filename="images/1D.png")
         ax[1].set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(t))))
     end
     savefig(filename)
-    println(filename)
+    @info "Saved '$filename'"
+    plt.close()
+end
+
+function plot_bz(b, z; t=nothing, filename="images/1D.png")
+    fig, ax = plt.subplots(1, figsize=(2, 3.2))
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_xlabel(L"Stratification $\partial_z b$")
+    ax.set_xlim(0, 1.5)
+    bz = differentiate(b, z)
+    ax.plot(1 .+ bz, z)
+    if t !== nothing
+        ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(t))))
+    end
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 end
 
 function save(u, v, w, b, params, t, z; filename="data/1D.jld2")
     jldsave(filename; u, v, w, b, params, t, z) 
-    println(filename)
+    @info "Saved '$filename'"
 end
 
 function sim_setup(params)
@@ -257,144 +266,71 @@ function sim_setup(params)
 
     # forcing
     ν = ones(params.nz)
-    # ν = @. 1e-2 + exp(-(z + params.H)/0.1)
     κ = @. 1e-2 + exp(-(z + params.H)/0.1)
 
     # build matrices
     LHS_b, RHS_b, rhs_b = build_b(z, κ, params)
     LHS_b = lu(LHS_b)
-    LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
-    LHS_χ = lu(LHS_χ)
+    LHS_τ = build_LHS_τ(z, ν, params)
+    LHS_τ = lu(LHS_τ)
 
     # initial condition
     b = zeros(params.nz)
-    χ = zeros(params.nz)
+    rhs_τ = zeros(2*params.nz)
+    τ = zeros(2*params.nz)
     t = 0
 
-    return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t
+    return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_τ, rhs_τ, b, τ, t
 end
 
 function solve(params)
     # setup 
-    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_χ, RHS_χ, rhs_χ, b, χ, t = sim_setup(params)
+    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_τ, rhs_τ, b, τ, t = sim_setup(params)
+
+    # compute u, v, w
+    u, v, w = uvw(τ, z, params)
 
     # run
     n_steps = Int(round(params.T/params.Δt))
     for i ∈ 1:n_steps
         # timestep
-        step!(b, LHS_b, RHS_b*b + rhs_b - params.Δt*differentiate(χ, z)*tan(params.θ))
+        ldiv!(b, LHS_b, RHS_b*b + rhs_b - params.Δt*u*tan(params.θ))
         t += params.Δt
 
         # inversion
-        invert!(χ, LHS_χ, RHS_χ*b + rhs_χ)
+        update_rhs_τ!(rhs_τ, z, b, params)
+        ldiv!(τ, LHS_τ, rhs_τ)
+        u, v, w = uvw(τ, z, params)
     end
-
-    # compute u, v, w
-    u, v, w = uvw(χ, z, ν, params)
 
     return u, v, w, b, t, z
 end
 
-function quick_invert()
+function main()
     # parameters
+    μϱ = 1e-4
     γ = 1/4
     θ = π/4
     ε = 1e-2
-    U = 0
+    Δt = 1e-4*μϱ/ε^2
+    set_V = true
     H = 0.75
     f = 1
     nz = 2^8
-    params = (γ=γ, θ=θ, ε=ε, U=U, H=H, f=f, nz=nz)
+    horiz_diff = false
+    T = 3e-3*μϱ/ε^2
+    params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
 
-    # grid
-    z = params.H*chebyshev_nodes(params.nz)
-
-    # forcing
-    ν = ones(params.nz)
-
-    # buoyancy
-    # b = @. 1/(1 + γ*tan(θ)^2)*0.1*exp(-(z + params.H)/0.1)
-    # b = @. 0.1*exp(-(z + params.H)/0.1)
-    # file = jldopen(@sprintf("../out/data/state2D_diff_column_%.5f.jld2", γ), "r")
-    file = jldopen(@sprintf("../out/data/state2D_diff_0.005_column_%.5f.jld2", γ), "r")
-    b = file["b"]
-    close(file)
-
-    # build matrices
-    LHS_χ, RHS_χ, rhs_χ = build_χ(z, ν, params)
-    LHS_χ = lu(LHS_χ)
-
-    # inversion
-    χ = zeros(params.nz)
-    invert!(χ, LHS_χ, RHS_χ*b + rhs_χ)
-
-    # compute u, v, w
-    u, v, w = uvw(χ, z, ν, params)
+    # solve
+    u, v, w, b, t, z = solve(params)
 
     # save
-    # jldsave(@sprintf("../out/data/state1D_%.5f.jld2", γ); u, v, w, b, params, z)
-    # println(@sprintf("../out/data/state1D_%.5f.jld2", γ))
-    # jldsave(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ); u, v, w, b, params, z)
-    # println(@sprintf("../out/data/state1D_old_b_%.5f.jld2", γ))
-    # jldsave(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ); u, v, w, b, params, z)
-    # println(@sprintf("../out/data/state1D_diff_%.5f.jld2", γ))
-    jldsave(@sprintf("../out/data/state1D_diff_0.005_%.5f.jld2", γ); u, v, w, b, params, z)
-    println(@sprintf("../out/data/state1D_diff_0.005_%.5f.jld2", γ))
+    save(u, v, w, b, params, t, z; filename="../sims/sim048/data/1D_beta1.0.jld2")
 
-    return u, v, w, b, z
-end
-
-function main(; T)
-    # parameters
-    μϱ = 1e-4
-    # γ = 1/4
-    θ = π/4
-    ε = 1e-2
-    Δt = 1e-4*μϱ/ε^2
-    U = 0
-    H = 0.75
-    f = 1
-    nz = 2^8
-    # horiz_diff = true
-    horiz_diff = false
-    # T = 5e-2*μϱ/ε^2
-
-    # start plot
+    # plot
     fig, ax = plot_setup()
-
-    # loop over γ
-    γs = 0:0.1:1
-    # γs = [0.25]
-    colors = pl.cm.viridis(range(0, 1, length=length(γs)))
-    t = 0
-    for i ∈ eachindex(γs)
-        γ = γs[i]
-        color = colors[i, :]
-        label = L"\alpha = "*@sprintf("%.2f", γ)
-        println("γ = ", γs[i])
-
-        # parameters
-        params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, U=U, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
-
-        # solve
-        u, v, w, b, t, z = solve(params)
-
-        # save
-        save(u, v, w, b, params, t, z; filename=@sprintf("data/1D_%0.2f.jld2", γ))
-
-        # plot
-        plot(u, v, w, b, z; fig, ax, label, color)
-    end
-
-    # finish plot
-    plot_finish(; fig, ax, t, filename=@sprintf("images/1D_gamma_t%0.03f.png", t))
+    plot(u, v, w, b, z; fig, ax)
+    plot_finish(; fig, ax, t, filename="images/1D.png")
 end
 
-# for T ∈ 1e1:1e1:5e2
-#     main(; T)
-# end
-
-main(T=3e-3)
-# main(T=3e1)
-
-# quick_invert()
+main()
