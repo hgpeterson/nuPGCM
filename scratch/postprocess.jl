@@ -11,30 +11,30 @@ plt.close("all")
 
 include("../plots/derivatives.jl")
 
-# simulation folder
-set_out_dir!("../sims/sim048")
+# # simulation folder
+# set_out_dir!("../sims/sim048")
 
-# dimensions
-dim = ThreeD()
+# # dimensions
+# dim = ThreeD()
 
-# model
-hres = 0.01
-model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
+# # model
+# hres = 0.01
+# model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
 
-# FE spaces
-X, Y, B, D = setup_FESpaces(model)
-Ux, Uy, Uz, P = unpack_spaces(X)
+# # FE spaces
+# X, Y, B, D = setup_FESpaces(model)
+# Ux, Uy, Uz, P = unpack_spaces(X)
 
-# triangulation
-Ω = Triangulation(model)
+# # triangulation
+# Ω = Triangulation(model)
 
-# depth
-H(x) = 1 - x[1]^2 - x[2]^2
-Hx(x) = -2x[1]
-Hy(x) = -2x[2]
+# # depth
+# H(x) = 1 - x[1]^2 - x[2]^2
+# Hx(x) = -2x[1]
+# Hy(x) = -2x[2]
 
-# stratification
-N² = 1
+# # stratification
+# N² = 1
 
 # # load state file
 # i_save = 3
@@ -78,6 +78,20 @@ function save_gridded_data(statefile; n=2^6, outfile="gridded.jld2")
     @info "Data saved to '$outfile'"
 end
 
+function load_gridded_data(file)
+    jldopen(file) do file
+        x = file["x"]
+        y = file["y"]
+        z = file["z"]
+        u = file["u"]
+        v = file["v"]
+        w = file["w"]
+        b = file["b"]
+        t = file["t"]
+        return x, y, z, u, v, w, b, t
+    end
+end
+
 function save_gridded_sigma_data(statefile; n=2^6, outfile="gridded_sigma.jld2")
     # load state file
     ux, uy, uz, p, b, t = load_state(statefile)
@@ -116,21 +130,23 @@ function save_gridded_sigma_data(statefile; n=2^6, outfile="gridded_sigma.jld2")
     @info "Data saved to '$outfile'"
 end
 
-# for contour lines
-get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
-
-function plot_animation()
-    # for i_save ∈ 1:50
-    for i_save ∈ [10]
-        statefile = @sprintf("%s/data/state%03d.h5", out_dir, i_save)
-        ux, uy, uz, p, b, t = load_state(statefile)
-        ux = FEFunction(Ux, ux)
-        uy = FEFunction(Uy, uy)
-        x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
-        Psi = compute_barotropic_streamfunction(U, y)
-        plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
+function load_gridded_sigma_data(file)
+    jldopen(file) do file
+        x = file["x"]
+        y = file["y"]
+        σ = file["σ"]
+        u = file["u"]
+        v = file["v"]
+        w = file["w"]
+        b = file["b"]
+        H = file["H"]
+        t = file["t"]
+        return x, y, σ, u, v, w, b, H, t
     end
 end
+
+# for contour lines
+get_levels(vmax) = [-vmax, -3vmax/4, -vmax/2, -vmax/4, vmax/4, vmax/2, 3vmax/4, vmax]
 
 function extract_profile_data(x, y; i_save=0)
     # load state file
@@ -244,63 +260,45 @@ function plot_profiles(datafiles; labels=nothing, fname="profiles.png")
     plt.close()
 end
 
-function compute_barotropic_velocities(ux, uy)
-    # resolution
-    nx = 2^7
-    ny = nx
-    nz = 2^5
-
-    # 3D grid
-    x = range(-1, 1, length=nx)
-    y = range(-1, 1, length=ny)
-    # z = range(-1, 0, length=nz)
-    σ = chebyshev_nodes(nz)
-
-    # # horizontal grid
-    # p, t = get_p_t("../meshes/circle.msh")
-    # x = p[:, 1]
-    # y = p[:, 2]
-    # nx = ny = size(x, 1)
-    # println("nx = ny = ", nx)
-    # t = t .- 1
-
-    # points 
-    # points = [Point(x[i], y[j], z[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
-    points = [Point(x[i], y[j], H([x[i], y[j]])*σ[k]) for i ∈ 1:nx, j ∈ 1:ny, k ∈ 1:nz][:]
-
-    # evaluation caches
-    cache_ux = Gridap.CellData.return_cache(ux, points)
-    cache_uy = Gridap.CellData.return_cache(uy, points)
-
-    # evaluate fields
-    @time "evals" begin
-    uxs = reshape(nan_eval(cache_ux, ux, points), nx, ny, nz)
-    uys = reshape(nan_eval(cache_uy, uy, points), nx, ny, nz)
-    end
-
-    # barotropic velocities
-    Ux = [trapz(uxs[i, j, :], σ*H([x[i], y[j]])) for i ∈ 1:nx, j ∈ 1:ny]
-    Uy = [trapz(uys[i, j, :], σ*H([x[i], y[j]])) for i ∈ 1:nx, j ∈ 1:ny]
-    # Ux = [trapz(uxs[i, j, :], z) for i ∈ 1:nx, j ∈ 1:ny]
-    # Uy = [trapz(uys[i, j, :], z) for i ∈ 1:nx, j ∈ 1:ny]
+function compute_U_V(u, v, σ, H)
+    # integrate
+    U = [trapz(u[i, j, :], σ*H[i, j]) for i in axes(u, 1), j in axes(u, 2)]
+    V = [trapz(v[i, j, :], σ*H[i, j]) for i in axes(u, 1), j in axes(u, 2)]
 
     # NaNs outside of domain
-    mask = ones(nx, ny)
-    for i ∈ 1:nx, j ∈ 1:ny
-        if all(isnan.(uxs[i, j, :]))
-            mask[i, j] = NaN
+    for i in axes(u, 1), j in axes(u, 2)
+        if all(isnan.(u[i, j, :]))
+            U[i, j] = NaN
+            V[i, j] = NaN
         end
     end
 
-    return x, y, Ux, Uy, mask
+    # # debug: number of NaNs per column
+    # nan_count = [sum(isnan.(u[i, j, :])) for i in axes(u, 1), j in axes(u, 2)]
+    # # imshow(log.(nan_count/size(u, 1)))
+    # # colorbar(label="log(NaN fraction)")
+    # imshow(nan_count, vmax=10)
+    # colorbar()
+    # savefig("nan_count.png")
+    # @info "Saved 'nan_count.png'"
+    # plt.close()
+
+    return U, V
 end
 
-function compute_barotropic_streamfunction(Ux, y)
-    Psi = zeros(size(Ux))
-    for i in axes(Ux, 1)
-        Psi[i, :] = -cumtrapz(Ux[i, :], y)
+function compute_Ψ(U, y)
+    Ψ = zeros(size(U))
+    for i in axes(U, 1), j in axes(U, 2)
+        if isnan(U[i, j]) || isnan(U[i, j-1])
+            Ψ[i, j] = NaN
+        elseif isnan(Ψ[i, j-1])
+            Ψ[i, j] = -0.5*(y[j] - y[j-1])*(U[i, j] + U[i, j-1])
+        else
+            Ψ[i, j] = Ψ[i, j-1] - 0.5*(y[j] - y[j-1])*(U[i, j] + U[i, j-1])
+        end
+        # Ψ[i, :] = -cumtrapz(U[i, :], y)
     end
-    return Psi
+    return Ψ
 end
 
 function plot_barotropic(x, y, F; fig=nothing, ax=nothing, label=L"F")
@@ -337,11 +335,11 @@ function save_plot(fname_base; i=0)
     plt.close()
 end
 
-function plot_UV_Psi(x, y, Ux, Uy, Psi; i=0, t=nothing)
+function plot_UV_Ψ(x, y, U, V, Ψ; i=0, t=nothing)
     # plot UV
     fig, ax = plt.subplots(1, 2, figsize=(3.2*2, 2))
-    plot_barotropic(x, y, Ux', fig=fig, ax=ax[1], label=L"U")
-    plot_barotropic(x, y, Uy', fig=fig, ax=ax[2], label=L"V")
+    plot_barotropic(x, y, U', fig=fig, ax=ax[1], label=L"U")
+    plot_barotropic(x, y, V', fig=fig, ax=ax[2], label=L"V")
     if t !== nothing
         add_title(ax[1], t)
         add_title(ax[2], t)
@@ -350,11 +348,10 @@ function plot_UV_Psi(x, y, Ux, Uy, Psi; i=0, t=nothing)
     save_plot("UV"; i)
 
     # plot Psi
-    fig, ax = plot_barotropic(x, y, Psi', label=L"\Psi")
-    f_over_H = [(1 + 0*y[j])/H([x[i], y[j]]) for i ∈ eachindex(x), j ∈ eachindex(y)]
-    f_over_H = f_over_H.*mask
+    fig, ax = plot_barotropic(x, y, Ψ', label=L"\Psi")
+    f_over_H = [(1 + 0*y[j])/H[i, j] for i ∈ eachindex(x), j ∈ eachindex(y)]
     ax.contour(x, y, f_over_H', colors="k", linewidths=0.5, alpha=0.5, linestyles="--", levels=get_levels(6))
-    save_plot("Psi"; i)
+    save_plot("psi"; i)
 end
 
 function compute_γ(b)
@@ -747,10 +744,10 @@ function compute_BVE_buoyancy_source(n)
     return x, BVE_buoyancy_source
 end
 
-sim_dir = "../sims/sim048"
-i_save = 3
-n = 2^8 + 1
-save_gridded_sigma_data(@sprintf("%s/data/state_beta0.0_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta0.0_n%04d_i%03d.jld2", sim_dir, n, i_save))
+# sim_dir = "../sims/sim048"
+# i_save = 3
+# n = 2^8 + 1
+# save_gridded_sigma_data(@sprintf("%s/data/state_beta0.0_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta0.0_n%04d_i%03d.jld2", sim_dir, n, i_save))
 # save_gridded_sigma_data(@sprintf("%s/data/state_beta0.5_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta0.5_n%04d_i%03d.jld2", sim_dir, n, i_save))
 # save_gridded_sigma_data(@sprintf("%s/data/state_beta1.0_%03d.h5", sim_dir, i_save); n=n, outfile=@sprintf("%s/data/gridded_sigma_beta1.0_n%04d_i%03d.jld2", sim_dir, n, i_save))
 
@@ -770,6 +767,12 @@ save_gridded_sigma_data(@sprintf("%s/data/state_beta0.0_%03d.h5", sim_dir, i_sav
 #                    @sprintf("../sims/sim035/data/profiles%03d.jld2", i_save)]; 
 #                 labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
 # end
+
+x, y, σ, u, v, w, b, H, t = load_gridded_sigma_data("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
+U, V = compute_U_V(u, v, σ, H)
+Ψ = compute_Ψ(U, y)
+plot_UV_Ψ(x, y, U, V, Ψ; i=3, t=t)
+# plot_barotropic(x, y, U; i=i_save, t=t)
 # x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
 # Psi = compute_barotropic_streamfunction(U, y)
 # jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
