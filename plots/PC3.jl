@@ -144,32 +144,31 @@ function psi()
     ax[4].set_visible(false)
 
     # plot
-    sims = ["035", "036", "037"]
     βs = [0.0, 0.5, 1.0]
     img = nothing
     vmax = 0.
-    for i ∈ eachindex(sims)
-        data = jldopen("../out/data/psi$(sims[i]).jld2")
-        x = data["x"]
-        y = data["y"]
-        mask = data["mask"]
-        z = data["Psi"].*mask
-        # vmax = nuPGCM.nan_max(abs.(z))
-        # println(vmax)
-        vmax = 0.013
-        img = ax[i].pcolormesh(x, y, z', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-        ax[i].contour(x, y, z', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
-        z = [f_over_H(x[j], y[k], β=βs[i]) for j ∈ eachindex(x), k ∈ eachindex(y)].*mask
-        ax[i].contour(x, y, z', colors="k", linewidths=0.5, alpha=0.5, linestyles="-", levels=f_over_H_levels)
+    for i ∈ eachindex(βs)
+        d = jldopen(@sprintf("../sims/sim048/data/psi_beta%1.1f_i003.jld2", βs[i]))
+        x = d["x"]
+        y = d["y"]
+        psi = d["psi"]
+        close(d)
+        vmax = nuPGCM.nan_max(abs.(psi))
+        @info "vmax = $vmax"
+        vmax = 1.5
+        img = ax[i].pcolormesh(x, y, psi', shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+        ax[i].contour(x, y, 1e2*psi', colors="k", linewidths=0.5, linestyles="-", levels=get_levels(vmax))
+        foH = [f_over_H(x[j], y[k], β=βs[i]) for j ∈ eachindex(x), k ∈ eachindex(y)]
+        ax[i].contour(x, y, foH', colors=(0.2, 0.5, 0.2), linewidths=0.5, alpha=0.5, linestyles="-", levels=f_over_H_levels)
     end
-    cb = fig.colorbar(img, ax=ax[4], label=L"Barotropic streamfunction $\Psi$", fraction=1.0)
+    cb = fig.colorbar(img, ax=ax[4], label=L"Barotropic streamfunction $\Psi$"*"\n"*L"(\times 10^{-2})", fraction=1.0)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
 
     # save
     savefig("psi.png")
-    println("psi.png") 
+    @info "Saved 'psi.png'"
     savefig("psi.pdf")
-    println("psi.pdf") 
+    @info "Saved 'psi.pdf'"
     plt.close()
 end
 
@@ -198,13 +197,12 @@ function slices(field)
     ax[4].set_visible(false)
 
     # plot
-    sims = ["035", "036", "037"]
     βs = [0.0, 0.5, 1.0]
     img = nothing
     vmax = 0.
-    for i ∈ eachindex(sims)
+    for i ∈ eachindex(βs)
         # load gridded sigma data
-        d = jldopen("../sims/sim$(sims[i])/data/gridded_sigma003.jld2")
+        d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", βs[i]))
         x = d["x"]
         y = d["y"]
         σ = d["σ"]
@@ -213,8 +211,8 @@ function slices(field)
         b = d["b"]
         close(d)
         xx = repeat(x, 1, length(σ))
-        z = H*σ'
         j = argmin(abs.(y)) # index where y = 0
+        z = H[:, j]*σ'
         f = f[:, j, :]
         fill_nans!(f)
         f[:, 1] .= 0
@@ -225,36 +223,32 @@ function slices(field)
         fill_nans!(b)
         b[:, end] .= 0
         if field == "u" 
-            # vmax = nan_max(abs.(f))
-            vmax = 0.015
+            vmax = 1.8
         elseif field == "v"
-            # vmax = nan_max(abs.(f))
-            vmax = 0.054
+            vmax = 7.2
         elseif field == "w"
-            # vmax = nan_max(abs.(f))
-            vmax = 0.022
+            vmax = 2.8
         end
-        img = ax[i].pcolormesh(xx, z, f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+        img = ax[i].pcolormesh(xx, z, 1e2*f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
         ax[i].contour(xx, z, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
         if i == 1
             ax[i].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
         end
     end
     if field == "u"
-        label = L"Zonal flow $u$"
+        label = L"Zonal flow $u$"*"\n"*L"($\times 10^{-2}$)"
     elseif field == "v"
-        label = L"Meridional flow $v$"
+        label = L"Meridional flow $v$"*"\n"*L"($\times 10^{-2}$)"
     elseif field == "w"
-        label = L"Vertical flow $w$"
+        label = L"Vertical flow $w$"*"\n"*L"($\times 10^{-2}$)"
     end
-    cb = fig.colorbar(img, ax=ax[4], label=label, fraction=1.0)
-    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    fig.colorbar(img, ax=ax[4], label=label, fraction=1.0)
 
     # save
     savefig("$field.png")
-    println("$field.png") 
+    @info "Saved '$field.png'"
     savefig("$field.pdf")
-    println("$field.pdf") 
+    @info "Saved '$field.pdf'"
     plt.close()
 end
 
@@ -305,14 +299,13 @@ function zonal_sections()
     ax[3, 4].set_visible(false)
 
     # plot
-    sims = ["035", "036", "037"]
     βs = [0.0, 0.5, 1.0]
-    umax = 1.5
-    vmax = 5.4
-    wmax = 2.2
-    for i ∈ eachindex(sims)
+    umax = 1.8
+    vmax = 7.2
+    wmax = 2.8
+    for i ∈ eachindex(βs)
         # load gridded sigma data
-        d = jldopen("../sims/sim$(sims[i])/data/gridded_sigma003.jld2")
+        d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", βs[i]))
         x = d["x"]
         y = d["y"]
         σ = d["σ"]
@@ -323,8 +316,8 @@ function zonal_sections()
         b = d["b"]
         close(d)
         xx = repeat(x, 1, length(σ))
-        z = H*σ'
         j = argmin(abs.(y)) # index where y = 0
+        z = H[:, j]*σ'
         u = u[:, j, :]
         v = v[:, j, :]
         w = w[:, j, :]
@@ -338,6 +331,7 @@ function zonal_sections()
         b = z .+ b[:, j, :]
         fill_nans!(b)
         b[:, end] .= 0
+        @info "vmax values" maximum(abs.(u)) maximum(abs.(v)) maximum(abs.(w))
         ax[1, i].pcolormesh(xx, z, 1e2*u, shading="gouraud", cmap="RdBu_r", vmin=-umax, vmax=umax, rasterized=true)
         ax[1, i].contour(xx, z, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
         ax[2, i].pcolormesh(xx, z, 1e2*v, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
@@ -355,15 +349,15 @@ function zonal_sections()
 
     # save
     savefig("zonal_sections.png")
-    println("zonal_sections.png") 
+    @info "Saved 'zonal_sections.png'"
     savefig("zonal_sections.pdf")
-    println("zonal_sections.pdf") 
+    @info "Saved 'zonal_sections.pdf'"
     plt.close()
 end
 
 function profiles()
     width = 33pc
-    fig, ax = plt.subplots(1, 4, figsize=(width, width/4*1.62), sharey=true)
+    fig, ax = plt.subplots(1, 4, figsize=(width, width/4*1.62))
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
@@ -380,18 +374,20 @@ function profiles()
     ax[1].spines["left"].set_visible(false)
     ax[2].spines["left"].set_visible(false)
     ax[3].spines["left"].set_visible(false)
+    ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
+    ax[2].set_yticks([])
+    ax[3].set_yticks([])
+    ax[4].set_yticks([])
     ax[1].axvline(0, color="k", lw=0.5)
     ax[2].axvline(0, color="k", lw=0.5)
     ax[3].axvline(0, color="k", lw=0.5)
     for a ∈ ax 
         a.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
     end
-    # colors = pl.cm.viridis(range(0, 1, length=length(αs)))
-    sims = ["035", "036", "037"]
     βs = [0.0, 0.5, 1.0]
-    for i ∈ eachindex(sims)
+    for i ∈ eachindex(βs)
         # load gridded sigma data
-        d = jldopen("../sims/sim$(sims[i])/data/gridded_sigma003.jld2")
+        d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", βs[i]))
         x = d["x"]
         y = d["y"]
         σ = d["σ"]
@@ -402,7 +398,6 @@ function profiles()
         b = d["b"]
         close(d)
         j = argmin(abs.(x .- 0.5)) # index where x = 0.5
-        println("x = ", x[j])
         k = argmin(abs.(y)) # index where y = 0
         u = u[j, k, :]; u[1] = 0
         v = v[j, k, :]; v[1] = 0
@@ -410,12 +405,18 @@ function profiles()
         b = b[j, k, :]; b[end] = 0
         z = H[j, k]*σ
         Bz = 1 .+ differentiate(b, z)
-        ax[1].plot(1e2*u,  z, label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[2].plot(1e2*v,  z, label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[3].plot(1e2*w,  z, label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[4].plot(Bz,     z, label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        Bz[1] = 0
+        umask = isnan.(u) .== 0
+        vmask = isnan.(v) .== 0
+        wmask = isnan.(w) .== 0
+        Bzmask = isnan.(Bz) .== 0
+        ax[1].plot(1e2*u[umask],  z[umask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[2].plot(1e2*v[vmask],  z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[3].plot(1e2*w[wmask],  z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[4].plot(Bz[Bzmask],    z[Bzmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
     end
-    file = jldopen("../scratch/data/1D_0.25.jld2")
+    # 1D U = 0
+    file = jldopen("../sims/sim048/data/1D_beta0.0.jld2")
     u = file["u"]
     v = file["v"]
     w = file["w"]
@@ -423,15 +424,30 @@ function profiles()
     z = file["z"]
     close(file)
     Bz = 1 .+ differentiate(b, z)
-    ax[1].plot(1e2*u,  z, "k--", lw=0.5, label="1D")
-    ax[2].plot(1e2*v,  z, "k--", lw=0.5, label="1D")
-    ax[3].plot(1e2*w,  z, "k--", lw=0.5, label="1D")
-    ax[4].plot(Bz,     z, "k--", lw=0.5, label="1D")
-    ax[4].legend(loc=(0.1, 0.6))
+    ax[1].plot(1e2*u,  z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[2].plot(1e2*v,  z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[3].plot(1e2*w,  z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[4].plot(Bz,     z, "k--", lw=0.5, label=L"1D $U=0$")
+
+    # 1D U = V = 0
+    file = jldopen("../sims/sim048/data/1D_beta1.0.jld2")
+    u = file["u"]
+    v = file["v"]
+    w = file["w"]
+    b = file["b"]
+    z = file["z"]
+    close(file)
+    Bz = 1 .+ differentiate(b, z)
+    ax[1].plot(1e2*u,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[2].plot(1e2*v,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[3].plot(1e2*w,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[4].plot(Bz,     z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+
+    ax[2].legend(loc=(-0.6, 0.5))
     savefig("profiles.png")
-    println("profiles.png")
+    @info "Saved 'profiles.png'"
     savefig("profiles.pdf")
-    println("profiles.pdf")
+    @info "Saved 'profiles.pdf'"
     plt.close()
 end
 
@@ -473,11 +489,11 @@ end
 
 
 # f_over_H()
-# psi()
+psi()
 # slices("u")
 # slices("v")
 # slices("w")
-zonal_sections()
+# zonal_sections()
 # profiles()
 # alpha()
 
