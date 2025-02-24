@@ -3,16 +3,20 @@ module nuPGCM
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
-using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
+using CUDA
+using CUDA.CUSPARSE
+using CUDA.CUSOLVER
 using CuthillMcKee
+using LinearAlgebra
 using SparseArrays
+using Krylov
 using PyPlot
 using HDF5
 using Printf
 import Base.string
 
 # directory where the output files will be saved
-global out_dir = ""
+global out_dir = "."
 
 """
     set_out_dir!(dir)
@@ -40,13 +44,13 @@ function set_out_dir!(dir)
     end
 end
 
-# define CPU and GPU architectures (credit: Oceananigans.jl)
+# define CPU and GPU architectures (see: Oceananigans.jl/src/Architectures.jl)
 abstract type AbstractArchitecture end
 
 struct CPU <: AbstractArchitecture end
 struct GPU <: AbstractArchitecture end
 
-# convert types from one architecture to another (credit: Oceananigans.jl)
+# convert types from one architecture to another
 on_architecture(::CPU, a::Array) = a
 on_architecture(::GPU, a::Array) = CuArray(a)
 
@@ -58,6 +62,10 @@ on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
 
 on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
 on_architecture(::GPU, a::CuSparseMatrixCSR) = a
+
+# determine architecture array is on 
+architecture(::Array) = CPU()
+architecture(::CuArray) = GPU()
 
 # physical dimension of the problem
 abstract type AbstractDimension end
@@ -78,6 +86,8 @@ include("plotting.jl")
 include("IO.jl")
 include("spaces.jl")
 include("matrices.jl")
+include("solvers.jl")
+include("preconditioners.jl")
 
 export 
 out_dir,
@@ -123,6 +133,13 @@ unpack_spaces,
 assemble_LHS_inversion,
 assemble_RHS_inversion,
 assemble_LHS_adv_diff,
-assemble_RHS_diff
+assemble_RHS_diff,
+# solvers.jl
+generate_inversion_solver,
+generate_evolution_solver,
+solve_inversion!,
+solve_evolution!,
+# preconditioners.jl
+mul!
 
 end # module
