@@ -15,27 +15,18 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-set_out_dir!("../sims/sim048")
+set_out_dir!(".")
 
 # choose dimensions
-# dim = TwoD()
-dim = ThreeD()
+dim = TwoD()
+# dim = ThreeD()
 
 # choose architecture
-# arch = CPU()
-arch = GPU()
-
-# tolerance and max iterations for iterative solvers
-tol = 1e-8
-@printf("tol = %.1e\n", tol)
-itmax = 0
-@printf("itmax = %d\n\n", itmax)
-
-# Vector type 
-VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
+arch = CPU()
+# arch = GPU()
 
 # model
-h = 0.01
+h = 0.10
 model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, h))
 
 # FE spaces
@@ -62,10 +53,10 @@ H(x) = 1 - x[1]^2 - x[2]^2
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
 # params
-ε² = 1e-4
+ε² = 1e-2
 γ = 1/4
 f₀ = 1
-β = 1.0
+β = 0
 f(x) = f₀ + β*x[2]
 μϱ = 1e-4
 Δt = 1e-4*μϱ/ε²
@@ -82,57 +73,29 @@ println("Parameters:\n")
 @printf(" T = %.1e\n", T)
 println("---\n")
 
-# filenames for LHS matrices
-LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
-LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, h)
-
 # inversion LHS
+LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
 if isfile(LHS_inversion_fname)
     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
 else
     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
 end
+LHS_inversion = on_architecture(arch, LHS_inversion)
 
 # inversion RHS
 RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
+RHS_inversion = on_architecture(arch, RHS_inversion)
 
 # preconditioner
 if typeof(dim) == TwoD && typeof(arch) == CPU
     @time "lu(LHS_inversion)" P_inversion = lu(LHS_inversion)
-    ldiv_P_inversion = true
 else
     P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
     # P_inversion = I
-    ldiv_P_inversion = false
 end
 
-# put on GPU, if needed
-LHS_inversion = on_architecture(arch, LHS_inversion)
-RHS_inversion = on_architecture(arch, RHS_inversion)
-if typeof(arch) == GPU
-    CUDA.memory_status()
-    println()
-end
+inversion_solver = generate_inversion_solver(arch, LHS_inversion, P_inversion, RHS_inversion)
 
-# Krylov solver for inversion
-solver_inversion = GmresSolver(N, N, 20, VT)
-solver_inversion.x .= 0.
-
-# inversion functions
-function invert!(arch::AbstractArchitecture, solver, b)
-    b_arch = on_architecture(arch, b.free_values)
-    if typeof(arch) == GPU
-        RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
-    else
-        RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
-    end
-    Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
-                  atol=tol, rtol=tol, verbose=1, itmax=itmax, restart=true,
-                  history=true)
-    @printf("inversion GMRES solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
-    return solver
-end
 function update_u_p!(ux, uy, uz, p, solver)
     sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
     ux.free_values .= sol[1:nx]
@@ -141,9 +104,6 @@ function update_u_p!(ux, uy, uz, p, solver)
     p = FEFunction(P, sol[nx+ny+nz+1:end])
     return ux, uy, uz, p
 end
-
-flush(stdout)
-flush(stderr)
 
 # background state \partial_z b = N^2
 N² = 1.
@@ -158,16 +118,14 @@ N² = 1.
 # p  = interpolate_everywhere(0, P) 
 # save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
 
-# # initial condition: b = N^2 z + some exponential
-# i_save = 0
-# Hx(x) = -2*x[1]
-# Hy(x) = -2*x[2]
-# b = interpolate_everywhere(x -> 1/(1 + γ*Hx(x)^2 + γ*Hy(x)^2)*0.1*exp(-(x[3] + H(x))/0.1), B)
-# t = 0.
-# ux = interpolate_everywhere(0, Ux)
-# uy = interpolate_everywhere(0, Uy)
-# uz = interpolate_everywhere(0, Uz)
-# p  = interpolate_everywhere(0, P) 
+# initial condition: b = N^2 z + exponential
+i_save = 0
+b = interpolate_everywhere(x -> 0.1*exp(-(x[3] + H(x))/0.1), B)
+t = 0.
+ux = interpolate_everywhere(0, Ux)
+uy = interpolate_everywhere(0, Uy)
+uz = interpolate_everywhere(0, Uz)
+p  = interpolate_everywhere(0, P) 
 
 # # initial condition: load from file
 # i_save = 1
@@ -180,58 +138,52 @@ N² = 1.
 # p  = FEFunction(P, p)
 # b  = FEFunction(B, b)
 
-# initial condition: load from diffusion
-diff_dir = "../sims/sim048"
-i_save = 3
-file = jldopen(@sprintf("%s/data/b%03d.jld2", diff_dir, i_save), "r")
-b = FEFunction(B, file["b"])
-t = file["t"]
-close(file)
-ux = interpolate_everywhere(0, Ux)
-uy = interpolate_everywhere(0, Uy)
-uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P) 
-invert!(arch, solver_inversion, b)
-ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+# # initial condition: load from diffusion
+# diff_dir = "../sims/sim048"
+# i_save = 3
+# file = jldopen(@sprintf("%s/data/b%03d.jld2", diff_dir, i_save), "r")
+# b = FEFunction(B, file["b"])
+# t = file["t"]
+# close(file)
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P) 
+
+# invert initial condition
+solve_inversion!(inversion_solver, b)
+ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_solver.state)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state_beta%0.1f_%03d.h5", out_dir, β, i_save))
 
 # plot
 plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
 i_save += 1
 
-# # evolution LHSs
-# if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
-#     LHS_adv,  perm_b, inv_perm_b = read_sparse_matrix(LHS_adv_fname)
-#     LHS_diff, perm_b, inv_perm_b = read_sparse_matrix(LHS_diff_fname)
-# else
-#     LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
-# end
+# evolution LHSs
+LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
+LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, h)
+if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
+    LHS_adv,  perm_b, inv_perm_b = read_sparse_matrix(LHS_adv_fname)
+    LHS_diff, perm_b, inv_perm_b = read_sparse_matrix(LHS_diff_fname)
+else
+    LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
+end
+LHS_adv = on_architecture(arch, LHS_adv)
+LHS_diff = on_architecture(arch, LHS_diff)
 
-# # diffusion RHS matrix and vector
-# RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
+# diffusion RHS matrix and vector
+RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
+RHS_diff = on_architecture(arch, RHS_diff)
+rhs_diff = on_architecture(arch, rhs_diff)
 
-# # preconditioners
-# if typeof(dim) == TwoD && typeof(arch) == CPU
-#     @time "lu(LHS_diff)" P_diff = lu(LHS_diff)
-#     @time "lu(LHS_adv)"  P_adv  = lu(LHS_adv)
-#     ldiv_P_diff = true
-#     ldiv_P_adv  = true
-# else
-#     P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
-#     P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
-#     ldiv_P_diff = false
-#     ldiv_P_adv  = false
-# end
-
-# # put on GPU, if needed
-# LHS_diff = on_architecture(arch, LHS_diff)
-# RHS_diff = on_architecture(arch, RHS_diff)
-# rhs_diff = on_architecture(arch, rhs_diff)
-# LHS_adv = on_architecture(arch, LHS_adv)
-# if typeof(arch) == GPU
-#     CUDA.memory_status()
-#     println()
-# end
+# preconditioners
+if typeof(dim) == TwoD && typeof(arch) == CPU
+    @time "lu(LHS_diff)" P_diff = lu(LHS_diff)
+    @time "lu(LHS_adv)"  P_adv  = lu(LHS_adv)
+else
+    P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
+    P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
+end
 
 # # Krylov solver for evolution
 # solver_evolution = CgSolver(nb, nb, VT)
