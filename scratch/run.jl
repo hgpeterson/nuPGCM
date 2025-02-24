@@ -94,7 +94,7 @@ else
     # P_inversion = I
 end
 
-inversion_solver = generate_inversion_solver(arch, LHS_inversion, P_inversion, RHS_inversion)
+inversion = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
 
 function update_u_p!(ux, uy, uz, p, solver)
     sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
@@ -151,142 +151,142 @@ p  = interpolate_everywhere(0, P)
 # p  = interpolate_everywhere(0, P) 
 
 # invert initial condition
-solve_inversion!(inversion_solver, b)
-ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_solver.state)
+invert!(inversion, b)
+ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion.solver)
 save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state_beta%0.1f_%03d.h5", out_dir, β, i_save))
 
 # plot
 plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
 i_save += 1
 
-# evolution LHSs
-LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
-LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, h)
-if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
-    LHS_adv,  perm_b, inv_perm_b = read_sparse_matrix(LHS_adv_fname)
-    LHS_diff, perm_b, inv_perm_b = read_sparse_matrix(LHS_diff_fname)
-else
-    LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
-end
-LHS_adv = on_architecture(arch, LHS_adv)
-LHS_diff = on_architecture(arch, LHS_diff)
-
-# diffusion RHS matrix and vector
-RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
-RHS_diff = on_architecture(arch, RHS_diff)
-rhs_diff = on_architecture(arch, rhs_diff)
-
-# preconditioners
-if typeof(dim) == TwoD && typeof(arch) == CPU
-    @time "lu(LHS_diff)" P_diff = lu(LHS_diff)
-    @time "lu(LHS_adv)"  P_adv  = lu(LHS_adv)
-else
-    P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
-    P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
-end
-
-# # Krylov solver for evolution
-# solver_evolution = CgSolver(nb, nb, VT)
-# solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_b])
-
-# # evolution functions
-# b_half = interpolate_everywhere(0, B)
-# function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolution, ux, uy, uz, p, b)
-#     # half step
-#     l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(N² + ∂z(b)))*d )dΩ
-#     @time "build RHS_evolution 1" RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
-#     Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-#     @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
-
-#     # u, v, w, p, b at half step
-#     update_b!(b_half, solver_evolution)
-#     solver_inversion = invert!(arch, solver_inversion, b_half)
-#     ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
-
-#     # full step
-#     l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
-#     @time "build RHS_evolution 2" RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
-#     Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-#     @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
-
-#     return solver_inversion, solver_evolution
+# # evolution LHSs
+# LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
+# LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, h)
+# if isfile(LHS_adv_fname) && isfile(LHS_diff_fname)
+#     LHS_adv,  perm_b, inv_perm_b = read_sparse_matrix(LHS_adv_fname)
+#     LHS_diff, perm_b, inv_perm_b = read_sparse_matrix(LHS_diff_fname)
+# else
+#     LHS_adv, LHS_diff, perm_b, inv_perm_b = assemble_LHS_adv_diff(arch, α, γ, κ, B, D, dΩ; fname_adv=LHS_adv_fname, fname_diff=LHS_diff_fname)
 # end
-# function evolve_diff!(arch::AbstractArchitecture, solver, b)
-#     b_arch= on_architecture(arch, b.free_values)
-#     RHS = RHS_diff*b_arch + rhs_diff
-#     Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-#     @printf("diffusion CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
-#     return solver
-# end
-# function update_b!(b, solver)
-#     b.free_values .= on_architecture(CPU(), solver.x[inv_perm_b])
-#     return b
+# LHS_adv = on_architecture(arch, LHS_adv)
+# LHS_diff = on_architecture(arch, LHS_diff)
+
+# # diffusion RHS matrix and vector
+# RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ)
+# RHS_diff = on_architecture(arch, RHS_diff)
+# rhs_diff = on_architecture(arch, rhs_diff)
+
+# # preconditioners
+# if typeof(dim) == TwoD && typeof(arch) == CPU
+#     @time "lu(LHS_diff)" P_diff = lu(LHS_diff)
+#     @time "lu(LHS_adv)"  P_adv  = lu(LHS_adv)
+# else
+#     P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
+#     P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
 # end
 
-# # solve function
-# function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
-#     t0 = time()
-#     for i ∈ i_step:n_steps
-#         flush(stdout)
-#         flush(stderr)
+# # # Krylov solver for evolution
+# # solver_evolution = CgSolver(nb, nb, VT)
+# # solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_b])
 
-#         # advection step
-#         solver_inversion, solver_evolution = evolve_adv!(arch, solver_inversion, solver_evolution, ux, uy, uz, p, b)
-#         b = update_b!(b, solver_evolution)
+# # # evolution functions
+# # b_half = interpolate_everywhere(0, B)
+# # function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolution, ux, uy, uz, p, b)
+# #     # half step
+# #     l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(N² + ∂z(b)))*d )dΩ
+# #     @time "build RHS_evolution 1" RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
+# #     Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+# #     @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
 
-#         # diffusion step
-#         solver_evolution = evolve_diff!(arch, solver_evolution, b)
-#         b = update_b!(b, solver_evolution)
+# #     # u, v, w, p, b at half step
+# #     update_b!(b_half, solver_evolution)
+# #     solver_inversion = invert!(arch, solver_inversion, b_half)
+# #     ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
-#         # invert
-#         solver_inversion = invert!(arch, solver_inversion, b)
-#         ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+# #     # full step
+# #     l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
+# #     @time "build RHS_evolution 2" RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
+# #     Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+# #     @printf("advection CG solve 2: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
 
-#         # blow up
-#         if any(isnan.(solver_inversion.x)) || any(isnan.(solver_evolution.x))
-#             # save and kill
-#             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
-#             sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
-#             error("Solution diverged: NaN(s) found.")
-#         end
+# #     return solver_inversion, solver_evolution
+# # end
+# # function evolve_diff!(arch::AbstractArchitecture, solver, b)
+# #     b_arch= on_architecture(arch, b.free_values)
+# #     RHS = RHS_diff*b_arch + rhs_diff
+# #     Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+# #     @printf("diffusion CG solve: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
+# #     return solver
+# # end
+# # function update_b!(b, solver)
+# #     b.free_values .= on_architecture(CPU(), solver.x[inv_perm_b])
+# #     return b
+# # end
 
-#         # time
-#         t += Δt
+# # # solve function
+# # function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
+# #     t0 = time()
+# #     for i ∈ i_step:n_steps
+# #         flush(stdout)
+# #         flush(stderr)
 
-#         # info
-#         ux_max = maximum(abs.(ux.free_values))
-#         uy_max = maximum(abs.(uy.free_values))
-#         uz_max = maximum(abs.(uz.free_values))
-#         t1 = time()
-#         println("\n---")
-#         @printf("t = %f (i = %d/%d, Δt = %f)\n\n", t, i, n_steps, Δt)
-#         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-#         @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
-#         @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(ux_max, uy_max, uz_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
-#         @printf("CFL ≈ %f\n", min(hmin/ux_max, hmin/uy_max, hmin/uz_max))
-#         println("---\n")
+# #         # advection step
+# #         solver_inversion, solver_evolution = evolve_adv!(arch, solver_inversion, solver_evolution, ux, uy, uz, p, b)
+# #         b = update_b!(b, solver_evolution)
 
-#         # blow up
-#         if max(ux_max, uy_max, uz_max) > 10
-#             # save and kill
-#             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
-#             sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_dir)
-#             error("Solution diverged: |u|ₘₐₓ > 10.")
-#         end
+# #         # diffusion step
+# #         solver_evolution = evolve_diff!(arch, solver_evolution, b)
+# #         b = update_b!(b, solver_evolution)
 
-#         # save/plot
-#         if mod(i, n_steps ÷ 50) == 0
-#             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
-#             sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_dir)
-#             i_save += 1
-#         end
-#     end
-#     return ux, uy, uz, p, b
-# end
+# #         # invert
+# #         solver_inversion = invert!(arch, solver_inversion, b)
+# #         ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
 
-# # run
-# i_step = Int64(round(t/Δt)) + 1
-# n_steps = Int64(round(T/Δt))
-# ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
+# #         # blow up
+# #         if any(isnan.(solver_inversion.x)) || any(isnan.(solver_evolution.x))
+# #             # save and kill
+# #             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# #             sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
+# #             error("Solution diverged: NaN(s) found.")
+# #         end
 
-println("Done.")
+# #         # time
+# #         t += Δt
+
+# #         # info
+# #         ux_max = maximum(abs.(ux.free_values))
+# #         uy_max = maximum(abs.(uy.free_values))
+# #         uz_max = maximum(abs.(uz.free_values))
+# #         t1 = time()
+# #         println("\n---")
+# #         @printf("t = %f (i = %d/%d, Δt = %f)\n\n", t, i, n_steps, Δt)
+# #         @printf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
+# #         @printf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
+# #         @printf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(ux_max, uy_max, uz_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+# #         @printf("CFL ≈ %f\n", min(hmin/ux_max, hmin/uy_max, hmin/uz_max))
+# #         println("---\n")
+
+# #         # blow up
+# #         if max(ux_max, uy_max, uz_max) > 10
+# #             # save and kill
+# #             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# #             sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_dir)
+# #             error("Solution diverged: |u|ₘₐₓ > 10.")
+# #         end
+
+# #         # save/plot
+# #         if mod(i, n_steps ÷ 50) == 0
+# #             save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# #             sim_plots(plots_cache, ux, uy, uz, b, t, i_save, out_dir)
+# #             i_save += 1
+# #         end
+# #     end
+# #     return ux, uy, uz, p, b
+# # end
+
+# # # run
+# # i_step = Int64(round(t/Δt)) + 1
+# # n_steps = Int64(round(T/Δt))
+# # ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_save, i_step, n_steps)
+
+# println("Done.")
