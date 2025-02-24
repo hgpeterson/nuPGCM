@@ -66,6 +66,8 @@ on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 # determine architecture array is on 
 architecture(::Array) = CPU()
 architecture(::CuArray) = GPU()
+architecture(::SparseMatrixCSC) = CPU()
+architecture(::CuSparseMatrixCSR) = GPU()
 
 # physical dimension of the problem
 abstract type AbstractDimension end
@@ -86,7 +88,7 @@ include("plotting.jl")
 include("IO.jl")
 include("spaces.jl")
 include("matrices.jl")
-include("solvers.jl")
+include("inversion.jl")
 include("preconditioners.jl")
 
 export 
@@ -96,6 +98,7 @@ AbstractArchitecture,
 CPU,
 GPU,
 on_architecture,
+architecture,
 AbstractDimension,
 TwoD,
 ThreeD,
@@ -134,11 +137,9 @@ assemble_LHS_inversion,
 assemble_RHS_inversion,
 assemble_LHS_adv_diff,
 assemble_RHS_diff,
-# solvers.jl
-generate_inversion_solver,
-generate_evolution_solver,
-solve_inversion!,
-solve_evolution!,
+# inversion.jl
+InversionToolkit,
+invert!,
 # preconditioners.jl
 mul!
 
