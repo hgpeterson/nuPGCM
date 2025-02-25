@@ -49,12 +49,18 @@ function assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFE
     nx = Vx.nfree
     ny = Vy.nfree
     nz = Vz.nfree
+    np = Q.space.space.nfree
 
     # permutation for Uz
     perm_uz = perm_inversion[nx+ny+1:nx+ny+nz] .- nx .- ny
 
     # assemble
     @time "RHS_inversion" RHS = assemble_matrix(a, B, Vz)[perm_uz, :]
+
+    # convert RHS to N x nb matrix
+    I, J, V = findnz(RHS)
+    I .+= nx + ny
+    RHS = sparse(I, J, V, nx+ny+nz+np-1, size(RHS, 2))
 
     return RHS
 end
