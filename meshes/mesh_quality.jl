@@ -71,15 +71,21 @@ function inner_angles(p, t)
     return sort(θ[:])
 end
 
-function print_stats(θ)
-    @printf("  %f ≤ θ ≤ %f\n", minimum(θ), maximum(θ))
-    @printf("  mean(θ):   %f\n", mean(θ))
-    @printf("  median(θ): %f\n", median(θ))
-    @printf("  std(θ):    %f\n", std(θ))
+function print_stats(title, θ)
+    @info begin
+    msg = title
+    msg *= @sprintf("\n%f ≤ θ ≤ %f\n", minimum(θ), maximum(θ))
+    msg *= @sprintf("mean(θ):   %f\n", mean(θ))
+    msg *= @sprintf("median(θ): %f\n", median(θ))
+    msg *= @sprintf("std(θ):    %f\n", std(θ))
+    msg
+    end
 end
 
+# resolution
+h = 0.02
+
 # # distmesh
-# h = 0.01
 # fname = @sprintf("bowl3D_%0.2fdm.h5", h)
 # p = h5read(fname, "p")
 # t = h5read(fname, "t")
@@ -88,28 +94,30 @@ end
 # print_stats(θ_dm)
 
 # gmsh
-# fname = @sprintf("bowl2D_%0.2f.msh", h)
-# fname = "bowl2D_exp.msh"
-fname = "bowl2D_0.01.msh"
+fname = @sprintf("bowl3D_%0.2f.msh", h)
 p, t = get_p_t(fname)
 @time θ_gm = inner_angles(p, t)
-println("Gmsh:")
-print_stats(θ_gm)
+print_stats("Gmsh", θ_gm)
+
+# jörn
+fname = @sprintf("bowl3D_%0.2fjc.h5", h)
+p = h5read(fname, "p")
+t = h5read(fname, "t")
+@time θ_jc = inner_angles(p, t)
+print_stats("Jörn", θ_jc)
 
 # plot
 fig, ax = plt.subplots(1)
 # ax.hist(θ_dm, bins=100, density=true, alpha=0.5, label="DistMesh")
 ax.hist(θ_gm, bins=100, density=true, alpha=0.5, label="Gmsh")
-# ax.legend()
+ax.hist(θ_jc, bins=100, density=true, alpha=0.5, label="Jörn")
+ax.legend()
 ax.set_xlabel("Inner angle (degrees)")
 ax.set_ylabel("Density")
 ax.set_xlim(0, 120)
 ax.set_xticks(0:30:120)
 ax.set_ylim(0, 0.05)
-# ax.set_yscale("log")
-# ax.set_ylim(1e-5, 1e0)
-# savefig(@sprintf("../out/inner_angles_%.2f.png", h))
-# println(@sprintf("../out/inner_angles_%.2f.png", h))
-savefig(@sprintf("../out/inner_angles_%s.png", fname[8:end-4]))
-println(@sprintf("../out/inner_angles_%s.png", fname[8:end-4]))
+fname = @sprintf("../out/inner_angles_%.2f.png", h)
+savefig(fname)
+@info "Saved '$fname'"
 plt.close()
