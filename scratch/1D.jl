@@ -333,4 +333,4 @@ function main()
     plot_finish(; fig, ax, t, filename="images/1D.png")
 end
 
-main()
+# main()
