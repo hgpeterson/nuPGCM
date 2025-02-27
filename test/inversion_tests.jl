@@ -2,7 +2,6 @@ using Test
 using nuPGCM
 using Gridap
 using GridapGmsh
-using Krylov
 using CUDA
 using SparseArrays
 using LinearAlgebra
@@ -13,14 +12,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
-    # tolerance and max iterations for iterative solvers
-    tol = 1e-6
-    itmax = 0
-
-    # Vector type 
-    VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
-
+function coarse_inversion(dim, arch)
     # coarse model
     h = 0.1
     model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
@@ -74,33 +66,17 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
     # preconditioner
     if typeof(arch) == CPU
         P_inversion = lu(LHS_inversion)
-        ldiv_P_inversion = true
     else
         P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
-        ldiv_P_inversion = false
     end
 
-    # put on GPU, if needed
+    # move to arch
     LHS_inversion = on_architecture(arch, LHS_inversion)
     RHS_inversion = on_architecture(arch, RHS_inversion)
 
-    # Krylov solver for inversion
-    solver_inversion = GmresSolver(N, N, 20, VT)
-    solver_inversion.x .= 0.
+    # setup inversion toolkit
+    inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
 
-    # inversion functions
-    function invert!(arch::AbstractArchitecture, solver, b)
-        b_arch = on_architecture(arch, b.free_values)
-        if typeof(arch) == GPU
-            RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
-        else
-            RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
-        end
-        Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
-                    atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true,
-                    history=true)
-        return solver
-    end
     function update_u_p!(ux, uy, uz, p, solver)
         sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
         ux.free_values .= sol[1:nx]
@@ -121,8 +97,8 @@ function coarse_inversion(dim::AbstractDimension, arch::AbstractArchitecture)
     p  = interpolate_everywhere(0, P) 
 
     # invert
-    solver_inversion = invert!(arch, solver_inversion, b)
-    ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+    invert!(inversion_toolkit, b)
+    ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
 
     # # plot for sanity check
     # sim_plots(dim, ux, uy, uz, b, N², H, 0, 0, "test")
@@ -149,13 +125,13 @@ end
     @testset "2D CPU" begin
         coarse_inversion(TwoD(), CPU())
     end
-    # @testset "2D GPU" begin
-    #     coarse_inversion(TwoD(), GPU())
-    # end
+    @testset "2D GPU" begin
+        coarse_inversion(TwoD(), GPU())
+    end
     @testset "3D CPU" begin
         coarse_inversion(ThreeD(), CPU())
     end
-    # @testset "3D GPU" begin
-    #     coarse_inversion(ThreeD(), GPU())
-    # end
+    @testset "3D GPU" begin
+        coarse_inversion(ThreeD(), GPU())
+    end
 end

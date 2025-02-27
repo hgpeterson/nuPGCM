@@ -1,9 +1,12 @@
 using Test
 using nuPGCM
-using Gridap, GridapGmsh
-using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
+using Gridap
+using GridapGmsh
+using Krylov
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using SparseArrays, LinearAlgebra, Statistics
+using SparseArrays
+using LinearAlgebra
+using ProgressMeter
 using Printf
 using PyPlot
 
@@ -11,14 +14,7 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
-function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
-    # tolerance and max iterations for iterative solvers
-    tol = 1e-6
-    itmax = 0
-
-    # Vector type 
-    VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
-
+function coarse_evolution(dim, arch)
     # coarse model
     h = 0.1
     model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
@@ -72,33 +68,17 @@ function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     # preconditioner
     if typeof(arch) == CPU
         P_inversion = lu(LHS_inversion)
-        ldiv_P_inversion = true
     else
         P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
-        ldiv_P_inversion = false
     end
 
     # put on GPU, if needed
     LHS_inversion = on_architecture(arch, LHS_inversion)
     RHS_inversion = on_architecture(arch, RHS_inversion)
 
-    # Krylov solver for inversion
-    solver_inversion = GmresSolver(N, N, 20, VT)
-    solver_inversion.x .= 0.
+    # setup inversion toolkit
+    inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
 
-    # inversion functions
-    function invert!(arch::AbstractArchitecture, solver, b)
-        b_arch = on_architecture(arch, b.free_values)
-        if typeof(arch) == GPU
-            RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
-        else
-            RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
-        end
-        Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, ldiv=ldiv_P_inversion,
-                    atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true,
-                    history=true)
-        return solver
-    end
     function update_u_p!(ux, uy, uz, p, solver)
         sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
         ux.free_values .= sol[1:nx]
@@ -138,13 +118,9 @@ function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     if typeof(arch) == CPU
         P_diff = lu(LHS_diff)
         P_adv  = lu(LHS_adv)
-        ldiv_P_diff = true
-        ldiv_P_adv  = true
     else
         P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_diff))))
         P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(LHS_adv))))
-        ldiv_P_diff = false
-        ldiv_P_adv  = false
     end
 
     # put on GPU, if needed
@@ -154,33 +130,40 @@ function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     LHS_adv = on_architecture(arch, LHS_adv)
 
     # Krylov solver for evolution
+    VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
+    tol = 1e-6
+    itmax = 0
     solver_evolution = CgSolver(nb, nb, VT)
     solver_evolution.x .= on_architecture(arch, copy(b.free_values)[perm_b])
 
     # evolution functions
     b_half = interpolate_everywhere(0, B)
-    function evolve_adv!(arch::AbstractArchitecture, solver_inversion, solver_evolution, ux, uy, uz, p, b)
+    function evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
+        # determine architecture
+        arch = architecture(solver_evolution.x)
+
         # half step
         l_half(d) = ∫( b*d - Δt/2*(ux*∂x(b) + uy*∂y(b) + uz*(N² + ∂z(b)))*d )dΩ
         RHS = on_architecture(arch, assemble_vector(l_half, D)[perm_b])
-        Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+        Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
 
         # u, v, w, p, b at half step
         update_b!(b_half, solver_evolution)
-        solver_inversion = invert!(arch, solver_inversion, b_half)
-        ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+        invert!(inversion_toolkit, b_half)
+        ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
 
         # full step
         l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
         RHS = on_architecture(arch, assemble_vector(l_full, D)[perm_b])
-        Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, ldiv=ldiv_P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+        Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
 
-        return solver_inversion, solver_evolution
+        return inversion_toolkit, solver_evolution
     end
-    function evolve_diff!(arch::AbstractArchitecture, solver, b)
+    function evolve_diff!(solver, b)
+        arch = architecture(solver.x)
         b_arch= on_architecture(arch, b.free_values)
         RHS = RHS_diff*b_arch + rhs_diff
-        Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, ldiv=ldiv_P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
+        Krylov.solve!(solver, LHS_diff, RHS, solver.x, M=P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
         return solver
     end
     function update_b!(b, solver)
@@ -189,19 +172,19 @@ function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     end
 
     # solve function
-    function solve!(arch::AbstractArchitecture, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_step, n_steps)
-        for i ∈ i_step:n_steps
+    function solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_step, n_steps)
+        @showprogress for i ∈ i_step:n_steps
             # advection step
-            solver_inversion, solver_evolution = evolve_adv!(arch, solver_inversion, solver_evolution, ux, uy, uz, p, b)
-            b = update_b!(b, solver_evolution)
+            evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
+            update_b!(b, solver_evolution)
 
             # diffusion step
-            solver_evolution = evolve_diff!(arch, solver_evolution, b)
-            b = update_b!(b, solver_evolution)
+            evolve_diff!(solver_evolution, b)
+            update_b!(b, solver_evolution)
 
             # invert
-            solver_inversion = invert!(arch, solver_inversion, b)
-            ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
+            invert!(inversion_toolkit, b)
+            ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
 
             # time
             t += Δt
@@ -212,13 +195,10 @@ function coarse_evolution(dim::AbstractDimension, arch::AbstractArchitecture)
     # run
     i_step = Int64(round(t/Δt)) + 1
     n_steps = Int64(round(T/Δt))
-    ux, uy, uz, p, b = solve!(arch, ux, uy, uz, p, b, t, solver_inversion, solver_evolution, i_step, n_steps)
+    ux, uy, uz, p, b = solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_step, n_steps)
 
     # # plot for sanity check
     # sim_plots(dim, ux, uy, uz, b, N², H, t, 0, "test")
-
-    # FIRST TIME ONLY: save state
-    # save_state(ux, uy, uz, p, b, t; fname=@sprintf("test/data/evolution_%s.h5", dim))
 
     # compare state with data
     datafile = @sprintf("test/data/evolution_%s.h5", dim)
@@ -243,13 +223,13 @@ end
     @testset "2D CPU" begin
         coarse_evolution(TwoD(), CPU())
     end
-    # @testset "2D GPU" begin
-    #     coarse_evolution(TwoD(), GPU())
-    # end
+    @testset "2D GPU" begin
+        coarse_evolution(TwoD(), GPU())
+    end
     @testset "3D CPU" begin
         coarse_evolution(ThreeD(), CPU())
     end
-    # @testset "3D GPU" begin
-    #     coarse_evolution(ThreeD(), GPU())
-    # end
+    @testset "3D GPU" begin
+        coarse_evolution(ThreeD(), GPU())
+    end
 end

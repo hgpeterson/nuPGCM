@@ -243,11 +243,11 @@ function solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_save
 
         # advection step
         evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
-        b = update_b!(b, solver_evolution)
+        update_b!(b, solver_evolution)
 
         # diffusion step
         evolve_diff!(solver_evolution, b)
-        b = update_b!(b, solver_evolution)
+        update_b!(b, solver_evolution)
 
         # invert
         invert!(inversion_toolkit, b)
