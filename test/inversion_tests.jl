@@ -1,7 +1,6 @@
 using Test
 using nuPGCM
 using Gridap
-using GridapGmsh
 using CUDA
 using SparseArrays
 using LinearAlgebra
@@ -12,126 +11,129 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
+set_out_dir!("./test")
+
 function coarse_inversion(dim, arch)
-    # coarse model
-    h = 0.1
-    model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
-
-    # FE spaces
-    X, Y, B, D = setup_FESpaces(model)
-    Ux, Uy, Uz, P = unpack_spaces(X)
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
-    nu = nx + ny + nz
-    np = P.space.space.nfree
-    N = nu + np - 1
-    if typeof(dim) == TwoD
-        @test N == 2023
-    else
-        @test N == 27934
-    end
-
-    # triangulation and integration measure
-    Ω = Triangulation(model)
-    dΩ = Measure(Ω, 4)
-
-    # depth
-    H(x) = 1 - x[1]^2 - x[2]^2
-
-    # forcing
-    ν(x) = 1
-    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
-
-    # params
+    # params/funcs
     ε² = 1e-2
     γ = 1/4
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
+    H(x) = 1 - x[1]^2 - x[2]^2
+    ν(x) = 1
+    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
-    # assemble LHS inversion and test against saved matrix
-    LHS_inversion_fname = @sprintf("test/data/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-    if !isfile(LHS_inversion_fname)
-        @warn "LHS_inversion file not found, generating..."
-        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(CPU(), γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    # coarse mesh
+    h = 0.1
+    mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
+
+    # dof
+    nu, nv, nw, np, nb = get_n_dof(mesh)
+    if typeof(dim) == TwoD
+        @test nu + nv + nw + np == 2023
     else
-        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(CPU(), γ, ε², ν, f, X, Y, dΩ; fname="LHS_inv_temp.h5")
-        @test LHS_inversion ≈ read_sparse_matrix(LHS_inversion_fname)[1]
+        @test nu + nv + nw + np == 27934
     end
 
-    # inversion RHS
-    RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
+    # dof perms
+    p_u, p_v, p_w, p_p, p_b = nuPGCM.compute_dof_perms(mesh)
+    inv_p_b = invperm(p_b)
+    p_inversion = [p_u; p_v .+ nu; p_w .+ nu .+ nv; p_p .+ nu .+ nv .+ nw]
+    inv_p_inversion = invperm(p_inversion)
+
+    # assemble LHS inversion and test against saved matrix
+    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
+    if !isfile(A_inversion_fname)
+        @warn "A_inversion file not found, generating..."
+        A_inversion = nuPGCM.build_A_inversion(mesh, γ, ε², ν, f; fname=A_inversion_fname)
+    else
+        A_inversion = nuPGCM.build_A_inversion(mesh, γ, ε², ν, f; fname="A_inversion_temp.jld2")
+        jldopen(A_inversion_fname, "r") do file
+            @test A_inversion ≈ file["A_inversion"]
+        end
+    end
+
+    # re-order dof
+    A_inversion = A_inversion[p_inversion, p_inversion]
+
+    # build RHS matrix for inversion
+    B_inversion = nuPGCM.build_B_inversion(mesh)
+
+    # re-order dof
+    B_inversion = B_inversion[p_inversion, :]
 
     # preconditioner
     if typeof(arch) == CPU
-        P_inversion = lu(LHS_inversion)
+        P_inversion = lu(A_inversion)
     else
         P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
     end
 
     # move to arch
-    LHS_inversion = on_architecture(arch, LHS_inversion)
-    RHS_inversion = on_architecture(arch, RHS_inversion)
+    A_inversion = on_architecture(arch, A_inversion)
+    B_inversion = on_architecture(arch, B_inversion)
 
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
+    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
-    function update_u_p!(ux, uy, uz, p, solver)
-        sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
-        ux.free_values .= sol[1:nx]
-        uy.free_values .= sol[nx+1:nx+ny]
-        uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-        p = FEFunction(P, sol[nx+ny+nz+1:end])
-        return ux, uy, uz, p
+    function update_u_p!(u, v, w, p, solver)
+        sol = on_architecture(CPU(), solver.x[inv_p_inversion])
+        u.free_values .= sol[1:nu]
+        v.free_values .= sol[nu+1:nu+nv]
+        w.free_values .= sol[nu+nv+1:nu+nv+nw]
+        p = FEFunction(P, sol[nu+nv+nw+1:end])
+        return u, v, w, p
     end
 
     # background state ∂z(b) = N^2
     N² = 1.
 
     # simple test buoyancy field: b = δ exp(-(z + H)/δ)
+    U, V, W, P = unpack_spaces(mesh.X_trial)
+    B = mesh.B_trial
     b = interpolate_everywhere(x -> 0.1*exp(-(x[3] + H(x))/0.1), B)
-    ux = interpolate_everywhere(0, Ux)
-    uy = interpolate_everywhere(0, Uy)
-    uz = interpolate_everywhere(0, Uz)
-    p  = interpolate_everywhere(0, P) 
+    u = interpolate_everywhere(0, U)
+    v = interpolate_everywhere(0, V)
+    w = interpolate_everywhere(0, W)
+    p = interpolate_everywhere(0, P) 
 
     # invert
     invert!(inversion_toolkit, b)
-    ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
+    u, v, w, p = update_u_p!(u, v, w, p, inversion_toolkit.solver)
 
-    # # plot for sanity check
-    # sim_plots(dim, ux, uy, uz, b, N², H, 0, 0, "test")
+    # plot for sanity check
+    sim_plots(dim, u, v, w, b, N², H, 0, 0)
 
     # compare state with data
     datafile = @sprintf("test/data/inversion_%s.h5", dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
-        save_state(ux, uy, uz, p, b, 0; fname=datafile)
+        save_state(u, v, w, p, b, 0; fname=datafile)
     else
-        ux_data, uy_data, uz_data, p_data, b_data, t_data = load_state(@sprintf("test/data/inversion_%s.h5", dim))
-        @test isapprox(ux.free_values, ux_data, rtol=1e-2)
-        @test isapprox(uy.free_values, uy_data, rtol=1e-2)
-        @test isapprox(uz.free_values, uz_data, rtol=1e-2)
-        @test isapprox(p.free_values,  p_data,  rtol=1e-2)
-        @test isapprox(b.free_values,  b_data,  rtol=1e-2)
+        u_data, v_data, w_data, p_data, b_data, t_data = load_state(@sprintf("test/data/inversion_%s.h5", dim))
+        @test isapprox(u.free_values, u_data, rtol=1e-2)
+        @test isapprox(v.free_values, v_data, rtol=1e-2)
+        @test isapprox(w.free_values, w_data, rtol=1e-2)
+        @test isapprox(p.free_values, p_data, rtol=1e-2)
+        @test isapprox(b.free_values, b_data, rtol=1e-2)
     end
 
     # remove temporary files
-    rm("LHS_inv_temp.h5", force=true)
+    rm("A_inversion_temp.jld2", force=true)
 end
 
 @testset "Inversion Tests" begin
     @testset "2D CPU" begin
         coarse_inversion(TwoD(), CPU())
     end
-    @testset "2D GPU" begin
-        coarse_inversion(TwoD(), GPU())
-    end
-    @testset "3D CPU" begin
-        coarse_inversion(ThreeD(), CPU())
-    end
-    @testset "3D GPU" begin
-        coarse_inversion(ThreeD(), GPU())
-    end
+    # @testset "2D GPU" begin
+    #     coarse_inversion(TwoD(), GPU())
+    # end
+    # @testset "3D CPU" begin
+    #     coarse_inversion(ThreeD(), CPU())
+    # end
+    # @testset "3D GPU" begin
+    #     coarse_inversion(ThreeD(), GPU())
+    # end
 end

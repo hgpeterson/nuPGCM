@@ -1,7 +1,6 @@
 using Test
 using nuPGCM
 using Gridap
-using GridapGmsh
 using Krylov
 using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
 using SparseArrays
@@ -15,33 +14,7 @@ plt.style.use("plots.mplstyle")
 plt.close("all")
 
 function coarse_evolution(dim, arch)
-    # coarse model
-    h = 0.1
-    model = GmshDiscreteModel(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
-
-    # FE spaces
-    X, Y, B, D = setup_FESpaces(model)
-    Ux, Uy, Uz, P = unpack_spaces(X)
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
-    nu = nx + ny + nz
-    np = P.space.space.nfree
-    nb = B.space.nfree
-    N = nu + np - 1
-
-    # triangulation and integration measure
-    Ω = Triangulation(model)
-    dΩ = Measure(Ω, 4)
-
-    # depth
-    H(x) = 1 - x[1]^2 - x[2]^2
-
-    # forcing
-    ν(x) = 1
-    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
-
-    # params
+    # params/funcs
     ε² = 1e-2
     γ = 1/4
     f₀ = 1
@@ -51,36 +24,58 @@ function coarse_evolution(dim, arch)
     Δt = 1e-4*μϱ/ε²
     T = 5e-2*μϱ/ε²
     α = Δt/2*ε²/μϱ
+    H(x) = 1 - x[1]^2 - x[2]^2
+    ν(x) = 1
+    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
-    # assemble LHS inversion and test against saved matrix
-    LHS_inversion_fname = @sprintf("test/data/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-    if !isfile(LHS_inversion_fname)
-        @warn "LHS_inversion file not found, generating..."
-        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+    # coarse mesh
+    h = 0.1
+    mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
+
+    # dof
+    nu, nv, nw, np, nb = get_n_dof(mesh)
+
+    # dof perms
+    p_u, p_v, p_w, p_p, p_b = compute_dof_perms(mesh)
+    inv_p_b = invperm(p_b)
+    p_inversion = [p_u; p_v .+ nu; p_w .+ nu .+ nv; p_p .+ nu .+ nv .+ nw]
+    inv_p_inversion = invperm(p_inversion)
+
+    # build LHS matrix for inversion and test against saved matrix
+    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
+    if !isfile(A_inversion_fname)
+        @warn "A_inversion file not found, generating..."
+        A_inversion = build_A_inversion(mesh, γ, ε², ν, f; fname=A_inversion_fname)
     else
         # just read inversion matrix instead of building and testing it; this is already tested in inversion_tests.jl
-        LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+        A_inversion = load(A_inversion_fname, "A_inversion")
     end
 
-    # inversion RHS
-    RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
+    # re-order dof
+    A_inversion = A_inversion[p_inversion, p_inversion]
+
+    # build RHS matrix for inversion
+    B_inversion = build_B_inversion(mesh)
+
+    # re-order dof
+    B_inversion = B_inversion[p_inversion, :]
 
     # preconditioner
     if typeof(arch) == CPU
-        P_inversion = lu(LHS_inversion)
+        P_inversion = lu(A_inversion)
     else
         P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
     end
 
     # put on GPU, if needed
-    LHS_inversion = on_architecture(arch, LHS_inversion)
-    RHS_inversion = on_architecture(arch, RHS_inversion)
+    A_inversion = on_architecture(arch, A_inversion)
+    B_inversion = on_architecture(arch, B_inversion)
 
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
+    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
     function update_u_p!(ux, uy, uz, p, solver)
-        sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
+        sol = on_architecture(CPU(), solver.x[inv_p_inversion])
         ux.free_values .= sol[1:nx]
         uy.free_values .= sol[nx+1:nx+ny]
         uz.free_values .= sol[nx+ny+1:nx+ny+nz]
@@ -167,7 +162,7 @@ function coarse_evolution(dim, arch)
         return solver
     end
     function update_b!(b, solver)
-        b.free_values .= on_architecture(CPU(), solver.x[inv_perm_b])
+        b.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
         return b
     end
 

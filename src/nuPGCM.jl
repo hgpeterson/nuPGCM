@@ -7,6 +7,7 @@ using CUDA
 using CUDA.CUSPARSE
 using CUDA.CUSOLVER
 using CuthillMcKee
+using JLD2
 using LinearAlgebra
 using SparseArrays
 using Krylov
@@ -83,10 +84,10 @@ string(::TwoD) = "2D"
 string(::ThreeD) = "3D"
 
 include("utils.jl")
-include("meshes.jl")
 include("plotting.jl")
 include("IO.jl")
 include("spaces.jl")
+include("meshes.jl")
 include("matrices.jl")
 include("inversion.jl")
 include("preconditioners.jl")
@@ -110,10 +111,6 @@ trapz,
 cumtrapz,
 nan_max,
 nan_min,
-# meshes.jl
-Mesh,
-get_p_t,
-get_p_to_t,
 # plotting.jl
 nan_eval,
 plot_slice,
@@ -121,22 +118,21 @@ plot_profiles,
 sim_plots,
 plot_sparsity_pattern,
 # IO.jl
-write_sparse_matrix,
-read_sparse_matrix,
 save_state,
 save_state_vtu,
 load_state,
 # spaces.jl
-setup_FESpaces,
 unpack_spaces,
+# meshes.jl
+Mesh,
+get_n_dof,
+get_p_t,
+get_p_to_t,
 # matrices.jl
 ∂x,
 ∂y,
 ∂z,
-assemble_LHS_inversion,
-assemble_RHS_inversion,
-assemble_LHS_adv_diff,
-assemble_RHS_diff,
+build_matrices,
 # inversion.jl
 InversionToolkit,
 invert!,
