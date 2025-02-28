@@ -3,16 +3,24 @@
 ∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
-"""
-    LHS, perm, inv_perm = assemble_LHS_inversion(arch::AbstractArchitecture, 
-                                                 γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
+# function build_matrices(mesh::Mesh)
+#     A_inversion = build_A_inversion(mesh)
+#     B_inversion = build_B_inversion(mesh)
+#     A_adv, A_diff = build_A_adv_A_diff(mesh)
+#     B_diff, b_diff = build_B_diff(mesh)
+#     return A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff
+# end
 
-Assemble the LHS of the inversion problem for Non-Hydrostatic PG equations and 
-return the matrix `LHS` along with the permutation `perm` and its inverse 
-`inv_perm`. The matrix is saved to a file `fname`.
 """
-function assemble_LHS_inversion(arch::AbstractArchitecture,
-                                γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
+    A = build_A_inversion(mesh::Mesh, γ, ε², ν, f; fname)
+
+Assemble the LHS matrix `A` for the inversion problem. 
+If `fname` is given, the data is saved to a file.
+"""
+function build_A_inversion(mesh::Mesh, γ, ε², ν, f; fname=nothing)
+    # unpack
+    X_trial, X_test, dΩ = mesh.X_trial, mesh.X_test, mesh.dΩ
+
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
         ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
@@ -21,48 +29,43 @@ function assemble_LHS_inversion(arch::AbstractArchitecture,
                                                                       ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
-    @time "assemble LHS_inversion" LHS = assemble_matrix(a, X, Y)
-
-    # Cuthill-McKee DOF reordering
-    @time "RCM perm" perm, inv_perm = RCM_perm(arch, X, Y, dΩ)
-
-    # re-order DOFs
-    LHS = LHS[perm, perm]
+    @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
 
     # save
-    write_sparse_matrix(LHS, perm, inv_perm; fname)
+    if fname !== nothing
+        jldsave(fname; A_inversion=A)
+        @info @sprintf("A_inversion saved to '%s' (%.1f GB)", fname, filesize(fname)/1e9)
+    end
 
-    return LHS, perm, inv_perm
+    return A
 end
 
 """
-    RHS = assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFESpace, dΩ::Measure)
+    B = build_B_inversion(mesh::Mesh)
 
-Assemble the RHS matrix for the inversion problem of the Non-Hydrostatic PG equations.
+Assemble the RHS matrix for the inversion problem.
 """
-function assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFESpace, dΩ::Measure)
+function build_B_inversion(mesh::Mesh)
+    # unpack
+    X_test, B_trial, dΩ = mesh.X_test, mesh.B_trial, mesh.dΩ
+
     # bilinear form
     a(b, vz) = ∫( b*vz )dΩ
 
-    # unpack Y
-    Vx, Vy, Vz, Q = unpack_spaces(Y)
-    nx = Vx.nfree
-    ny = Vy.nfree
-    nz = Vz.nfree
-    np = Q.space.space.nfree
-
-    # permutation for Uz
-    perm_uz = perm_inversion[nx+ny+1:nx+ny+nz] .- nx .- ny
+    # unpack X_test
+    U_test, V_test, W_test, P_test = unpack_spaces(X_test)
 
     # assemble
-    @time "RHS_inversion" RHS = assemble_matrix(a, B, Vz)[perm_uz, :]
+    @time "B_inversion" B = assemble_matrix(a, B_trial, W_test)
 
-    # convert RHS to N x nb matrix
-    I, J, V = findnz(RHS)
-    I .+= nx + ny
-    RHS = sparse(I, J, V, nx+ny+nz+np-1, size(RHS, 2))
+    # convert to N × nb matrix
+    nu, nv, nw, np, nb = get_n_dof(mesh)
+    N = nu + nv + nw + np
+    I, J, V = findnz(B)
+    I .+= nu + nv
+    B = sparse(I, J, V, N, nb)
 
-    return RHS
+    return B
 end
 
 """
@@ -113,80 +116,4 @@ function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ)
     @time "RHS_diff vector" v = assemble_vector(l, D)[perm]
 
     return M, v
-end
-
-"""
-    perm, inv_perm = RCM_perm(arch::AbstractArchitecture, X::MultiFieldFESpace, 
-                              Y::MultiFieldFESpace, dΩ::Measure)
-
-Return the reverse Cuthill-McKee permutation and its inverse for a multi-field FE 
-space.
-"""
-function RCM_perm(arch::AbstractArchitecture, X::MultiFieldFESpace, Y::MultiFieldFESpace, dΩ::Measure)
-    # unpack spaces
-    Ux, Uy, Uz, P = unpack_spaces(X)
-    Vx, Vy, Vz, Q = unpack_spaces(Y)
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
-
-    # assemble mass matrices
-    a(u, v) = ∫( u*v )dΩ
-    M_ux = assemble_matrix(a, Ux, Vx)
-    M_uy = assemble_matrix(a, Uy, Vy)
-    M_uz = assemble_matrix(a, Uz, Vz)
-    M_p  = assemble_matrix(a, P, Q)
-
-    # compute permutations
-    perm_ux = RCM_perm(arch, M_ux)
-    perm_uy = RCM_perm(arch, M_uy)
-    perm_uz = RCM_perm(arch, M_uz)
-    perm_p  = RCM_perm(arch, M_p)
-
-    # combine
-    perm = [perm_ux; 
-            perm_uy .+ nx; 
-            perm_uz .+ nx .+ ny; 
-            perm_p  .+ nx .+ ny .+ nz]
-
-    # inverse permutation
-    inv_perm = invperm(perm)
-
-    return perm, inv_perm
-end
-
-"""
-    perm, inv_perm = RCM_perm(arch::AbstractArchitecture, B::Gridap.FESpaces.SingleFieldFESpace, 
-                              D::Gridap.FESpaces.SingleFieldFESpace, dΩ::Measure)
-
-Return the reverse Cuthill-McKee permutation and its inverse for a single-field FE 
-space.
-"""
-function RCM_perm(arch::AbstractArchitecture, B::Gridap.FESpaces.SingleFieldFESpace, 
-                  D::Gridap.FESpaces.SingleFieldFESpace, dΩ::Measure)
-    # assemble mass matrix
-    a(b, d) = ∫( b*d )dΩ
-    M_b = assemble_matrix(a, B, D)
-
-    # compute permutation
-    perm = RCM_perm(arch, M_b)
-
-    # inverse permutation
-    inv_perm = invperm(perm)
-
-    return perm, inv_perm
-end
-
-"""
-    perm = RCM_perm(arch::AbstractArchitecture, M)
-
-Return the reverse Cuthill-McKee permutation of the matrix `M`. If `arch` is 
-`GPU`, the permutation is computed using the CUSOLVER library, otherwise it 
-is computed using the CuthillMcKee library.
-"""
-function RCM_perm(arch::GPU, M)
-    return CUSOLVER.symrcm(M) .+ 1
-end
-function RCM_perm(arch::CPU, M)
-    return CuthillMcKee.symrcm(M, true, false)
 end
