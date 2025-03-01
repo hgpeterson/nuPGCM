@@ -26,26 +26,42 @@ function diffuse_column(z, κ, params)
 end
 
 """
-B = -∂R( 1/[√2(1 - R²)²] ∫ z ∂R(b) dz )
-  = -∂R( 1/[√2(1 - R²)²] ∫ ∂R(zb) dz )
-  = -∂R( 1/[√2(1 - R²)²] [∂R(∫ zb dz) + H b(-H) ∂R(H)] )
-  = -∂R( 1/[√2(1 - R²)²] ) [∂R(∫ zb dz) + H b(-H) ∂R(H)] - 1/[√2(1 - R²)²] ∂R[∂R(∫ zb dz) + H b(-H) ∂R(H)]
-  = -4R/[√2(1 - R²)³] [∂R(∫ zb dz) + H b(-H) ∂R(H)] - 1/[√2(1 - R²)²] ∂R[∂R(∫ zb dz) + H b(-H) ∂R(H)]
-
-√2(1 - R²)³ B = -4R [∂R(∫ zb dz) + H b(-H) ∂R(H)] - (1 - R²) ∂R[∂R(∫ zb dz) + H b(-H) ∂R(H)]
-              = -4R [-∂R(γ) + H b(-H) ∂R(H)] - (1 - R²) ∂R[-∂R(γ) + H b(-H) ∂R(H)]
-              = -4R f - (1 - R²) ∂R[f]
+√2 R (1 - R^2)^3 B = R (1 - R^2) γ'' 
+                   + (1 + 3 R^2) γ' 
+                   + 2 R^2 (1 - R^2)^2 b'(-H)
+                   + 4 R (1 - R^2) b(-H)
 """
 function compute_barotropic_ode_rhs(R, z, b)
     # γ = -∫ zb dz
     γ = [-trapz(z[i, :].*b[i, :], z[i, :]) for i in eachindex(R)]
-    
-    # f = -∂R(γ) + H b(-H) ∂R(H)
-    H = -z[:, 1]
-    f = -differentiate(γ, R) .+ H.*b[:, 1].*differentiate(H, R)
 
-    # rhs = -4R f - (1 - R²) ∂R[f]
-    return -4*R .* f .- (1 .- R.^2) .* differentiate(f, R)
+    # bottom buoyancy
+    bbot = b[:, 1]
+
+    # compute terms
+    rhs1 = R.*(1 .- R.^2).*differentiate(differentiate(γ, R), R)
+    rhs2 = (1 .+ 3*R.^2).*differentiate(γ, R)
+    rhs3 = 2*R.^2 .*(1 .- R.^2).^2 .*differentiate(bbot, R)
+    rhs4 = 4*R.*(1 .- R.^2).*bbot
+
+    # plot
+    fig, ax = plt.subplots(1)
+    ax.spines["bottom"].set_visible(false)
+    ax.axhline(0, color="k", linewidth=0.5)
+    ax.set_xlim(0, 1)
+    ax.plot(R, rhs1, label="Term 1")
+    ax.plot(R, rhs2, label="Term 2")
+    ax.plot(R, rhs3, label="Term 3")
+    ax.plot(R, rhs4, label="Term 4")
+    ax.plot(R, rhs1 + rhs2 + rhs3 + rhs4, "k", label="Total")
+    ax.legend()
+    ax.set_xlabel(L"R")
+    ax.set_ylabel(L"\sqrt{2} R (1 - R^2)^3 \mathcal{B}")
+    savefig("images/barotropic_rhs.png")
+    @info "Saved 'images/barotropic_rhs.png'"
+    plt.close()
+
+    return rhs1 + rhs2 + rhs3 + rhs4
 end
 
 """
@@ -53,7 +69,7 @@ end
 
 Solve the barotropic ODE
 
-    (1 - R²) G'' + 4 G' / R = f
+    R (1 - R²) G'' + (1 + 3 R²) G' = f
 
 with boundary conditions 
 
@@ -70,15 +86,15 @@ function solve_barotropic_ode(R, f)
         fd_R  = mkfdstencil(R[i-1:i+1], R[i], 1)
         fd_RR = mkfdstencil(R[i-1:i+1], R[i], 2)
 
-        # (1 - R²) G''
-        push!(A, (i, i-1, (1 - R[i]^2)*fd_RR[1]))
-        push!(A, (i, i,   (1 - R[i]^2)*fd_RR[2]))
-        push!(A, (i, i+1, (1 - R[i]^2)*fd_RR[3]))
+        # R (1 - R²) G''
+        push!(A, (i, i-1, R[i]*(1 - R[i]^2)*fd_RR[1]))
+        push!(A, (i, i,   R[i]*(1 - R[i]^2)*fd_RR[2]))
+        push!(A, (i, i+1, R[i]*(1 - R[i]^2)*fd_RR[3]))
 
-        # 4 G'/ R 
-        push!(A, (i, i-1, 4/R[i]*fd_R[1]))
-        push!(A, (i, i,   4/R[i]*fd_R[2]))
-        push!(A, (i, i+1, 4/R[i]*fd_R[3]))
+        # (1 + 3 R²) G' 
+        push!(A, (i, i-1, (1 + 3*R[i]^2)*fd_R[1]))
+        push!(A, (i, i,   (1 + 3*R[i]^2)*fd_R[2]))
+        push!(A, (i, i+1, (1 + 3*R[i]^2)*fd_R[3]))
     end
 
     # G'(0) = 0
@@ -101,7 +117,7 @@ function solve_barotropic_ode(R, f)
     return A\f
 end
 
-function main()
+function diffuse_columns()
     # grid in R
     nR = 2^10
     # R = range(0, 1, length=nR)
@@ -131,48 +147,80 @@ function main()
     @showprogress for i in 1:nR-1
         b[i, :] .= diffuse_column(z[i, :], κ[i, :], params)
     end
-
-    # RHS forcing to barotropic ODE
-    barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
-
-    # solve barotropic ODE
-    G = solve_barotropic_ode(R, barotropic_rhs)
-
-    return R, z, b, barotropic_rhs, G
+    
+    return R, z, b
 end
 
-R, z, b, barotropic_rhs, G = main()
+# R, z, b = diffuse_columns()
+barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
+G = solve_barotropic_ode(R, barotropic_rhs)
 
-# plot column
-i = argmin(abs.(R .- 0.5))
-plot_bz(b[i, :], z[i, :]; t=3e-3, filename="images/bz.png")
+# # plot column
+# i = argmin(abs.(R .- 0.5))
+# plot_bz(b[i, :], z[i, :]; t=3e-3, filename="images/bz.png")
 
-# plot bowl
-fig, ax = plt.subplots(1)
-R2 = repeat(R, 1, size(z, 2))
-vmax = maximum(abs.(b))
-ax.pcolormesh(R2, z, b, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="auto")
-ax.contour(R2, z, z .+ b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.3, linestyles="-", alpha=0.5)
-ax.spines["left"].set_visible(false)
-ax.spines["bottom"].set_visible(false)
-ax.set_xlabel(L"R")
-ax.set_ylabel(L"z")
-ax.set_xlim(0, 1)
-savefig("images/b.png")
-@info "Saved 'images/b.png'"
-plt.close()
-
-# plot B and G
-fig, ax = plt.subplots(1)
-ax.set_xlim(0, 1)
-# ax.set_ylim(-0.2, 0.2)
-ax.spines["bottom"].set_visible(false)
-ax.axhline(0, color="k", linewidth=0.5)
-# ax.set_title(L"\sqrt{2} (1 - R^2)^2 \mathcal{B}")
-# ax.plot(R, barotropic_rhs, label=L"\sqrt{2} (1 - R^2)^3 \mathcal{B}")
-ax.plot(R, G, label=L"G")
+# # plot column vs full field
+# d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
+# b_full = d["b"]
+# x = d["x"]
+# y = d["y"]
+# σ = d["σ"]
+# H = d["H"]
+# close(d)
+# i = argmin(abs.(x .- 0.5))
+# j = length(y) ÷ 2 + 1
+# z_full = σ*H[i, j]
+# fig, ax = plt.subplots(1, figsize=(2, 3.2))
+# ax.set_ylabel(L"Vertical coordinate $z$")
+# ax.set_xlabel(L"Stratification $\partial_z b$")
+# ax.set_xlim(0, 1.5)
+# bz_full = differentiate(b_full[i, j, :], z_full)
+# ax.plot(1 .+ bz_full[isnan.(bz_full) .== 0], z_full[isnan.(bz_full) .== 0], label="3D")
+# i = argmin(abs.(R .- 0.5))
+# bz1D = differentiate(b[i, :], z[i, :])
+# ax.plot(1 .+ bz1D, z[i, :], "k--", lw=0.5, label="1D")
 # ax.legend()
-ax.set_xlabel(L"R")
+# ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(3e-3))))
+# savefig("images/bz_full.png")
+# @info "Saved 'images/bz_full.png'"
+# plt.close()
+
+# # plot bowl
+# fig, ax = plt.subplots(1)
+# R2 = repeat(R, 1, size(z, 2))
+# vmax = maximum(abs.(b))
+# ax.pcolormesh(R2, z, b, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="auto")
+# ax.contour(R2, z, z .+ b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.3, linestyles="-", alpha=0.5)
+# ax.spines["left"].set_visible(false)
+# ax.spines["bottom"].set_visible(false)
+# ax.set_xlabel(L"R")
+# ax.set_ylabel(L"z")
+# ax.set_xlim(0, 1)
+# savefig("images/b.png")
+# @info "Saved 'images/b.png'"
+# plt.close()
+
+# plot Ψ
+d = jldopen("../sims/sim048/data/psi_beta0.0_n0257_003.jld2", "r")
+x = d["x"]
+Ψ = d["Ψ"]
+close(d)
+fig, ax = plt.subplots(1)
+ax.set_xlim(0, 1)
+# ax.set_ylim(-1.5, 0)
+ax.spines["bottom"].set_position("zero")
+ax.xaxis.set_label_coords(0.5, 1.25)
+ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
+ax.axhline(0, color="k", linewidth=0.5)
+i = size(Ψ, 2) ÷ 2 + 1
+ax.plot(x, 1e2*Ψ[:, i], label="Model")
+# ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
+ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
+ax.legend()
+ax.set_xticks(0:0.5:1)
+# ax.set_yticks(0:-0.5:-1.5)
+ax.set_xlabel(L"Zonal coordinate $x$")
+ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
 savefig("images/barotropic_ode.png")
 @info "Saved 'images/barotropic_ode.png'"
 plt.close()
