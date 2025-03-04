@@ -19,7 +19,7 @@ If `fname` is given, the data is saved to a file.
 """
 function build_A_inversion(mesh::Mesh, γ, ε², ν, f; fname=nothing)
     # unpack
-    X_trial, X_test, dΩ = mesh.X_trial, mesh.X_test, mesh.dΩ
+    X_trial, X_test, dΩ = mesh.spaces.X_trial, mesh.spaces.X_test, mesh.dΩ
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
@@ -47,19 +47,17 @@ Assemble the RHS matrix for the inversion problem.
 """
 function build_B_inversion(mesh::Mesh)
     # unpack
-    X_test, B_trial, dΩ = mesh.X_test, mesh.B_trial, mesh.dΩ
+    X_test, B_trial, dΩ = mesh.spaces.X_test, mesh.spaces.B_trial, mesh.dΩ
+    W_test = X_test[3]
 
     # bilinear form
     a(b, vz) = ∫( b*vz )dΩ
-
-    # unpack X_test
-    U_test, V_test, W_test, P_test = unpack_spaces(X_test)
 
     # assemble
     @time "B_inversion" B = assemble_matrix(a, B_trial, W_test)
 
     # convert to N × nb matrix
-    nu, nv, nw, np, nb = get_n_dof(mesh)
+    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
     N = nu + nv + nw + np
     I, J, V = findnz(B)
     I .+= nu + nv
