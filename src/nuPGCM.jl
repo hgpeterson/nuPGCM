@@ -85,12 +85,13 @@ string(::ThreeD) = "3D"
 
 include("utils.jl")
 include("plotting.jl")
-include("IO.jl")
 include("spaces.jl")
+include("dofs.jl")
 include("meshes.jl")
 include("matrices.jl")
 include("inversion.jl")
 include("preconditioners.jl")
+include("state.jl")
 
 export 
 out_dir,
@@ -117,15 +118,12 @@ plot_slice,
 plot_profiles,
 sim_plots,
 plot_sparsity_pattern,
-# IO.jl
-save_state,
-save_state_vtu,
-load_state,
 # spaces.jl
-unpack_spaces,
+Spaces,
+# dofs.jl
+get_n_dof,
 # meshes.jl
 Mesh,
-get_n_dof,
 get_p_t,
 get_p_to_t,
 # matrices.jl
@@ -137,6 +135,12 @@ build_matrices,
 InversionToolkit,
 invert!,
 # preconditioners.jl
-mul!
+mul!,
+# state.jl
+State,
+rest_state,
+set_state!,
+save,
+load_state
 
 end # module
