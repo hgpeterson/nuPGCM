@@ -1,15 +1,15 @@
-mutable struct State{V, T}
+mutable struct State{V, P, T}
     u::V
     v::V
     w::V
-    p::V
+    p::P
     b::V
     t::T
 end
 
 function State(u::V, v::V, w::V, p::V, b::V, t) where V <: CellField
-    # since `p` is a lazy array, need to use `[:]` to evaluate it
-    return State(u.free_values, v.free_values, w.free_values, p.free_values[:], b.free_values, t)
+    # assuming here that p.free_values is a Gridap.Arrays.LazyArray
+    return State(u.free_values, v.free_values, w.free_values, p.free_values.args[1], b.free_values, t)
 end
 
 function rest_state(U, V, W, P, B, t)
