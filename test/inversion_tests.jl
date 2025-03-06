@@ -17,7 +17,7 @@ set_out_dir!("./test")
 function coarse_inversion(dim, arch)
     # params/funcs
     ε² = 1e-2
-    γ = 1/4
+    α = 1/4
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
@@ -30,12 +30,12 @@ function coarse_inversion(dim, arch)
     mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
 
     # assemble LHS inversion and test against saved matrix
-    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
+    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion = nuPGCM.build_A_inversion(mesh, γ, ε², ν, f; fname=A_inversion_fname)
+        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε², ν, f; fname=A_inversion_fname)
     else
-        A_inversion = nuPGCM.build_A_inversion(mesh, γ, ε², ν, f; fname="A_inversion_temp.jld2")
+        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε², ν, f; fname="A_inversion_temp.jld2")
         jldopen(A_inversion_fname, "r") do file
             @test A_inversion ≈ file["A_inversion"]
         end
@@ -80,8 +80,8 @@ function coarse_inversion(dim, arch)
     invert!(inversion_toolkit, b)
     set_state!(state, mesh, inversion_toolkit)
 
-    # plot for sanity check
-    sim_plots(dim, u, v, w, b, N², H, 0, 0)
+    # # plot for sanity check
+    # sim_plots(dim, u, v, w, b, N², H, 0, 0)
 
     # compare state with data
     datafile = @sprintf("test/data/inversion_%s.h5", dim)
@@ -95,11 +95,13 @@ function coarse_inversion(dim, arch)
         # @test isapprox(state.w, state_data.w, rtol=1e-2)
         # @test isapprox(state.p, state_data.p, rtol=1e-2)
         # @test isapprox(state.b, state_data.b, rtol=1e-2)
+        p = FEFunction(mesh.spaces.X_trial[4], state.p)
         file = h5open(datafile, "r")
         @test isapprox(state.u, read(file, "ux"), rtol=1e-2)
         @test isapprox(state.v, read(file, "uy"), rtol=1e-2)
         @test isapprox(state.w, read(file, "uz"), rtol=1e-2)
-        @test isapprox(state.p, read(file, "p"), rtol=1e-2) #FAILURE HERE
+        # @test isapprox(state.p, read(file, "p"), rtol=1e-2) #FAILURE HERE
+        @test isapprox(p.free_values[:], read(file, "p"), rtol=1e-2)
         @test isapprox(state.b, read(file, "b"), rtol=1e-2)
         close(file)
     end
@@ -112,13 +114,13 @@ end
     @testset "2D CPU" begin
         coarse_inversion(TwoD(), CPU())
     end
-    # @testset "2D GPU" begin
-    #     coarse_inversion(TwoD(), GPU())
-    # end
+    @testset "2D GPU" begin
+        coarse_inversion(TwoD(), GPU())
+    end
     @testset "3D CPU" begin
         coarse_inversion(ThreeD(), CPU())
     end
-    # @testset "3D GPU" begin
-    #     coarse_inversion(ThreeD(), GPU())
-    # end
+    @testset "3D GPU" begin
+        coarse_inversion(ThreeD(), GPU())
+    end
 end
