@@ -34,9 +34,31 @@ end
 function compute_barotropic_ode_rhs(R, z, b)
     # γ = -∫ zb dz
     γ = [-trapz(z[i, :].*b[i, :], z[i, :]) for i in eachindex(R)]
+    fig, ax = plt.subplots(1)
+    ax.spines["bottom"].set_visible(false)
+    ax.axhline(0, color="k", linewidth=0.5)
+    ax.set_xlim(0, 1)
+    ax.set_ymargin(0.1)
+    ax.plot(R, γ)
+    ax.set_xlabel(L"R")
+    ax.set_title(L"\gamma")
+    savefig("images/gamma.png")
+    @info "Saved 'images/gamma.png'"
+    plt.close()
 
     # bottom buoyancy
     bbot = b[:, 1]
+    fig, ax = plt.subplots(1)
+    ax.spines["bottom"].set_visible(false)
+    ax.axhline(0, color="k", linewidth=0.5)
+    ax.set_xlim(0, 1)
+    ax.set_ymargin(0.1)
+    ax.plot(R, bbot)
+    ax.set_xlabel(L"R")
+    ax.set_title(L"b|_{-H}")
+    savefig("images/bbot.png")
+    @info "Saved 'images/bbot.png'"
+    plt.close()
 
     # compute terms
     rhs1 = R.*(1 .- R.^2).*differentiate(differentiate(γ, R), R)
@@ -49,6 +71,7 @@ function compute_barotropic_ode_rhs(R, z, b)
     ax.spines["bottom"].set_visible(false)
     ax.axhline(0, color="k", linewidth=0.5)
     ax.set_xlim(0, 1)
+    ax.set_ymargin(0.1)
     ax.plot(R, rhs1, label="Term 1")
     ax.plot(R, rhs2, label="Term 2")
     ax.plot(R, rhs3, label="Term 3")
@@ -125,6 +148,8 @@ function diffuse_columns()
 
     # depth function
     H = @. 1 - R^2
+    HR = -2*R
+    θs = -atan.(HR)
 
     # vertical grids
     nz = 2^10
@@ -136,15 +161,15 @@ function diffuse_columns()
     # parameters
     ε = 1e-2
     μϱ = 1e-4
-    γ = θ = 0
+    α = 1/2
     horiz_diff = false
     T = 3e-3*μϱ/ε^2
     Δt = 1e-4*μϱ/ε^2
-    params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, T=T, horiz_diff=horiz_diff)
 
     # solve diffusion problem for each column (except the last one where H = 0)
     b = zeros(nR, nz)
     @showprogress for i in 1:nR-1
+        params = (μϱ=μϱ, α=α, θ=θs[i], ε=ε, Δt=Δt, T=T, horiz_diff=horiz_diff)
         b[i, :] .= diffuse_column(z[i, :], κ[i, :], params)
     end
     
@@ -152,8 +177,8 @@ function diffuse_columns()
 end
 
 # R, z, b = diffuse_columns()
-barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
-G = solve_barotropic_ode(R, barotropic_rhs)
+# barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
+# G = solve_barotropic_ode(R, barotropic_rhs)
 
 # # plot column
 # i = argmin(abs.(R .- 0.5))
@@ -207,18 +232,17 @@ x = d["x"]
 close(d)
 fig, ax = plt.subplots(1)
 ax.set_xlim(0, 1)
-# ax.set_ylim(-1.5, 0)
+# ax.set_ymargin(0.1)
+ax.set_ylim(1e2*G[1], 0)
 ax.spines["bottom"].set_position("zero")
 ax.xaxis.set_label_coords(0.5, 1.25)
 ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
 ax.axhline(0, color="k", linewidth=0.5)
 i = size(Ψ, 2) ÷ 2 + 1
 ax.plot(x, 1e2*Ψ[:, i], label="Model")
-# ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
-ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
+ax.plot(R, 1e2*G*(2/pi), "k--", lw=0.5, label="Theory")
 ax.legend()
 ax.set_xticks(0:0.5:1)
-# ax.set_yticks(0:-0.5:-1.5)
 ax.set_xlabel(L"Zonal coordinate $x$")
 ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
 savefig("images/barotropic_ode.png")

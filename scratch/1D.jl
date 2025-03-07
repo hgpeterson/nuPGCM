@@ -16,23 +16,23 @@ include("../plots/derivatives.jl")
 
 """
 Build matrix representations of 
-    b^(n+1) - α dz(κ (1 + β dz(b^(n+1)))) = b^(n) + α dz(κ (1 + β dz(b^(n))))
-so that LHS*b[n+1] = RHS*b[n] + rhs where α = ε²/μϱ * Δt/2 and β = 1 + γ*tan(θ)^2.
+    b^(n+1) - a dz(κ (1 + Γ dz(b^(n+1)))) = b^(n) + a dz(κ (1 + Γ dz(b^(n))))
+so that LHS*b[n+1] = RHS*b[n] + rhs where a = ε²/μϱ * Δt/2 and Γ = 1 + α^2*tan(θ)^2.
 """
 function build_b(z, κ, params)
     # unpack
     μϱ = params.μϱ
-    γ = params.γ
+    α = params.α
     θ = params.θ
     ε = params.ε
     Δt = params.Δt
 
     # coeffs
-    α = ε^2/μϱ * Δt/2
+    a = ε^2/μϱ * Δt/2
     if params.horiz_diff 
-        β = 1 + γ*tan(θ)^2
+        Γ = 1 + α^2*tan(θ)^2
     else
-        β = 1
+        Γ = 1
     end
 
     # initialize
@@ -52,31 +52,31 @@ function build_b(z, κ, params)
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
 
-        # LHS: b - α*dz(κ*(1 + β*dz(b)))
-        #    = b - α*dz(κ + β*κ*dz(b))
-        #    = b - α*dz(κ) - α*β*dz(κ)*dz(b) - α*β*κ*dzz(b)
+        # LHS: b - a*dz(κ*(1 + Γ*dz(b)))
+        #    = b - a*dz(κ + Γ*κ*dz(b))
+        #    = b - a*dz(κ) - a*Γ*dz(κ)*dz(b) - a*Γ*κ*dzz(b)
         push!(LHS, (j, j, 1))
-        push!(LHS, (j, j-1, (-α*β*κ_z*fd_z[1] - α*β*κ[j]*fd_zz[1])))
-        push!(LHS, (j, j,   (-α*β*κ_z*fd_z[2] - α*β*κ[j]*fd_zz[2])))
-        push!(LHS, (j, j+1, (-α*β*κ_z*fd_z[3] - α*β*κ[j]*fd_zz[3])))
-        rhs[j] += α*κ_z # -α*dz(κ) move to rhs
+        push!(LHS, (j, j-1, (-a*Γ*κ_z*fd_z[1] - a*Γ*κ[j]*fd_zz[1])))
+        push!(LHS, (j, j,   (-a*Γ*κ_z*fd_z[2] - a*Γ*κ[j]*fd_zz[2])))
+        push!(LHS, (j, j+1, (-a*Γ*κ_z*fd_z[3] - a*Γ*κ[j]*fd_zz[3])))
+        rhs[j] += a*κ_z # -α*dz(κ) move to rhs
 
-        # RHS: b + α*dz(κ*(1 + β*dz(b)))
-        #    = b + α*dz(κ + β*κ*dz(b))
-        #    = b + α*dz(κ) + α*β*dz(κ)*dz(b) + α*β*κ*dzz(b)
+        # RHS: b + a*dz(κ*(1 + Γ*dz(b)))
+        #    = b + a*dz(κ + Γ*κ*dz(b))
+        #    = b + a*dz(κ) + a*Γ*dz(κ)*dz(b) + a*Γ*κ*dzz(b)
         push!(RHS, (j, j, 1))
-        push!(RHS, (j, j-1, (α*β*κ_z*fd_z[1] + α*β*κ[j]*fd_zz[1])))
-        push!(RHS, (j, j,   (α*β*κ_z*fd_z[2] + α*β*κ[j]*fd_zz[2])))
-        push!(RHS, (j, j+1, (α*β*κ_z*fd_z[3] + α*β*κ[j]*fd_zz[3])))
-        rhs[j] += α*κ_z
+        push!(RHS, (j, j-1, (a*Γ*κ_z*fd_z[1] + a*Γ*κ[j]*fd_zz[1])))
+        push!(RHS, (j, j,   (a*Γ*κ_z*fd_z[2] + a*Γ*κ[j]*fd_zz[2])))
+        push!(RHS, (j, j+1, (a*Γ*κ_z*fd_z[3] + a*Γ*κ[j]*fd_zz[3])))
+        rhs[j] += a*κ_z
     end
 
-    # z = -H: 1 + β*dz(b) = 0 -> dz(b) = -1/β
+    # z = -H: 1 + Γ*dz(b) = 0 -> dz(b) = -1/Γ
     fd_z = mkfdstencil(z[1:3], z[1], 1)
     push!(LHS, (1, 1, fd_z[1]))
     push!(LHS, (1, 2, fd_z[2]))
     push!(LHS, (1, 3, fd_z[3]))
-    rhs[1] = -1/β
+    rhs[1] = -1/Γ
 
     # z = 0: b = 0
     push!(LHS, (N, N, 1))
@@ -92,7 +92,7 @@ end
 Build matrix representation of
    ε²Γ²*dzz(ν*τˣ) + f*τʸ = F
    ε²Γ *dzz(ν*τʸ) - f*τˣ = G
-where τˣ = dz(u) and τʸ = dz(v) and Γ = 1 + γ*tan(θ)^2.
+where τˣ = dz(u) and τʸ = dz(v) and Γ = 1 + α*tan(θ)^2.
 Boundary conditions:
     τˣ = τʸ = 0 at z = 0
     -∫ z τˣ dz = U
@@ -102,14 +102,14 @@ function build_LHS_τ(z, ν, params)
     # unpack
     ε = params.ε
     θ = params.θ
-    γ = params.γ
+    α = params.α
     f = params.f
 
     # setup
     nz = length(z)
     umap = 1:nz
     vmap = nz+1:2nz
-    Γ = 1 + γ*tan(θ)^2
+    Γ = 1 + α^2*tan(θ)^2
     LHS = Tuple{Int64,Int64,Float64}[]  
 
     # interior nodes
@@ -309,7 +309,7 @@ end
 function main()
     # parameters
     μϱ = 1e-4
-    γ = 1/4
+    α = 1/2
     θ = π/4
     ε = 1e-2
     Δt = 1e-4*μϱ/ε^2
@@ -319,13 +319,13 @@ function main()
     nz = 2^8
     horiz_diff = false
     T = 3e-3*μϱ/ε^2
-    params = (μϱ=μϱ, γ=γ, θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
+    params = (μϱ=μϱ, α=α, θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
 
     # solve
     u, v, w, b, t, z = solve(params)
 
-    # save
-    save(u, v, w, b, params, t, z; filename="../sims/sim048/data/1D_beta1.0.jld2")
+    # # save
+    # save(u, v, w, b, params, t, z; filename="../sims/sim048/data/1D_beta1.0.jld2")
 
     # plot
     fig, ax = plot_setup()
