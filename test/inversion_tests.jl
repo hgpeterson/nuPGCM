@@ -16,8 +16,8 @@ set_out_dir!("./test")
 
 function coarse_inversion(dim, arch)
     # params/funcs
-    ε² = 1e-2
-    α = 1/4
+    ε = 1e-1
+    α = 1/2
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
@@ -30,12 +30,12 @@ function coarse_inversion(dim, arch)
     mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
 
     # assemble LHS inversion and test against saved matrix
-    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², α, f₀, β)
+    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε², ν, f; fname=A_inversion_fname)
+        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε, ν, f; fname=A_inversion_fname)
     else
-        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε², ν, f; fname="A_inversion_temp.jld2")
+        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε, ν, f; fname="A_inversion_temp.jld2")
         jldopen(A_inversion_fname, "r") do file
             @test A_inversion ≈ file["A_inversion"]
         end
@@ -64,9 +64,6 @@ function coarse_inversion(dim, arch)
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
-    # background state ∂z(b) = N^2
-    N² = 1.
-
     # simple test buoyancy field: b = δ exp(-(z + H)/δ)
     u = interpolate_everywhere(0, mesh.spaces.X_trial[1])
     v = interpolate_everywhere(0, mesh.spaces.X_trial[2])
@@ -81,29 +78,20 @@ function coarse_inversion(dim, arch)
     set_state!(state, mesh, inversion_toolkit)
 
     # # plot for sanity check
-    # sim_plots(dim, u, v, w, b, N², H, 0, 0)
+    # sim_plots(dim, u, v, w, b, 1, H, 0, 0)
 
     # compare state with data
-    datafile = @sprintf("test/data/inversion_%s.h5", dim)
+    datafile = @sprintf("test/data/inversion_%s.jld2", dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
         save(state; ofile=datafile)
     else
-        # state_data = load_state(datafile)
-        # @test isapprox(state.u, state_data.u, rtol=1e-2)
-        # @test isapprox(state.v, state_data.v, rtol=1e-2)
-        # @test isapprox(state.w, state_data.w, rtol=1e-2)
-        # @test isapprox(state.p, state_data.p, rtol=1e-2)
-        # @test isapprox(state.b, state_data.b, rtol=1e-2)
-        p = FEFunction(mesh.spaces.X_trial[4], state.p)
-        file = h5open(datafile, "r")
-        @test isapprox(state.u, read(file, "ux"), rtol=1e-2)
-        @test isapprox(state.v, read(file, "uy"), rtol=1e-2)
-        @test isapprox(state.w, read(file, "uz"), rtol=1e-2)
-        # @test isapprox(state.p, read(file, "p"), rtol=1e-2) #FAILURE HERE
-        @test isapprox(p.free_values[:], read(file, "p"), rtol=1e-2)
-        @test isapprox(state.b, read(file, "b"), rtol=1e-2)
-        close(file)
+        state_data = load_state(datafile)
+        @test isapprox(state.u, state_data.u, rtol=1e-2)
+        @test isapprox(state.v, state_data.v, rtol=1e-2)
+        @test isapprox(state.w, state_data.w, rtol=1e-2)
+        @test isapprox(state.p, state_data.p, rtol=1e-2)
+        @test isapprox(state.b, state_data.b, rtol=1e-2)
     end
 
     # remove temporary files

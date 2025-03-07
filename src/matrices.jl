@@ -12,21 +12,31 @@
 # end
 
 """
-    A = build_A_inversion(mesh::Mesh, γ, ε², ν, f; fname)
+    A = build_A_inversion(mesh::Mesh, α, ε, ν, f; fname)
 
 Assemble the LHS matrix `A` for the inversion problem. 
 If `fname` is given, the data is saved to a file.
 """
-function build_A_inversion(mesh::Mesh, γ, ε², ν, f; fname=nothing)
+function build_A_inversion(mesh::Mesh, α, ε, ν, f; fname=nothing)
     # unpack
     X_trial, X_test, dΩ = mesh.spaces.X_trial, mesh.spaces.X_test, mesh.dΩ
 
+    # coefficient
+    ε² = ε^2
+    α²ε² = α^2*ε^2
+    α⁴ε² = α^4*ε^2
+
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-           γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-         γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                                                      ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        ∫( α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+           α⁴ε²*∂x(uz)*∂x(vz)*ν + α⁴ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    # a((ux, uy, uz, p), (vx, vy, vz, q)) =
+    #     ∫(α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν + α²ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+    #       α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν + α²ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+    #       α²ε²*∂x(uz)*∂x(vz)*ν + α²ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+    #                                                                 ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
@@ -45,13 +55,18 @@ end
 
 Assemble the RHS matrix for the inversion problem.
 """
+# function build_B_inversion(mesh::Mesh, α)
 function build_B_inversion(mesh::Mesh)
     # unpack
     X_test, B_trial, dΩ = mesh.spaces.X_test, mesh.spaces.B_trial, mesh.dΩ
     W_test = X_test[3]
 
+    # coefficient
+    # α⁻¹ = 1/α
+
     # bilinear form
     a(b, vz) = ∫( b*vz )dΩ
+    # a(b, vz) = ∫( α⁻¹*b*vz )dΩ
 
     # assemble
     @time "B_inversion" B = assemble_matrix(a, B_trial, W_test)
