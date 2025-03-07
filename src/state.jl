@@ -1,3 +1,6 @@
+using JLD2
+import JLD2.save
+
 mutable struct State{V, P, T}
     u::V
     v::V
@@ -33,7 +36,7 @@ function set_state!(state::State, mesh::Mesh, inversion_toolkit::InversionToolki
     return state
 end
 
-function save(state; ofile="state.jld2")
+function save(state::State; ofile="state.jld2")
     jldsave(ofile; state)
     @info "State saved to '$ofile'"
 end
@@ -41,7 +44,7 @@ end
 function load_state(ifile)
     d = jldopen(ifile, "r")
     state = d["state"]
-    close(file)
+    close(d)
     @info "State loaded from '$ifile'"
     return state
 end
