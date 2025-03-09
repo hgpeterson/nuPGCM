@@ -18,24 +18,24 @@ function coarse_inversion(dim, arch)
     # params/funcs
     ε = 1e-1
     α = 1/2
+    params = Parameters(ε, α, 0.)
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
     H(x) = 1 - x[1]^2 - x[2]^2
     ν(x) = 1
-    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 
     # coarse mesh
     h = 0.1
     mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
 
-    # assemble LHS inversion and test against saved matrix
+    # build inversion matrices and test LHS against saved matrix
     A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε, ν, f; fname=A_inversion_fname)
+        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; ofile=A_inversion_fname)
     else
-        A_inversion = nuPGCM.build_A_inversion(mesh, α, ε, ν, f; fname="A_inversion_temp.jld2")
+        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
         jldopen(A_inversion_fname, "r") do file
             @test A_inversion ≈ file["A_inversion"]
         end
@@ -43,11 +43,6 @@ function coarse_inversion(dim, arch)
 
     # re-order dofs
     A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
-
-    # build RHS matrix for inversion
-    B_inversion = nuPGCM.build_B_inversion(mesh)
-
-    # re-order dofs
     B_inversion = B_inversion[mesh.dofs.p_inversion, :]
 
     # preconditioner
@@ -93,9 +88,6 @@ function coarse_inversion(dim, arch)
         @test isapprox(state.p, state_data.p, rtol=1e-2)
         @test isapprox(state.b, state_data.b, rtol=1e-2)
     end
-
-    # remove temporary files
-    rm("A_inversion_temp.jld2", force=true)
 end
 
 @testset "Inversion Tests" begin
