@@ -34,35 +34,41 @@ end
 function compute_barotropic_ode_rhs(R, z, b)
     # γ = -∫ zb dz
     γ = [-trapz(z[i, :].*b[i, :], z[i, :]) for i in eachindex(R)]
+    γR = differentiate(γ, R)
+    γRR = differentiate(γR, R)
     fig, ax = plt.subplots(1)
     ax.spines["bottom"].set_visible(false)
     ax.axhline(0, color="k", linewidth=0.5)
     ax.set_xlim(0, 1)
     ax.set_ymargin(0.1)
-    ax.plot(R, γ)
+    ax.plot(R, γ, label=L"\gamma")
+    ax.plot(R, γR, label=L"\gamma'")
+    ax.plot(R, γRR, label=L"\gamma''")
     ax.set_xlabel(L"R")
-    ax.set_title(L"\gamma")
+    ax.legend()
     savefig("images/gamma.png")
     @info "Saved 'images/gamma.png'"
     plt.close()
 
     # bottom buoyancy
     bbot = b[:, 1]
+    bbotR = differentiate(bbot, R)
     fig, ax = plt.subplots(1)
     ax.spines["bottom"].set_visible(false)
     ax.axhline(0, color="k", linewidth=0.5)
     ax.set_xlim(0, 1)
     ax.set_ymargin(0.1)
-    ax.plot(R, bbot)
+    ax.plot(R, bbot, label=L"b|_{-H}")
+    ax.plot(R, bbotR, label=L"b'|_{-H}")
+    ax.legend()
     ax.set_xlabel(L"R")
-    ax.set_title(L"b|_{-H}")
     savefig("images/bbot.png")
     @info "Saved 'images/bbot.png'"
     plt.close()
 
     # compute terms
-    rhs1 = R.*(1 .- R.^2).*differentiate(differentiate(γ, R), R)
-    rhs2 = (1 .+ 3*R.^2).*differentiate(γ, R)
+    rhs1 = R.*(1 .- R.^2).*γRR
+    rhs2 = (1 .+ 3*R.^2).*γR
     rhs3 = 2*R.^2 .*(1 .- R.^2).^2 .*differentiate(bbot, R)
     rhs4 = 4*R.*(1 .- R.^2).*bbot
 
@@ -172,13 +178,16 @@ function diffuse_columns()
         params = (μϱ=μϱ, α=α, θ=θs[i], ε=ε, Δt=Δt, T=T, horiz_diff=horiz_diff)
         b[i, :] .= diffuse_column(z[i, :], κ[i, :], params)
     end
+
+    # add z to b to make it the full buoyancy field
+    b .+= z
     
     return R, z, b
 end
 
 # R, z, b = diffuse_columns()
-# barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
-# G = solve_barotropic_ode(R, barotropic_rhs)
+barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
+G = solve_barotropic_ode(R, barotropic_rhs)
 
 # # plot column
 # i = argmin(abs.(R .- 0.5))
@@ -203,7 +212,7 @@ end
 # ax.plot(1 .+ bz_full[isnan.(bz_full) .== 0], z_full[isnan.(bz_full) .== 0], label="3D")
 # i = argmin(abs.(R .- 0.5))
 # bz1D = differentiate(b[i, :], z[i, :])
-# ax.plot(1 .+ bz1D, z[i, :], "k--", lw=0.5, label="1D")
+# ax.plot(bz1D, z[i, :], "k--", lw=0.5, label="1D")
 # ax.legend()
 # ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(3e-3))))
 # savefig("images/bz_full.png")
@@ -214,8 +223,9 @@ end
 # fig, ax = plt.subplots(1)
 # R2 = repeat(R, 1, size(z, 2))
 # vmax = maximum(abs.(b))
-# ax.pcolormesh(R2, z, b, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="auto")
-# ax.contour(R2, z, z .+ b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.3, linestyles="-", alpha=0.5)
+# img = ax.pcolormesh(R2, z, b, cmap="RdBu_r", vmin=-vmax, vmax=vmax, shading="auto")
+# plt.colorbar(img, ax=ax, label=L"Buoyancy $b$")
+# ax.contour(R2, z, b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.3, linestyles="-", alpha=0.5)
 # ax.spines["left"].set_visible(false)
 # ax.spines["bottom"].set_visible(false)
 # ax.set_xlabel(L"R")
@@ -233,14 +243,13 @@ close(d)
 fig, ax = plt.subplots(1)
 ax.set_xlim(0, 1)
 # ax.set_ymargin(0.1)
-ax.set_ylim(1e2*G[1], 0)
 ax.spines["bottom"].set_position("zero")
 ax.xaxis.set_label_coords(0.5, 1.25)
 ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
 ax.axhline(0, color="k", linewidth=0.5)
 i = size(Ψ, 2) ÷ 2 + 1
 ax.plot(x, 1e2*Ψ[:, i], label="Model")
-ax.plot(R, 1e2*G*(2/pi), "k--", lw=0.5, label="Theory")
+ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
 ax.legend()
 ax.set_xticks(0:0.5:1)
 ax.set_xlabel(L"Zonal coordinate $x$")
