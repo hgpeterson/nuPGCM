@@ -114,6 +114,8 @@ get_p_to_t,
 ∂y,
 ∂z,
 build_matrices,
+build_inversion_matrices,
+build_evolution_matrices,
 # preconditioners.jl
 mul!,
 # inversion.jl
