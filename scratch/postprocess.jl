@@ -286,18 +286,15 @@ function compute_U_V(u, v, σ, H)
     return U, V
 end
 
+# ∂y(Ψ) = -U and Ψ(x, 0) = 0 → Ψ  = -∫ U dy
 function compute_Ψ(U, y)
-    Ψ = zeros(size(U))
-    for i in axes(U, 1), j in axes(U, 2)
-        if isnan(U[i, j]) || isnan(U[i, j-1])
-            Ψ[i, j] = NaN
-        elseif isnan(Ψ[i, j-1])
-            Ψ[i, j] = -0.5*(y[j] - y[j-1])*(U[i, j] + U[i, j-1])
-        else
-            Ψ[i, j] = Ψ[i, j-1] - 0.5*(y[j] - y[j-1])*(U[i, j] + U[i, j-1])
-        end
-        # Ψ[i, :] = -cumtrapz(U[i, :], y)
+    U_filled = copy(U)
+    U_filled[isnan.(U)] .= 0
+    Ψ = zeros(size(U_filled))
+    for i in axes(U, 1)
+        Ψ[i, :] = -cumtrapz(U_filled[i, :], y)
     end
+    Ψ[isnan.(U)] .= NaN
     return Ψ
 end
 
@@ -335,11 +332,11 @@ function save_plot(fname_base; i=0)
     plt.close()
 end
 
-function plot_UV_Ψ(x, y, U, V, Ψ; i=0, t=nothing)
+function plot_UV_Ψ(x, y, U, V, Ψ; i=0, t=nothing, β=0)
     # plot UV
     fig, ax = plt.subplots(1, 2, figsize=(3.2*2, 2))
-    plot_barotropic(x, y, U', fig=fig, ax=ax[1], label=L"U")
-    plot_barotropic(x, y, V', fig=fig, ax=ax[2], label=L"V")
+    plot_barotropic(x, y, U, fig=fig, ax=ax[1], label=L"U")
+    plot_barotropic(x, y, V, fig=fig, ax=ax[2], label=L"V")
     if t !== nothing
         add_title(ax[1], t)
         add_title(ax[2], t)
@@ -348,9 +345,11 @@ function plot_UV_Ψ(x, y, U, V, Ψ; i=0, t=nothing)
     save_plot("UV"; i)
 
     # plot Psi
-    fig, ax = plot_barotropic(x, y, Ψ', label=L"\Psi")
-    f_over_H = [(1 + 0*y[j])/H[i, j] for i ∈ eachindex(x), j ∈ eachindex(y)]
-    ax.contour(x, y, f_over_H', colors="k", linewidths=0.5, alpha=0.5, linestyles="--", levels=get_levels(6))
+    fig, ax = plot_barotropic(x, y, Ψ, label=L"\Psi")
+    f_over_H = [(1 + β*y[j])/H[i, j]   for i ∈ eachindex(x), j ∈ eachindex(y)]
+    f_over_H[isnan.(Ψ)] .= NaN
+    levels = 6*(1:4)/4
+    ax.contour(x, y, f_over_H', colors=(0.2, 0.5, 0.2), linewidths=0.5, alpha=0.5, linestyles="-", levels=levels)
     save_plot("psi"; i)
 end
 
@@ -768,15 +767,14 @@ end
 #                 labels=["2D", "3D"], fname=@sprintf("images/profiles%03d.png", i_save))
 # end
 
-x, y, σ, u, v, w, b, H, t = load_gridded_sigma_data("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
+β = 0.0
+x, y, σ, u, v, w, b, H, t = load_gridded_sigma_data(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", β))
 U, V = compute_U_V(u, v, σ, H)
 Ψ = compute_Ψ(U, y)
-plot_UV_Ψ(x, y, U, V, Ψ; i=3, t=t)
-# plot_barotropic(x, y, U; i=i_save, t=t)
-# x, y, U, V, mask = compute_barotropic_velocities(ux, uy)
-# Psi = compute_barotropic_streamfunction(U, y)
-# jldsave("../out/data/psi037.jld2"; x, y, U, V, Psi, mask, i_save, t)
-# plot_barotropic(x, y, U.*mask, V.*mask, Psi.*mask; i=i_save, t=t)
+plot_UV_Ψ(x, y, U, V, Ψ; i=3, t=t, β=β)
+fname = @sprintf("../sims/sim048/data/psi_beta%1.1f_n0257_003.jld2", β)
+jldsave(fname; x, y, U, V, Ψ, t)
+@info "Saved '$fname'"
 
 # x, y, γ = compute_γ(b)
 # fig, ax = plot_barotropic(x, y, γ; label=L"\gamma")
