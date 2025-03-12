@@ -146,6 +146,16 @@ function solve_barotropic_ode(R, f)
     return A\f
 end
 
+function compute_TW(R, z, b)
+    # γ = [-trapz(z[i, :].*b[i, :], z[i, :]) for i in eachindex(R)]
+    # γR = differentiate(γ, R)
+    # bbot = b[:, 1]
+    # V = γR + 2*bbot.*R.*(1 .- R.^2)
+    V = 2*R .* (-[trapz(b[i, :], z[i, :]) for i in eachindex(R)] .+ b[:, 1].*(1 .- R.^2))
+    Ψ = cumtrapz(V, R) .- trapz(V, R)
+    return Ψ
+end
+
 function diffuse_columns()
     # grid in R
     nR = 2^10
@@ -179,45 +189,49 @@ function diffuse_columns()
         b[i, :] .= diffuse_column(z[i, :], κ[i, :], params)
     end
 
-    # add z to b to make it the full buoyancy field
-    b .+= z
+    # # add z to b to make it the full buoyancy field
+    # b .+= z
     
     return R, z, b
 end
 
 # R, z, b = diffuse_columns()
-barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
-G = solve_barotropic_ode(R, barotropic_rhs)
+# barotropic_rhs = compute_barotropic_ode_rhs(R, z, b)
+# G = solve_barotropic_ode(R, barotropic_rhs)
 
-# # plot column
-# i = argmin(abs.(R .- 0.5))
-# plot_bz(b[i, :], z[i, :]; t=3e-3, filename="images/bz.png")
+function plot_cols()
+    d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
+    b_full = d["b"]
+    x = d["x"]
+    y = d["y"]
+    σ = d["σ"]
+    H = d["H"]
+    nx = length(x)
+    ny = length(y)
+    j = ny÷2 + 1
+    for i in nx÷2+1:nx
+        z_full = σ*H[i, j]
+        fig, ax = plt.subplots(1, figsize=(2, 3.2))
+        ax.set_ylabel(L"Vertical coordinate $z$")
+        ax.set_xlabel(L"Stratification $\partial_z b$")
+        # ax.set_xlim(0, 1.5)
+        bz_full = differentiate(b_full[i, j, :], z_full)
+        ax.plot(1 .+ bz_full[isnan.(bz_full) .== 0], z_full[isnan.(bz_full) .== 0], label="3D")
+        i1D = argmin(abs.(R .- x[i]))
+        println(R[i1D])
+        println(x[i])
+        bz1D = differentiate(b[i1D, :], z[i1D, :])
+        ax.plot(1 .+ bz1D, z[i1D, :], "k--", lw=0.5, label="1D")
+        ax.legend()
+        ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(3e-3))))
+        ofile = @sprintf("images/bz_full_%03d.png", i)
+        savefig(ofile)
+        @info "Saved '$ofile'"
+        plt.close()
+    end
+end
 
-# # plot column vs full field
-# d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
-# b_full = d["b"]
-# x = d["x"]
-# y = d["y"]
-# σ = d["σ"]
-# H = d["H"]
-# close(d)
-# i = argmin(abs.(x .- 0.5))
-# j = length(y) ÷ 2 + 1
-# z_full = σ*H[i, j]
-# fig, ax = plt.subplots(1, figsize=(2, 3.2))
-# ax.set_ylabel(L"Vertical coordinate $z$")
-# ax.set_xlabel(L"Stratification $\partial_z b$")
-# ax.set_xlim(0, 1.5)
-# bz_full = differentiate(b_full[i, j, :], z_full)
-# ax.plot(1 .+ bz_full[isnan.(bz_full) .== 0], z_full[isnan.(bz_full) .== 0], label="3D")
-# i = argmin(abs.(R .- 0.5))
-# bz1D = differentiate(b[i, :], z[i, :])
-# ax.plot(bz1D, z[i, :], "k--", lw=0.5, label="1D")
-# ax.legend()
-# ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(3e-3))))
-# savefig("images/bz_full.png")
-# @info "Saved 'images/bz_full.png'"
-# plt.close()
+# plot_cols()
 
 # # plot bowl
 # fig, ax = plt.subplots(1)
@@ -242,18 +256,112 @@ x = d["x"]
 close(d)
 fig, ax = plt.subplots(1)
 ax.set_xlim(0, 1)
-# ax.set_ymargin(0.1)
+ax.set_ylim(-1.5, 0)
 ax.spines["bottom"].set_position("zero")
 ax.xaxis.set_label_coords(0.5, 1.25)
 ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
 ax.axhline(0, color="k", linewidth=0.5)
 i = size(Ψ, 2) ÷ 2 + 1
-ax.plot(x, 1e2*Ψ[:, i], label="Model")
-ax.plot(R, 1e2*G, "k--", lw=0.5, label="Theory")
+ax.plot(x, 1e2*Ψ[:, i], label="3D model")
+ax.plot(R, 1e2*Ψ_BL, "k--", lw=0.5, label="BL theory")
 ax.legend()
 ax.set_xticks(0:0.5:1)
 ax.set_xlabel(L"Zonal coordinate $x$")
 ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
-savefig("images/barotropic_ode.png")
-@info "Saved 'images/barotropic_ode.png'"
+savefig("images/psi_bl.png")
+@info "Saved 'images/psi_bl.png'"
 plt.close()
+
+# # plot V
+# fig, ax = plt.subplots(1)
+# ax.set_xlim(0, 1)
+# ax.set_ylim(0, 4)
+# ax.plot(x, 1e2*differentiate(Ψ[:, i], x), label="3D model")
+# # ax.plot(R, 1e2*differentiate(G, R), label="ODE solution")
+# # ax.plot(R, 1e2*differentiate(TW, R), "k--", lw=0.5, label="Thermal wind")
+# ax.plot(R, 1e2*V, "k--", lw=0.5, label="BL theory")
+# ax.legend()
+# ax.set_xticks(0:0.5:1)
+# ax.set_xlabel(L"Zonal coordinate $x$")
+# ax.set_ylabel(L"Meridional transport $V$ ($\times 10^{-2}$)")
+# savefig("images/V.png")
+# @info "Saved 'images/V.png'"
+# plt.close()
+
+function plot_v()
+    # parameters
+    ε = 1e-2
+    μϱ = 1e-4
+    α = 1/2
+    x = 0.5
+    i = argmin(abs.(R .- x)) # location of x on grid
+    θ = atan(2*R[i])
+    H = 1 - R[i]^2
+    f = 1
+    ν = 1
+    nz = length(z[i, :])
+
+    # figure setup
+    fig, ax = plt.subplots(1, figsize=(2, 3.2))
+    ax.set_xlabel(L"Meridional flow $v$ ($\times 10^{-2}$)")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.spines["left"].set_visible(false)
+    ax.axvline(0, color="k", lw=0.5)
+    
+    # numberical solution
+    params = (μϱ=μϱ, α=α, θ=θ, ε=ε, set_V=false, H=H, f=f, nz=nz)
+    LHS_τ = build_LHS_τ(z[i, :], ones(nz), params)
+    rhs_τ = zeros(2nz)
+    update_rhs_τ!(rhs_τ, z[i, :], b[i, :], params)
+    τ = LHS_τ\rhs_τ
+    u, v, w = uvw(τ, z[i, :], params)
+    ax.plot(1e2*v, z[i, :], label="Numerical")
+
+    # BL solution
+    Γ = 1 + α^2*tan(θ)^2
+    q = Γ^(-3/4)*√(f/2/ν)
+    Px0 = b[i, 1]*tan(θ)
+    Px1 = -tan(θ)/q
+    vI0 = @. (Px0 - b[i, :]*tan(θ))/f
+    vI1 = Px1*ones(nz)/f
+    zbar = @. (z[i, :] + H)/ε
+    vB1 = @. -vI1[1]*exp(-q*zbar)*cos(q*zbar)
+    # ax.plot(1e2*(vI0),                 z[i, :], "k",   lw=0.5, label=L"v_{\rm{I}0}")
+    # ax.plot(1e2*(vI0 + ε*vI1),         z[i, :], "k--", lw=0.5, label=L"v_{\rm{I}0} + \varepsilon v_{\rm{I}1}")
+    ax.plot(1e2*(vI0 + ε*vI1 + ε*vB1), z[i, :], "k--", lw=0.5, label=L"v_{\rm{I}0} + \varepsilon v_{\rm{I}1} + \varepsilon v_{\rm{B}1}")
+    # ax.axvline(1e2*Px0, color="C1", lw=0.5, label=L"P_{x0}")
+    # ax.axvline(1e2*(Px0 + ε*Px1), color="C1", ls="--", lw=0.5, label=L"P_{x0} + \varepsilon P_{x1}")
+
+    # compare integrals
+    println(trapz(v, z[i, :]))
+    println(trapz(vI0 + ε*vI1 + ε*vB1, z[i, :]))
+    println(H*(Px0 + ε*Px1)/f - trapz(b[i, :], z[i, :])*tan(θ)/f - ε^2*Px1/f/(2q))
+
+    # xlim
+    # vmax = 1e2*maximum(abs.(v))
+    # ax.set_xlim(-1.1*vmax, 1.1*vmax)
+
+    # time
+    t = 3e-3
+    ax.set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(t))))
+
+    # finish plot
+    ax.legend(loc=(1.0, 0.7))
+    ofile = @sprintf("images/v%1.0e.png", t)
+    savefig(ofile)
+    @info "Saved '$ofile'"
+    plt.close()
+end
+
+# plot_v()
+
+function compute_V_BL(b, z, ε, α, θ)
+    Γ = 1 + α^2*tan(θ)^2
+    q = Γ^(-3/4)/√2
+    H = -z[1]
+    V = -trapz((b .- b[1])*tan(θ), z) .- ε/q*H*tan(θ) .+ ε^2/q^2 * tan(θ)/2
+    return V
+end
+
+V_BL = [compute_V_BL(b[i, :], z[i, :], 1e-2, 1/2, atan(2*R[i])) for i in eachindex(R)]
+Ψ_BL = cumtrapz(V_BL, R) .- trapz(V_BL, R)
