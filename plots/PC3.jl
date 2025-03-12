@@ -4,10 +4,10 @@ using PyCall
 using JLD2
 using Printf
 
-# full width (39 picas) for three or more panels across
-# just under full width (33 picas, which is 85% of full width) for two panels across
-# two-thirds page width (27 picas) for single panel figures that have detail or text that needs to be larger than single column width
-# 19 picas (single column width). 
+# full width (39 picas)
+# just under full width (33 picas)
+# two-thirds page width (27 picas)
+# single column width (19 picas)
 
 pl = pyimport("matplotlib.pylab")
 cm = pyimport("matplotlib.cm")
@@ -112,6 +112,35 @@ function f_over_H()
     plt.close()
 end
 
+function bz_profiles()
+    fig, ax = plt.subplots(1, figsize=(19pc/1.62, 19pc))
+    ax.set_xlabel(L"Stratification $\partial_z b$")
+    ax.set_ylabel(L"Vertical coordinate $z$")
+    ax.set_xlim(0, 1.5)
+    ax.set_yticks(-0.75:0.25:0)
+    ts = 5e-4:5e-4:5e-2
+    t0 = 3e-3
+    colors = pl.cm.Greys_r(range(0, 1, length=length(ts)))
+    for i in eachindex(ts)
+        file = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", ts[i]), "r")
+        b = file["b"]
+        z = file["z"]
+        close(file)
+        bz = differentiate(b, z)
+        if ts[i] == t0 
+            ax.plot(1 .+ bz, z, "C0", zorder=length(ts)+1, lw=1.5, label=L"t = 3 \times 10^{-3}")
+        else
+            ax.plot(1 .+ bz, z, c=colors[i, :], zorder=i)
+        end
+    end
+    ax.legend()
+    savefig("bz_profiles.png")
+    @info "Saved 'bz_profiles.png'"
+    savefig("bz_profiles.pdf")
+    @info "Saved 'bz_profiles.pdf'"
+    plt.close()
+end
+
 function psi()
     # params/funcs
     f₀ = 1
@@ -161,8 +190,7 @@ function psi()
         foH = [f_over_H(x[j], y[k], β=βs[i]) for j ∈ eachindex(x), k ∈ eachindex(y)]
         ax[i].contour(x, y, foH', colors=(0.2, 0.5, 0.2), linewidths=0.5, alpha=0.5, linestyles="-", levels=f_over_H_levels)
     end
-    cb = fig.colorbar(img, ax=ax[4], label=L"Barotropic streamfunction $\Psi$"*"\n"*L"(\times 10^{-2})", fraction=1.0)
-    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    fig.colorbar(img, ax=ax[4], label=L"Barotropic streamfunction $\Psi$"*"\n"*L"(\times 10^{-2})", fraction=1.0)
 
     # save
     savefig("psi.png")
@@ -355,34 +383,25 @@ function zonal_sections()
     plt.close()
 end
 
-function profiles()
-    width = 33pc
-    fig, ax = plt.subplots(1, 4, figsize=(width, width/4*1.62))
+function flow_profiles()
+    width = 27pc
+    fig, ax = plt.subplots(1, 3, figsize=(width, width/3*1.62))
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[4].annotate("(d)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[1].set_ylabel(L"z")
+    ax[1].set_ylabel(L"Vertical coordinate $z$")
     ax[1].set_xlabel(L"Zonal flow $u$"*"\n"*L"($\times 10^{-2}$)")
     ax[2].set_xlabel(L"Meridional flow $v$"*"\n"*L"($\times 10^{-2}$)")
     ax[3].set_xlabel(L"Vertical flow $w$"*"\n"*L"($\times 10^{-2}$)")
-    ax[4].set_xlabel(L"Stratification $\partial_z b$")
     ax[1].set_xlim(-1.5, 1.5)
     ax[2].set_xlim(-4.5, 4.5)
     ax[3].set_xlim(-1.5, 1.5)
-    ax[4].set_xlim(0, 1.1)
-    ax[1].spines["left"].set_visible(false)
-    ax[2].spines["left"].set_visible(false)
-    ax[3].spines["left"].set_visible(false)
     ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
     ax[2].set_yticks([])
     ax[3].set_yticks([])
-    ax[4].set_yticks([])
-    ax[1].axvline(0, color="k", lw=0.5)
-    ax[2].axvline(0, color="k", lw=0.5)
-    ax[3].axvline(0, color="k", lw=0.5)
     for a ∈ ax 
-        a.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
+        a.spines["left"].set_visible(false)
+        a.axvline(0, color="k", lw=0.5)
     end
     βs = [0.0, 0.5, 1.0]
     for i ∈ eachindex(βs)
@@ -395,59 +414,47 @@ function profiles()
         u = d["u"]
         v = d["v"]
         w = d["w"]
-        b = d["b"]
         close(d)
         j = argmin(abs.(x .- 0.5)) # index where x = 0.5
         k = argmin(abs.(y)) # index where y = 0
         u = u[j, k, :]; u[1] = 0
         v = v[j, k, :]; v[1] = 0
         w = w[j, k, :]; w[1] = 0; w[end] = 0
-        b = b[j, k, :]; b[end] = 0
         z = H[j, k]*σ
-        Bz = 1 .+ differentiate(b, z)
-        Bz[1] = 0
         umask = isnan.(u) .== 0
         vmask = isnan.(v) .== 0
         wmask = isnan.(w) .== 0
-        Bzmask = isnan.(Bz) .== 0
-        ax[1].plot(1e2*u[umask],  z[umask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[2].plot(1e2*v[vmask],  z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[3].plot(1e2*w[wmask],  z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[4].plot(Bz[Bzmask],    z[Bzmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[1].plot(1e2*u[umask], z[umask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[2].plot(1e2*v[vmask], z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+        ax[3].plot(1e2*w[wmask], z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
     end
     # 1D U = 0
     file = jldopen("../sims/sim048/data/1D_beta0.0.jld2")
     u = file["u"]
     v = file["v"]
     w = file["w"]
-    b = file["b"]
     z = file["z"]
     close(file)
-    Bz = 1 .+ differentiate(b, z)
-    ax[1].plot(1e2*u,  z, "k--", lw=0.5, label=L"1D $U=0$")
-    ax[2].plot(1e2*v,  z, "k--", lw=0.5, label=L"1D $U=0$")
-    ax[3].plot(1e2*w,  z, "k--", lw=0.5, label=L"1D $U=0$")
-    ax[4].plot(Bz,     z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[1].plot(1e2*u, z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"1D $U=0$")
+    ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"1D $U=0$")
 
     # 1D U = V = 0
     file = jldopen("../sims/sim048/data/1D_beta1.0.jld2")
     u = file["u"]
     v = file["v"]
     w = file["w"]
-    b = file["b"]
     z = file["z"]
     close(file)
-    Bz = 1 .+ differentiate(b, z)
-    ax[1].plot(1e2*u,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    ax[2].plot(1e2*v,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    ax[3].plot(1e2*w,  z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    ax[4].plot(Bz,     z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
 
     ax[2].legend(loc=(-0.6, 0.5))
-    savefig("profiles.png")
-    @info "Saved 'profiles.png'"
-    savefig("profiles.pdf")
-    @info "Saved 'profiles.pdf'"
+    savefig("flow_profiles.png")
+    @info "Saved 'flow_profiles.png'"
+    savefig("flow_profiles.pdf")
+    @info "Saved 'flow_profiles.pdf'"
     plt.close()
 end
 
@@ -560,13 +567,14 @@ end
 
 
 # f_over_H()
+bz_profiles()
 # psi()
 # slices("u")
 # slices("v")
 # slices("w")
 # zonal_sections()
-# profiles()
-psi_bl()
+# flow_profiles()
+# psi_bl()
 # alpha()
 
 println("Done.")
