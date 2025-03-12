@@ -451,6 +451,76 @@ function profiles()
     plt.close()
 end
 
+function psi_bl()
+    # load b from 3D model
+    d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
+    b = d["b"]
+    x = d["x"]
+    y = d["y"]
+    σ = d["σ"]
+    H = d["H"]
+    close(d)
+
+    # load Ψ from 3D model
+    d = jldopen("../sims/sim048/data/psi_beta0.0_n0257_003.jld2", "r")
+    Ψ = d["Ψ"]
+    close(d)
+
+    # slice at y = 0 from x = 0 to 1
+    i0 = length(x)÷2 + 1
+    j0 = length(y)÷2 + 1
+    x = x[i0:end]
+    b = b[i0:end, j0, :]
+    Ψ = Ψ[i0:end, j0]
+    H = H[i0:end, j0]
+
+    # compute Ψ from BL theory
+    V_BL = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i])) for i in eachindex(x)]
+    Ψ_BL = cumtrapz(V_BL, x) .- trapz(V_BL, x)
+
+    # plot
+    fig, ax = plt.subplots(1)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-1.5, 0)
+    ax.spines["bottom"].set_position("zero")
+    ax.xaxis.set_label_coords(0.5, 1.25)
+    ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
+    ax.axhline(0, color="k", linewidth=0.5)
+    ax.plot(x, 1e2*Ψ, label="3D model")
+    ax.plot(x, 1e2*Ψ_BL, "k--", lw=0.5, label="BL theory")
+    ax.legend()
+    ax.set_xticks(0:0.5:1)
+    ax.set_xlabel(L"Zonal coordinate $x$")
+    ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
+    savefig("psi_bl.png")
+    @info "Saved 'psi_bl.png'"
+    savefig("psi_bl.pdf")
+    @info "Saved 'psi_bl.pdf'"
+    plt.close()
+end
+function compute_V_BL(b, z, ε, α, θ)
+    H = -z[1]
+    if H == 0
+        return 0
+    end
+    Γ = 1 + α^2*tan(θ)^2
+    q = Γ^(-3/4)/√2
+    i1 = 1
+    while isnan(b[i1])
+        i1 += 1
+    end
+    i2 = i1 + 1
+    while isnan(b[i2])
+        i2 += 1
+    end
+    bbot = b[i1] + (b[i2] - b[i1])/(z[i2] - z[i1])*(z[1] - z[i1])
+    if isnan(bbot)
+        @warn "bbot is NaN"
+    end
+    V = -trapz((b .- bbot)*tan(θ), z) .- ε/q*H*tan(θ) .+ ε^2/q^2 * tan(θ)/2
+    return V
+end
+
 function alpha()
     width = 27pc
     fig, ax = plt.subplots(1, 3, figsize=(width, width/3*1.62), sharey=true)
@@ -465,7 +535,7 @@ function alpha()
     ax[2].spines["left"].set_visible(false)
     ax[1].axvline(0, color="k", lw=0.5)
     ax[2].axvline(0, color="k", lw=0.5)
-    αs = 0:0.1:1
+    αs = [0, 1/4, 1/2, 1]
     colors = pl.cm.viridis(range(0, 1, length=length(αs)))
     for i ∈ eachindex(αs)
         file = jldopen(@sprintf("../scratch/data/1D_%0.2f.jld2", αs[i]))
@@ -478,8 +548,9 @@ function alpha()
         ax[2].plot(1e2*v,   z, c=colors[i, :], label=latexstring(@sprintf("\$\\alpha = %0.2f\$", αs[i])))
         ax[3].plot(1 .+ bz, z, c=colors[i, :], label=latexstring(@sprintf("\$\\alpha = %0.2f\$", αs[i])))
         close(file)
+        println(trapz(v, z))
     end
-    ax[1].legend(loc=(0.3, 0.12))
+    ax[3].legend()
     savefig("alpha.png")
     println("alpha.png")
     savefig("alpha.pdf")
@@ -489,12 +560,13 @@ end
 
 
 # f_over_H()
-psi()
+# psi()
 # slices("u")
 # slices("v")
 # slices("w")
 # zonal_sections()
 # profiles()
+psi_bl()
 # alpha()
 
 println("Done.")
