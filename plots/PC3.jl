@@ -521,10 +521,18 @@ function compute_V_BL(b, z, ε, α, θ)
         i2 += 1
     end
     bbot = b[i1] + (b[i2] - b[i1])/(z[i2] - z[i1])*(z[1] - z[i1])
-    if isnan(bbot)
-        @warn "bbot is NaN"
+    V = -trapz((b .- bbot)*tan(θ), z) - ε/q*H*tan(θ)
+    b_filled = copy(b)
+    b_filled[1] = bbot
+    for i in 2:length(b)-1
+        if isnan(b[i])
+            b_filled[i] = (b_filled[i-1] + b_filled[i+1])/2
+        end
     end
-    V = -trapz((b .- bbot)*tan(θ), z) .- ε/q*H*tan(θ) .+ ε^2/q^2 * tan(θ)/2
+    bz = differentiate(b_filled, z)
+    bzz = differentiate(bz, z)
+    bzzbot = bzz[1]
+    V += ε^2*(1/(2q^2) - H*Γ*bzzbot)*tan(θ)
     return V
 end
 
@@ -567,14 +575,14 @@ end
 
 
 # f_over_H()
-bz_profiles()
+# bz_profiles()
 # psi()
 # slices("u")
 # slices("v")
 # slices("w")
 # zonal_sections()
 # flow_profiles()
-# psi_bl()
+psi_bl()
 # alpha()
 
 println("Done.")
