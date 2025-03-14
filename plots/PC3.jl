@@ -12,6 +12,7 @@ using Printf
 pl = pyimport("matplotlib.pylab")
 cm = pyimport("matplotlib.cm")
 colors = pyimport("matplotlib.colors")
+patches = pyimport("matplotlib.patches")
 
 pygui(false)
 plt.style.use("../plots.mplstyle")
@@ -481,22 +482,41 @@ function psi_bl()
     Ψ = Ψ[i0:end, j0]
     H = H[i0:end, j0]
 
-    # compute Ψ from BL theory
-    V_BL = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i])) for i in eachindex(x)]
-    Ψ_BL = cumtrapz(V_BL, x) .- trapz(V_BL, x)
+    # compute Ψ from BL theory (asymptotic orders 1, 2, 3)
+    V_BL_1 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=1) for i in eachindex(x)]
+    Ψ_BL_1 = cumtrapz(V_BL_1, x) .- trapz(V_BL_1, x)
+    V_BL_2 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=2) for i in eachindex(x)]
+    Ψ_BL_2 = cumtrapz(V_BL_2, x) .- trapz(V_BL_2, x)
+    V_BL_3 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=3) for i in eachindex(x)]
+    Ψ_BL_3 = cumtrapz(V_BL_3, x) .- trapz(V_BL_3, x)
 
     # plot
     fig, ax = plt.subplots(1)
     ax.set_xlim(0, 1)
-    ax.set_ylim(-1.5, 0)
+    ax.set_xticks(0:0.5:1)
+    ax.set_ylim(-2.5, 0)
     ax.spines["bottom"].set_position("zero")
     ax.xaxis.set_label_coords(0.5, 1.25)
     ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
     ax.axhline(0, color="k", linewidth=0.5)
     ax.plot(x, 1e2*Ψ, label="3D model")
-    ax.plot(x, 1e2*Ψ_BL, "k--", lw=0.5, label="BL theory")
-    ax.legend()
-    ax.set_xticks(0:0.5:1)
+    ax.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5, label=L"BL theory to $O(1)$")
+    ax.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
+    ax.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
+    ax.add_patch(patches.Rectangle((0, -1.55), 0.1, 0.25, color=(0.9, 0.9, 0.9), zorder=-1))
+    # inset of Rectangle region
+    ax_inset = fig.add_axes([0.65, 0.2, 0.3, 0.3])
+    ax_inset.plot(x, 1e2*Ψ, label="3D model")
+    ax_inset.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5, label=L"BL theory to $O(1)$")
+    ax_inset.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
+    ax_inset.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
+    ax_inset.set_xlim(0, 0.1)
+    ax_inset.set_ylim(-1.55, -1.30)
+    ax_inset.set_xticks([0, 0.1])
+    ax_inset.set_yticks([-1.55, -1.3])
+    ax_inset.spines["right"].set_visible(true)
+    ax_inset.spines["top"].set_visible(true)
+    ax.legend(loc=(0.0, -0.3), ncol=2)
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
     savefig("psi_bl.png")
@@ -505,13 +525,20 @@ function psi_bl()
     @info "Saved 'psi_bl.pdf'"
     plt.close()
 end
-function compute_V_BL(b, z, ε, α, θ)
-    H = -z[1]
-    if H == 0
-        return 0
+function compute_V_BL(b, z, ε, α, θ; order)
+    if !(order in [1, 2, 3])
+        throw(ArgumentError("Invalid `order`: $order; must be 1, 2, or 3."))
     end
+
+    # parameters
+    H = -z[1]
     Γ = 1 + α^2*tan(θ)^2
     q = Γ^(-3/4)/√2
+
+    # V = 0 for zero depth
+    H == 0 && return 0
+
+    # compute bbot (have to extrapolate if NaN)
     i1 = 1
     while isnan(b[i1])
         i1 += 1
@@ -521,18 +548,36 @@ function compute_V_BL(b, z, ε, α, θ)
         i2 += 1
     end
     bbot = b[i1] + (b[i2] - b[i1])/(z[i2] - z[i1])*(z[1] - z[i1])
-    V = -trapz((b .- bbot)*tan(θ), z) - ε/q*H*tan(θ)
-    b_filled = copy(b)
-    b_filled[1] = bbot
-    for i in 2:length(b)-1
-        if isnan(b[i])
-            b_filled[i] = (b_filled[i-1] + b_filled[i+1])/2
-        end
+
+    # order 1 
+    V = -trapz((b .- bbot)*tan(θ), z) 
+    order -= 1
+
+    if order != 0
+        # order 2
+        V -= ε/q*H*tan(θ)
+        order -= 1
     end
-    bz = differentiate(b_filled, z)
-    bzz = differentiate(bz, z)
-    bzzbot = bzz[1]
-    V += ε^2*(1/(2q^2) - H*Γ*bzzbot)*tan(θ)
+
+    if order != 0
+        # order 3
+        b_filled = copy(b)
+        b_filled[1] = bbot
+        for i in 2:length(b)-1
+            if isnan(b[i])
+                b_filled[i] = (b_filled[i-1] + b_filled[i+1])/2
+            end
+        end
+        bz = differentiate(b_filled, z)
+        bzz = differentiate(bz, z)
+        bzzbot = bzz[1]
+        V += ε^2*(1/(2q^2) - H*Γ*bzzbot)*tan(θ)
+        order -= 1
+    end
+
+    # if all went well, order should be 0
+    @assert order == 0
+
     return V
 end
 
