@@ -1,4 +1,5 @@
 using nuPGCM
+using JLD2
 using PyPlot
 using SparseArrays
 using Printf
@@ -25,8 +26,8 @@ function solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
     r = zeros(2nz)
     imap = reshape(1:2nz, 2, :)
     for i ∈ 2:nz-1
-        fd_z   = mkfdstencil(z[i-1:i+1], z[i], 1)
-        fd_zz  = mkfdstencil(z[i-1:i+1], z[i], 2)
+        fd_z  = mkfdstencil(z[i-1:i+1], z[i], 1)
+        fd_zz = mkfdstencil(z[i-1:i+1], z[i], 2)
 
         ## -f τy - ε² (ν τx)_zz = -b_x
 
@@ -125,102 +126,14 @@ function solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
            1/ε*vB0_s .+ vI0 .+ vB0_b .+ ε*(vI1 .+ vB1_b)
 end
 
-function baroclinic_with_wind_stress()
-    # params
-    ε = 1e-2
-    f = 1
-    H = 1
-    nz = 2^8
-    z = -H*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
-    ν = ones(nz)
-    # ν = @. 1e-2 + exp(-(z + H)/0.1)
-
-    # transport
-    τx = 0
-    τy = 0
-    U = H^2
-    V = 0
-    bx = zeros(nz)
-    by = zeros(nz)
-    uU, vU = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    uUBL, vUBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
-
-    # wind stress
-    τx = 1
-    τy = 0
-    U = 0
-    V = 0
-    bx = zeros(nz)
-    by = zeros(nz)
-    uτ, vτ = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    uτBL, vτBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
-
-    # buoyancy
-    τx = 0
-    τy = 0
-    U = 0
-    V = 0
-    bx = @. exp(-(z + H)/0.1)
-    by = zeros(nz)
-    ub, vb = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    ubBL, vbBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
-
-    # bottom stress stats
-    qb = sqrt(f/2/ν[1])
-    @printf("∂z(uU)(-H) = % .2e (% .2e)\n", differentiate_pointwise(uU[1:3], z[1:3], z[1], 1),  qb/ε*H)
-    @printf("∂z(vU)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vU[1:3], z[1:3], z[1], 1),  qb/ε*H)
-    @printf("∂z(uτ)(-H) = % .2e (% .2e)\n", differentiate_pointwise(uτ[1:3], z[1:3], z[1], 1), -qb/ε*1/(H*f))
-    @printf("∂z(vτ)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vτ[1:3], z[1:3], z[1], 1),  qb/ε*1/(H*f))
-    @printf("∂z(ub)(-H) = % .2e (% .2e)\n", differentiate_pointwise(ub[1:3], z[1:3], z[1], 1), -qb/ε*trapz(z.*bx, z)/(H*f))
-    @printf("∂z(vb)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vb[1:3], z[1:3], z[1], 1),  qb/ε*trapz(z.*bx, z)/(H*f))
-
-    fig, ax = plt.subplots(1, 3, figsize=(27pc, 16pc))
-    for a ∈ ax
-        a.spines["left"].set_visible(false)
-        a.spines["top"].set_visible(true)
-        a.axvline(0, lw=0.5, c="k")
-        a.set_xlabel(L"Velocity $u$, $v$")
-    end
-    ax[1].text(-0.04, 1.05, s="(a)", transform=ax[1].transAxes, ha="center")
-    ax[2].text(-0.04, 1.05, s="(b)", transform=ax[2].transAxes, ha="center")
-    ax[3].text(-0.04, 1.05, s="(c)", transform=ax[3].transAxes, ha="center")
-    ax[1].set_ylabel(L"Vertical coordinate $z$")
-    ax[2].set_yticks([])
-    ax[3].set_yticks([])
-    ax[1].plot(uU, z)
-    ax[1].plot(vU, z)
-    ax[1].plot(uUBL, z, "k--", lw=0.5)
-    ax[1].plot(vUBL, z, "k--", lw=0.5)
-    ax[1].set_title(L"$U = H^2$")
-    ax[2].plot(uτ, z, label=L"u")
-    ax[2].plot(vτ, z, label=L"v")
-    ax[2].plot(uτBL, z, "k--", lw=0.5, label="Theory")
-    ax[2].plot(vτBL, z, "k--", lw=0.5)
-    ax[2].set_title(L"$\tau^x = 1$")
-    ax[2].legend(loc=(0.55, 0.6))
-    # ax[2].set_xlim(-10, 10)
-    # ax[2].set_ylim(-0.1, 0.0)
-    ax[3].plot(ub, z)
-    ax[3].plot(vb, z)
-    ax[3].plot(ubBL, z, "k--", lw=0.5)
-    ax[3].plot(vbBL, z, "k--", lw=0.5)
-    ax[3].set_title(L"$\partial_x b = e^{-(z + H)/0.1}$")
-    savefig("baroclinic.png")
-    println("baroclinic.png")
-    savefig("baroclinic.pdf")
-    println("baroclinic.pdf")
-    plt.close()
-end
-
 function baroclinic()
     # params
     ε = 1e-2
     f = 1
-    H = 1
-    nz = 2^8
+    H = 0.75
+    nz = 2^10
     z = -H*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
     ν = ones(nz)
-    # ν = @. 1e-2 + exp(-(z + H)/0.1)
 
     # U transport
     τx = 0
@@ -247,19 +160,25 @@ function baroclinic()
     τy = 0
     U = 0
     V = 0
-    bx = @. exp(-(z + H)/0.1)
-    by = zeros(nz)
-    ub, vb = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    ubBL, vbBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
+    d = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", 3e-3), "r")
+    b = d["b"]
+    z_sim = d["z"]
+    close(d)
+    θ = pi/4
+    bx = -differentiate(b, z_sim)*sin(θ)
+    by = zeros(length(z_sim))
+    ν_sim = ones(length(z_sim))
+    ub, vb = solve_baroclinic_problem(ε, z_sim, ν_sim, f, bx, by, U, V, τx, τy)
+    ubBL, vbBL = solve_baroclinic_problem_BL(ε, z_sim, ν_sim, f, bx, by, U, V, τx, τy)
 
     # bottom stress stats
-    qb = sqrt(f/2/ν[1])
+    qb = sqrt(f/2/ν_sim[1])
     @printf("∂z(uU)(-H) = % .2e (% .2e)\n", differentiate_pointwise(uU[1:3], z[1:3], z[1], 1),  qb/ε/H)
     @printf("∂z(vU)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vU[1:3], z[1:3], z[1], 1),  qb/ε/H)
     @printf("∂z(uV)(-H) = % .2e (% .2e)\n", differentiate_pointwise(uV[1:3], z[1:3], z[1], 1), -qb/ε/H)
     @printf("∂z(vV)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vV[1:3], z[1:3], z[1], 1),  qb/ε/H)
-    @printf("∂z(ub)(-H) = % .2e (% .2e)\n", differentiate_pointwise(ub[1:3], z[1:3], z[1], 1),  -qb/ε*trapz(z.*bx, z)/(H*f))
-    @printf("∂z(vb)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vb[1:3], z[1:3], z[1], 1),   qb/ε*trapz(z.*bx, z)/(H*f))
+    @printf("∂z(ub)(-H) = % .2e (% .2e)\n", differentiate_pointwise(ub[1:3], z_sim[1:3], z_sim[1], 1),  -qb/ε*trapz(z_sim.*bx, z_sim)/(H*f))
+    @printf("∂z(vb)(-H) = % .2e (% .2e)\n", differentiate_pointwise(vb[1:3], z_sim[1:3], z_sim[1], 1),   qb/ε*trapz(z_sim.*bx, z_sim)/(H*f))
 
     width = 27pc
     fig, ax = plt.subplots(1, 3, figsize=(width, width/3*1.62))
@@ -272,27 +191,32 @@ function baroclinic()
     ax[2].text(-0.04, 1.05, s="(b)", transform=ax[2].transAxes, ha="center")
     ax[3].text(-0.04, 1.05, s="(c)", transform=ax[3].transAxes, ha="center")
     ax[1].set_xlim(-0.5, 1.5)
+    ax[1].set_xticks([0, 1/H])
+    ax[1].set_xticklabels(["0", L"$1/H$"])
     ax[2].set_xlim(-0.5, 1.5)
-    ax[3].set_xlim(-0.08, 0.08)
+    ax[2].set_xticks([0, 1/H])
+    ax[2].set_xticklabels(["0", L"$1/H$"])
+    ax[3].set_xlim(-0.02, 0.02)
     ax[1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
     ax[2].set_yticks([])
     ax[3].set_yticks([])
     ax[1].plot(uU, z, label=L"u")
     ax[1].plot(vU, z, label=L"v")
-    ax[1].plot(uUBL, z, "k--", lw=0.5, label="Theory")
+    ax[1].plot(uUBL, z, "k--", lw=0.5, label="BL theory")
     ax[1].plot(vUBL, z, "k--", lw=0.5)
     ax[1].set_title(L"$U = 1, \; V = 0$")
     ax[2].plot(uV, z, label=L"u")
     ax[2].plot(vV, z, label=L"v")
-    ax[2].plot(uVBL, z, "k--", lw=0.5, label="Theory")
+    ax[2].plot(uVBL, z, "k--", lw=0.5, label="BL theory")
     ax[2].plot(vVBL, z, "k--", lw=0.5)
     ax[2].set_title(L"$U = 0, \; V = 1$")
-    ax[3].plot(ub, z, label=L"u")
-    ax[3].plot(vb, z, label=L"v")
-    ax[3].plot(ubBL, z, "k--", lw=0.5, label="Theory")
-    ax[3].plot(vbBL, z, "k--", lw=0.5)
-    ax[3].set_title(L"$\partial_x b = e^{-(z + H)/0.1}$")
-    ax[3].legend(loc=(-0.2, 0.6))
+    ax[3].plot(ub, z_sim, label=L"u")
+    ax[3].plot(vb, z_sim, label=L"v")
+    ax[3].plot(ubBL, z_sim, "k--", lw=0.5, label="BL theory")
+    ax[3].plot(vbBL, z_sim, "k--", lw=0.5)
+    ax[3].set_title(L"$\partial_x b \neq 0$")
+    ax[3].legend(loc=(0.55, 0.7))
     savefig("baroclinic.png")
     println("baroclinic.png")
     savefig("baroclinic.pdf")
