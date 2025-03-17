@@ -301,6 +301,11 @@ function solve(params)
         update_rhs_τ!(rhs_τ, z, b, params)
         ldiv!(τ, LHS_τ, rhs_τ)
         u, v, w = uvw(τ, z, params)
+
+        # # save 
+        # if mod(i, 5) == 0
+        #     save(u, v, w, b, params, t, z; filename=@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", t))
+        # end
     end
 
     return u, v, w, b, t, z
@@ -339,7 +344,7 @@ function main()
     f = 1
     nz = 2^8
     horiz_diff = false
-    T = 3e-3*μϱ/ε^2
+    T = 5e-2*μϱ/ε^2
     params = (μϱ=μϱ, α=α, θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
 
     # solve
@@ -348,11 +353,11 @@ function main()
     # # save
     # save(u, v, w, b, params, t, z; filename="../sims/sim048/data/1D_beta1.0.jld2")
 
-    # plot
-    fig, ax = plot_setup()
-    plot(u, v, w, b, z; fig, ax)
-    plot_finish(; fig, ax, t, filename="images/1D.png")
+    # # plot
+    # fig, ax = plot_setup()
+    # plot(u, v, w, b, z; fig, ax)
+    # plot_finish(; fig, ax, t, filename="images/1D.png")
 end
 
-# main()
+main()
 # loop_aspect_ratios()
