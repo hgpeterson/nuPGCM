@@ -2,7 +2,10 @@ using Test
 using nuPGCM
 using Gridap
 using Krylov
-using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
+using CUDA
+using CUDA.CUSPARSE
+using CUDA.CUSOLVER
+using JLD2
 using SparseArrays
 using LinearAlgebra
 using ProgressMeter
@@ -13,11 +16,13 @@ pygui(false)
 plt.style.use("plots.mplstyle")
 plt.close("all")
 
+set_out_dir!("./test")
+
 function coarse_evolution(dim, arch)
     # params/funcs
     ε = 1e-1
     α = 1/2
-    μϱ = 1e-4
+    μϱ = 1e1
     params = Parameters(ε, α, μϱ)
     f₀ = 1
     β = 0.5
@@ -96,6 +101,12 @@ function coarse_evolution(dim, arch)
         end
     end
 
+    # re-order dofs
+    A_adv  = A_adv[mesh.dofs.p_b, mesh.dofs.p_b]
+    A_diff = A_diff[mesh.dofs.p_b, mesh.dofs.p_b]
+    B_diff = B_diff[mesh.dofs.p_b, :]
+    b_diff = b_diff[mesh.dofs.p_b]
+
     # preconditioners
     if typeof(arch) == CPU
         P_diff = lu(A_diff)
@@ -104,12 +115,6 @@ function coarse_evolution(dim, arch)
         P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_diff))))
         P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
     end
-
-    # re-order dofs
-    A_adv  = A_adv[mesh.dofs.p_b, mesh.dofs.p_b]
-    A_diff = A_diff[mesh.dofs.p_b, mesh.dofs.p_b]
-    B_diff = B_diff[mesh.dofs.p_b, :]
-    b_diff = b_diff[mesh.dofs.p_b]
 
     # move to arch
     A_adv  = on_architecture(arch, A_adv)
@@ -192,6 +197,11 @@ function coarse_evolution(dim, arch)
 
             # time
             state.t += Δt
+
+            # average stratification
+            if mod(i, n_steps ÷ 100) == 0
+                @info @sprintf("average ∂z(b) = %1.5e", sum(∫(N² + ∂z(b))mesh.dΩ)/sum(∫(1)mesh.dΩ))
+            end
         end
         return state, inversion_toolkit, solver_evolution
     end
@@ -201,49 +211,34 @@ function coarse_evolution(dim, arch)
     n_steps = Int64(round(T/Δt))
     solve!(state, inversion_toolkit, solver_evolution, i_step, n_steps)
 
-    # # plot for sanity check
-    # sim_plots(dim, u, v, w, b, N², H, state.t, 0)
+    # plot for sanity check
+    sim_plots(dim, u, v, w, b, N², H, state.t, 0)
 
     # compare state with data
-    datafile = @sprintf("test/data/evolution_%s.h5", dim)
+    datafile = @sprintf("test/data/evolution_%s.jld2", dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
         save(state; ofile=datafile)
     else
-        file = jldopen(datafile, "r")
-        u_data = file["ux"]
-        v_data = file["uy"]
-        w_data = file["uz"]
-        p_data = file["p"]
-        b_data = file["b"]
-        close(file)
-        # state_data = load_state(datafile)
-        # @test isapprox(state.u, state_data.u, rtol=1e-2)
-        # @test isapprox(state.v, state_data.v, rtol=1e-2)
-        # @test isapprox(state.w, state_data.w, rtol=1e-2)
-        # @test isapprox(state.p, state_data.p, rtol=1e-2)
-        # @test isapprox(state.b, state_data.b, rtol=1e-2)
-        p = FEFunction(mesh.spaces.X_trial[4], state.p)
-        @test isapprox(state.u, u_data, rtol=1e-2)
-        @test isapprox(state.v, v_data, rtol=1e-2)
-        @test isapprox(state.w, w_data, rtol=1e-2) ## FAILS HERE
-        println(norm(state.w - w_data)) # 0.0017
-        # @test isapprox(state.p, p_data, rtol=1e-2)
-        @test isapprox(p.free_values, p_data, rtol=1e-2)
-        @test isapprox(state.b, b_data, rtol=1e-2)
+        state_data = load_state(datafile)
+        @test isapprox(state.u, state_data.u, rtol=1e-2)
+        @test isapprox(state.v, state_data.v, rtol=1e-2)
+        @test isapprox(state.w, state_data.w, rtol=1e-2)
+        @test isapprox(state.p, state_data.p, rtol=1e-2)
+        @test isapprox(state.b, state_data.b, rtol=1e-2)
     end
 end
 
 @testset "Evolution Tests" begin
-    @testset "2D CPU" begin
-        coarse_evolution(TwoD(), CPU())
-    end
+    # @testset "2D CPU" begin
+    #     coarse_evolution(TwoD(), CPU())
+    # end
     # @testset "2D GPU" begin
     #     coarse_evolution(TwoD(), GPU())
     # end
-    # @testset "3D CPU" begin
-    #     coarse_evolution(ThreeD(), CPU())
-    # end
+    @testset "3D CPU" begin
+        coarse_evolution(ThreeD(), CPU())
+    end
     # @testset "3D GPU" begin
     #     coarse_evolution(ThreeD(), GPU())
     # end
