@@ -21,3 +21,7 @@ architecture(::Array) = CPU()
 architecture(::CuArray) = GPU()
 architecture(::SparseMatrixCSC) = CPU()
 architecture(::CuSparseMatrixCSR) = GPU()
+
+# create a vector holding elements of type T on architecture arch
+vector_type(arch::CPU, T) = Vector{T}
+vector_type(arch::GPU, T) = CuVector{T}
