@@ -14,7 +14,6 @@ using Krylov
 using PyPlot
 using HDF5
 using Printf
-import Base.string
 
 # directory where the output files will be saved
 global out_dir = "."
@@ -45,23 +44,9 @@ function set_out_dir!(dir)
     end
 end
 
-#TODO: Remove
-abstract type AbstractDimension end
-struct TwoD <: AbstractDimension 
-    n::Int
-end
-struct ThreeD <: AbstractDimension 
-    n::Int
-end
-TwoD() = TwoD(2)
-ThreeD() = ThreeD(3)
-string(::TwoD) = "2D"
-string(::ThreeD) = "3D"
-
 # include all the module code
 include("architectures.jl")
 include("utils.jl")
-include("plotting.jl")
 include("parameters.jl")
 include("spaces.jl")
 include("dofs.jl")
@@ -70,15 +55,13 @@ include("matrices.jl")
 include("preconditioners.jl")
 include("inversion.jl")
 include("evolution.jl")
-include("state.jl")
 include("model.jl")
+include("IO.jl")
+include("plotting.jl")
 
 export 
 out_dir,
 set_out_dir!,
-AbstractDimension,
-TwoD,
-ThreeD,
 # architectures.jl
 AbstractArchitecture,
 CPU,
@@ -93,12 +76,6 @@ trapz,
 cumtrapz,
 nan_max,
 nan_min,
-# plotting.jl
-nan_eval,
-plot_slice,
-plot_profiles,
-sim_plots,
-plot_sparsity_pattern,
 # parameters.jl
 Parameters,
 # spaces.jl
@@ -123,13 +100,18 @@ InversionToolkit,
 invert!,
 # evolution.jl
 EvolutionToolkit,
-# state.jl
-State,
-rest_state,
-set_state!,
-save,
-load_state,
 # model.jl
-Model
+State,
+Model,
+set_b!,
+# IO.jl
+save_state,
+load_state_from_file!,
+# plotting.jl
+nan_eval,
+plot_slice,
+plot_profiles,
+sim_plots,
+plot_sparsity_pattern
 
 end # module
