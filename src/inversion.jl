@@ -9,11 +9,11 @@ struct InversionToolkit{A, P, V, S}
     itmax::Int
     memory::Int
     history::Bool
-    verbose::Int
+    verbose::Bool
 end
 
 function InversionToolkit(lhs_matrix, preconditioner, rhs_matrix; 
-                          atol=1e-6, rtol=1e-6, itmax=0, memory=20, history=true, verbose=0)
+                          atol=1e-6, rtol=1e-6, itmax=0, memory=20, history=true, verbose=false)
     arch = architecture(lhs_matrix)
     N = size(lhs_matrix, 1)
     T = eltype(lhs_matrix)
@@ -25,25 +25,7 @@ function InversionToolkit(lhs_matrix, preconditioner, rhs_matrix;
                             atol, rtol, itmax, memory, history, verbose)
 end
 
-function vector_type(arch::CPU, T)
-    return Vector{T}
-end
-function vector_type(arch::GPU, T)
-    return CuVector{T}
-end
-
-function calculate_inversion_rhs_vector!(inversion::InversionToolkit, b)
-    arch = architecture(inversion.rhs_vector)
-    inversion.rhs_vector .= inversion.rhs_matrix*on_architecture(arch, b.free_values)
-    return inversion
-end
-
 function invert!(inversion::InversionToolkit, b)
-    # calculate rhs vector, then invert
-    calculate_inversion_rhs_vector!(inversion, b)
-    return invert!(inversion)
-end
-function invert!(inversion::InversionToolkit)
     # unpack
     solver = inversion.solver
     A = inversion.lhs_matrix
@@ -52,9 +34,11 @@ function invert!(inversion::InversionToolkit)
     atol = inversion.atol
     rtol = inversion.rtol
     itmax = inversion.itmax
-    memory = inversion.memory
     history = inversion.history
-    verbose = inversion.verbose
+    verbose = inversion.verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
+
+    # calculate rhs vector
+    calculate_inversion_rhs_vector!(inversion, b)
 
     # solve
     Krylov.solve!(solver, A, y, solver.x;  
@@ -68,5 +52,11 @@ function invert!(inversion::InversionToolkit)
     "Inversion iterative solve: solved=$solved, niter=$niter, time=$time" 
     end
 
+    return inversion
+end
+
+function calculate_inversion_rhs_vector!(inversion::InversionToolkit, b)
+    arch = architecture(inversion.rhs_vector)
+    inversion.rhs_vector .= inversion.rhs_matrix*on_architecture(arch, b.free_values)
     return inversion
 end
