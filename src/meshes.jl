@@ -4,24 +4,28 @@ struct Mesh{M, O, DO}
     dofs::DoFHandler # degree of freedom handler
     Ω::O             # triangulation
     dΩ::DO           # measure
+    dim::Int         # dimension of the problem
 end
 
 """
-    m = Mesh(fname::AbstractString)
-    m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
+    m = Mesh(ifile)
 
 Returns a struct holding mesh-related data.
 """
-function Mesh(fname::AbstractString)
-    model = GmshDiscreteModel(fname)
-    return Mesh(model)
-end
-function Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
+function Mesh(ifile)
+    model = GmshDiscreteModel(ifile)
     spaces = Spaces(model)
     Ω = Triangulation(model)
     dΩ = Measure(Ω, 4)
     dofs = DoFHandler(spaces, dΩ)
-    return Mesh(model, spaces, dofs, Ω, dΩ)
+    if model.grid_topology.polytopes[1] == TRI
+        dim = 2
+    elseif model.grid_topology.polytopes[1] == TET
+        dim = 3
+    else
+        throw(ArgumentError("Could not determine dimension of mesh."))
+    end
+    return Mesh(model, spaces, dofs, Ω, dΩ, dim)
 end
 
 ### some utility functions for working with meshes
