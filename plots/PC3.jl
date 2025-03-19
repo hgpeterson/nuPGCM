@@ -50,6 +50,40 @@ function fill_nans!(f)
     return f
 end
 
+function compute_bbot(b, z)
+    if !isnan(b[1])
+        return b[1]
+    elseif z[2] == z[1] == 0 # H = 0
+        return 0
+    else
+        # have to extrapolate if NaN
+        i1 = 2
+        while isnan(b[i1])
+            i1 += 1
+        end
+        i2 = i1 + 1
+        while isnan(b[i2])
+            i2 += 1
+        end
+        return b[i1] + (b[i2] - b[i1])/(z[i2] - z[i1])*(z[1] - z[i1])
+    end
+end
+
+function compute_bx(b, x, σ, H)
+    Hx = differentiate(H, x)
+
+    # bx = bξ - σ Hx/H bσ
+    bx = zeros(size(b))
+    for j in axes(b, 2)
+        bx[:, j] = differentiate(b[:, j], x)
+    end
+    for i in axes(b, 1)
+        if H[i] != 0
+            bx[i, :] -= Hx[i]/H[i]*σ.*differentiate(b[i, :], σ)
+        end
+    end
+    return bx
+end
 
 ### figure creation functions
 
@@ -113,12 +147,15 @@ function f_over_H()
     plt.close()
 end
 
-function bz_profiles()
-    fig, ax = plt.subplots(1, figsize=(19pc/1.62, 19pc))
-    ax.set_xlabel(L"Stratification $\partial_z b$")
-    ax.set_ylabel(L"Vertical coordinate $z$")
-    ax.set_xlim(0, 1.5)
-    ax.set_yticks(-0.75:0.25:0)
+function buoyancy()
+    fig, ax = plt.subplots(1, 2, figsize=(27pc, 10pc), gridspec_kw=Dict("width_ratios"=>[1, 2]))
+
+    # (a) buoyancy profiles
+    ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[1].set_xlabel(L"Stratification $\partial_z b$")
+    ax[1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1].set_xlim(0, 1.5)
+    ax[1].set_yticks(-0.75:0.25:0)
     ts = 5e-4:5e-4:5e-2
     t0 = 3e-3
     colors = pl.cm.Greys_r(range(0, 1, length=length(ts)))
@@ -129,16 +166,55 @@ function bz_profiles()
         close(file)
         bz = differentiate(b, z)
         if ts[i] == t0 
-            ax.plot(1 .+ bz, z, "C0", zorder=length(ts)+1, lw=1.5, label=L"t = 3 \times 10^{-3}")
+            ax[1].plot(1 .+ bz, z, "C0", zorder=length(ts)+1, lw=1.5, label=L"t = 3 \times 10^{-3}")
         else
-            ax.plot(1 .+ bz, z, c=colors[i, :], zorder=i)
+            ax[1].plot(1 .+ bz, z, c=colors[i, :], zorder=i)
         end
     end
-    ax.legend()
-    savefig("bz_profiles.png")
-    @info "Saved 'bz_profiles.png'"
-    savefig("bz_profiles.pdf")
-    @info "Saved 'bz_profiles.pdf'"
+    ax[1].legend(loc=(0.8, 0.9))
+
+    # (b) buoyancy gradient
+    ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2].set_xlabel(L"Zonal coordinate $x$")
+    ax[2].set_ylabel(L"Vertical coordinate $z$")
+    ax[2].axis("equal")
+    ax[2].set_xticks([0, 1])
+    ax[2].set_yticks([-1, 0])
+    ax[2].spines["left"].set_visible(false)
+    ax[2].spines["bottom"].set_visible(false)
+    d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
+    x = d["x"]
+    y = d["y"]
+    σ = d["σ"]
+    H = d["H"]
+    b = d["b"]
+    close(d)
+    i0 = length(x) ÷ 2 + 1 # index where x = 0
+    j0 = length(y) ÷ 2 + 1 # index where y = 0
+    x = x[i0:end]
+    H = H[i0:end, j0]
+    b = b[i0:end, j0, :]
+    xx = repeat(x, 1, length(σ))
+    zz = H*σ'
+    b[:, end] .= 0 # b = 0 at z = 0
+    b[end, :] .= 0 # b = 0 where H = 0
+    b[:, 1] .= [compute_bbot(b[i, :], zz[i, :]) for i in eachindex(x)] # fill nans at z = -H
+    fill_nans!(b) # everywhere else
+    bx = compute_bx(b, x, σ, H)
+    vmax = maximum(abs.(bx))
+    vmax = 0.3
+    img = ax[2].pcolormesh(xx, zz, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    ax[2].contour(xx, zz, zz .+ b, colors="k", linewidths=0.5, alpha=1, linestyles="-", levels=-0.9:0.1:-0.1)
+    ax[2].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
+    cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy gradient $\partial_x b$", extend="both")
+    cb.set_ticks([-vmax, 0, vmax])
+
+    subplots_adjust(wspace=0.9)
+
+    savefig("buoyancy.png")
+    @info "Saved 'buoyancy.png'"
+    savefig("buoyancy.pdf")
+    @info "Saved 'buoyancy.pdf'"
     plt.close()
 end
 
@@ -481,14 +557,35 @@ function psi_bl()
     b = b[i0:end, j0, :]
     Ψ = Ψ[i0:end, j0]
     H = H[i0:end, j0]
+    z = H*σ'
+    # b[:, 1] .= [compute_bbot(b[i, :], H[i]*σ) for i in eachindex(x)]
+    b[:, end] .= 0 # b = 0 at z = 0
+    b[end, :] .= 0 # b = 0 where H = 0
+    b[:, 1] .= [compute_bbot(b[i, :], z[i, :]) for i in eachindex(x)] # fill nans at z = -H
+    fill_nans!(b) # everywhere else
+    bx = compute_bx(b, x, σ, H)
 
     # compute Ψ from BL theory (asymptotic orders 1, 2, 3)
-    V_BL_1 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=1) for i in eachindex(x)]
+    ε = 1e-2
+    # α = 0
+    α = 1/2
+    V_BL_1 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=1) for i in eachindex(x)]
     Ψ_BL_1 = cumtrapz(V_BL_1, x) .- trapz(V_BL_1, x)
-    V_BL_2 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=2) for i in eachindex(x)]
+    V_BL_2 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=2) for i in eachindex(x)]
     Ψ_BL_2 = cumtrapz(V_BL_2, x) .- trapz(V_BL_2, x)
-    V_BL_3 = [compute_V_BL(b[i, :], σ*H[i], 1e-2, 1/2, atan(2*x[i]); order=3) for i in eachindex(x)]
+    V_BL_3 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=3) for i in eachindex(x)]
     Ψ_BL_3 = cumtrapz(V_BL_3, x) .- trapz(V_BL_3, x)
+
+    # new BL theory
+    V_BL_1_new = compute_V_BL(bx, z, ε; order=1)
+    Ψ_BL_1_new = cumtrapz(V_BL_1_new, x) .- trapz(V_BL_1_new, x)
+    V_BL_2_new = compute_V_BL(bx, z, ε; order=2)
+    Ψ_BL_2_new = cumtrapz(V_BL_2_new, x) .- trapz(V_BL_2_new, x)
+    V_BL_3_new = compute_V_BL(bx, z, ε; order=3)
+    Ψ_BL_3_new = cumtrapz(V_BL_3_new, x) .- trapz(V_BL_3_new, x)
+    println(maximum(abs.(Ψ_BL_1 .- Ψ_BL_1_new)))
+    println(maximum(abs.(Ψ_BL_2 .- Ψ_BL_2_new)))
+    println(maximum(abs.(Ψ_BL_3 .- Ψ_BL_3_new)))
 
     # plot
     fig, ax = plt.subplots(1)
@@ -501,15 +598,21 @@ function psi_bl()
     ax.axhline(0, color="k", linewidth=0.5)
     ax.plot(x, 1e2*Ψ, label="3D model")
     ax.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5, label=L"BL theory to $O(1)$")
+    ax.plot(x, 1e2*Ψ_BL_1_new, "C2-",  lw=0.5)
     ax.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
+    ax.plot(x, 1e2*Ψ_BL_2_new, "C2--",  lw=0.5)
     ax.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
+    ax.plot(x, 1e2*Ψ_BL_3_new, "C2-.",  lw=0.5)
     ax.add_patch(patches.Rectangle((0, -1.55), 0.1, 0.25, color=(0.9, 0.9, 0.9), zorder=-1))
     # inset of Rectangle region
     ax_inset = fig.add_axes([0.65, 0.2, 0.3, 0.3])
     ax_inset.plot(x, 1e2*Ψ, label="3D model")
-    ax_inset.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5, label=L"BL theory to $O(1)$")
-    ax_inset.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
-    ax_inset.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
+    ax_inset.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5)
+    ax_inset.plot(x, 1e2*Ψ_BL_1_new, "C2-",  lw=0.5)
+    ax_inset.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5)
+    ax_inset.plot(x, 1e2*Ψ_BL_2_new, "C2--",  lw=0.5)
+    ax_inset.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5)
+    ax_inset.plot(x, 1e2*Ψ_BL_3_new, "C2-.",  lw=0.5)
     ax_inset.set_xlim(0, 0.1)
     ax_inset.set_ylim(-1.55, -1.30)
     ax_inset.set_xticks([0, 0.1])
@@ -539,15 +642,7 @@ function compute_V_BL(b, z, ε, α, θ; order)
     H == 0 && return 0
 
     # compute bbot (have to extrapolate if NaN)
-    i1 = 1
-    while isnan(b[i1])
-        i1 += 1
-    end
-    i2 = i1 + 1
-    while isnan(b[i2])
-        i2 += 1
-    end
-    bbot = b[i1] + (b[i2] - b[i1])/(z[i2] - z[i1])*(z[1] - z[i1])
+    bbot = compute_bbot(b, z)
 
     # order 1 
     V = -trapz((b .- bbot)*tan(θ), z) 
@@ -580,37 +675,71 @@ function compute_V_BL(b, z, ε, α, θ; order)
 
     return V
 end
+function compute_V_BL(bx, z, ε; order)
+    if !(order in [1, 2, 3])
+        throw(ArgumentError("Invalid `order`: $order; must be 1, 2, or 3."))
+    end
+
+    # order 1
+    V = [-trapz(bx[i, :].*z[i, :], z[i, :]) for i in axes(bx, 1)]
+    order -= 1
+
+    if order != 0
+        # order 2
+        H = -z[:, 1]
+        V -= ε*sqrt(2)*H.*bx[:, 1]
+        order -= 1
+    end
+
+    if order != 0
+        # order 3
+        bxz_bot = zeros(size(bx, 1))
+        for i in 1:size(bx, 1)-1
+            bxz_bot[i] = differentiate_pointwise(bx[i, 1:3], z[i, 1:3], z[i, 1], 1) 
+        end
+        V -= ε^2*(sqrt(2)*H.*bxz_bot + bx[:, 1])
+        order -= 1
+    end
+
+    # if all went well, order should be 0
+    @assert order == 0
+
+    return V
+end
 
 function alpha()
-    width = 27pc
-    fig, ax = plt.subplots(1, 3, figsize=(width, width/3*1.62), sharey=true)
+    width = 19pc
+    fig, ax = plt.subplots(1, 2, figsize=(width, width/2*1.62))
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[1].set_ylabel(L"Vertical coordinate $z$")
     ax[1].set_xlabel(L"Cross-slope flow $u$"*"\n"*L"($\times 10^{-2}$)")
     ax[2].set_xlabel(L"Along-slope flow $v$"*"\n"*L"($\times 10^{-2}$)")
-    ax[3].set_xlabel(L"Stratification $\partial_z b$")
     ax[1].spines["left"].set_visible(false)
     ax[2].spines["left"].set_visible(false)
     ax[1].axvline(0, color="k", lw=0.5)
     ax[2].axvline(0, color="k", lw=0.5)
-    αs = [0, 1/4, 1/2, 1]
-    colors = pl.cm.viridis(range(0, 1, length=length(αs)))
-    for i ∈ eachindex(αs)
-        file = jldopen(@sprintf("../scratch/data/1D_%0.2f.jld2", αs[i]))
-        u = file["u"]
-        v = file["v"]
-        b = file["b"]
-        z = file["z"]
-        bz = differentiate(b, z)
-        ax[1].plot(1e2*u,   z, c=colors[i, :], label=latexstring(@sprintf("\$\\alpha = %0.2f\$", αs[i])))
-        ax[2].plot(1e2*v,   z, c=colors[i, :], label=latexstring(@sprintf("\$\\alpha = %0.2f\$", αs[i])))
-        ax[3].plot(1 .+ bz, z, c=colors[i, :], label=latexstring(@sprintf("\$\\alpha = %0.2f\$", αs[i])))
-        close(file)
-        println(trapz(v, z))
-    end
-    ax[3].legend()
+    ax[1].set_yticks(-0.75:0.25:0)
+    ax[2].set_yticks([])
+    ax[1].set_xlim(-0.2, 0.45)
+    ax[2].set_xlim(-1, 4.5)
+    # α = 0
+    file = jldopen("../scratch/data/1D_0.00.jld2")
+    u = file["u"]
+    v = file["v"]
+    z = file["z"]
+    ax[1].plot(1e2*u, z, label=L"\alpha = 0")
+    ax[2].plot(1e2*v, z, label=L"\alpha = 0")
+    close(file)
+    # α = 1/2
+    file = jldopen("../scratch/data/1D_0.50.jld2")
+    u = file["u"]
+    v = file["v"]
+    z = file["z"]
+    ax[1].plot(1e2*u, z, label=L"\alpha = 1/2")
+    ax[2].plot(1e2*v, z, label=L"\alpha = 1/2")
+    close(file)
+    ax[1].legend(loc=(0.45, 0.55))
     savefig("alpha.png")
     println("alpha.png")
     savefig("alpha.pdf")
@@ -620,14 +749,14 @@ end
 
 
 # f_over_H()
-# bz_profiles()
+# buoyancy()
 # psi()
 # slices("u")
 # slices("v")
 # slices("w")
 # zonal_sections()
 # flow_profiles()
-psi_bl()
-# alpha()
+# psi_bl()
+alpha()
 
 println("Done.")
