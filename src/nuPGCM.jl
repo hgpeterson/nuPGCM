@@ -104,6 +104,8 @@ EvolutionToolkit,
 State,
 Model,
 set_b!,
+rest_state_model,
+solve!,
 # IO.jl
 save_state,
 load_state_from_file!,
