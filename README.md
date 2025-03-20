@@ -11,7 +11,7 @@ The model is written in [Julia](https://julialang.org/) and can run on a GPU.
 
 If you don't have Julia installed already, [download it here](https://julialang.org/downloads/) (currently, the model has only been verified with Julia version 1.10).
 
-The model is still in active development and has not yet been added tot he official Julia package registry.
+The model is still in active development and has not yet been added to the official Julia package registry.
 To try it out, manually download the repository:
 ```
 git clone git@github.com:hgpeterson/nuPGCM.git
