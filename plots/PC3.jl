@@ -316,7 +316,9 @@ function slices(field)
         b = d["b"]
         close(d)
         xx = repeat(x, 1, length(σ))
-        j = argmin(abs.(y)) # index where y = 0
+        # j = argmin(abs.(y)) # index where y = 0
+        y0 = √3 - 2
+        j = argmin(abs.(y .- y0))
         z = H[:, j]*σ'
         f = f[:, j, :]
         fill_nans!(f)
@@ -327,18 +329,20 @@ function slices(field)
         b = z .+ b[:, j, :]
         fill_nans!(b)
         b[:, end] .= 0
-        if field == "u" 
-            vmax = 1.8
-        elseif field == "v"
-            vmax = 7.2
-        elseif field == "w"
-            vmax = 2.8
-        end
+        # if field == "u" 
+        #     vmax = 1.8
+        # elseif field == "v"
+        #     vmax = 7.2
+        # elseif field == "w"
+        #     vmax = 2.8
+        # end
+        vmax = 1e2*nan_max(abs.(f))
+        println(vmax)
         img = ax[i].pcolormesh(xx, z, 1e2*f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
         ax[i].contour(xx, z, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
-        if i == 1
-            ax[i].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
-        end
+        # if i == 1
+        #     ax[i].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
+        # end
     end
     if field == "u"
         label = L"Zonal flow $u$"*"\n"*L"($\times 10^{-2}$)"
@@ -751,12 +755,12 @@ end
 # f_over_H()
 # buoyancy()
 # psi()
-# slices("u")
-# slices("v")
-# slices("w")
+slices("u")
+slices("v")
+slices("w")
 # zonal_sections()
 # flow_profiles()
 # psi_bl()
-alpha()
+# alpha()
 
 println("Done.")
