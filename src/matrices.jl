@@ -5,7 +5,7 @@
 
 """
     A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
-        build_matrices(mesh, params, f, ν, κ, N², Δt; 
+        build_matrices(mesh, params, f, ν, κ; 
                        A_inversion_ofile=nothing,
                        A_adv_ofile=nothing, A_diff_ofile=nothing)
 
@@ -19,14 +19,14 @@ if `ofile`s are provided. The matrices are:
 - `B_diff`: RHS matrix for the diffusion part of the evolution problem
 - `b_diff`: RHS vector for the diffusion part of the evolution problem
 The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosity, and turbulent 
-diffusivity, respectively. The parameter `N²` is the buoyancy frequency, and `Δt` is the time step.
+diffusivity, respectively. 
 """
-function build_matrices(mesh::Mesh, params::Parameters, f, ν, κ, N², Δt; 
+function build_matrices(mesh::Mesh, params::Parameters, f, ν, κ; 
                         A_inversion_ofile=nothing,
                         A_adv_ofile=nothing, A_diff_ofile=nothing)
     A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; 
                                    A_inversion_ofile=A_inversion_ofile)
-    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ, N², Δt;
+    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ;
                                       A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
     return A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff
 end
@@ -50,7 +50,7 @@ function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν;
 end
 
 """
-    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ, N², Δt; 
+    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
                                    A_adv_ofile=nothing, A_diff_ofile=nothing)
 Build the matrices for the evolution problem of the PG equations.
 The matrices are assembled using the finite element method and can be saved to files
@@ -59,13 +59,13 @@ if `A_adv_ofile` and `A_diff_ofile` are provided. The matrices are:
 - `A_diff`: LHS matrix for the diffusion part of the evolution problem
 - `B_diff`: RHS matrix for the diffusion part of the evolution problem
 - `b_diff`: RHS vector for the diffusion part of the evolution problem
-The function `κ` is the turbulent diffusivity, `N²` is the buoyancy frequency, and `Δt` is the time step.
+The function `κ` is the turbulent diffusivity.
 """
-function build_evolution_matrices(mesh::Mesh, params::Parameters, κ, N², Δt; 
+function build_evolution_matrices(mesh::Mesh, params::Parameters, κ; 
                                    A_adv_ofile=nothing, A_diff_ofile=nothing)
-    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ, Δt; 
+    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ; 
                         ofile_adv=A_adv_ofile, ofile_diff=A_diff_ofile)
-    B_diff, b_diff = build_B_diff_b_diff(mesh, params, κ, N², Δt)
+    B_diff, b_diff = build_B_diff_b_diff(mesh, params, κ)
     return A_adv, A_diff, B_diff, b_diff
 end
 
@@ -165,19 +165,20 @@ function build_B_inversion(mesh::Mesh, params::Parameters)
 end
 
 """
-    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ, Δt; ofile_adv, ofile_diff)
+    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ; ofile_adv, ofile_diff)
 
 Assemble the LHS matrices for the advection and diffusion components of the evolution
 problem for the PG equations. If `ofile`s are given, the data is saved to files.
 """
-function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ, Δt; ofile_adv=nothing, ofile_diff=nothing)
+function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ; ofile_adv=nothing, ofile_diff=nothing)
     # unpack
     B_trial = mesh.spaces.B_trial
     B_test = mesh.spaces.B_test
     dΩ = mesh.dΩ
-    α = params.α
     ε = params.ε
+    α = params.α
     μϱ = params.μϱ
+    Δt = params.Δt
 
     # advection matrix
     a_adv(b, d) = ∫( b*d )dΩ
@@ -202,19 +203,21 @@ function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ, Δt; ofile_adv=n
 end
 
 """
-    B, b = build_B_diff_b_diff(mesh, params, κ, N², Δt)
+    B, b = build_B_diff_b_diff(mesh, params, κ)
 
 Assemble the RHS matrix and vector for the diffusion part of the evolution
 problem for the PG equations.
 """
-function build_B_diff_b_diff(mesh::Mesh, params::Parameters, κ, N², Δt)
+function build_B_diff_b_diff(mesh::Mesh, params::Parameters, κ)
     # unpack
     B_trial = mesh.spaces.B_trial
     B_test = mesh.spaces.B_test
     dΩ = mesh.dΩ
-    α = params.α
     ε = params.ε
+    α = params.α
     μϱ = params.μϱ
+    Δt = params.Δt
+    N² = params.N²
 
     # matrix
     θ = Δt/2 * ε^2 / μϱ
