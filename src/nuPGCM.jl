@@ -53,6 +53,7 @@ include("dofs.jl")
 include("meshes.jl")
 include("matrices.jl")
 include("preconditioners.jl")
+include("iterative_solvers.jl")
 include("inversion.jl")
 include("evolution.jl")
 include("model.jl")
@@ -104,8 +105,9 @@ EvolutionToolkit,
 State,
 Model,
 set_b!,
+inversion_model,
 rest_state_model,
-solve!,
+run!,
 # IO.jl
 save_state,
 load_state_from_file!,

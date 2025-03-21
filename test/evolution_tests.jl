@@ -1,14 +1,7 @@
 using Test
 using nuPGCM
-using Gridap
-using Krylov
-using CUDA
-using CUDA.CUSPARSE
-using CUDA.CUSOLVER
 using JLD2
-using SparseArrays
 using LinearAlgebra
-using ProgressMeter
 using Printf
 using PyPlot
 
@@ -117,8 +110,8 @@ function coarse_evolution(dim, arch)
     # put it all together in the `model` struct
     model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
 
-    # run
-    nuPGCM.solve!(model, T)
+    # solve
+    run!(model, T)
 
     # # plot for sanity check
     # sim_plots(model, H, 0)
@@ -148,14 +141,13 @@ end
     @testset "2D CPU" begin
         coarse_evolution(2, CPU())
     end
-    # TODO: 
-    # @testset "2D GPU" begin
-    #     coarse_evolution(2, GPU())
-    # end
-    # @testset "3D CPU" begin
-    #     coarse_evolution(3, CPU())
-    # end
-    # @testset "3D GPU" begin
-    #     coarse_evolution(3, GPU())
-    # end
+    @testset "2D GPU" begin
+        coarse_evolution(2, GPU())
+    end
+    @testset "3D CPU" begin
+        coarse_evolution(3, CPU())
+    end
+    @testset "3D GPU" begin
+        coarse_evolution(3, GPU())
+    end
 end

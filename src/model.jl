@@ -1,6 +1,3 @@
-import Krylov: solve!
-import Gridap: solve!
-
 mutable struct State{U, P, B}
     u::U     # flow in x direction
     v::U     # flow in y direction
@@ -19,6 +16,12 @@ struct Model{A, P, M, I, E, S}
     state::S
 end
 
+function inversion_model(arch::AbstractArchitecture, params::Parameters, mesh::Mesh, inversion::InversionToolkit)
+    evolution = nothing # this model is only used for calculating the inversion, no need for evolution toolkit
+    state = rest_state(mesh)
+    return Model(arch, params, mesh, inversion, evolution, state)
+end
+
 function rest_state_model(arch::AbstractArchitecture, params::Parameters, mesh::Mesh, inversion::InversionToolkit, evolution::EvolutionToolkit)
     state = rest_state(mesh)
     return Model(arch, params, mesh, inversion, evolution, state)
@@ -26,10 +29,7 @@ end
 
 function rest_state(mesh::Mesh; t=0.)
     # unpack
-    U = mesh.spaces.X_trial[1]
-    V = mesh.spaces.X_trial[2]
-    W = mesh.spaces.X_trial[3]
-    P = mesh.spaces.X_trial[4]
+    U, V, W, P = get_U_V_W_P(mesh.spaces)
     B = mesh.spaces.B_trial
 
     # define FE functions
@@ -55,7 +55,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function solve!(model::Model, t_final)
+function run!(model::Model, t_final)
     # unpack
     t = model.state.t
     Δt = model.params.Δt
@@ -116,32 +116,37 @@ function evolve_advection!(model::Model, b_half)
     v = model.state.v
     w = model.state.w
     b = model.state.b
-    evolution = model.evolution
+    solver = model.evolution.solver_adv
+    y = solver.y
+    is_solved = solver.is_solved
 
     # get u_half, v_half, w_half, b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-    evolution.rhs_vector .= on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    evolve_advection!(evolution)
-    b_half.free_values .= on_architecture(CPU(), evolution.solver.x[inv_p_b])
+    y .= on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
+    solver.is_solved = false
+    iterative_solve!(solver)
+    b_half.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
     invert!(model, b_half) # u, v, w, p are now updated to half-step values
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-    evolution.rhs_vector .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    evolve_advection!(evolution)
+    y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
+    solver.is_solved = false
+    iterative_solve!(solver)
 
     # sync state
-    b.free_values .= on_architecture(CPU(), evolution.solver.x[inv_p_b])
+    b.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
 
     return model
 end
 
 function evolve_diffusion!(model::Model)
+    # solve
     evolve_diffusion!(model.evolution, model.state.b)
 
     # sync solution to state
     # TODO: maybe give `state` an `arch` field instead of insisting on `CPU`?
-    model.state.b.free_values .= on_architecture(CPU(), model.evolution.solver.x[model.mesh.dofs.inv_p_b]) 
+    model.state.b.free_values .= on_architecture(CPU(), model.evolution.solver_diff.x[model.mesh.dofs.inv_p_b]) 
     return model
 end
 
