@@ -90,18 +90,19 @@ end
 
 """
 Build matrix representation of
-   ε²Γ²*dzz(ν*τˣ) + f*τʸ = F
-   ε²Γ *dzz(ν*τʸ) - f*τˣ = G
-where τˣ = dz(u) and τʸ = dz(v) and Γ = 1 + α*tan(θ)^2.
+   -ε²Γ²*dz(ν*dz(u)) - f*v + Px*cos(ϕ) = b*tan(θ)
+   -ε²Γ *dz(ν*dz(v)) + f*u + Px*sin(ϕ) = 0
+where Γ = 1 + α^2*tan(θ)^2 and ϕ is the angle the zero-transport component makes with x.
 Boundary conditions:
-    τˣ = τʸ = 0 at z = 0
-    -∫ z τˣ dz = U
-    -∫ z τʸ dz = V or τʸ(-H) = 0 depending on params.set_V
+    dz(u) = dz(v) = 0 at z = 0
+    u = v = 0 at z = -H
+    ∫ [u*cos(ϕ) + v*sin(ϕ)] dz = 0 or Px = 0 depending on params.no_Px
 """
-function build_LHS_τ(z, ν, params)
+function build_LHS_inversion(z, ν, params)
     # unpack
     ε = params.ε
     θ = params.θ
+    ϕ = params.ϕ
     α = params.α
     f = params.f
 
@@ -109,6 +110,7 @@ function build_LHS_τ(z, ν, params)
     nz = length(z)
     umap = 1:nz
     vmap = nz+1:2nz
+    iPx = 2nz + 1
     Γ = 1 + α^2*tan(θ)^2
     LHS = Tuple{Int64,Int64,Float64}[]  
 
@@ -120,88 +122,71 @@ function build_LHS_τ(z, ν, params)
 
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
-        ν_zz = sum(fd_zz.*ν[j-1:j+1])
         
-        # eq 1: ε²Γ²*dzz(ν*τˣ) + f*τʸ = F 
-        # term 1 = ε²Γ²*[dzz(ν)*τˣ + 2*dz(ν)*dz(τˣ) + ν*dzz(τˣ)] 
+        # eq 1: -ε²Γ²*dz(ν*dz(u)) - f*v + Px*cos(ϕ) = b*tan(θ)
+        # term 1 = -ε²Γ²*[dz(ν)*dz(u) + ν*dzz(u)] 
         c = ε^2*Γ^2
-        push!(LHS, (umap[j], umap[j],     c*ν_zz))
-        push!(LHS, (umap[j], umap[j-1], 2*c*ν_z*fd_z[1]))
-        push!(LHS, (umap[j], umap[j],   2*c*ν_z*fd_z[2]))
-        push!(LHS, (umap[j], umap[j+1], 2*c*ν_z*fd_z[3]))
-        push!(LHS, (umap[j], umap[j-1],   c*ν[j]*fd_zz[1]))
-        push!(LHS, (umap[j], umap[j],     c*ν[j]*fd_zz[2]))
-        push!(LHS, (umap[j], umap[j+1],   c*ν[j]*fd_zz[3]))
-        # term 2 = f*τʸ
-        push!(LHS, (umap[j], vmap[j], f))
+        push!(LHS, (umap[j], umap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
+        push!(LHS, (umap[j], umap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
+        push!(LHS, (umap[j], umap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
+        # term 2 = -f*v
+        push!(LHS, (umap[j], vmap[j], -f))
+        # term 3 = Px*cos(ϕ)
+        push!(LHS, (umap[j], iPx, cos(ϕ)))
 
-        # eq 2: ε²Γ *dzz(ν*τʸ) - f*τˣ = G
-        # term 1 = ε²Γ*[dzz(ν)*τʸ + 2*dz(ν)*dz(τʸ) + ν*dzz(τʸ)]
+        # eq 2: -ε²Γ *dz(ν*dz(v)) + f*u + Px*sin(ϕ) = 0
+        # term 1 = -ε²Γ*[dz(ν)*dz(v) + ν*dzz(v)]
         c = ε^2*Γ
-        push!(LHS, (vmap[j], vmap[j],     c*ν_zz))
-        push!(LHS, (vmap[j], vmap[j-1], 2*c*ν_z*fd_z[1]))
-        push!(LHS, (vmap[j], vmap[j],   2*c*ν_z*fd_z[2]))
-        push!(LHS, (vmap[j], vmap[j+1], 2*c*ν_z*fd_z[3]))
-        push!(LHS, (vmap[j], vmap[j-1],   c*ν[j]*fd_zz[1]))
-        push!(LHS, (vmap[j], vmap[j],     c*ν[j]*fd_zz[2]))
-        push!(LHS, (vmap[j], vmap[j+1],   c*ν[j]*fd_zz[3]))
-        # term 2 = -f*τˣ
-        push!(LHS, (vmap[j], umap[j], -f))
+        push!(LHS, (vmap[j], vmap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
+        push!(LHS, (vmap[j], vmap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
+        push!(LHS, (vmap[j], vmap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
+        # term 2 = f*u
+        push!(LHS, (vmap[j], umap[j], f))
+        # term 3 = Px*sin(ϕ)
+        push!(LHS, (vmap[j], iPx, sin(ϕ)))
     end
 
-    # surface boundary conditions: τˣ = τʸ = 0
-    push!(LHS, (umap[nz], umap[nz], 1))
-    push!(LHS, (vmap[nz], vmap[nz], 1))
+    # bottom boundary conditions: u = v = 0
+    push!(LHS, (umap[1], umap[1], 1))
+    push!(LHS, (vmap[1], vmap[1], 1))
 
-    # integral boundary conditions: -∫ z τˣ dz = U, -∫ z τʸ dz = V
-    for j in 1:nz-1
-        # trapezoidal rule
-        dz = z[j+1] - z[j]
-        push!(LHS, (umap[1], umap[j],   -z[j]*dz/2))
-        push!(LHS, (umap[1], umap[j+1], -z[j]*dz/2))
-        if params.set_V
-            push!(LHS, (vmap[1], vmap[j],   -z[j]*dz/2))
-            push!(LHS, (vmap[1], vmap[j+1], -z[j]*dz/2))
+    # surface boundary conditions: dz(u) = dz(v) = 0
+    fd_z = mkfdstencil(z[end-2:end], z[end], 1)
+    push!(LHS, (umap[end], umap[end-2], fd_z[1]))
+    push!(LHS, (umap[end], umap[end-1], fd_z[2]))
+    push!(LHS, (umap[end], umap[end],   fd_z[3]))
+    push!(LHS, (vmap[end], vmap[end-2], fd_z[1]))
+    push!(LHS, (vmap[end], vmap[end-1], fd_z[2]))
+    push!(LHS, (vmap[end], vmap[end],   fd_z[3]))
+
+    # last degree of freedom: ∫ [u*cos(ϕ) + v*sin(ϕ)] dz = 0 or Px = 0
+    if params.no_Px
+        push!(LHS, (iPx, iPx, 1))
+    else
+        for j in 1:nz-1
+            # trapezoidal rule
+            dz = z[j+1] - z[j]
+            push!(LHS, (iPx, umap[j],   cos(ϕ)*dz/2))
+            push!(LHS, (iPx, umap[j+1], cos(ϕ)*dz/2))
+            push!(LHS, (iPx, vmap[j],   sin(ϕ)*dz/2))
+            push!(LHS, (iPx, vmap[j+1], sin(ϕ)*dz/2))
         end
     end
 
-    # if V is not set, set τʸ = 0 at the bottom
-    if !params.set_V
-        push!(LHS, (vmap[1], vmap[1], 1))
-    end
-
     # Create CSC sparse matrix from matrix elements
-    LHS = sparse((x->x[1]).(LHS), (x->x[2]).(LHS), (x->x[3]).(LHS), 2nz, 2nz)
+    LHS = sparse((x->x[1]).(LHS), (x->x[2]).(LHS), (x->x[3]).(LHS), 2nz+1, 2nz+1)
 
     return LHS
 end
 
 """
 Update vector for RHS of baroclinic inversion 
-   ε²Γ²*dzz(ν*τˣ) + f*τʸ = -dz(b)*tan(θ)
-   ε²Γ *dzz(ν*τʸ) - f*τˣ = 0
-with integral constraints conditions
-    -∫ z τˣ dz = 0
-    -∫ z τʸ dz = 0
+   -ε²Γ²*dz(ν*dz(u)) - f*v + Px*cos(ϕ) = b*tan(θ)
+   -ε²Γ *dz(ν*dz(v)) + f*u + Px*sin(ϕ) = 0
 """
-function update_rhs_τ!(rhs_τ, z, b, params)
-    bz = differentiate(b, z)
-    rhs_τ[2:params.nz] = -bz[2:params.nz]*tan(params.θ)
-    rhs_τ[1] = 0
-    rhs_τ[params.nz+1] = 0
-    return rhs_τ
-end
-
-function uvw(τ, z, params)
-    nz = params.nz
-
-    # compute u and v from τ
-    u = cumtrapz(τ[1:nz], z)
-    v = cumtrapz(τ[nz+1:end], z)
-
-    # transform
-    w = u*tan(params.θ)
-    return u, v, w
+function update_rhs_inversion!(rhs, z, b, params)
+    rhs[2:params.nz-1] .= b[2:params.nz-1]*tan(params.θ)
+    return rhs
 end
 
 function plot_setup()
@@ -228,10 +213,10 @@ function plot(u, v, w, b, z; fig, ax, label="", color="C0")
     ax[2].plot(v,       z, c=color, label=label)
     ax[3].plot(w,       z, c=color, label=label)
     ax[4].plot(1 .+ bz, z, c=color, label=label)
+    label != "" && ax[1].legend()
 end
 
 function plot_finish(; fig, ax, t=nothing, filename="images/1D.png")
-    ax[1].legend()
     if t !== nothing
         ax[1].set_title(latexstring(@sprintf("\$t = %s\$", sci_notation(t))))
     end
@@ -271,66 +256,59 @@ function sim_setup(params)
     # build matrices
     LHS_b, RHS_b, rhs_b = build_b(z, κ, params)
     LHS_b = lu(LHS_b)
-    LHS_τ = build_LHS_τ(z, ν, params)
-    LHS_τ = lu(LHS_τ)
+    LHS_inversion = build_LHS_inversion(z, ν, params)
+    LHS_inversion = lu(LHS_inversion)
 
     # initial condition
     b = zeros(params.nz)
-    rhs_τ = zeros(2*params.nz)
-    τ = zeros(2*params.nz)
+    rhs_inversion = zeros(2*params.nz + 1)
+    sol_inversion = zeros(2*params.nz + 1)
     t = 0
 
-    return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_τ, rhs_τ, b, τ, t
+    return z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_inversion, rhs_inversion, b, sol_inversion, t
 end
 
 function solve(params)
     # setup 
-    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_τ, rhs_τ, b, τ, t = sim_setup(params)
-
-    # compute u, v, w
-    u, v, w = uvw(τ, z, params)
+    z, ν, κ, LHS_b, RHS_b, rhs_b, LHS_inversion, rhs_inversion, b, sol_inversion, t = sim_setup(params)
+    u = @view sol_inversion[1:params.nz]
+    v = @view sol_inversion[params.nz+1:2params.nz]
 
     # run
-    n_steps = Int(round(params.T/params.Δt))
+    n_steps = params.T ÷ params.Δt
     for i ∈ 1:n_steps
         # timestep
         ldiv!(b, LHS_b, RHS_b*b + rhs_b - params.Δt*u*tan(params.θ))
         t += params.Δt
 
         # inversion
-        update_rhs_τ!(rhs_τ, z, b, params)
-        ldiv!(τ, LHS_τ, rhs_τ)
-        u, v, w = uvw(τ, z, params)
-
-        # # save 
-        # if mod(i, 5) == 0
-        #     save(u, v, w, b, params, t, z; filename=@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", t))
-        # end
+        update_rhs_inversion!(rhs_inversion, z, b, params)
+        ldiv!(sol_inversion, LHS_inversion, rhs_inversion)
     end
 
-    return u, v, w, b, t, z
+    return u, v, u*tan(params.θ), b, t, z
 end
 
-function loop_aspect_ratios()
-    # parameters
-    μϱ = 1e-4
-    θ = π/4
-    ε = 1e-2
-    Δt = 1e-4*μϱ/ε^2
-    set_V = false
-    H = 0.75
-    f = 1
-    nz = 2^8
-    horiz_diff = false
-    T = 3e-3*μϱ/ε^2
+# function loop_aspect_ratios()
+#     # parameters
+#     μϱ = 1e-4
+#     θ = π/4
+#     ε = 1e-2
+#     Δt = 1e-4*μϱ/ε^2
+#     set_V = false
+#     H = 0.75
+#     f = 1
+#     nz = 2^8
+#     horiz_diff = false
+#     T = 3e-3*μϱ/ε^2
 
-    αs = [0, 1/4, 1/2, 1]
-    for i ∈ eachindex(αs)
-        params = (μϱ=μϱ, α=αs[i], θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
-        u, v, w, b, t, z = solve(params)
-        save(u, v, w, b, params, t, z; filename=@sprintf("./data/1D_%0.2f.jld2", αs[i]))
-    end
-end
+#     αs = [0, 1/4, 1/2, 1]
+#     for i ∈ eachindex(αs)
+#         params = (μϱ=μϱ, α=αs[i], θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
+#         u, v, w, b, t, z = solve(params)
+#         save(u, v, w, b, params, t, z; filename=@sprintf("./data/1D_%0.2f.jld2", αs[i]))
+#     end
+# end
 
 function main()
     # parameters
@@ -339,13 +317,15 @@ function main()
     θ = π/4
     ε = 1e-2
     Δt = 1e-4*μϱ/ε^2
-    set_V = true
+    no_Px = false
     H = 0.75
     f = 1
+    ϕ = atan(0.5*H/tan(θ)) # tan ϕ = -(β*H - f*Hy)/f*Hx
+    println(ϕ*180/π)
     nz = 2^8
     horiz_diff = false
-    T = 5e-2*μϱ/ε^2
-    params = (μϱ=μϱ, α=α, θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
+    T = 3e-3*μϱ/ε^2
+    params = (μϱ=μϱ, α=α, θ=θ, ε=ε, Δt=Δt, no_Px=no_Px, ϕ=ϕ, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
 
     # solve
     u, v, w, b, t, z = solve(params)
@@ -353,10 +333,13 @@ function main()
     # # save
     # save(u, v, w, b, params, t, z; filename="../sims/sim048/data/1D_beta1.0.jld2")
 
-    # # plot
-    # fig, ax = plot_setup()
-    # plot(u, v, w, b, z; fig, ax)
-    # plot_finish(; fig, ax, t, filename="images/1D.png")
+    # plot
+    fig, ax = plot_setup()
+    plot(u, v, w, b, z; fig, ax)
+    plot_finish(; fig, ax, t, filename="images/1D.png")
+
+    println(trapz(u*cos(ϕ), z))
+    println(trapz(v*sin(ϕ), z))
 end
 
 main()
