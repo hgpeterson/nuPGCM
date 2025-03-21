@@ -23,22 +23,23 @@ function coarse_evolution(dim, arch)
     ε = 1e-1
     α = 1/2
     μϱ = 1e1
-    params = Parameters(ε, α, μϱ)
+    N² = 1.
+    Δt = 1e-4*μϱ/ε^2
+    params = Parameters(ε, α, μϱ, N², Δt)
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
-    Δt = 1e-4*μϱ/ε^2
-    T = 5e-2*μϱ/ε^2
     H(x) = 1 - x[1]^2 - x[2]^2
     ν(x) = 1
     κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
+    T = 5e-2*μϱ/ε^2
 
     # coarse mesh
     h = 0.1
-    mesh = Mesh(@sprintf("meshes/bowl%s_%0.2f.msh", dim, h))
+    mesh = Mesh(@sprintf("meshes/bowl%sD_%0.2f.msh", dim, h))
 
     # build inversion matrices and test LHS against saved matrix
-    A_inversion_fname = @sprintf("test/data/A_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
+    A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; ofile=A_inversion_fname)
@@ -61,7 +62,7 @@ function coarse_evolution(dim, arch)
     if typeof(arch) == CPU
         P_inversion = lu(A_inversion)
     else
-        P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(size(A_inversion, 1))))
+        P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
     end
 
     # move to arch
@@ -71,28 +72,16 @@ function coarse_evolution(dim, arch)
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
-    # background state ∂z(b) = N²
-    N² = 1.
-
-    # initial condition: b = N²z, t = 0
-    u = interpolate_everywhere(0, mesh.spaces.X_trial[1])
-    v = interpolate_everywhere(0, mesh.spaces.X_trial[2])
-    w = interpolate_everywhere(0, mesh.spaces.X_trial[3])
-    p = interpolate_everywhere(0, mesh.spaces.X_trial[4]) 
-    b = interpolate_everywhere(0, mesh.spaces.B_trial)
-    t = 0.
-    state = State(u, v, w, p, b, t) 
-
     # build evolution matrices and test against saved matrices
     θ = Δt/2 * ε^2 / μϱ
-    A_diff_fname = @sprintf("test/data/A_diff_%s_%e_%e_%e.jld2", dim, h, θ, α)
-    A_adv_fname = @sprintf("test/data/A_adv_%s_%e.jld2", dim, h)
+    A_diff_fname = @sprintf("test/data/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α)
+    A_adv_fname = @sprintf("test/data/A_adv_%sD_%e.jld2", dim, h)
     if !isfile(A_diff_fname) || !isfile(A_adv_fname)
         @warn "A_diff or A_adv file not found, generating..."
-        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ, N², Δt; 
+        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
                                             A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
     else
-        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ, N², Δt) 
+        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ) 
         jldopen(A_adv_fname, "r") do file
             @test A_adv ≈ file["A_adv"]
         end
@@ -122,124 +111,51 @@ function coarse_evolution(dim, arch)
     B_diff = on_architecture(arch, B_diff)
     b_diff = on_architecture(arch, b_diff)
 
-    # Krylov solver for evolution
-    VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
-    tol = 1e-6
-    itmax = 0
-    solver_evolution = CgSolver(mesh.dofs.nb, mesh.dofs.nb, VT)
-    solver_evolution.x .= on_architecture(arch, copy(state.b)[mesh.dofs.p_b])
+    # setup evolution toolkit
+    evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff)
 
-    # evolution functions
-    b_half = interpolate_everywhere(0, mesh.spaces.B_trial)
-    function evolve_adv!(inversion_toolkit, solver_evolution, state)
-        # determine architecture
-        arch = architecture(solver_evolution.x)
-
-        # unpack
-        p_b = mesh.dofs.p_b
-        inv_p_b = mesh.dofs.inv_p_b
-        B_test = mesh.spaces.B_test
-        dΩ = mesh.dΩ
-
-        # half step
-        l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-        RHS = on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-        Krylov.solve!(solver_evolution, A_adv, RHS, solver_evolution.x, M=P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-
-        # update b_half
-        b_half.free_values .= on_architecture(CPU(), solver_evolution.x[inv_p_b])
-
-        # invert with b_half
-        invert!(inversion_toolkit, b_half)
-        set_state!(state, mesh, inversion_toolkit)
-
-        # full step
-        l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-        RHS = on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-        Krylov.solve!(solver_evolution, A_adv, RHS, solver_evolution.x, M=P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-
-        # update state
-        state.b .= on_architecture(CPU(), solver_evolution.x[inv_p_b])
-
-        return inversion_toolkit, solver_evolution
-    end
-    function evolve_diff!(solver_evolution, state)
-        # determine architecture
-        arch = architecture(solver_evolution.x)
-
-        # make copy of b on arch
-        b_arch = on_architecture(arch, state.b)
-
-        # compute RHS
-        RHS = B_diff*b_arch + b_diff
-
-        # solve
-        Krylov.solve!(solver_evolution, A_diff, RHS, solver_evolution.x, M=P_diff, atol=tol, rtol=tol, verbose=0, itmax=itmax)
-
-        # update state
-        state.b .= on_architecture(CPU(), solver_evolution.x[mesh.dofs.inv_p_b])
-
-        return solver_evolution
-    end
-
-    # solve function
-    function solve!(state, inversion_toolkit, solver_evolution, i_step, n_steps)
-        @showprogress for i ∈ i_step:n_steps
-            # advection step
-            evolve_adv!(inversion_toolkit, solver_evolution, state)
-
-            # diffusion step
-            evolve_diff!(solver_evolution, state)
-
-            # invert
-            invert!(inversion_toolkit, b)
-            set_state!(state, mesh, inversion_toolkit)
-
-            # time
-            state.t += Δt
-
-            # average stratification
-            if mod(i, n_steps ÷ 100) == 0
-                @info @sprintf("average ∂z(b) = %1.5e", sum(∫(N² + ∂z(b))mesh.dΩ)/sum(∫(1)mesh.dΩ))
-            end
-        end
-        return state, inversion_toolkit, solver_evolution
-    end
+    # put it all together in the `model` struct
+    model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
 
     # run
-    i_step = Int64(round(t/Δt)) + 1
-    n_steps = Int64(round(T/Δt))
-    solve!(state, inversion_toolkit, solver_evolution, i_step, n_steps)
+    nuPGCM.solve!(model, T)
 
-    # plot for sanity check
-    sim_plots(dim, u, v, w, b, N², H, state.t, 0)
+    # # plot for sanity check
+    # sim_plots(model, H, 0)
 
     # compare state with data
-    datafile = @sprintf("test/data/evolution_%s.jld2", dim)
+    datafile = @sprintf("test/data/evolution_%sD.jld2", dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
         save(state; ofile=datafile)
     else
-        state_data = load_state(datafile)
-        @test isapprox(state.u, state_data.u, rtol=1e-2)
-        @test isapprox(state.v, state_data.v, rtol=1e-2)
-        @test isapprox(state.w, state_data.w, rtol=1e-2)
-        @test isapprox(state.p, state_data.p, rtol=1e-2)
-        @test isapprox(state.b, state_data.b, rtol=1e-2)
+        jldopen(datafile, "r") do file
+            u_data = file["u"]
+            v_data = file["v"]
+            w_data = file["w"]
+            p_data = file["p"]
+            b_data = file["b"]
+            @test isapprox(model.state.u.free_values, u_data, rtol=1e-2)
+            @test isapprox(model.state.v.free_values, v_data, rtol=1e-2)
+            @test isapprox(model.state.w.free_values, w_data, rtol=1e-2)
+            @test isapprox(model.state.p.free_values, p_data, rtol=1e-2)
+            @test isapprox(model.state.b.free_values, b_data, rtol=1e-2)
+        end
     end
 end
 
 @testset "Evolution Tests" begin
-    # @testset "2D CPU" begin
-    #     coarse_evolution(TwoD(), CPU())
-    # end
-    # @testset "2D GPU" begin
-    #     coarse_evolution(TwoD(), GPU())
-    # end
-    @testset "3D CPU" begin
-        coarse_evolution(ThreeD(), CPU())
+    @testset "2D CPU" begin
+        coarse_evolution(2, CPU())
     end
+    # TODO: 
+    # @testset "2D GPU" begin
+    #     coarse_evolution(2, GPU())
+    # end
+    # @testset "3D CPU" begin
+    #     coarse_evolution(3, CPU())
+    # end
     # @testset "3D GPU" begin
-    #     coarse_evolution(ThreeD(), GPU())
+    #     coarse_evolution(3, GPU())
     # end
 end
