@@ -39,3 +39,11 @@ function Spaces(model; order=2)
 
     return Spaces(X_trial, X_test, B_trial, B_test)
 end
+
+function get_U_V_W_P(spaces::Spaces)
+    U = spaces.X_trial[1]
+    V = spaces.X_trial[2]
+    W = spaces.X_trial[3]
+    P = spaces.X_trial[4]
+    return U, V, W, P
+end
