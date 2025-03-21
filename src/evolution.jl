@@ -1,91 +1,40 @@
-struct EvolutionToolkit{A, P, V, S}
-    lhs_adv_matrix::A 
-    preconditioner_adv::P 
-    lhs_diff_matrix::A 
-    preconditioner_diff::P 
-    rhs_diff_matrix::A 
-    rhs_diff_vector::V
-    rhs_vector::V
-    solver::S
-    atol::Real
-    rtol::Real
-    itmax::Int
-    history::Bool
-    verbose::Bool
+struct EvolutionToolkit{A, V}
+    B_diff::A 
+    b_diff::V
+    solver_adv::IterativeSolverToolkit
+    solver_diff::IterativeSolverToolkit
 end
 
-function EvolutionToolkit(lhs_adv_matrix, preconditioner_adv, lhs_diff_matrix, preconditioner_diff, rhs_diff_matrix, rhs_diff_vector;
+function EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff;
                           atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=false)
-    arch = architecture(lhs_adv_matrix)
-    N = size(lhs_adv_matrix, 1)
-    T = eltype(lhs_adv_matrix)
-    rhs_vector = on_architecture(arch, zeros(T, N))
+    arch = architecture(A_adv)
+    N = size(A_adv, 1)
+    T = eltype(A_adv)
+    y = on_architecture(arch, zeros(T, N))
     VT = vector_type(arch, T)
     solver = Krylov.CgSolver(N, N, VT)
     solver.x .= zero(T)
-    return EvolutionToolkit(lhs_adv_matrix, preconditioner_adv, lhs_diff_matrix, preconditioner_diff, rhs_diff_matrix, rhs_diff_vector, rhs_vector, solver,
-                            atol, rtol, itmax, history, verbose)
+    verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
+    kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
+    solver_adv = IterativeSolverToolkit(A_adv, P_adv, y, solver, kwargs, "Advection")
+    solver_diff = IterativeSolverToolkit(A_diff, P_diff, y, solver, kwargs, "Diffusion")
+    return EvolutionToolkit(B_diff, b_diff, solver_adv, solver_diff)
 end
 
 function evolve_diffusion!(evolution::EvolutionToolkit, b)
     # unpack
-    solver = evolution.solver
-    A = evolution.lhs_diff_matrix
-    P = evolution.preconditioner_diff
-    y = evolution.rhs_vector
-    atol = evolution.atol
-    rtol = evolution.rtol
-    itmax = evolution.itmax
-    history = evolution.history
-    verbose = evolution.verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
+    solver = evolution.solver_diff
+    y = solver.y
+    arch = architecture(y)
+    B_diff = evolution.B_diff
+    b_diff = evolution.b_diff
 
     # calculate rhs vector
-    calculate_diffusion_rhs_vector!(evolution, b)
+    y .= B_diff*on_architecture(arch, b.free_values) + b_diff
+    solver.is_solved = false
 
     # solve
-    Krylov.solve!(solver, A, y, solver.x;  
-                  atol, rtol, itmax, history, verbose,
-                  M=P)
-
-    @debug begin 
-    solved = solver.stats.solved
-    niter = solver.stats.niter 
-    time = solver.stats.timer
-    "Diffusion iterative solve: solved=$solved, niter=$niter, time=$time" 
-    end
-
-    return evolution
-end
-
-function calculate_diffusion_rhs_vector!(evolution::EvolutionToolkit, b)
-    arch = architecture(evolution.rhs_vector)
-    evolution.rhs_vector .= evolution.rhs_diff_matrix*on_architecture(arch, b.free_values) + evolution.rhs_diff_vector
-    return evolution
-end
-
-function evolve_advection!(evolution::EvolutionToolkit)
-    # unpack
-    solver = evolution.solver
-    A = evolution.lhs_adv_matrix
-    P = evolution.preconditioner_adv
-    y = evolution.rhs_vector
-    atol = evolution.atol
-    rtol = evolution.rtol
-    itmax = evolution.itmax
-    history = evolution.history
-    verbose = evolution.verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
-
-    # solve
-    Krylov.solve!(solver, A, y, solver.x;  
-                  atol, rtol, itmax, history, verbose,
-                  M=P)
-
-    @debug begin 
-    solved = solver.stats.solved
-    niter = solver.stats.niter 
-    time = solver.stats.timer
-    "Advection iterative solve: solved=$solved, niter=$niter, time=$time" 
-    end
+    iterative_solve!(solver)
 
     return evolution
 end

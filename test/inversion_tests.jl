@@ -1,9 +1,6 @@
 using Test
 using nuPGCM
-using Gridap
 using JLD2
-using CUDA
-using SparseArrays
 using LinearAlgebra
 using Printf
 using PyPlot
@@ -62,7 +59,7 @@ function coarse_inversion(dim, arch)
     inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
     # model
-    model = Model(arch, params, mesh, inversion_toolkit)
+    model = inversion_model(arch, params, mesh, inversion_toolkit)
 
     # simple test buoyancy field: b = δ exp(-(z + H)/δ)
     set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/0.1))
@@ -70,8 +67,8 @@ function coarse_inversion(dim, arch)
     # invert
     invert!(model)
 
-    # plot for sanity check
-    sim_plots(model, H, 0)
+    # # plot for sanity check
+    # sim_plots(model, H, 0)
 
     # compare state with data
     datafile = @sprintf("test/data/inversion_%sD.jld2", dim)
@@ -98,13 +95,13 @@ end
     @testset "2D CPU" begin
         coarse_inversion(2, CPU())
     end
-    # @testset "2D GPU" begin
-    #     coarse_inversion(TwoD(), GPU())
-    # end
-    # @testset "3D CPU" begin
-    #     coarse_inversion(3, CPU())
-    # end
-    # @testset "3D GPU" begin
-    #     coarse_inversion(ThreeD(), GPU())
-    # end
+    @testset "2D GPU" begin
+        coarse_inversion(2, GPU())
+    end
+    @testset "3D CPU" begin
+        coarse_inversion(3, CPU())
+    end
+    @testset "3D GPU" begin
+        coarse_inversion(3, GPU())
+    end
 end
