@@ -80,7 +80,8 @@ function assemble_LHS_adv_diff(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ
     @time "assemble LHS_adv" LHS_adv = assemble_matrix(a_adv, B, D)
 
     # diffusion matrix
-    a_diff(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    # a_diff(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
+    a_diff(b, d) = ∫( b*d + α*∂z(b)*∂z(d)*κ )dΩ
     @time "assemble LHS_diff" LHS_diff = assemble_matrix(a_diff, B, D)
 
     # Cuthill-McKee DOF reordering
@@ -103,14 +104,18 @@ end
 Assemble the RHS matrix and vector for the diffusion part of the evolution
 problem for the PG equations.
 """
-function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ)
+function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ, dΓ, b₀)
     # matrix
-    a(b, d) = ∫( b*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
+    a(b, d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     @time "RHS_diff matrix" M = assemble_matrix(a, B, D)[perm, :]
 
     # vector
     l(d) = ∫( -2*α*∂z(d)*N²*κ )dΩ
     @time "RHS_diff vector" v = assemble_vector(l, D)[perm]
+
+    # boundary 
+    lbdy(d) = ∫( -2*α*∂z(d)*b₀*κ )dΓ
+    @time "RHS_diff boundary" v .+= assemble_vector(lbdy, D)[perm]
 
     return M, v
 end

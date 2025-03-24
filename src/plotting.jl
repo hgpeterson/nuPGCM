@@ -351,10 +351,10 @@ end
 function sim_plots(dim::TwoD, ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function, t::Real, i_save::Int)
     # don't plot u_sfc in 2D
     @time "plotting" begin
-    cache_profiles = plot_profiles(ux, uy, uz, b, N², H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
-    cache_u_slice  = plot_slice(ux, b, N²; y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_dir, i_save))
-    cache_v_slice  = plot_slice(uy, b, N²; y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_dir, i_save))
-    cache_w_slice  = plot_slice(uz, b, N²; y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_dir, i_save))
+    cache_profiles = plot_profiles(ux, uy, uz, b, N², H; x=0.0, y=0.5, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
+    cache_u_slice  = plot_slice(ux, b, N²; x=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_dir, i_save))
+    cache_v_slice  = plot_slice(uy, b, N²; x=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_dir, i_save))
+    cache_w_slice  = plot_slice(uz, b, N²; x=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_dir, i_save))
     end
     return cache_profiles, cache_u_slice, cache_v_slice, cache_w_slice
 end
