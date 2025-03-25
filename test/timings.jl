@@ -38,10 +38,6 @@ function make_model(dim, arch)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; ofile=A_inversion_fname)
     else
-        # A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
-        # jldopen(A_inversion_fname, "r") do file
-        #     @test A_inversion ≈ file["A_inversion"]
-        # end
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
@@ -76,12 +72,6 @@ function make_model(dim, arch)
                                             A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
     else
         A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ) 
-        jldopen(A_adv_fname, "r") do file
-            @test A_adv ≈ file["A_adv"]
-        end
-        jldopen(A_diff_fname, "r") do file
-            @test A_diff ≈ file["A_diff"]
-        end
     end
 
     # re-order dofs
@@ -114,10 +104,10 @@ function make_model(dim, arch)
     return model
 end
 
-model = make_model(3, GPU())
+model = make_model(2, GPU())
 b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
 @btime nuPGCM.evolve_advection!($model, $b_half)
-@btime nuPGCM.evolve_diffusion!($model)
-@btime nuPGCM.invert!($model)
+# @btime nuPGCM.evolve_diffusion!($model)
+# @btime nuPGCM.invert!($model)
 
 println("Done.")

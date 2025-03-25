@@ -26,7 +26,7 @@ function invert!(inversion::InversionToolkit, b)
 
     # calculate rhs vector
     y .= B*on_architecture(arch, b.free_values)
-    solver.is_solved = false
+    # solver.is_solved = false
 
     # solve
     iterative_solve!(solver)
