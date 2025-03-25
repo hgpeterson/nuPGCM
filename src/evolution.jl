@@ -31,7 +31,7 @@ function evolve_diffusion!(evolution::EvolutionToolkit, b)
 
     # calculate rhs vector
     y .= B_diff*on_architecture(arch, b.free_values) + b_diff
-    solver.is_solved = false
+    # solver.is_solved = false
 
     # solve
     iterative_solve!(solver)

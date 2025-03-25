@@ -1,4 +1,5 @@
-mutable struct State{U, P, B}
+# mutable struct State{U, P, B}
+struct State{U, P, B}
     u::U     # flow in x direction
     v::U     # flow in y direction
     w::U     # flow in z direction
@@ -57,7 +58,7 @@ end
 
 function run!(model::Model, t_final)
     # unpack
-    t = model.state.t
+    t = model.state.t #FIXME this is just a copy of t, not the original
     Δt = model.params.Δt
     u = model.state.u
     v = model.state.v
@@ -118,20 +119,19 @@ function evolve_advection!(model::Model, b_half)
     b = model.state.b
     solver = model.evolution.solver_adv
     y = solver.y
-    is_solved = solver.is_solved
 
     # get u_half, v_half, w_half, b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    solver.is_solved = false
+    # solver.is_solved = false
     iterative_solve!(solver)
     b_half.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
-    invert!(model, b_half) # u, v, w, p are now updated to half-step values
+    @time "inv b_half" invert!(model, b_half) # u, v, w, p are now updated to half-step values
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    solver.is_solved = false
+    # solver.is_solved = false
     iterative_solve!(solver)
 
     # sync state
@@ -154,8 +154,8 @@ function invert!(model::Model)
     return invert!(model, model.state.b)
 end
 function invert!(model::Model, b)
-    invert!(model.inversion, b)
-    sync_flow!(model)
+    @time "inv" invert!(model.inversion, b)
+    @time "sync" sync_flow!(model)
     return model
 end
 function sync_flow!(model::Model)
