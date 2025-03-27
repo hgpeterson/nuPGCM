@@ -4,7 +4,7 @@
 Setup the trial and test FE spaces for the velocity, pressure, and buoyancy fields.
 `X` and `Y` are multi-field FE spaces for (u, v, w, p).
 """
-function setup_FESpaces(model; order=2, b₀)
+function setup_FESpaces(model; order=2)
     # reference FE 
     reffe_ux = ReferenceFE(lagrangian, Float64, order;   space=:P)
     reffe_uy = ReferenceFE(lagrangian, Float64, order;   space=:P)
@@ -17,7 +17,7 @@ function setup_FESpaces(model; order=2, b₀)
     Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot"])
     Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bot", "sfc"])
     Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
-    D  = TestFESpace(model, reffe_b,  conformity=:H1, dirichlet_tags=["sfc"])
+    D  = TestFESpace(model, reffe_b,  conformity=:H1)
     Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
 
     # trial FESpaces with Dirichlet values
@@ -25,7 +25,7 @@ function setup_FESpaces(model; order=2, b₀)
     Uy = TrialFESpace(Vy, [0])
     Uz = TrialFESpace(Vz, [0, 0])
     P  = TrialFESpace(Q)
-    B  = TrialFESpace(D, [b₀])
+    B  = TrialFESpace(D)
     X  = MultiFieldFESpace([Ux, Uy, Uz, P])
 
     return X, Y, B, D

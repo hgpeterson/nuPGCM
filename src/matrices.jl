@@ -104,7 +104,7 @@ end
 Assemble the RHS matrix and vector for the diffusion part of the evolution
 problem for the PG equations.
 """
-function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ, dΓ, b₀)
+function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ, dΓ, Fb)
     # matrix
     a(b, d) = ∫( b*d - α*∂z(b)*∂z(d)*κ )dΩ
     @time "RHS_diff matrix" M = assemble_matrix(a, B, D)[perm, :]
@@ -114,7 +114,7 @@ function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ, dΓ, b₀)
     @time "RHS_diff vector" v = assemble_vector(l, D)[perm]
 
     # boundary 
-    lbdy(d) = ∫( -2*α*∂z(d)*b₀*κ )dΓ
+    lbdy(d) = ∫( 2*α*d*Fb )dΓ
     @time "RHS_diff boundary" v .+= assemble_vector(lbdy, D)[perm]
 
     return M, v

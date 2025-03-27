@@ -19,27 +19,27 @@ dim = TwoD()
 # dim = ThreeD()
 
 # choose architecture
-# arch = CPU()
-arch = GPU()
+arch = CPU()
+# arch = GPU()
 
 # model
 h = 0.01
 model = GmshDiscreteModel(@sprintf("../meshes/bowl%sy_%0.2f.msh", dim, h))
 
 # surface buoyancy forcing
+# Fb(x) = 1
 y₀ = -0.5
-bₗ = -0.5
-b₀(x) = Int(x[2] < y₀)*(bₗ*(x[2] - y₀)/(-1 - y₀))
+Fb(x) = 1/2*(1 + tanh((x[2] - y₀)/0.1))
 
 # FE spaces
-X, Y, B, D = setup_FESpaces(model; b₀)
+X, Y, B, D = setup_FESpaces(model)
 Ux, Uy, Uz, P = unpack_spaces(X)
 nx = Ux.space.nfree
 ny = Uy.space.nfree
 nz = Uz.space.nfree
 nu = nx + ny + nz
 np = P.space.space.nfree
-nb = B.space.nfree
+nb = B.nfree
 N = nu + np - 1
 @info @sprintf("N = %d (%d + %d) ∼ 10^%d DOF", N, nu, np-1, floor(log10(N)))
 
@@ -56,7 +56,8 @@ H(x) = 1 - x[1]^2 - x[2]^2
 
 # forcing
 ν(x) = 1
-κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
+κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1) + exp(x[3]/0.05)
+# κ(x) = 1
 
 # params
 ε² = 1e-4
@@ -79,41 +80,41 @@ println("Parameters:\n")
 @printf(" T = %.1e\n", T)
 println("---\n")
 
-# inversion LHS
-LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
-if isfile(LHS_inversion_fname)
-    LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
-else
-    LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
-end
+# # inversion LHS
+# LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, h, ε², γ, f₀, β)
+# if isfile(LHS_inversion_fname)
+#     LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+# else
+#     LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+# end
 
-# inversion RHS
-RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
+# # inversion RHS
+# RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
 
-# preconditioner
-if typeof(dim) == TwoD && typeof(arch) == CPU
-    @time "lu(LHS_inversion)" P_inversion = lu(LHS_inversion)
-else
-    P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
-    # P_inversion = I
-end
+# # preconditioner
+# if typeof(dim) == TwoD && typeof(arch) == CPU
+#     @time "lu(LHS_inversion)" P_inversion = lu(LHS_inversion)
+# else
+#     P_inversion = Diagonal(on_architecture(arch, 1/h^dim.n*ones(N)))
+#     # P_inversion = I
+# end
 
-# move to arch
-LHS_inversion = on_architecture(arch, LHS_inversion)
-RHS_inversion = on_architecture(arch, RHS_inversion)
-CUDA.memory_status()
+# # move to arch
+# LHS_inversion = on_architecture(arch, LHS_inversion)
+# RHS_inversion = on_architecture(arch, RHS_inversion)
+# typeof(arch) == GPU() && CUDA.memory_status()
 
-# setup inversion toolkit
-inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
+# # setup inversion toolkit
+# inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion)
 
-function update_u_p!(ux, uy, uz, p, solver)
-    sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
-    ux.free_values .= sol[1:nx]
-    uy.free_values .= sol[nx+1:nx+ny]
-    uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-    p = FEFunction(P, sol[nx+ny+nz+1:end])
-    return ux, uy, uz, p
-end
+# function update_u_p!(ux, uy, uz, p, solver)
+#     sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
+#     ux.free_values .= sol[1:nx]
+#     uy.free_values .= sol[nx+1:nx+ny]
+#     uz.free_values .= sol[nx+ny+1:nx+ny+nz]
+#     p = FEFunction(P, sol[nx+ny+nz+1:end])
+#     return ux, uy, uz, p
+# end
 
 # background state ∂z(b) = N²
 N² = 0.
@@ -121,13 +122,13 @@ N² = 0.
 # initial condition: b = N²z, t = 0
 i_save = 0
 # b = interpolate_everywhere(0, B)
-b = interpolate_everywhere(x->x[3] + b₀(x), B)
+b = interpolate_everywhere(x->x[3], B)
 t = 0.
-ux = interpolate_everywhere(0, Ux)
-uy = interpolate_everywhere(0, Uy)
-uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P) 
-save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P) 
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
 
 # # initial condition: b = N²z + exponential
 # i_save = 0
@@ -169,6 +170,7 @@ save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, 
 # plot
 # plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
 plot_slice(b, b, N²; x=0.0, t=t, cb_label=L"Buoyancy $b$", fname=@sprintf("%s/images/b%03d.png", out_dir, i_save))
+nuPGCM.plot_b(b, H; x=0.0, y=-0.75, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
 i_save += 1
 
 # evolution LHSs
@@ -182,7 +184,7 @@ LHS_adv_fname = @sprintf("../matrices/LHS_adv_%s_%e.h5", dim, h)
 # end
 
 # diffusion RHS matrix and vector
-RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ, dΓ, b₀)
+RHS_diff, rhs_diff = assemble_RHS_diff(perm_b, α, γ, κ, N², B, D, dΩ, dΓ, Fb)
 
 # preconditioners
 if typeof(dim) == TwoD && typeof(arch) == CPU
@@ -198,7 +200,7 @@ LHS_adv = on_architecture(arch, LHS_adv)
 LHS_diff = on_architecture(arch, LHS_diff)
 RHS_diff = on_architecture(arch, RHS_diff)
 rhs_diff = on_architecture(arch, rhs_diff)
-CUDA.memory_status()
+typeof(arch) == GPU() && CUDA.memory_status()
 
 # Krylov solver for evolution
 VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
@@ -219,10 +221,10 @@ function evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
     Krylov.solve!(solver_evolution, LHS_adv, RHS, solver_evolution.x, M=P_adv, atol=tol, rtol=tol, verbose=0, itmax=itmax)
     @printf("advection CG solve 1: solved=%s, niter=%d, time=%f\n", solver_evolution.stats.solved, solver_evolution.stats.niter, solver_evolution.stats.timer)
 
-    # # u, v, w, p, b at half step
-    # update_b!(b_half, solver_evolution)
-    # invert!(inversion_toolkit, b_half)
-    # ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
+    # u, v, w, p, b at half step
+    update_b!(b_half, solver_evolution)
+    invert!(inversion_toolkit, b_half)
+    ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
 
     # full step
     l_full(d) = ∫( b*d - Δt*(ux*∂x(b_half) + uy*∂y(b_half) + uz*(N² + ∂z(b_half)))*d )dΩ
@@ -252,9 +254,9 @@ function solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_save
         flush(stdout)
         flush(stderr)
 
-        # advection step
-        evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
-        update_b!(b, solver_evolution)
+        # # advection step
+        # evolve_adv!(inversion_toolkit, solver_evolution, ux, uy, uz, p, b)
+        # update_b!(b, solver_evolution)
 
         # diffusion step
         evolve_diff!(solver_evolution, b)
@@ -264,54 +266,60 @@ function solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_save
         # invert!(inversion_toolkit, b)
         # ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
 
-        # blow up
-        if any(isnan.(inversion_toolkit.solver.x)) || any(isnan.(solver_evolution.x))
-            # save and kill
-            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
-            sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
-            error("Solution diverged: NaN(s) found.")
-        end
+        # # blow up
+        # if any(isnan.(inversion_toolkit.solver.x)) || any(isnan.(solver_evolution.x))
+        #     # save and kill
+        #     save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+        #     sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
+        #     error("Solution diverged: NaN(s) found.")
+        # end
 
         # time
         t += Δt
 
         # info
-        ux_max = maximum(abs.(ux.free_values))
-        uy_max = maximum(abs.(uy.free_values))
-        uz_max = maximum(abs.(uz.free_values))
+        # ux_max = maximum(abs.(ux.free_values))
+        # uy_max = maximum(abs.(uy.free_values))
+        # uz_max = maximum(abs.(uz.free_values))
         t1 = time()
         @info begin
         msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", t, i, n_steps, Δt)
         msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
         msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
-        msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(ux_max, uy_max, uz_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
-        msg *= @sprintf("CFL ≈ %f\n", min(h/ux_max, h/uy_max, h/uz_max))
+        # msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(ux_max, uy_max, uz_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+        # msg *= @sprintf("CFL ≈ %f\n", min(h/ux_max, h/uy_max, h/uz_max))
         msg
         end
 
-        # blow up
-        if max(ux_max, uy_max, uz_max) > 10
-            # save and kill
-            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
-            sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
-            error("Solution diverged: |u|ₘₐₓ > 10.")
-        end
+        # # blow up
+        # if max(ux_max, uy_max, uz_max) > 10
+        #     # save and kill
+        #     save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+        #     sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
+        #     error("Solution diverged: |u|ₘₐₓ > 10.")
+        # end
 
         # save/plot
-        if mod(i, n_steps ÷ 5) == 0
-            save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+        if mod(i, n_steps ÷ 10) == 0
+            # save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
             # sim_plots(plots_cache, ux, uy, uz, b, t, i_save)
             # sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
             plot_slice(b, b, N²; x=0.0, t=t, cb_label=L"Buoyancy $b$", fname=@sprintf("%s/images/b%03d.png", out_dir, i_save))
+            # plot_profiles(ux, uy, uz, b, N², H; x=0.0, y=-0.75, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
             i_save += 1
         end
     end
-    return ux, uy, uz, p, b
+    return ux, uy, uz, p, b, t
 end
 
 # run
 i_step = Int64(round(t/Δt)) + 1
 n_steps = Int64(round(T/Δt))
-ux, uy, uz, p, b = solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_save, i_step, n_steps)
+# ux, uy, uz, p, b, t = solve!(ux, uy, uz, p, b, t, inversion_toolkit, solver_evolution, i_save, i_step, n_steps)
+ux, uy, uz, p, b, t = solve!(0, 0, 0, 0, b, t, 0, solver_evolution, i_save, i_step, n_steps)
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# plot_slice(b, b, N²; x=0.0, t=t, cb_label=L"Buoyancy $b$", fname=@sprintf("%s/images/b%03d.png", out_dir, i_save))
+nuPGCM.plot_b(b, H; x=0.0, y=-0.75, t=t, fname=@sprintf("%s/images/profiles_l.png", out_dir))
+nuPGCM.plot_b(b, H; x=0.0, y=0.75, t=t, fname=@sprintf("%s/images/profiles_r.png", out_dir))
 
 println("Done.")

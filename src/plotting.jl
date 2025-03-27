@@ -344,6 +344,47 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
     plt.close()
 end
 
+function plot_b(b, H; x, y, t=nothing, fname="profiles.png")
+    # setup points
+    H0 = H([x, y])
+    z = range(-H0, 0, length=2^8)
+    points = [Point(x, y, zᵢ) for zᵢ ∈ z]
+
+    # compute evaluation caches
+    cache_b  = Gridap.CellData.return_cache(b,  points)
+
+    # evaluate field
+    bs = nan_eval(cache_b,  b,  points)
+
+    # compute bz
+    dz = z[2] - z[1]
+    bzs = (bs[3:end] - bs[1:end-2])/(2dz)
+    bzs = [(-3/2*bs[1] + 2*bs[2] - 1/2*bs[3])/dz; bzs; (1/2*bs[end-2] - 2*bs[end-1] + 3/2*bs[end])/dz]
+
+    # NaN masks
+    b_mask = (isnan.(bs) .== 0)
+    bz_mask = (isnan.(bzs) .== 0)
+
+    # plot
+    fig, ax = plt.subplots(1, figsize=(2, 3.2))
+    ax.set_ylabel(L"z")
+    ax.set_xlabel(L"$b$, $\partial_z b$")
+    ax.set_ylim(z[1], 0) 
+    ax.ticklabel_format(axis="x", style="sci", scilimits=(-2,2))
+    ax.spines["left"].set_visible(false)
+    ax.axvline(0, color="k", linewidth=0.5, linestyle="-")
+    ax.plot(bs[b_mask], z[b_mask])
+    ax.plot(bzs[bz_mask], z[bz_mask])
+    if t === nothing
+        ax.set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f", x, y)))
+    else
+        ax.set_title(latexstring(@sprintf("x = %1.2f, \\quad y = %1.2f, \\quad t = %s", x, y, sci_notation(t))))
+    end
+    savefig(fname)
+    println(fname)
+    plt.close()
+end
+
 """
     cache = sim_plots(dim::AbstractDimension, ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function, t::Real, i_save::Int)
     sim_plots(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField, t::Real, i_save::Int)
