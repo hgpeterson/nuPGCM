@@ -35,7 +35,7 @@ function coarse_evolution(dim, arch)
     A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; ofile=A_inversion_fname)
+        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
     else
         # A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
         # jldopen(A_inversion_fname, "r") do file
