@@ -321,7 +321,7 @@ function main()
     H = 0.75
     f = 1
     ϕ = atan(0.5*H/tan(θ)) # tan ϕ = -(β*H - f*Hy)/f*Hx
-    println(ϕ*180/π)
+    println("ϕ = ", ϕ*180/π)
     nz = 2^8
     horiz_diff = false
     T = 3e-3*μϱ/ε^2
@@ -338,8 +338,7 @@ function main()
     plot(u, v, w, b, z; fig, ax)
     plot_finish(; fig, ax, t, filename="images/1D.png")
 
-    println(trapz(u*cos(ϕ), z))
-    println(trapz(v*sin(ϕ), z))
+    println(trapz(u*cos(ϕ) + v*sin(ϕ), z))
 end
 
 main()
