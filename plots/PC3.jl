@@ -277,7 +277,7 @@ function psi()
     plt.close()
 end
 
-function slices(field)
+function zonal_sections_single_field(field)
     # setup
     fig, ax = plt.subplots(1, 4, figsize=(39pc, 8pc), gridspec_kw=Dict("width_ratios"=>[1, 1, 1, 0.05]))
     ax[1].set_title(L"\beta = 0")
@@ -358,6 +358,76 @@ function slices(field)
     @info "Saved '$field.png'"
     savefig("$field.pdf")
     @info "Saved '$field.pdf'"
+    plt.close()
+end
+
+function zonal_sections_single_sim(β)
+    # Load data
+    d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", β))
+    x = d["x"]
+    y = d["y"]
+    σ = d["σ"]
+    H = d["H"]
+    u = d["u"]
+    v = d["v"]
+    w = d["w"]
+    b = d["b"]
+    close(d)
+
+    # Prepare data
+    xx = repeat(x, 1, length(σ))
+    # j = argmin(abs.(y)) # index where y = 0
+    y0 = √3 - 2
+    j = argmin(abs.(y .- y0))
+    z = H[:, j] * σ'
+    u = u[:, j, :]
+    v = v[:, j, :]
+    w = w[:, j, :]
+    fill_nans!(u)
+    fill_nans!(v)
+    fill_nans!(w)
+    u[:, 1] .= 0
+    v[:, 1] .= 0
+    w[:, 1] .= 0
+    w[:, end] .= 0
+    b = z .+ b[:, j, :]
+    fill_nans!(b)
+    b[:, end] .= 0
+
+    # Plot setup
+    fig, ax = plt.subplots(1, 3, figsize=(39pc, 12pc), gridspec_kw=Dict("width_ratios" => [1, 1, 1], "wspace" => 0.3))
+    components = [(u, L"Zonal flow $u$"), (v, L"Meridional flow $v$"), (w, L"Vertical flow $w$")]
+    vmax_values = [1.8, 7.2, 2.8]  # Adjust these values as needed for colorbar limits
+
+    for i ∈ 1:3
+        f, label = components[i]
+        vmax = vmax_values[i]
+        img = ax[i].pcolormesh(xx, z, 1e2 * f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+        ax[i].contour(xx, z, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
+        ax[i].set_xlabel(L"Zonal coordinate $x$")
+        # ax[i].set_title(label)
+        ax[i].axis("equal")
+        ax[i].set_xticks(-1:1:1)
+        ax[i].set_yticks(-1:1:0)
+        ax[i].set_xlim(-1.05, 1.05)
+        ax[i].set_ylim(-1.05, 0.05)
+        ax[i].spines["left"].set_visible(false)
+        ax[i].spines["bottom"].set_visible(false)
+        if i > 1
+            ax[i].set_yticklabels([])
+        else
+            ax[i].set_ylabel(L"Vertical coordinate $z$")
+        end
+        cb = fig.colorbar(img, ax=ax[i], orientation="horizontal", pad=0.3, fraction=0.05)
+        cb.set_label(label * L" ($\times 10^{-2}$)")
+    end
+
+    # Save the figure
+    ofile = @sprintf("zonal_sections_beta%1.1f", β)
+    savefig(ofile * ".png")
+    @info "Saved '$ofile.png'"
+    savefig(ofile * ".pdf")
+    @info "Saved '$ofile.pdf'"
     plt.close()
 end
 
@@ -581,11 +651,11 @@ function psi_bl()
     Ψ_BL_3 = cumtrapz(V_BL_3, x) .- trapz(V_BL_3, x)
 
     # new BL theory
-    V_BL_1_new = compute_V_BL(bx, z, ε; order=1)
+    V_BL_1_new = compute_V_BL(bx, x, z, ε; order=1)
     Ψ_BL_1_new = cumtrapz(V_BL_1_new, x) .- trapz(V_BL_1_new, x)
-    V_BL_2_new = compute_V_BL(bx, z, ε; order=2)
+    V_BL_2_new = compute_V_BL(bx, x, z, ε; order=2)
     Ψ_BL_2_new = cumtrapz(V_BL_2_new, x) .- trapz(V_BL_2_new, x)
-    V_BL_3_new = compute_V_BL(bx, z, ε; order=3)
+    V_BL_3_new = compute_V_BL(bx, x, z, ε; order=3)
     Ψ_BL_3_new = cumtrapz(V_BL_3_new, x) .- trapz(V_BL_3_new, x)
     println(maximum(abs.(Ψ_BL_1 .- Ψ_BL_1_new)))
     println(maximum(abs.(Ψ_BL_2 .- Ψ_BL_2_new)))
@@ -679,10 +749,18 @@ function compute_V_BL(b, z, ε, α, θ; order)
 
     return V
 end
-function compute_V_BL(bx, z, ε; order)
+function compute_V_BL(bx, x, z, ε; order)
     if !(order in [1, 2, 3])
         throw(ArgumentError("Invalid `order`: $order; must be 1, 2, or 3."))
     end
+    
+    # parameters
+    # q = 1/√2
+    α = 1/2
+    H = -z[:, 1]
+    Hx = differentiate(H, x)
+    Γ = @. 1 + α^2*Hx^2
+    q = @. Γ^(-3/4)/√2
 
     # order 1
     V = [-trapz(bx[i, :].*z[i, :], z[i, :]) for i in axes(bx, 1)]
@@ -690,8 +768,7 @@ function compute_V_BL(bx, z, ε; order)
 
     if order != 0
         # order 2
-        H = -z[:, 1]
-        V -= ε*sqrt(2)*H.*bx[:, 1]
+        V -= @. ε/q*H*bx[:, 1]
         order -= 1
     end
 
@@ -701,7 +778,7 @@ function compute_V_BL(bx, z, ε; order)
         for i in 1:size(bx, 1)-1
             bxz_bot[i] = differentiate_pointwise(bx[i, 1:3], z[i, 1:3], z[i, 1], 1) 
         end
-        V -= ε^2*(sqrt(2)*H.*bxz_bot + bx[:, 1])
+        V -= @. ε^2*(1/q*H*bxz_bot + 1/(2q^2)*bx[:, 1])
         order -= 1
     end
 
@@ -755,12 +832,15 @@ end
 # f_over_H()
 # buoyancy()
 # psi()
-slices("u")
-slices("v")
-slices("w")
+# zonal_sections_single_field("u")
+# zonal_sections_single_field("v")
+# zonal_sections_single_field("w")
+# zonal_sections_single_sim(0.0)
+# zonal_sections_single_sim(0.5)
+# zonal_sections_single_sim(1.0)
 # zonal_sections()
 # flow_profiles()
-# psi_bl()
+psi_bl()
 # alpha()
 
 println("Done.")
