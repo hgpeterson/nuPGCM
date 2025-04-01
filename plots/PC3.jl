@@ -156,22 +156,18 @@ function buoyancy()
     ax[1].set_ylabel(L"Vertical coordinate $z$")
     ax[1].set_xlim(0, 1.5)
     ax[1].set_yticks(-0.75:0.25:0)
-    ts = 5e-4:5e-4:5e-2
-    t0 = 3e-3
-    colors = pl.cm.Greys_r(range(0, 1, length=length(ts)))
+    ts = 3e-3:3e-3:10*3e-3
+    colors = pl.cm.BuPu_r(range(0, 0.8, length=length(ts)))
     for i in eachindex(ts)
         file = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", ts[i]), "r")
         b = file["b"]
         z = file["z"]
         close(file)
         bz = differentiate(b, z)
-        if ts[i] == t0 
-            ax[1].plot(1 .+ bz, z, "C0", zorder=length(ts)+1, lw=1.5, label=L"t = 3 \times 10^{-3}")
-        else
-            ax[1].plot(1 .+ bz, z, c=colors[i, :], zorder=i)
-        end
+        ax[1].plot(1 .+ bz, z, c=colors[i, :])
     end
-    ax[1].legend(loc=(0.8, 0.9))
+    ax[1].annotate("", xy=(0.8, -0.67), xytext=(1.4, -0.71), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"), fontsize=6)
+    ax[1].annotate(L"$t = 3 \times 10^{-3}$", xy=(1.42, -0.72))
 
     # (b) buoyancy gradient
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
@@ -201,12 +197,12 @@ function buoyancy()
     b[:, 1] .= [compute_bbot(b[i, :], zz[i, :]) for i in eachindex(x)] # fill nans at z = -H
     fill_nans!(b) # everywhere else
     bx = compute_bx(b, x, σ, H)
-    vmax = maximum(abs.(bx))
-    vmax = 0.3
+    # vmax = maximum(abs.(bx))
+    vmax = 3
     img = ax[2].pcolormesh(xx, zz, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-    ax[2].contour(xx, zz, zz .+ b, colors="k", linewidths=0.5, alpha=1, linestyles="-", levels=-0.9:0.1:-0.1)
+    ax[2].contour(xx, zz, zz .+ b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
     ax[2].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
-    cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy gradient $\partial_x b$", extend="both")
+    cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy gradient $\partial_x b$")
     cb.set_ticks([-vmax, 0, vmax])
 
     subplots_adjust(wspace=0.9)
@@ -830,7 +826,7 @@ end
 
 
 # f_over_H()
-# buoyancy()
+buoyancy()
 # psi()
 # zonal_sections_single_field("u")
 # zonal_sections_single_field("v")
@@ -840,7 +836,7 @@ end
 # zonal_sections_single_sim(1.0)
 # zonal_sections()
 # flow_profiles()
-psi_bl()
+# psi_bl()
 # alpha()
 
 println("Done.")
