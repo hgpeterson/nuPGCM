@@ -1,3 +1,5 @@
+import Base: show
+
 # mutable struct State{U, P, B}
 struct State{U, P, B}
     u::U     # flow in x direction
@@ -56,7 +58,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model, t_final)
+function run!(model::Model, t_final; t_save=0, t_plot=0)
     # unpack
     t = model.state.t #FIXME this is just a copy of t, not the original
     Δt = model.params.Δt
@@ -74,6 +76,11 @@ function run!(model::Model, t_final)
     # starting step number (just 1 if t = 0)
     i_step = t ÷ Δt + 1
 
+    # number of steps between saves, plots, and info
+    n_save = t_save ÷ Δt
+    n_plot = t_plot ÷ Δt
+    n_info = n_steps ÷ 100
+
     # need to store a half-step buoyancy for advection
     b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
     for i ∈ i_step:n_steps
@@ -85,7 +92,7 @@ function run!(model::Model, t_final)
 
         t += Δt
 
-        if mod(i, n_steps ÷ 100) == 0
+        if mod(i, n_info) == 0
             # @info @sprintf("average ∂z(b) = %1.5e", sum(∫(model.params.N² + ∂z(model.state.b))model.mesh.dΩ)/sum(∫(1)model.mesh.dΩ))
 
             u_max = maximum(abs.(u.free_values))
@@ -99,6 +106,14 @@ function run!(model::Model, t_final)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             msg
             end
+        end
+
+        if mod(i, n_save) == 0
+            save_state(model, @sprintf("%s/data/state_%16d.jld2", out_dir, i))
+        end
+
+        if mod(i, n_plot) == 0
+            sim_plots(model, x->1 - x[1]^2 - x[2]^2, t) # FIXME need to allow for general H
         end
     end
     return model
@@ -169,4 +184,24 @@ function sync_flow!(model::Model)
     model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
     model.state.p.free_values.args[1] .= x[nu+nv+nw+1:end]
     return model
+end
+
+function show(model::Model)
+    # Custom show method for the model struct
+    println("Model Summary:")
+    println("Architecture: ", model.arch)
+    println("Parameters: ", model.params)
+    # println("Mesh: ", model.mesh.dim)
+    # println("Inversion Toolkit: ", model.inversion)
+    # if model.evolution !== nothing
+    #     println("Evolution Toolkit: ", model.evolution)
+    # else
+    #     println("Evolution Toolkit: Not used (inversion only)")
+    # end
+    println("Current State: ")
+    println("  Time: ", model.state.t)
+    println("  u max: ", maximum(abs.(model.state.u.free_values)))
+    println("  v max: ", maximum(abs.(model.state.v.free_values)))
+    println("  w max: ", maximum(abs.(model.state.w.free_values)))
+    return nothing
 end
