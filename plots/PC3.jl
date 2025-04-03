@@ -4,6 +4,8 @@ using PyCall
 using JLD2
 using Printf
 
+include("baroclinic.jl")
+
 # full width (39 picas)
 # just under full width (33 picas)
 # two-thirds page width (27 picas)
@@ -575,27 +577,68 @@ function flow_profiles()
         ax[2].plot(1e2*v[vmask], z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
         ax[3].plot(1e2*w[wmask], z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
     end
-    # 1D U = 0
-    file = jldopen("../sims/sim048/data/1D_beta0.0.jld2")
-    u = file["u"]
-    v = file["v"]
-    w = file["w"]
-    z = file["z"]
-    close(file)
-    ax[1].plot(1e2*u, z, "k--", lw=0.5, label=L"1D $U=0$")
-    ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"1D $U=0$")
-    ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"1D $U=0$")
 
-    # 1D U = V = 0
-    file = jldopen("../sims/sim048/data/1D_beta1.0.jld2")
-    u = file["u"]
-    v = file["v"]
-    w = file["w"]
-    z = file["z"]
-    close(file)
-    ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    # # 1D U = 0
+    # file = jldopen("../sims/sim048/data/1D_beta0.0.jld2")
+    # u = file["u"]
+    # v = file["v"]
+    # w = file["w"]
+    # z = file["z"]
+    # close(file)
+    # ax[1].plot(1e2*u, z, "k--", lw=0.5, label=L"1D $U=0$")
+    # ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"1D $U=0$")
+    # ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"1D $U=0$")
+
+    # # 1D U = V = 0
+    # file = jldopen("../sims/sim048/data/1D_beta1.0.jld2")
+    # u = file["u"]
+    # v = file["v"]
+    # w = file["w"]
+    # z = file["z"]
+    # close(file)
+    # ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    # ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+    # ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
+
+    # # get bx from 3D model
+    # d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
+    # x = d["x"]
+    # y = d["y"]
+    # σ = d["σ"]
+    # H = d["H"]
+    # b = d["b"]
+    # close(d)
+    # j0 = length(y) ÷ 2 + 1 # index where y = 0
+    # H = H[:, j0]
+    # b = b[:, j0, :]
+    # zz = H*σ'
+    # b[:, end] .= 0 # b = 0 at z = 0
+    # b[end, :] .= 0 # b = 0 where H = 0
+    # b[:, 1] .= [compute_bbot(b[i, :], zz[i, :]) for i in eachindex(x)] # fill nans at z = -H
+    # fill_nans!(b) # everywhere else
+    # bx = compute_bx(b, x, σ, H)
+    # i0 = argmin(abs.(x .- 0.5)) # index where x = 0.5
+    # bx = bx[i0, :]
+    # z = zz[i0, :]
+    # nz = length(z)
+
+    # get bx from 1D model
+    d = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", 3e-3), "r")
+    b = d["b"]
+    z = d["z"]
+    close(d)
+    nz = length(z)
+    bx = -differentiate(b, z)
+
+    # get BL solutions
+    u, v, w = solve_baroclinic_problem_BL_U0(ε=1e-2, z=z, ν=ones(nz), f=1, bx=bx, Hx=-1)
+    ax[1].plot(1e2*u, z, "k--", lw=0.5, label=L"$U = 0$ theory")
+    ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"$U = 0$ theory")
+    ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"$U = 0$ theory")
+    u, v, w = solve_baroclinic_problem_BL(ε=1e-2, z=z, ν=ones(nz), f=1, β=1, bx=bx, by=zeros(nz), U=0, V=0, τx=0, τy=0, Hx=-1, Hy=0)
+    ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
+    ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
+    ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
 
     ax[2].legend(loc=(-0.6, 0.5))
     savefig("flow_profiles.png")
@@ -603,6 +646,18 @@ function flow_profiles()
     savefig("flow_profiles.pdf")
     @info "Saved 'flow_profiles.pdf'"
     plt.close()
+
+    # fig, ax = plt.subplots(1, figsize=(2, 3.2))
+    # ax.set_xlabel(L"\partial_x b")
+    # ax.set_ylabel(L"Vertical coordinate $z$")
+    # ax.plot(bx3D, z3D)
+    # ax.plot(bx1D, z1D)
+    # ax.spines["left"].set_visible(false)
+    # ax.axvline(0, color="k", lw=0.5)
+    # ax.set_yticks([-0.75, -0.5, -0.25, 0])
+    # savefig("bx.png")
+    # @info "Saved 'bx.png'"
+    # plt.close()
 end
 
 function psi_bl()
@@ -826,7 +881,7 @@ end
 
 
 # f_over_H()
-buoyancy()
+# buoyancy()
 # psi()
 # zonal_sections_single_field("u")
 # zonal_sections_single_field("v")
@@ -835,7 +890,7 @@ buoyancy()
 # zonal_sections_single_sim(0.5)
 # zonal_sections_single_sim(1.0)
 # zonal_sections()
-# flow_profiles()
+flow_profiles()
 # psi_bl()
 # alpha()
 
