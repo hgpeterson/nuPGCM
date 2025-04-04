@@ -87,12 +87,22 @@ function solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
     return cumtrapz(τx, z), cumtrapz(τy, z)
 end
 
-function solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
+function solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy, α=1/2)
     H = -z[1]
 
-    wI0_sfc = 0 # for now
+    # surface BL coords
+    z_s = z/ε
+    q_s = sqrt(f/2/ν[end])
+
+    # bottom BL coords
+    z_b = (z .+ H)/ε
+    q_b = sqrt(f/2/ν[1])
+    println("α = 0.0: q_bot = ", q_b)
+    q_b *= (1 + α^2*Hx^2)^(-3/4)
+    println("α = 0.5: q_bot = ", q_b)
 
     # interior O(1)
+    wI0_sfc = 0 # for now
     uI0_bot = U/H - 1/(H*f)*trapz(z.*by, z) - τy/(H*f)
     vI0_bot = V/H + 1/(H*f)*trapz(z.*bx, z) + τx/(H*f)
     uI0 = uI0_bot .- 1/f*cumtrapz(by, z)
@@ -100,8 +110,6 @@ function solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy,
     wI0 = wI0_sfc .- β/f*(trapz(vI0, z) .- cumtrapz(vI0, z))
 
     # bottom BL O(1)
-    q_b = sqrt(f/2/ν[1])
-    z_b = (z .+ H)/ε
     c1 = -uI0_bot
     c2 = -vI0_bot
     uB0_b = bl_spiral(z_b, q_b, c1,  c2)
@@ -109,12 +117,10 @@ function solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy,
     wB0_b = -Hx*uB0_b - Hy*vB0_b
 
     # surface BL O(1/ε)
-    q_s = sqrt(f/2/ν[end])
-    z_s = z/ε
     c1 = (τx + τy)/(2ν[end]*q_s)
     c2 = (τx - τy)/(2ν[end]*q_s)
-    uB0_s = bl_spiral(z_s, q_s,  c1, c2)
-    vB0_s = bl_spiral(z_s, q_s, -c2, c1)
+    uBm1_s = bl_spiral(z_s, q_s,  c1, c2)
+    vBm1_s = bl_spiral(z_s, q_s, -c2, c1)
 
     # interior O(ε)
     uI1 =  (uI0_bot + vI0_bot)/(2H*q_b)
@@ -128,29 +134,40 @@ function solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy,
     vB1_b = bl_spiral(z_b, q_b, c2, -c1)
     wB1_b = -Hx*uB1_b - Hy*vB1_b
 
-    # # interior O(ε²)
-    # uI2_bot = ...
-    # vI2_bot = ...
-    # uI2 = uI2_bot .+ 1/f^2*differentiate(ν.*bx, z) .- ...
-    # vI2 = vI2_bot .+ 1/f^2*differentiate(ν.*by, z) .- ...
+    # surface BL O(ε)
+    c1 = -(bx[end] - by[end])/(2*f*q_s)
+    c2 = +(bx[end] + by[end])/(2*f*q_s)
+    uB1_s = bl_spiral(z_s, q_s,  c1, c2)
+    vB1_s = bl_spiral(z_s, q_s, -c2, c1)
 
-    # # bottom BL O(ε²)
-    # c1 = -uI2_bot
-    # c2 = -vI2_bot
-    # uB2_b = bl_spiral(z_b, q_b, c1,  c2)
-    # vB2_b = bl_spiral(z_b, q_b, c2, -c1)
+    # interior O(ε²)
+    uI2_bot = ν[1]/H/f^2*bx[1] + 1/f^2*differentiate_pointwise(ν[1:3].*bx[1:3], z[1:3], z[1], 1) + (uI1 + vI1)/(2q_b*H)
+    vI2_bot = ν[1]/H/f^2*by[1] + 1/f^2*differentiate_pointwise(ν[1:3].*by[1:3], z[1:3], z[1], 1) - (uI1 - vI1)/(2q_b*H)
+    uI2 = uI2_bot .+ 1/f^2*differentiate(ν.*bx, z) .- 1/f^2*differentiate_pointwise(ν[1:3].*bx[1:3], z[1:3], z[1], 1)
+    vI2 = vI2_bot .+ 1/f^2*differentiate(ν.*by, z) .- 1/f^2*differentiate_pointwise(ν[1:3].*by[1:3], z[1:3], z[1], 1)
+    # wI2 = -β/f*(trapz(vI2, z) .- cumtrapz(vI2, z)) # this is missing the ∂z(ν ∂z(ζ)) term
+
+    # bottom BL O(ε²)
+    c1 = -uI2_bot
+    c2 = -vI2_bot
+    uB2_b = bl_spiral(z_b, q_b, c1,  c2)
+    vB2_b = bl_spiral(z_b, q_b, c2, -c1)
+    # wB2_b = -Hx*uB2_b - Hy*vB2_b
 
     # total
-    uBL = 1/ε*uB0_s .+ uI0 .+ uB0_b .+ ε*(uI1 .+ uB1_b) # .+ ε^2*(uI2 .+ uB2_b)
-    vBL = 1/ε*vB0_s .+ vI0 .+ vB0_b .+ ε*(vI1 .+ vB1_b) # .+ ε^2*(vI2 .+ vB2_b)
-    wBL =              wI0 .+ wB0_b .+ ε*(wI1 .+ wB1_b) # .+ ε^2*(wI2 .+ wB2_b)
+    uBL = 1/ε*uBm1_s .+ uI0 .+ uB0_b .+ ε*(uI1 .+ uB1_b .+ uB1_s) .+ ε^2*(uI2 .+ uB2_b)
+    vBL = 1/ε*vBm1_s .+ vI0 .+ vB0_b .+ ε*(vI1 .+ vB1_b .+ vB1_s) .+ ε^2*(vI2 .+ vB2_b)
+    wBL =               wI0 .+ wB0_b .+ ε*(wI1 .+ wB1_b)          #.+ ε^2*(wI2 .+ wB2_b)
 
     return uBL, vBL, wBL
 end
 
-function solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx)
+function solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx, α=1/2)
     H = -z[1]
     q_b = sqrt(f/2/ν[1])
+    println("α = 0.0: q_bot = ", q_b)
+    q_b *= (1 + α^2*Hx^2)^(-3/4)
+    println("α = 0.5: q_bot = ", q_b)
     z_b = (z .+ H)/ε
 
     # interior O(1)
@@ -171,8 +188,8 @@ function solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx)
     wB1 = -Hx*uB1
 
     # interior O(ε²)
-    uI2 = 1/f^2*differentiate(ν.*bx, z)
-    vI2 = -1/(f*q_b)*differentiate_pointwise(ν[1:3].*bx[1:3], z[1:3], z[1], 1)
+    uI2 =  1/f^2*differentiate(ν.*bx, z)
+    vI2 = -uI2[1]
     wI2 = -Hx*uI2
 
     # bottom BL O(ε²)
@@ -194,7 +211,10 @@ function baroclinic()
     # params
     ε = 1e-2
     f = 1
+    β = 0
     H = 0.75
+    Hx = -1
+    Hy = 0
     nz = 2^10
     z = -H*(cos.(π*(0:nz-1)/(nz-1)) .+ 1)/2
     ν = ones(nz)
@@ -206,8 +226,8 @@ function baroclinic()
     V = 0
     bx = zeros(nz)
     by = zeros(nz)
-    uU, vU = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    uUBL, vUBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
+    uU, vU = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
+    uUBL, vUBL, wUBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
 
     # V transport
     τx = 0
@@ -216,8 +236,8 @@ function baroclinic()
     V = 1
     bx = zeros(nz)
     by = zeros(nz)
-    uV, vV = solve_baroclinic_problem(ε, z, ν, f, bx, by, U, V, τx, τy)
-    uVBL, vVBL = solve_baroclinic_problem_BL(ε, z, ν, f, bx, by, U, V, τx, τy)
+    uV, vV = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
+    uVBL, vVBL, wVBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
 
     # buoyancy
     τx = 0
@@ -232,8 +252,8 @@ function baroclinic()
     bx = -differentiate(b, z_sim)*sin(θ)
     by = zeros(length(z_sim))
     ν_sim = ones(length(z_sim))
-    ub, vb = solve_baroclinic_problem(ε, z_sim, ν_sim, f, bx, by, U, V, τx, τy)
-    ubBL, vbBL = solve_baroclinic_problem_BL(ε, z_sim, ν_sim, f, bx, by, U, V, τx, τy)
+    ub, vb = solve_baroclinic_problem(; ε, z=z_sim, ν=ν_sim, f, bx, by, U, V, τx, τy)
+    ubBL, vbBL, wbBL = solve_baroclinic_problem_BL(; ε, z=z_sim, ν=ν_sim, f, β, bx, by, U, V, τx, τy, Hx, Hy)
 
     # bottom stress stats
     qb = sqrt(f/2/ν_sim[1])
@@ -313,7 +333,7 @@ function wBL()
 
     # solve
     u, v = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
-    uBL, vBL, wBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
+    uBL, vBL, wBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy, α=0)
     @printf("max |u - uBL| = %1.1e\n", maximum(abs.(u - uBL)))
     @printf("max |v - vBL| = %1.1e\n", maximum(abs.(v - vBL)))
 
@@ -346,5 +366,4 @@ end
 
 # baroclinic()
 # wBL()
-
-println("Done.")
+# println("Done.")
