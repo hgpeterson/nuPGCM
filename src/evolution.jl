@@ -1,8 +1,8 @@
-struct EvolutionToolkit{A, V}
-    B_diff::A 
-    b_diff::V
-    solver_adv::IterativeSolverToolkit
-    solver_diff::IterativeSolverToolkit
+struct EvolutionToolkit{A, V, SA<:IterativeSolverToolkit, SD<:IterativeSolverToolkit}
+    B_diff::A       # RHS diffusion matrix
+    b_diff::V       # RHS diffusion vector
+    solver_adv::SA  # advection iterative solver
+    solver_diff::SD # diffusion iterative solver
 end
 
 function EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff;
@@ -22,19 +22,12 @@ function EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff;
 end
 
 function evolve_diffusion!(evolution::EvolutionToolkit, b)
-    # unpack
-    solver = evolution.solver_diff
-    y = solver.y
-    arch = architecture(y)
-    B_diff = evolution.B_diff
-    b_diff = evolution.b_diff
-
     # calculate rhs vector
-    y .= B_diff*on_architecture(arch, b.free_values) + b_diff
-    # solver.is_solved = false
+    arch = architecture(evolution.B_diff)
+    evolution.solver_diff.y .= evolution.B_diff*on_architecture(arch, b.free_values) + evolution.b_diff
 
     # solve
-    iterative_solve!(solver)
+    iterative_solve!(evolution.solver_diff)
 
     return evolution
 end

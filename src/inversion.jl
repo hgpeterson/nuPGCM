@@ -1,9 +1,9 @@
-struct InversionToolkit{B}
-    B::B  # RHS matrix
-    solver::IterativeSolverToolkit
+struct InversionToolkit{B, S <: IterativeSolverToolkit}
+    B::B      # RHS matrix
+    solver::S # iterative solver toolkit
 end
 
-function InversionToolkit(A, P, B; atol=1e-6, rtol=1e-6, itmax=0, memory=20, history=true, verbose=false)
+function InversionToolkit(A, P, B; atol=1e-6, rtol=1e-6, itmax=0, memory=20, history=true, verbose=false, restart=true)
     arch = architecture(A)
     N = size(A, 1)
     T = eltype(A)
@@ -12,24 +12,18 @@ function InversionToolkit(A, P, B; atol=1e-6, rtol=1e-6, itmax=0, memory=20, his
     solver = Krylov.GmresSolver(N, N, memory, VT)
     solver.x .= zero(T)
     verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
-    kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
+    kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int, :restart=>restart)
     solver_tk = IterativeSolverToolkit(A, P, y, solver, kwargs, "Inversion") 
     return InversionToolkit(B, solver_tk)
 end
 
 function invert!(inversion::InversionToolkit, b)
-    # unpack
-    solver = inversion.solver
-    y = solver.y
-    arch = architecture(y)
-    B = inversion.B
-
     # calculate rhs vector
-    y .= B*on_architecture(arch, b.free_values)
-    # solver.is_solved = false
+    arch = architecture(inversion.B)
+    inversion.solver.y .= inversion.B*on_architecture(arch, b.free_values)
 
     # solve
-    iterative_solve!(solver)
+    iterative_solve!(inversion.solver)
 
     return inversion
 end
