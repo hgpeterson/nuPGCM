@@ -14,7 +14,6 @@ include("baroclinic.jl")
 pl = pyimport("matplotlib.pylab")
 cm = pyimport("matplotlib.cm")
 colors = pyimport("matplotlib.colors")
-patches = pyimport("matplotlib.patches")
 
 pygui(false)
 plt.style.use("../plots.mplstyle")
@@ -636,6 +635,7 @@ function flow_profiles()
     ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"$U = 0$ theory")
     ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"$U = 0$ theory")
     u, v, w = solve_baroclinic_problem_BL(ε=1e-2, z=z, ν=ones(nz), f=1, β=1, bx=bx, by=zeros(nz), U=0, V=0, τx=0, τy=0, Hx=-1, Hy=0)
+    # u, v, w = solve_baroclinic_problem_BL(ε=1e-2, z=z, ν=ones(nz), f=1, β=1, bx=bx, by=zeros(nz), U=-4.1e-4, V=1.5e-3, τx=0, τy=0, Hx=-1, Hy=0)
     ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
     ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
     ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"$U = V = 0$ theory")
@@ -690,27 +690,13 @@ function psi_bl()
     fill_nans!(b) # everywhere else
     bx = compute_bx(b, x, σ, H)
 
-    # compute Ψ from BL theory (asymptotic orders 1, 2, 3)
+    # compute Ψ from BL theory
     ε = 1e-2
-    # α = 0
     α = 1/2
-    V_BL_1 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=1) for i in eachindex(x)]
+    V_BL_1 = compute_V_BL(bx, x, z, ε, α; order=1)
     Ψ_BL_1 = cumtrapz(V_BL_1, x) .- trapz(V_BL_1, x)
-    V_BL_2 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=2) for i in eachindex(x)]
+    V_BL_2 = compute_V_BL(bx, x, z, ε, α; order=2)
     Ψ_BL_2 = cumtrapz(V_BL_2, x) .- trapz(V_BL_2, x)
-    V_BL_3 = [compute_V_BL(b[i, :], σ*H[i], ε, α, atan(2*x[i]); order=3) for i in eachindex(x)]
-    Ψ_BL_3 = cumtrapz(V_BL_3, x) .- trapz(V_BL_3, x)
-
-    # new BL theory
-    V_BL_1_new = compute_V_BL(bx, x, z, ε; order=1)
-    Ψ_BL_1_new = cumtrapz(V_BL_1_new, x) .- trapz(V_BL_1_new, x)
-    V_BL_2_new = compute_V_BL(bx, x, z, ε; order=2)
-    Ψ_BL_2_new = cumtrapz(V_BL_2_new, x) .- trapz(V_BL_2_new, x)
-    V_BL_3_new = compute_V_BL(bx, x, z, ε; order=3)
-    Ψ_BL_3_new = cumtrapz(V_BL_3_new, x) .- trapz(V_BL_3_new, x)
-    println(maximum(abs.(Ψ_BL_1 .- Ψ_BL_1_new)))
-    println(maximum(abs.(Ψ_BL_2 .- Ψ_BL_2_new)))
-    println(maximum(abs.(Ψ_BL_3 .- Ψ_BL_3_new)))
 
     # plot
     fig, ax = plt.subplots(1)
@@ -721,30 +707,10 @@ function psi_bl()
     ax.xaxis.set_label_coords(0.5, 1.25)
     ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
     ax.axhline(0, color="k", linewidth=0.5)
-    ax.plot(x, 1e2*Ψ, label="3D model")
-    ax.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5, label=L"BL theory to $O(1)$")
-    ax.plot(x, 1e2*Ψ_BL_1_new, "C2-",  lw=0.5)
-    ax.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
-    ax.plot(x, 1e2*Ψ_BL_2_new, "C2--",  lw=0.5)
-    ax.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
-    ax.plot(x, 1e2*Ψ_BL_3_new, "C2-.",  lw=0.5)
-    ax.add_patch(patches.Rectangle((0, -1.55), 0.1, 0.25, color=(0.9, 0.9, 0.9), zorder=-1))
-    # inset of Rectangle region
-    ax_inset = fig.add_axes([0.65, 0.2, 0.3, 0.3])
-    ax_inset.plot(x, 1e2*Ψ, label="3D model")
-    ax_inset.plot(x, 1e2*Ψ_BL_1, "C1-",  lw=0.5)
-    ax_inset.plot(x, 1e2*Ψ_BL_1_new, "C2-",  lw=0.5)
-    ax_inset.plot(x, 1e2*Ψ_BL_2, "C1--", lw=0.5)
-    ax_inset.plot(x, 1e2*Ψ_BL_2_new, "C2--",  lw=0.5)
-    ax_inset.plot(x, 1e2*Ψ_BL_3, "C1-.", lw=0.5)
-    ax_inset.plot(x, 1e2*Ψ_BL_3_new, "C2-.",  lw=0.5)
-    ax_inset.set_xlim(0, 0.1)
-    ax_inset.set_ylim(-1.55, -1.30)
-    ax_inset.set_xticks([0, 0.1])
-    ax_inset.set_yticks([-1.55, -1.3])
-    ax_inset.spines["right"].set_visible(true)
-    ax_inset.spines["top"].set_visible(true)
-    ax.legend(loc=(0.0, -0.3), ncol=2)
+    ax.plot(x, 1e2*Ψ, "C0", label="3D model")
+    ax.plot(x, 1e2*Ψ_BL_1, "k-",  lw=0.5, label=L"BL theory to $O(1)$")
+    ax.plot(x, 1e2*Ψ_BL_2, "k--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
+    ax.legend()
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
     savefig("psi_bl.png")
@@ -753,61 +719,13 @@ function psi_bl()
     @info "Saved 'psi_bl.pdf'"
     plt.close()
 end
-function compute_V_BL(b, z, ε, α, θ; order)
-    if !(order in [1, 2, 3])
-        throw(ArgumentError("Invalid `order`: $order; must be 1, 2, or 3."))
-    end
-
-    # parameters
-    H = -z[1]
-    Γ = 1 + α^2*tan(θ)^2
-    q = Γ^(-3/4)/√2
-
-    # V = 0 for zero depth
-    H == 0 && return 0
-
-    # compute bbot (have to extrapolate if NaN)
-    bbot = compute_bbot(b, z)
-
-    # order 1 
-    V = -trapz((b .- bbot)*tan(θ), z) 
-    order -= 1
-
-    if order != 0
-        # order 2
-        V -= ε/q*H*tan(θ)
-        order -= 1
-    end
-
-    if order != 0
-        # order 3
-        b_filled = copy(b)
-        b_filled[1] = bbot
-        for i in 2:length(b)-1
-            if isnan(b[i])
-                b_filled[i] = (b_filled[i-1] + b_filled[i+1])/2
-            end
-        end
-        bz = differentiate(b_filled, z)
-        bzz = differentiate(bz, z)
-        bzzbot = bzz[1]
-        V += ε^2*(1/(2q^2) - H*Γ*bzzbot)*tan(θ)
-        order -= 1
-    end
-
-    # if all went well, order should be 0
-    @assert order == 0
-
-    return V
-end
-function compute_V_BL(bx, x, z, ε; order)
+function compute_V_BL(bx, x, z, ε, α; order)
     if !(order in [1, 2, 3])
         throw(ArgumentError("Invalid `order`: $order; must be 1, 2, or 3."))
     end
     
     # parameters
     # q = 1/√2
-    α = 1/2
     H = -z[:, 1]
     Hx = differentiate(H, x)
     Γ = @. 1 + α^2*Hx^2
@@ -819,7 +737,7 @@ function compute_V_BL(bx, x, z, ε; order)
 
     if order != 0
         # order 2
-        V -= @. ε/q*H*bx[:, 1]
+        V -= @. ε*H/q*bx[:, 1]
         order -= 1
     end
 
@@ -829,7 +747,7 @@ function compute_V_BL(bx, x, z, ε; order)
         for i in 1:size(bx, 1)-1
             bxz_bot[i] = differentiate_pointwise(bx[i, 1:3], z[i, 1:3], z[i, 1], 1) 
         end
-        V -= @. ε^2*(1/q*H*bxz_bot + 1/(2q^2)*bx[:, 1])
+        V -= @. ε^2*(H*bxz_bot - bx[:, 1])/(2q^2)
         order -= 1
     end
 
@@ -890,8 +808,8 @@ end
 # zonal_sections_single_sim(0.5)
 # zonal_sections_single_sim(1.0)
 # zonal_sections()
-flow_profiles()
-# psi_bl()
+# flow_profiles()
+psi_bl()
 # alpha()
 
 println("Done.")
