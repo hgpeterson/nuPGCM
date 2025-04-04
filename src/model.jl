@@ -1,7 +1,6 @@
 import Base: show
 
-# mutable struct State{U, P, B}
-struct State{U, P, B}
+mutable struct State{U, P, B}
     u::U     # flow in x direction
     v::U     # flow in y direction
     w::U     # flow in z direction
@@ -60,7 +59,6 @@ end
 
 function run!(model::Model, t_final; t_save=0, t_plot=0)
     # unpack
-    t = model.state.t #FIXME this is just a copy of t, not the original
     Δt = model.params.Δt
     u = model.state.u
     v = model.state.v
@@ -74,7 +72,7 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
     n_steps = t_final ÷ Δt
 
     # starting step number (just 1 if t = 0)
-    i_step = t ÷ Δt + 1
+    i_step = model.state.t ÷ Δt + 1
 
     # number of steps between saves, plots, and info
     n_save = t_save ÷ Δt
@@ -90,17 +88,16 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
 
         invert!(model)
 
-        t += Δt
+        model.state.t += Δt
 
         if mod(i, n_info) == 0
             # @info @sprintf("average ∂z(b) = %1.5e", sum(∫(model.params.N² + ∂z(model.state.b))model.mesh.dΩ)/sum(∫(1)model.mesh.dΩ))
-
             u_max = maximum(abs.(u.free_values))
             v_max = maximum(abs.(v.free_values))
             w_max = maximum(abs.(w.free_values))
             t1 = time()
             @info begin
-            msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", t, i, n_steps, Δt)
+            msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
@@ -113,7 +110,7 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
         end
 
         if mod(i, n_plot) == 0
-            sim_plots(model, x->1 - x[1]^2 - x[2]^2, t) # FIXME need to allow for general H
+            sim_plots(model, x->1 - x[1]^2 - x[2]^2, model.state.t) # FIXME need to allow for general H
         end
     end
     return model
@@ -138,15 +135,13 @@ function evolve_advection!(model::Model, b_half)
     # get u_half, v_half, w_half, b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    # solver.is_solved = false
     iterative_solve!(solver)
     b_half.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
-    @time "inv b_half" invert!(model, b_half) # u, v, w, p are now updated to half-step values
+    invert!(model, b_half) # u, v, w, p are now updated to half-step values
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    # solver.is_solved = false
     iterative_solve!(solver)
 
     # sync state
@@ -169,8 +164,8 @@ function invert!(model::Model)
     return invert!(model, model.state.b)
 end
 function invert!(model::Model, b)
-    @time "inv" invert!(model.inversion, b)
-    @time "sync" sync_flow!(model)
+    invert!(model.inversion, b)
+    sync_flow!(model)
     return model
 end
 function sync_flow!(model::Model)
