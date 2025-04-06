@@ -149,15 +149,15 @@ function f_over_H()
 end
 
 function buoyancy()
-    fig, ax = plt.subplots(1, 2, figsize=(27pc, 10pc), gridspec_kw=Dict("width_ratios"=>[1, 2]))
+    fig, ax = plt.subplots(1, 2, figsize=(19pc, 8pc), gridspec_kw=Dict("width_ratios"=>[1, 2]))
 
     # (a) buoyancy profiles
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[1].set_xlabel(L"Stratification $\partial_z b$")
     ax[1].set_ylabel(L"Vertical coordinate $z$")
-    ax[1].set_xlim(0, 1.5)
+    ax[1].set_xlim(0, 1.3)
     ax[1].set_yticks(-0.75:0.25:0)
-    ts = 3e-3:3e-3:10*3e-3
+    ts = 5e-3:5e-3:5e-2
     colors = pl.cm.BuPu_r(range(0, 0.8, length=length(ts)))
     for i in eachindex(ts)
         file = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", ts[i]), "r")
@@ -167,8 +167,8 @@ function buoyancy()
         bz = differentiate(b, z)
         ax[1].plot(1 .+ bz, z, c=colors[i, :])
     end
-    ax[1].annotate("", xy=(0.8, -0.67), xytext=(1.4, -0.71), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"), fontsize=6)
-    ax[1].annotate(L"$t = 3 \times 10^{-3}$", xy=(1.42, -0.72))
+    ax[1].annotate("", xy=(0.6, -0.57), xytext=(0.42, -0.42), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"), fontsize=6)
+    ax[1].annotate(L"$t = 5 \times 10^{-2}$", xy=(0.1, -0.4), fontsize=6)
 
     # (b) buoyancy gradient
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
@@ -179,34 +179,20 @@ function buoyancy()
     ax[2].set_yticks([-1, 0])
     ax[2].spines["left"].set_visible(false)
     ax[2].spines["bottom"].set_visible(false)
-    d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
+    d = jldopen("buoyancy.jld2")
     x = d["x"]
-    y = d["y"]
-    σ = d["σ"]
-    H = d["H"]
-    b = d["b"]
+    z = d["z"]
+    bx = d["bx"]
     close(d)
-    i0 = length(x) ÷ 2 + 1 # index where x = 0
-    j0 = length(y) ÷ 2 + 1 # index where y = 0
-    x = x[i0:end]
-    H = H[i0:end, j0]
-    b = b[i0:end, j0, :]
-    xx = repeat(x, 1, length(σ))
-    zz = H*σ'
-    b[:, end] .= 0 # b = 0 at z = 0
-    b[end, :] .= 0 # b = 0 where H = 0
-    b[:, 1] .= [compute_bbot(b[i, :], zz[i, :]) for i in eachindex(x)] # fill nans at z = -H
-    fill_nans!(b) # everywhere else
-    bx = compute_bx(b, x, σ, H)
-    # vmax = maximum(abs.(bx))
-    vmax = 3
-    img = ax[2].pcolormesh(xx, zz, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-    ax[2].contour(xx, zz, zz .+ b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
+    xx = repeat(x, 1, size(z, 2))
+    vmax = maximum(abs.(bx))
+    img = ax[2].pcolormesh(xx, z, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    ax[2].contour(xx, z, z .+ b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
     ax[2].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
     cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy gradient $\partial_x b$")
-    cb.set_ticks([-vmax, 0, vmax])
+    # cb.set_ticks([-vmax, 0, vmax])
 
-    subplots_adjust(wspace=0.9)
+    subplots_adjust(wspace=0.5)
 
     savefig("buoyancy.png")
     @info "Saved 'buoyancy.png'"
@@ -661,34 +647,41 @@ function flow_profiles()
 end
 
 function psi_bl()
-    # load b from 3D model
-    d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
-    b = d["b"]
-    x = d["x"]
-    y = d["y"]
-    σ = d["σ"]
-    H = d["H"]
-    close(d)
+    # # load b from 3D model
+    # d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
+    # b = d["b"]
+    # x = d["x"]
+    # y = d["y"]
+    # σ = d["σ"]
+    # H = d["H"]
+    # close(d)
 
     # load Ψ from 3D model
     d = jldopen("../sims/sim048/data/psi_beta0.0_n0257_003.jld2", "r")
-    Ψ = d["Ψ"]
+    x3D = d["x"]
+    Ψ3D = d["Ψ"]
     close(d)
 
     # slice at y = 0 from x = 0 to 1
-    i0 = length(x)÷2 + 1
-    j0 = length(y)÷2 + 1
-    x = x[i0:end]
-    b = b[i0:end, j0, :]
-    Ψ = Ψ[i0:end, j0]
-    H = H[i0:end, j0]
-    z = H*σ'
-    # b[:, 1] .= [compute_bbot(b[i, :], H[i]*σ) for i in eachindex(x)]
-    b[:, end] .= 0 # b = 0 at z = 0
-    b[end, :] .= 0 # b = 0 where H = 0
-    b[:, 1] .= [compute_bbot(b[i, :], z[i, :]) for i in eachindex(x)] # fill nans at z = -H
-    fill_nans!(b) # everywhere else
-    bx = compute_bx(b, x, σ, H)
+    i0 = size(Ψ3D, 1)÷2 + 1
+    j0 = size(Ψ3D, 2)÷2 + 1
+    x3D = x3D[i0:end]
+    Ψ3D = Ψ3D[i0:end, j0]
+    # b = b[i0:end, j0, :]
+    # Ψ = Ψ[i0:end, j0]
+    # H = H[i0:end, j0]
+    # z = H*σ'
+    # # b[:, 1] .= [compute_bbot(b[i, :], H[i]*σ) for i in eachindex(x)]
+    # b[:, end] .= 0 # b = 0 at z = 0
+    # b[end, :] .= 0 # b = 0 where H = 0
+    # b[:, 1] .= [compute_bbot(b[i, :], z[i, :]) for i in eachindex(x)] # fill nans at z = -H
+    # fill_nans!(b) # everywhere else
+    # bx = compute_bx(b, x, σ, H)
+    d = jldopen("buoyancy.jld2", "r")
+    x = d["x"]
+    z = d["z"]
+    bx = d["bx"]
+    close(d)
 
     # compute Ψ from BL theory
     ε = 1e-2
@@ -702,14 +695,15 @@ function psi_bl()
     fig, ax = plt.subplots(1)
     ax.set_xlim(0, 1)
     ax.set_xticks(0:0.5:1)
-    ax.set_ylim(-2.5, 0)
+    ax.set_ylim(-6, 0)
+    ax.set_yticks(-6:2:0)
     ax.spines["bottom"].set_position("zero")
     ax.xaxis.set_label_coords(0.5, 1.25)
     ax.tick_params(axis="x", top=true, labeltop=true, bottom=false, labelbottom=false)
     ax.axhline(0, color="k", linewidth=0.5)
-    ax.plot(x, 1e2*Ψ, "C0", label="3D model")
-    ax.plot(x, 1e2*Ψ_BL_1, "k-",  lw=0.5, label=L"BL theory to $O(1)$")
-    ax.plot(x, 1e2*Ψ_BL_2, "k--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
+    ax.plot(x3D, 1e2*Ψ3D,    "C0",          label="3D model")
+    ax.plot(x,   1e2*Ψ_BL_1, "k-",  lw=0.5, label=L"BL theory to $O(1)$")
+    ax.plot(x,   1e2*Ψ_BL_2, "k--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
     ax.legend()
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
