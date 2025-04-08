@@ -8,7 +8,8 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(".")
 
@@ -17,9 +18,9 @@ arch = GPU()
 dim = 2
 
 # params/funcs
-ε = 1e-4
+ε = 1e-2
 α = 1/2
-μϱ = 1e0
+μϱ = 1e-4
 N² = 1.
 Δt = 1e-4*μϱ/ε^2
 params = Parameters(ε, α, μϱ, N², Δt)
@@ -110,12 +111,12 @@ evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_dif
 # put it all together in the `model` struct
 model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
 
-set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/0.1))
+# set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/0.1))
 
 # invert
-invert!(model)
+# @time "invert!" invert!(model)
 
-# # solve
-# run!(model, T)
+# solve
+run!(model, T)
 
 println("Done.")
