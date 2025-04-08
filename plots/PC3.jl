@@ -431,31 +431,19 @@ function zonal_sections()
     ax[3, 3].annotate("(i)", xy=(-0.00, 0.95), xycoords="axes fraction")
     for a ∈ ax
         a.axis("equal")
-        a.set_xticks(-1:1:1)
-        a.set_yticks(-1:1:0)
+        a.set_xticks([])
+        a.set_yticks([])
         a.set_xlim(-1.05, 1.05)
         a.set_ylim(-1.05, 0.05)
         a.spines["left"].set_visible(false)
         a.spines["bottom"].set_visible(false)
     end
-    ax[3, 1].set_xlabel(L"Zonal coordinate $x$")
-    ax[3, 2].set_xlabel(L"Zonal coordinate $x$")
-    ax[3, 3].set_xlabel(L"Zonal coordinate $x$")
-    ax[1, 1].set_ylabel(L"Vertical coordinate $z$")
-    ax[2, 1].set_ylabel(L"Vertical coordinate $z$")
-    ax[3, 1].set_ylabel(L"Vertical coordinate $z$")
-    ax[1, 1].set_xticklabels([])
-    ax[1, 2].set_xticklabels([])
-    ax[1, 3].set_xticklabels([])
-    ax[2, 1].set_xticklabels([])
-    ax[2, 2].set_xticklabels([])
-    ax[2, 3].set_xticklabels([])
-    ax[1, 2].set_yticklabels([])
-    ax[2, 2].set_yticklabels([])
-    ax[3, 2].set_yticklabels([])
-    ax[1, 3].set_yticklabels([])
-    ax[2, 3].set_yticklabels([])
-    ax[3, 3].set_yticklabels([])
+    for i ∈ 1:3
+        ax[3, i].set_xlabel(L"Zonal coordinate $x$")
+        ax[3, i].set_xticks([-1, 0, 1])
+        ax[i, 1].set_ylabel(L"Vertical coordinate $z$")
+        ax[i, 1].set_yticks([-1, 0])
+    end
     ax[1, 4].set_visible(false)
     ax[2, 4].set_visible(false)
     ax[3, 4].set_visible(false)
@@ -527,9 +515,9 @@ function flow_profiles()
     ax[1].set_xlabel(L"Zonal flow $u$"*"\n"*L"($\times 10^{-2}$)")
     ax[2].set_xlabel(L"Meridional flow $v$"*"\n"*L"($\times 10^{-2}$)")
     ax[3].set_xlabel(L"Vertical flow $w$"*"\n"*L"($\times 10^{-2}$)")
-    ax[1].set_xlim(-1.5, 1.5)
-    ax[2].set_xlim(-4.5, 4.5)
-    ax[3].set_xlim(-1.5, 1.5)
+    # ax[1].set_xlim(-1.5, 1.5)
+    # ax[2].set_xlim(-4.5, 4.5)
+    # ax[3].set_xlim(-1.5, 1.5)
     ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
     ax[2].set_yticks([])
     ax[3].set_yticks([])
@@ -537,83 +525,45 @@ function flow_profiles()
         a.spines["left"].set_visible(false)
         a.axvline(0, color="k", lw=0.5)
     end
-    βs = [0.0, 0.5, 1.0]
-    for i ∈ eachindex(βs)
-        # load gridded sigma data
-        d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", βs[i]))
-        x = d["x"]
-        y = d["y"]
-        σ = d["σ"]
-        H = d["H"]
-        u = d["u"]
-        v = d["v"]
-        w = d["w"]
-        close(d)
-        j = argmin(abs.(x .- 0.5)) # index where x = 0.5
-        k = argmin(abs.(y)) # index where y = 0
-        u = u[j, k, :]; u[1] = 0
-        v = v[j, k, :]; v[1] = 0
-        w = w[j, k, :]; w[1] = 0; w[end] = 0
-        z = H[j, k]*σ
-        umask = isnan.(u) .== 0
-        vmask = isnan.(v) .== 0
-        wmask = isnan.(w) .== 0
-        ax[1].plot(1e2*u[umask], z[umask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[2].plot(1e2*v[vmask], z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-        ax[3].plot(1e2*w[wmask], z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
-    end
+    # βs = [0.0, 0.5, 1.0]
+    # for i ∈ eachindex(βs)
+    #     # load gridded sigma data
+    #     d = jldopen(@sprintf("../sims/sim048/data/gridded_sigma_beta%1.1f_n0257_i003.jld2", βs[i]))
+    #     x = d["x"]
+    #     y = d["y"]
+    #     σ = d["σ"]
+    #     H = d["H"]
+    #     u = d["u"]
+    #     v = d["v"]
+    #     w = d["w"]
+    #     close(d)
+    #     j = argmin(abs.(x .- 0.5)) # index where x = 0.5
+    #     k = argmin(abs.(y)) # index where y = 0
+    #     u = u[j, k, :]; u[1] = 0
+    #     v = v[j, k, :]; v[1] = 0
+    #     w = w[j, k, :]; w[1] = 0; w[end] = 0
+    #     z = H[j, k]*σ
+    #     umask = isnan.(u) .== 0
+    #     vmask = isnan.(v) .== 0
+    #     wmask = isnan.(w) .== 0
+    #     ax[1].plot(1e2*u[umask], z[umask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+    #     ax[2].plot(1e2*v[vmask], z[vmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+    #     ax[3].plot(1e2*w[wmask], z[wmask], label=latexstring(@sprintf("\$\\beta = %0.1f\$", βs[i])))
+    # end
 
-    # # 1D U = 0
-    # file = jldopen("../sims/sim048/data/1D_beta0.0.jld2")
-    # u = file["u"]
-    # v = file["v"]
-    # w = file["w"]
-    # z = file["z"]
-    # close(file)
-    # ax[1].plot(1e2*u, z, "k--", lw=0.5, label=L"1D $U=0$")
-    # ax[2].plot(1e2*v, z, "k--", lw=0.5, label=L"1D $U=0$")
-    # ax[3].plot(1e2*w, z, "k--", lw=0.5, label=L"1D $U=0$")
-
-    # # 1D U = V = 0
-    # file = jldopen("../sims/sim048/data/1D_beta1.0.jld2")
-    # u = file["u"]
-    # v = file["v"]
-    # w = file["w"]
-    # z = file["z"]
-    # close(file)
-    # ax[1].plot(1e2*u, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    # ax[2].plot(1e2*v, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-    # ax[3].plot(1e2*w, z, "k-.", lw=0.5, label=L"1D $U=V=0$")
-
-    # # get bx from 3D model
-    # d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2")
-    # x = d["x"]
-    # y = d["y"]
-    # σ = d["σ"]
-    # H = d["H"]
-    # b = d["b"]
-    # close(d)
-    # j0 = length(y) ÷ 2 + 1 # index where y = 0
-    # H = H[:, j0]
-    # b = b[:, j0, :]
-    # zz = H*σ'
-    # b[:, end] .= 0 # b = 0 at z = 0
-    # b[end, :] .= 0 # b = 0 where H = 0
-    # b[:, 1] .= [compute_bbot(b[i, :], zz[i, :]) for i in eachindex(x)] # fill nans at z = -H
-    # fill_nans!(b) # everywhere else
-    # bx = compute_bx(b, x, σ, H)
-    # i0 = argmin(abs.(x .- 0.5)) # index where x = 0.5
-    # bx = bx[i0, :]
-    # z = zz[i0, :]
-    # nz = length(z)
-
-    # get bx from 1D model
-    d = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", 3e-3), "r")
-    b = d["b"]
+    # load bx
+    d = jldopen("buoyancy.jld2", "r")
+    x = d["x"]
     z = d["z"]
+    bx = d["bx"]
     close(d)
-    nz = length(z)
-    bx = -differentiate(b, z)
+    nz = size(z, 2)
+
+    # profile at x = 0.5
+    i = argmin(abs.(x .- 0.5)) # index where x = 0.5
+    println("Closest point to x=0.5: x=", x[i])
+    z = z[i, :] 
+    bx = bx[i, :]
 
     # get BL solutions
     u, v, w = solve_baroclinic_problem_BL_U0(ε=1e-2, z=z, ν=ones(nz), f=1, bx=bx, Hx=-1)
@@ -647,15 +597,6 @@ function flow_profiles()
 end
 
 function psi_bl()
-    # # load b from 3D model
-    # d = jldopen("../sims/sim048/data/gridded_sigma_beta0.0_n0257_i003.jld2", "r")
-    # b = d["b"]
-    # x = d["x"]
-    # y = d["y"]
-    # σ = d["σ"]
-    # H = d["H"]
-    # close(d)
-
     # load Ψ from 3D model
     d = jldopen("../sims/sim048/data/psi_beta0.0_n0257_003.jld2", "r")
     x3D = d["x"]
@@ -667,16 +608,6 @@ function psi_bl()
     j0 = size(Ψ3D, 2)÷2 + 1
     x3D = x3D[i0:end]
     Ψ3D = Ψ3D[i0:end, j0]
-    # b = b[i0:end, j0, :]
-    # Ψ = Ψ[i0:end, j0]
-    # H = H[i0:end, j0]
-    # z = H*σ'
-    # # b[:, 1] .= [compute_bbot(b[i, :], H[i]*σ) for i in eachindex(x)]
-    # b[:, end] .= 0 # b = 0 at z = 0
-    # b[end, :] .= 0 # b = 0 where H = 0
-    # b[:, 1] .= [compute_bbot(b[i, :], z[i, :]) for i in eachindex(x)] # fill nans at z = -H
-    # fill_nans!(b) # everywhere else
-    # bx = compute_bx(b, x, σ, H)
     d = jldopen("buoyancy.jld2", "r")
     x = d["x"]
     z = d["z"]
@@ -801,9 +732,9 @@ end
 # zonal_sections_single_sim(0.0)
 # zonal_sections_single_sim(0.5)
 # zonal_sections_single_sim(1.0)
-# zonal_sections()
+zonal_sections()
 # flow_profiles()
-psi_bl()
+# psi_bl()
 # alpha()
 
 println("Done.")
