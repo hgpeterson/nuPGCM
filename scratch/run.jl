@@ -14,9 +14,11 @@ plt.close("all")
 
 set_out_dir!(".")
 
+ENV["JULIA_DEBUG"] = nuPGCM
+
 # choose dimensions
-# dim = TwoD()
-dim = ThreeD()
+dim = TwoD()
+# dim = ThreeD()
 
 # choose architecture
 # arch = CPU()
@@ -95,7 +97,7 @@ RHS_inversion = on_architecture(arch, RHS_inversion)
 typeof(arch) == GPU() && CUDA.memory_status()
 
 # setup inversion toolkit
-inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion; atol=1e-8, rtol=1e-8, itmax=0, verbose=1)
+inversion_toolkit = InversionToolkit(LHS_inversion, P_inversion, RHS_inversion; atol=1e-8, rtol=1e-8, itmax=100000, verbose=0)
 
 function update_u_p!(ux, uy, uz, p, solver)
     sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
@@ -119,14 +121,14 @@ N² = 1.
 # p  = interpolate_everywhere(0, P) 
 # save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
 
-# # initial condition: b = N²z + exponential
-# i_save = 0
-# b = interpolate_everywhere(x -> 0.1*exp(-(x[3] + H(x))/0.1), B)
-# t = 0.
-# ux = interpolate_everywhere(0, Ux)
-# uy = interpolate_everywhere(0, Uy)
-# uz = interpolate_everywhere(0, Uz)
-# p  = interpolate_everywhere(0, P) 
+# initial condition: b = N²z + exponential
+i_save = 0
+b = interpolate_everywhere(x -> 0.1*exp(-(x[3] + H(x))/0.1), B)
+t = 0.
+ux = interpolate_everywhere(0, Ux)
+uy = interpolate_everywhere(0, Uy)
+uz = interpolate_everywhere(0, Uz)
+p  = interpolate_everywhere(0, P) 
 
 # # initial condition: load from file
 # i_save = 1
@@ -139,26 +141,26 @@ N² = 1.
 # p  = FEFunction(P, p)
 # b  = FEFunction(B, b)
 
-# initial condition: load from diffusion
-diff_dir = "../sims/sim048"
-i_save = 50
-file = jldopen(@sprintf("%s/data/b%03d.jld2", diff_dir, i_save), "r")
-b = FEFunction(B, file["b"])
-t = file["t"]
-close(file)
-ux = interpolate_everywhere(0, Ux)
-uy = interpolate_everywhere(0, Uy)
-uz = interpolate_everywhere(0, Uz)
-p  = interpolate_everywhere(0, P) 
+# # initial condition: load from diffusion
+# diff_dir = "../sims/sim048"
+# i_save = 50
+# file = jldopen(@sprintf("%s/data/b%03d.jld2", diff_dir, i_save), "r")
+# b = FEFunction(B, file["b"])
+# t = file["t"]
+# close(file)
+# ux = interpolate_everywhere(0, Ux)
+# uy = interpolate_everywhere(0, Uy)
+# uz = interpolate_everywhere(0, Uz)
+# p  = interpolate_everywhere(0, P) 
 
 # invert initial condition
-invert!(inversion_toolkit, b)
+@time "invert!" invert!(inversion_toolkit, b)
 ux, uy, uz, p = update_u_p!(ux, uy, uz, p, inversion_toolkit.solver)
-save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
+# save_state(ux, uy, uz, p, b, t; fname=@sprintf("%s/data/state%03d.h5", out_dir, i_save))
 
-# plot
-plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
-i_save += 1
+# # plot
+# plots_cache = sim_plots(dim, ux, uy, uz, b, N², H, t, i_save)
+# i_save += 1
 
 # # evolution LHSs
 # LHS_diff_fname = @sprintf("../matrices/LHS_diff_%s_%e_%e_%e.h5", dim, h, α, γ)
