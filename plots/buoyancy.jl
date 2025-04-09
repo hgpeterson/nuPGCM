@@ -44,11 +44,13 @@ function diffuse_columns()
     κ = [1e-2 + exp(-(z[i, j] + H[i])/0.1) for i in 1:nx, j in 1:nz]
 
     # parameters
-    ε = 1e-2
+    ε = 2e-2
+    println("ε = $ε")
     μϱ = 1e-4
     α = 1/2
     horiz_diff = false
-    T = 5e-2*μϱ/ε^2
+    T = 4e-2*μϱ/ε^2
+    println("T = $T")
     Δt = 1e-4*μϱ/ε^2
 
     # solve diffusion problem for each column (except the last one where H = 0)
@@ -93,5 +95,6 @@ end
 # plt.close()
 
 # save 
-jldsave("buoyancy.jld2"; x, z, b, bx, t=T)
-@info "Saved 'buoyancy.jld2'"
+ofile = @sprintf("buoyancy_eps%.0e_T%.0e.jld2", 2e-2, 1e-2)
+jldsave(ofile; x, z, b, bx, t=T)
+@info "Saved '$ofile'"
