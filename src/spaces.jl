@@ -1,56 +1,49 @@
-"""
-    X, Y, B, D = setup_FESpaces(model; order=2)
-
-Setup the trial and test FE spaces for the velocity, pressure, and buoyancy fields.
-`X` and `Y` are multi-field FE spaces for (u, v, w, p).
-"""
-function setup_FESpaces(model; order=2)
-    # reference FE 
-    reffe_ux = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_uy = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_uz = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_p  = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-    reffe_b  = ReferenceFE(lagrangian, Float64, order;   space=:P)
-
-    # test FESpaces
-    Vx = TestFESpace(model, reffe_ux, conformity=:H1, dirichlet_tags=["bot"])
-    Vy = TestFESpace(model, reffe_uy, conformity=:H1, dirichlet_tags=["bot"])
-    Vz = TestFESpace(model, reffe_uz, conformity=:H1, dirichlet_tags=["bot", "sfc"])
-    Q  = TestFESpace(model, reffe_p,  conformity=:H1, constraint=:zeromean)
-    D  = TestFESpace(model, reffe_b,  conformity=:H1, dirichlet_tags=["sfc"])
-    Y = MultiFieldFESpace([Vx, Vy, Vz, Q])
-
-    # trial FESpaces with Dirichlet values
-    Ux = TrialFESpace(Vx, [0])
-    Uy = TrialFESpace(Vy, [0])
-    Uz = TrialFESpace(Vz, [0, 0])
-    P  = TrialFESpace(Q)
-    B  = TrialFESpace(D, [0])
-    X  = MultiFieldFESpace([Ux, Uy, Uz, P])
-
-    return X, Y, B, D
+struct Spaces{X, Y, B, C}
+    X_trial::X # trial space for [u, v, w, p]
+    X_test::Y  # test space for [u, v, w, p]
+    B_trial::B # trial space for buoyancy
+    B_test::C  # test space for buoyancy
 end
 
 """
-    spaces = unpack_spaces(X::MultiFieldFESpace)
+    spaces = Spaces(model; order=2)
 
-Return the individual field spaces of the multi-field FE space `X`.
-
-Example
-===
-
-```julia
-julia> X, Y, B, D = setup_FESpaces(model)
-(MultiFieldFESpace(), MultiFieldFESpace(), TrialFESpace(), UnconstrainedFESpace())
-
-julia> Ux, Uy, Uz, P = unpack_spaces(X)
-4-element Vector{Gridap.FESpaces.SingleFieldFESpace}:
- TrialFESpace()
- TrialFESpace()
- TrialFESpace()
- ZeroMeanFESpace()
-```
+Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
+`model` is assumed to be an `UnstructuredDiscreteModel` from Gridap. The `X`s are 
+multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
+buoyancy.
 """
-function unpack_spaces(X::MultiFieldFESpace)
-    return [X.spaces[i] for i in eachindex(X.spaces)] 
+function Spaces(model; order=2)
+    # reference FE 
+    reffe_u = ReferenceFE(lagrangian, Float64, order;   space=:P)
+    reffe_v = ReferenceFE(lagrangian, Float64, order;   space=:P)
+    reffe_w = ReferenceFE(lagrangian, Float64, order;   space=:P)
+    reffe_p = ReferenceFE(lagrangian, Float64, order-1; space=:P)
+    reffe_b = ReferenceFE(lagrangian, Float64, order;   space=:P)
+
+    # test FESpaces
+    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bot"])
+    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bot"])
+    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bot", "sfc"])
+    P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
+    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["sfc"])
+    X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
+
+    # trial FESpaces with Dirichlet values
+    U_trial = TrialFESpace(U_test, [0])
+    V_trial = TrialFESpace(V_test, [0])
+    W_trial = TrialFESpace(W_test, [0, 0])
+    P_trial = TrialFESpace(P_test)
+    B_trial = TrialFESpace(B_test, [0])
+    X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
+
+    return Spaces(X_trial, X_test, B_trial, B_test)
+end
+
+function get_U_V_W_P(spaces::Spaces)
+    U = spaces.X_trial[1]
+    V = spaces.X_trial[2]
+    W = spaces.X_trial[3]
+    P = spaces.X_trial[4]
+    return U, V, W, P
 end

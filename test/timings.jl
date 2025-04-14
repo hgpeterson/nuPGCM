@@ -1,7 +1,8 @@
-using Test
 using nuPGCM
+using Gridap
 using JLD2
 using LinearAlgebra
+using BenchmarkTools
 using Printf
 using PyPlot
 
@@ -11,7 +12,7 @@ plt.close("all")
 
 set_out_dir!("./test")
 
-function coarse_evolution(dim, arch)
+function make_model(dim, arch)
     # params/funcs
     ε = 1e-1
     α = 1/2
@@ -37,10 +38,6 @@ function coarse_evolution(dim, arch)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
     else
-        # A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
-        # jldopen(A_inversion_fname, "r") do file
-        #     @test A_inversion ≈ file["A_inversion"]
-        # end
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
@@ -75,12 +72,6 @@ function coarse_evolution(dim, arch)
                                             A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
     else
         A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ) 
-        jldopen(A_adv_fname, "r") do file
-            @test A_adv ≈ file["A_adv"]
-        end
-        jldopen(A_diff_fname, "r") do file
-            @test A_diff ≈ file["A_diff"]
-        end
     end
 
     # re-order dofs
@@ -109,45 +100,14 @@ function coarse_evolution(dim, arch)
 
     # put it all together in the `model` struct
     model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
-
-    # solve
-    run!(model, T)
-
-    # # plot for sanity check
-    # sim_plots(model, H, 0)
-
-    # compare state with data
-    datafile = @sprintf("test/data/evolution_%sD.jld2", dim)
-    if !isfile(datafile)
-        @warn "Data file not found, saving state..."
-        save(state; ofile=datafile)
-    else
-        jldopen(datafile, "r") do file
-            u_data = file["u"]
-            v_data = file["v"]
-            w_data = file["w"]
-            p_data = file["p"]
-            b_data = file["b"]
-            @test isapprox(model.state.u.free_values, u_data, rtol=1e-2)
-            @test isapprox(model.state.v.free_values, v_data, rtol=1e-2)
-            @test isapprox(model.state.w.free_values, w_data, rtol=1e-2)
-            @test isapprox(model.state.p.free_values, p_data, rtol=1e-2)
-            @test isapprox(model.state.b.free_values, b_data, rtol=1e-2)
-        end
-    end
+    set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/0.1))
+    return model
 end
 
-@testset "Evolution Tests" begin
-    @testset "2D CPU" begin
-        coarse_evolution(2, CPU())
-    end
-    @testset "2D GPU" begin
-        coarse_evolution(2, GPU())
-    end
-    @testset "3D CPU" begin
-        coarse_evolution(3, CPU())
-    end
-    @testset "3D GPU" begin
-        coarse_evolution(3, GPU())
-    end
-end
+model = make_model(2, GPU())
+b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
+@btime nuPGCM.evolve_advection!($model, $b_half)
+# @btime nuPGCM.evolve_diffusion!($model)
+# @btime nuPGCM.invert!($model)
+
+println("Done.")

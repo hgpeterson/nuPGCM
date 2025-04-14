@@ -7,13 +7,13 @@ using CUDA
 using CUDA.CUSPARSE
 using CUDA.CUSOLVER
 using CuthillMcKee
+using JLD2
 using LinearAlgebra
 using SparseArrays
 using Krylov
 using PyPlot
 using HDF5
 using Printf
-import Base.string
 
 # directory where the output files will be saved
 global out_dir = "."
@@ -44,64 +44,31 @@ function set_out_dir!(dir)
     end
 end
 
-# define CPU and GPU architectures (see: Oceananigans.jl/src/Architectures.jl)
-abstract type AbstractArchitecture end
-
-struct CPU <: AbstractArchitecture end
-struct GPU <: AbstractArchitecture end
-
-# convert types from one architecture to another
-on_architecture(::CPU, a::Array) = a
-on_architecture(::GPU, a::Array) = CuArray(a)
-
-on_architecture(::CPU, a::CuArray) = Array(a)
-on_architecture(::GPU, a::CuArray) = a
-
-on_architecture(::CPU, a::SparseMatrixCSC) = a
-on_architecture(::GPU, a::SparseMatrixCSC) = CuSparseMatrixCSR(a)
-
-on_architecture(::CPU, a::CuSparseMatrixCSR) = SparseMatrixCSC(a)
-on_architecture(::GPU, a::CuSparseMatrixCSR) = a
-
-# determine architecture array is on 
-architecture(::Array) = CPU()
-architecture(::CuArray) = GPU()
-architecture(::SparseMatrixCSC) = CPU()
-architecture(::CuSparseMatrixCSR) = GPU()
-
-# physical dimension of the problem
-abstract type AbstractDimension end
-struct TwoD <: AbstractDimension 
-    n::Int
-end
-struct ThreeD <: AbstractDimension 
-    n::Int
-end
-TwoD() = TwoD(2)
-ThreeD() = ThreeD(3)
-string(::TwoD) = "2D"
-string(::ThreeD) = "3D"
-
+# include all the module code
+include("architectures.jl")
 include("utils.jl")
-include("meshes.jl")
-include("plotting.jl")
-include("IO.jl")
+include("parameters.jl")
 include("spaces.jl")
+include("dofs.jl")
+include("meshes.jl")
 include("matrices.jl")
-include("inversion.jl")
 include("preconditioners.jl")
+include("iterative_solvers.jl")
+include("inversion.jl")
+include("evolution.jl")
+include("model.jl")
+include("IO.jl")
+include("plotting.jl")
 
 export 
 out_dir,
 set_out_dir!,
+# architectures.jl
 AbstractArchitecture,
 CPU,
 GPU,
 on_architecture,
 architecture,
-AbstractDimension,
-TwoD,
-ThreeD,
 # utils.jl
 chebyshev_nodes,
 hrs_mins_secs,
@@ -110,37 +77,45 @@ trapz,
 cumtrapz,
 nan_max,
 nan_min,
+# parameters.jl
+Parameters,
+# spaces.jl
+Spaces,
+# dofs.jl
+get_n_dof,
 # meshes.jl
 Mesh,
 get_p_t,
 get_p_to_t,
+# matrices.jl
+∂x,
+∂y,
+∂z,
+build_matrices,
+build_inversion_matrices,
+build_evolution_matrices,
+# preconditioners.jl
+mul!,
+# inversion.jl
+InversionToolkit,
+invert!,
+# evolution.jl
+EvolutionToolkit,
+# model.jl
+State,
+Model,
+set_b!,
+inversion_model,
+rest_state_model,
+run!,
+# IO.jl
+save_state,
+load_state_from_file!,
 # plotting.jl
 nan_eval,
 plot_slice,
 plot_profiles,
 sim_plots,
-plot_sparsity_pattern,
-# IO.jl
-write_sparse_matrix,
-read_sparse_matrix,
-save_state,
-save_state_vtu,
-load_state,
-# spaces.jl
-setup_FESpaces,
-unpack_spaces,
-# matrices.jl
-∂x,
-∂y,
-∂z,
-assemble_LHS_inversion,
-assemble_RHS_inversion,
-assemble_LHS_adv_diff,
-assemble_RHS_diff,
-# inversion.jl
-InversionToolkit,
-invert!,
-# preconditioners.jl
-mul!
+plot_sparsity_pattern
 
 end # module

@@ -10,4 +10,5 @@
 *.mp4
 *.jld2
 *.json
+*.gz
 *.log
