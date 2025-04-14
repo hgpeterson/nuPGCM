@@ -27,7 +27,7 @@ end
 
 function diffuse_columns()
     # grid in x
-    nx = 2^10
+    nx = 2^10 + 1 # odd to make sure 0.5 is included
     x = range(0, 1, length=nx)
 
     # depth function
@@ -76,23 +76,23 @@ function diffuse_columns()
     return x, z, b, bx, T
 end
 
-# # compute b
-# x, z, b, bx, T = diffuse_columns()
+# compute b
+x, z, b, bx, T = diffuse_columns()
 
-# # plot
-# fig, ax = plt.subplots(1)
-# vmax = maximum(abs.(bx))
-# xx = repeat(x, 1, size(z, 2))
-# img = ax.pcolormesh(xx, z, bx, cmap="RdBu_r", shading="auto", rasterized=true, vmin=-vmax, vmax=vmax)
-# plt.colorbar(img, ax=ax, label=L"Buoyancy gradient $\partial_x b$")
-# ax.contour(xx, z, z .+ b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.5, linestyles="-", alpha=0.3)
-# ax.spines["left"].set_visible(false)
-# ax.spines["bottom"].set_visible(false)
-# ax.set_xlabel(L"x")
-# ax.set_ylabel(L"z")
-# savefig("bx.png")
-# @info "Saved 'bx.png'"
-# plt.close()
+# plot
+fig, ax = plt.subplots(1)
+vmax = maximum(abs.(bx))
+xx = repeat(x, 1, size(z, 2))
+img = ax.pcolormesh(xx, z, bx, cmap="RdBu_r", shading="auto", rasterized=true, vmin=-vmax, vmax=vmax)
+plt.colorbar(img, ax=ax, label=L"Buoyancy gradient $\partial_x b$")
+ax.contour(xx, z, z .+ b, levels=-0.95:0.05:-0.05, colors="k", linewidths=0.5, linestyles="-", alpha=0.3)
+ax.spines["left"].set_visible(false)
+ax.spines["bottom"].set_visible(false)
+ax.set_xlabel(L"x")
+ax.set_ylabel(L"z")
+savefig("bx.png")
+@info "Saved 'bx.png'"
+plt.close()
 
 # save 
 ofile = @sprintf("buoyancy_eps%.0e_T%.0e.jld2", 2e-2, 1e-2)
