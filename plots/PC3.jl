@@ -495,7 +495,7 @@ function flow_profiles()
     @info "Actual transport:" U=trapz(u, z) V=trapz(v, z)
 
     # load bx
-    d = jldopen("buoyancy.jld2", "r")
+    d = jldopen("buoyancy_eps2e-02_T1e-02.jld2", "r")
     x = d["x"]
     z = d["z"]
     bx = d["bx"]
@@ -504,7 +504,6 @@ function flow_profiles()
 
     # profile at x = 0.5
     i = argmin(abs.(x .- 0.5)) # index where x = 0.5
-    println("Closest point to x=0.5: x=", x[i])
     z = z[i, :] 
     bx = bx[i, :]
 
@@ -610,7 +609,7 @@ function psi_bl()
     j0 = size(Ψ3D, 2)÷2 + 1
     x3D = x3D[i0:end]
     Ψ3D = Ψ3D[i0:end, j0]
-    d = jldopen("buoyancy.jld2", "r")
+    d = jldopen("buoyancy_eps2e-02_T1e-02.jld2", "r")
     x = d["x"]
     z = d["z"]
     bx = d["bx"]
@@ -639,7 +638,7 @@ function psi_bl()
     ax.plot(x3D, 1e2*Ψ3D,    "C0",          label="3D model")
     ax.plot(x,   1e2*Ψ_BL_1, "k-",  lw=0.5, label=L"BL theory to $O(1)$")
     ax.plot(x,   1e2*Ψ_BL_2, "k--", lw=0.5, label=L"BL theory to $O(\varepsilon)$")
-    ax.plot(x,   1e2*Ψ_BL_3, "k-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
+    # ax.plot(x,   1e2*Ψ_BL_3, "k-.", lw=0.5, label=L"BL theory to $O(\varepsilon^2)$")
     ax.legend()
     ax.set_xlabel(L"Zonal coordinate $x$")
     ax.set_ylabel(L"Barotropic streamfunction $\Psi$ ($\times 10^{-2}$)")
@@ -677,7 +676,7 @@ function compute_V_BL(bx, x, z, ε, α; order)
         for i in 1:size(bx, 1)-1
             bxz_bot[i] = differentiate_pointwise(bx[i, 1:3], z[i, 1:3], z[i, 1], 1) 
         end
-        V -= @. ε^2*(H*bxz_bot + bx[:, 1])/(2q^2)
+        V += @. -ε^2*H*Γ^(3/2)*bxz_bot + ε^2*bx[:, 1]/(2q^2)
         order -= 1
     end
 
