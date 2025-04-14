@@ -8,8 +8,8 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(".")
 
@@ -18,9 +18,9 @@ arch = GPU()
 dim = 2
 
 # params/funcs
-ε = 1e-2
+ε = 2e-2
 α = 1/2
-μϱ = 1e-4
+μϱ = 1e0
 N² = 1.
 Δt = 1e-4*μϱ/ε^2
 params = Parameters(ε, α, μϱ, N², Δt)
@@ -64,7 +64,7 @@ A_inversion = on_architecture(arch, A_inversion)
 B_inversion = on_architecture(arch, B_inversion)
 
 # setup inversion toolkit
-inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion; verbose=false, itmax=1000)
+inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
 # build evolution matrices and test against saved matrices
 θ = Δt/2 * ε^2 / μϱ
