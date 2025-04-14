@@ -16,7 +16,11 @@ function bl_spiral(z, q, c1, c2)
     return @. exp(pm*q*z)*(c1*cos(q*z) + c2*sin(q*z))
 end
 
-function solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
+function solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V=nothing, τx, τy, vz_bot=nothing)
+    if V === nothing && vz_bot === nothing
+        throw(ArgumentError("Either V or vz_bot must be provided."))
+    end
+
     nz = length(z)
 
     ν_z  = differentiate(ν, z)
@@ -72,11 +76,19 @@ function solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
     for i ∈ 1:nz-1
         push!(A, (imap[1, 1], imap[1, i],   z[i]*(z[i+1] - z[i])/2))
         push!(A, (imap[1, 1], imap[1, i+1], z[i]*(z[i+1] - z[i])/2))
-        push!(A, (imap[2, 1], imap[2, i],   z[i]*(z[i+1] - z[i])/2))
-        push!(A, (imap[2, 1], imap[2, i+1], z[i]*(z[i+1] - z[i])/2))
+        if V !== nothing
+            push!(A, (imap[2, 1], imap[2, i],   z[i]*(z[i+1] - z[i])/2))
+            push!(A, (imap[2, 1], imap[2, i+1], z[i]*(z[i+1] - z[i])/2))
+        end
     end
     r[imap[1, 1]] = -U
-    r[imap[2, 1]] = -V
+    if V !== nothing
+        r[imap[2, 1]] = -V
+    else
+        push!(A, (imap[2, 1], imap[2, 1], 1))
+        r[imap[2, 1]] = vz_bot
+    end
+
 
     # solve
     A = sparse((x -> x[1]).(A), (x -> x[2]).(A), (x -> x[3]).(A), 2nz, 2nz)
@@ -166,7 +178,8 @@ function solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx, α=1/2)
     H = -z[1]
     q_b = sqrt(f/2/ν[1])
     println("α = 0.0: q_bot = ", q_b)
-    q_b *= (1 + α^2*Hx^2)^(-3/4)
+    Γ = 1 + α^2*Hx^2
+    q_b *= Γ^(-3/4)
     println("α = 0.5: q_bot = ", q_b)
     z_b = (z .+ H)/ε
 
@@ -182,21 +195,21 @@ function solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx, α=1/2)
 
     # bottom BL O(ε)
     c1 = 0
-    c2 = -vI1
-    uB1 = bl_spiral(z_b, q_b, c1,  c2)
-    vB1 = bl_spiral(z_b, q_b, c2, -c1)
+    c2 = -vI1/√Γ
+    uB1 =    bl_spiral(z_b, q_b, c1,  c2)
+    vB1 = √Γ*bl_spiral(z_b, q_b, c2, -c1)
     wB1 = -Hx*uB1
 
     # interior O(ε²)
-    uI2 =  1/f^2*differentiate(ν.*bx, z)
-    vI2 = -uI2[1]
+    uI2 =  Γ/f^2*differentiate(ν.*bx, z)
+    vI2 = -uI2[1]*√Γ
     wI2 = -Hx*uI2
 
     # bottom BL O(ε²)
     c1 = -uI2[1]
-    c2 = -vI2
-    uB2 = bl_spiral(z_b, q_b, c1,  c2)
-    vB2 = bl_spiral(z_b, q_b, c2, -c1)
+    c2 = -vI2/√Γ
+    uB2 =    bl_spiral(z_b, q_b, c1,  c2)
+    vB2 = √Γ*bl_spiral(z_b, q_b, c2, -c1)
     wB2 = -Hx*uB2
 
     # total
@@ -209,7 +222,7 @@ end
 
 function baroclinic()
     # params
-    ε = 1e-2
+    ε = 2e-2
     f = 1
     β = 0
     H = 0.75
@@ -227,7 +240,7 @@ function baroclinic()
     bx = zeros(nz)
     by = zeros(nz)
     uU, vU = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
-    uUBL, vUBL, wUBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
+    uUBL, vUBL, wUBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy, α=0)
 
     # V transport
     τx = 0
@@ -237,23 +250,23 @@ function baroclinic()
     bx = zeros(nz)
     by = zeros(nz)
     uV, vV = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, V, τx, τy)
-    uVBL, vVBL, wVBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy)
+    uVBL, vVBL, wVBL = solve_baroclinic_problem_BL(; ε, z, ν, f, β, bx, by, U, V, τx, τy, Hx, Hy, α=0)
 
     # buoyancy
     τx = 0
     τy = 0
     U = 0
     V = 0
-    d = jldopen(@sprintf("../sims/sim048/data/1D_b_%1.1e.jld2", 3e-3), "r")
-    b = d["b"]
-    z_sim = d["z"]
+    d = jldopen("buoyancy_eps2e-02_T1e-02.jld2", "r")
+    x = d["x"]
+    i = argmin(abs.(x .- 0.5)) # index where x = 0.5
+    z_sim = d["z"][i, :]
+    bx = d["bx"][i, :]
     close(d)
-    θ = pi/4
-    bx = -differentiate(b, z_sim)*sin(θ)
     by = zeros(length(z_sim))
     ν_sim = ones(length(z_sim))
     ub, vb = solve_baroclinic_problem(; ε, z=z_sim, ν=ν_sim, f, bx, by, U, V, τx, τy)
-    ubBL, vbBL, wbBL = solve_baroclinic_problem_BL(; ε, z=z_sim, ν=ν_sim, f, β, bx, by, U, V, τx, τy, Hx, Hy)
+    ubBL, vbBL, wbBL = solve_baroclinic_problem_BL(; ε, z=z_sim, ν=ν_sim, f, β, bx, by, U, V, τx, τy, Hx, Hy, α=0)
 
     # bottom stress stats
     qb = sqrt(f/2/ν_sim[1])
@@ -280,7 +293,7 @@ function baroclinic()
     ax[2].set_xlim(-0.5, 1.5)
     ax[2].set_xticks([0, 1/H])
     ax[2].set_xticklabels(["0", L"$1/H$"])
-    ax[3].set_xlim(-0.02, 0.02)
+    ax[3].set_xlim(-0.08, 0.08)
     ax[1].set_ylabel(L"Vertical coordinate $z$")
     ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
     ax[2].set_yticks([])
@@ -364,6 +377,58 @@ function wBL()
     plt.close()
 end
 
-# baroclinic()
+function test_U0()
+    # params
+    ε = 2e-2
+    f = 1
+    β = 0
+    Hx = -1
+    Hy = 0
+    τx = 0
+    τy = 0
+    U = 0
+    vz_bot = 0
+
+    # load bx
+    d = jldopen("buoyancy_eps2e-02_T1e-02.jld2", "r")
+    x = d["x"]
+    z = d["z"]
+    bx = d["bx"]
+    close(d)
+    nz = size(z, 2)
+    i = argmin(abs.(x .- 0.5)) # index where x = 0.5
+    println("Closest point to x=0.5: x=", x[i])
+    z = z[i, :] 
+    bx = bx[i, :]
+    println(bx[end])
+    by = zeros(nz)
+    ν = ones(nz)
+    u, v = solve_baroclinic_problem(; ε, z, ν, f, bx, by, U, τx, τy, vz_bot)
+    uBL, vBL, wBL = solve_baroclinic_problem_BL_U0(; ε, z, ν, f, bx, Hx, α=0)
+    fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
+    ax[1].spines["left"].set_visible(false)
+    ax[2].spines["left"].set_visible(false)
+    ax[1].axvline(0, lw=0.5, c="k")
+    ax[2].axvline(0, lw=0.5, c="k")
+    ax[1].set_ylabel(L"Vertical coordinate $z$")
+    ax[1].set_xlabel(L"$u$")
+    ax[2].set_xlabel(L"$v$")
+    ax[1].set_yticks([-0.75, -0.5, -0.25, 0])
+    ax[2].set_yticks([])
+    # ax[1].set_ylim(-0.75, -.7)
+    # ax[2].set_ylim(-0.75, -.7)
+    ax[1].plot(u, z)
+    ax[1].plot(uBL, z, "k--", lw=0.5)
+    ax[2].plot(v, z)
+    ax[2].plot(vBL, z, "k--", lw=0.5)
+    savefig("test_U0.png")
+    println("test_U0.png")
+    plt.close()
+end
+
+
+baroclinic()
 # wBL()
-# println("Done.")
+# test_U0()
+
+println("Done.")
