@@ -289,26 +289,27 @@ function solve(params)
     return u, v, u*tan(params.θ), b, t, z
 end
 
-# function loop_aspect_ratios()
-#     # parameters
-#     μϱ = 1e-4
-#     θ = π/4
-#     ε = 1e-2
-#     Δt = 1e-4*μϱ/ε^2
-#     set_V = false
-#     H = 0.75
-#     f = 1
-#     nz = 2^8
-#     horiz_diff = false
-#     T = 3e-3*μϱ/ε^2
+function loop_aspect_ratios()
+    # parameters
+    μϱ = 1e-4
+    θ = π/4
+    ε = 2e-2
+    Δt = 1e-4*μϱ/ε^2
+    no_Px = false
+    ϕ = 0
+    H = 0.75
+    f = 1
+    nz = 2^8
+    horiz_diff = false
+    T = 4e-2*μϱ/ε^2
 
-#     αs = [0, 1/4, 1/2, 1]
-#     for i ∈ eachindex(αs)
-#         params = (μϱ=μϱ, α=αs[i], θ=θ, ε=ε, Δt=Δt, set_V=set_V, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
-#         u, v, w, b, t, z = solve(params)
-#         save(u, v, w, b, params, t, z; filename=@sprintf("./data/1D_%0.2f.jld2", αs[i]))
-#     end
-# end
+    αs = [0, 1/2]
+    for i ∈ eachindex(αs)
+        params = (μϱ=μϱ, α=αs[i], θ=θ, ε=ε, Δt=Δt, no_Px=no_Px, ϕ=ϕ, H=H, f=f, nz=nz, T=T, horiz_diff=horiz_diff)
+        u, v, w, b, t, z = solve(params)
+        save(u, v, w, b, params, t, z; filename=@sprintf("./data/1D_%0.2f.jld2", αs[i]))
+    end
+end
 
 function main()
     # parameters
@@ -341,5 +342,5 @@ function main()
     println(trapz(u*cos(ϕ) + v*sin(ϕ), z))
 end
 
-# main()
 # loop_aspect_ratios()
+# main()
