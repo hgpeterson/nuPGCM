@@ -1,50 +1,34 @@
-struct Mesh{P, T, PT}
-    p::P
-    t::T
-    p_to_t::PT
+struct Mesh{M, O, DO}
+    model::M         # unstructured discrete model
+    spaces::Spaces   # trial and test spaces for velocity, pressure, and buoyancy
+    dofs::DoFHandler # degree of freedom handler
+    Ω::O             # triangulation
+    dΩ::DO           # measure
+    dim::Int         # dimension of the problem
 end
 
 """
-    m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
-    m = Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
-    m = Mesh(fname::AbstractString)
-    m = Mesh(p, t)
-    m = Mesh(p, t, p_to_t)
+    m = Mesh(ifile)
 
-A simple custom struct to hold a mesh. `p` defines the node coordinates, 
-`t` defines the connectivities, and `p_to_t` maps nodes to cells.
+Returns a struct holding mesh-related data.
 """
-function Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel)
-    p, t = get_p_t(model)
-    return Mesh(p, t)
+function Mesh(ifile)
+    model = GmshDiscreteModel(ifile)
+    spaces = Spaces(model)
+    Ω = Triangulation(model)
+    dΩ = Measure(Ω, 4)
+    dofs = DoFHandler(spaces, dΩ)
+    if model.grid_topology.polytopes[1] == TRI
+        dim = 2
+    elseif model.grid_topology.polytopes[1] == TET
+        dim = 3
+    else
+        throw(ArgumentError("Could not determine dimension of mesh."))
+    end
+    return Mesh(model, spaces, dofs, Ω, dΩ, dim)
 end
-function Mesh(p, t)
-    p_to_t = get_p_to_t(t, size(p, 1))
-    return Mesh(p, t, p_to_t)
-end
-function Mesh(fname::AbstractString)
-    model = GmshDiscreteModel(fname)
-    return Mesh(model)
-end
-function Mesh(model::Gridap.Geometry.UnstructuredDiscreteModel, bdy_name)
-    # determine entity tags on boundary called `bdy_name`
-    tag = findfirst(model.face_labeling.tag_to_name .== bdy_name)
-    entities = model.face_labeling.tag_to_entities[tag]
 
-    # get indices of boundary triangles
-    tri_tags = model.face_labeling.d_to_dface_to_entity[3]
-    k_bdy = findall(k -> tri_tags[k] ∈ entities, 1:size(tri_tags, 1))
-
-    # `t` data structure for boundary (note: these are still the global indices)
-    tris = model.grid_topology.n_m_to_nface_to_mfaces[3, 1] # all triangles in the mesh
-    t = [tris[k][i] for k ∈ k_bdy, i ∈ 1:3]
-
-    # make `p` data structure for boundary (note: this is still _all_ of the nodes in the mesh)
-    nc = model.grid.node_coordinates
-    p = [nc[i][j] for i ∈ axes(nc, 1), j ∈ 1:length(nc[1])]
-
-    return Mesh(p, t)
-end
+### some utility functions for working with meshes
 
 """
     p, t = get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
@@ -68,7 +52,6 @@ function get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
     return p, t
 end
 function get_p_t(fname::AbstractString)
-    # load model
     model = GmshDiscreteModel(fname)
     return get_p_t(model)
 end

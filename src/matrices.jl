@@ -4,189 +4,231 @@
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 """
-    LHS, perm, inv_perm = assemble_LHS_inversion(arch::AbstractArchitecture, 
-                                                 γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
+    A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
+        build_matrices(mesh, params, f, ν, κ; 
+                       A_inversion_ofile=nothing,
+                       A_adv_ofile=nothing, A_diff_ofile=nothing)
 
-Assemble the LHS of the inversion problem for Non-Hydrostatic PG equations and 
-return the matrix `LHS` along with the permutation `perm` and its inverse 
-`inv_perm`. The matrix is saved to a file `fname`.
+Build the matrices for the inversion and evolution problems of the PG equations.
+The matrices are assembled using the finite element method and can be saved to files
+if `ofile`s are provided. The matrices are:
+- `A_inversion`: LHS matrix for the inversion problem
+- `B_inversion`: RHS matrix for the inversion problem
+- `A_adv`: LHS matrix for the advection part of the evolution problem
+- `A_diff`: LHS matrix for the diffusion part of the evolution problem
+- `B_diff`: RHS matrix for the diffusion part of the evolution problem
+- `b_diff`: RHS vector for the diffusion part of the evolution problem
+The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosity, and turbulent 
+diffusivity, respectively. 
 """
-function assemble_LHS_inversion(arch::AbstractArchitecture,
-                                γ, ε², ν, f, X, Y, dΩ; fname="LHS_inversion.h5")
-    # bilinear form
-    a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫( γ*ε²*∂x(ux)*∂x(vx)*ν +   γ*ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-           γ*ε²*∂x(uy)*∂x(vy)*ν +   γ*ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-         γ^2*ε²*∂x(uz)*∂x(vz)*ν + γ^2*ε²*∂y(uz)*∂y(vz)*ν + γ*ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                                                      ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-
-    # assemble 
-    @time "assemble LHS_inversion" LHS = assemble_matrix(a, X, Y)
-
-    # Cuthill-McKee DOF reordering
-    @time "RCM perm" perm, inv_perm = RCM_perm(arch, X, Y, dΩ)
-
-    # re-order DOFs
-    LHS = LHS[perm, perm]
-
-    # save
-    write_sparse_matrix(LHS, perm, inv_perm; fname)
-
-    return LHS, perm, inv_perm
+function build_matrices(mesh::Mesh, params::Parameters, f, ν, κ; 
+                        A_inversion_ofile=nothing,
+                        A_adv_ofile=nothing, A_diff_ofile=nothing)
+    A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; 
+                                   A_inversion_ofile=A_inversion_ofile)
+    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ;
+                                      A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
+    return A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff
 end
 
 """
-    RHS = assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFESpace, dΩ::Measure)
+    A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; 
+                                   A_inversion_ofile=nothing)
 
-Assemble the RHS matrix for the inversion problem of the Non-Hydrostatic PG equations.
+Build the matrices for the inversion problem of the PG equations.
+The matrices are assembled using the finite element method and can be saved to files
+if `A_inversion_ofile` is provided. The matrices are:
+- `A_inversion`: LHS matrix for the inversion problem
+- `B_inversion`: RHS matrix for the inversion problem
+The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
 """
-function assemble_RHS_inversion(perm_inversion, B::TrialFESpace, Y::MultiFieldFESpace, dΩ::Measure)
+function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν; 
+                                  A_inversion_ofile=nothing)
+    A_inversion = build_A_inversion(mesh, params, f, ν; ofile=A_inversion_ofile)
+    B_inversion = build_B_inversion(mesh)
+    return A_inversion, B_inversion
+end
+
+"""
+    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
+                                   A_adv_ofile=nothing, A_diff_ofile=nothing)
+Build the matrices for the evolution problem of the PG equations.
+The matrices are assembled using the finite element method and can be saved to files
+if `A_adv_ofile` and `A_diff_ofile` are provided. The matrices are:
+- `A_adv`: LHS matrix for the advection part of the evolution problem
+- `A_diff`: LHS matrix for the diffusion part of the evolution problem
+- `B_diff`: RHS matrix for the diffusion part of the evolution problem
+- `b_diff`: RHS vector for the diffusion part of the evolution problem
+The function `κ` is the turbulent diffusivity.
+"""
+function build_evolution_matrices(mesh::Mesh, params::Parameters, κ; 
+                                   A_adv_ofile=nothing, A_diff_ofile=nothing)
+    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ; 
+                        ofile_adv=A_adv_ofile, ofile_diff=A_diff_ofile)
+    B_diff, b_diff = build_B_diff_b_diff(mesh, params, κ)
+    return A_adv, A_diff, B_diff, b_diff
+end
+
+"""
+    A = build_A_inversion(mesh, params, f, ν; ofile)
+
+Assemble the LHS matrix `A` for the inversion problem. 
+If `ofile` is given, the data is saved to a file.
+"""
+function build_A_inversion(mesh::Mesh, params::Parameters, f, ν; ofile=nothing)
+    # unpack
+    X_trial = mesh.spaces.X_trial
+    X_test = mesh.spaces.X_test
+    dΩ = mesh.dΩ
+    ε = params.ε
+    α = params.α
+
+    # coefficient
+    ε² = ε^2
+    α²ε² = α^2*ε^2
+    α⁴ε² = α^4*ε^2
+
+    # bilinear form
+    a((ux, uy, uz, p), (vx, vy, vz, q)) =
+        ∫( α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+           α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+           α⁴ε²*∂x(uz)*∂x(vz)*ν + α⁴ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    # a((ux, uy, uz, p), (vx, vy, vz, q)) =
+    #     ∫(α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν + α²ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+    #       α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν + α²ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+    #       α²ε²*∂x(uz)*∂x(vz)*ν + α²ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+    #                                                                 ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+
+    # assemble 
+    @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
+
+    # save
+    if ofile !== nothing
+        jldsave(ofile; A_inversion=A, params=params, f=f, ν=ν)
+        @info @sprintf("A_inversion saved to '%s' (%.3f GB)", ofile, filesize(ofile)/1e9)
+    end
+
+    return A
+end
+
+"""
+    B = build_B_inversion(mesh)
+
+Assemble the RHS matrix for the inversion problem.
+"""
+function build_B_inversion(mesh::Mesh)
+    # unpack
+    W_test = mesh.spaces.X_test[3]
+    B_trial = mesh.spaces.B_trial
+    dΩ = mesh.dΩ
+
     # bilinear form
     a(b, vz) = ∫( b*vz )dΩ
 
-    # unpack Y
-    Vx, Vy, Vz, Q = unpack_spaces(Y)
-    nx = Vx.nfree
-    ny = Vy.nfree
-    nz = Vz.nfree
-    np = Q.space.space.nfree
+    # assemble
+    @time "build B_inversion" B = assemble_matrix(a, B_trial, W_test)
 
-    # permutation for Uz
-    perm_uz = perm_inversion[nx+ny+1:nx+ny+nz] .- nx .- ny
+    # convert to N × nb matrix
+    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
+    N = nu + nv + nw + np
+    I, J, V = findnz(B)
+    I .+= nu + nv
+    B = sparse(I, J, V, N, nb)
+
+    return B
+end
+function build_B_inversion(mesh::Mesh, params::Parameters)
+    # unpack
+    W_test = mesh.spaces.X_test[3]
+    B_trial = mesh.spaces.B_trial
+    dΩ = mesh.dΩ
+    α = params.α
+
+    # coefficient
+    α⁻¹ = 1/α
+
+    # bilinear form
+    a(b, vz) = ∫( α⁻¹*b*vz )dΩ
 
     # assemble
-    @time "RHS_inversion" RHS = assemble_matrix(a, B, Vz)[perm_uz, :]
+    @time "build B_inversion" B = assemble_matrix(a, B_trial, W_test)
 
-    # convert RHS to N x nb matrix
-    I, J, V = findnz(RHS)
-    I .+= nx + ny
-    RHS = sparse(I, J, V, nx+ny+nz+np-1, size(RHS, 2))
+    # convert to N × nb matrix
+    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
+    N = nu + nv + nw + np
+    I, J, V = findnz(B)
+    I .+= nu + nv
+    B = sparse(I, J, V, N, nb)
 
-    return RHS
+    return B
 end
 
 """
-    LHS_adv, LHS_diff, perm, inv_perm = assemble_LHS_adv_diff(arch::AbstractArchitecture, 
-                    α, γ, κ, B, D, dΩ; fname_adv="LHS_adv.h5", fname_diff="LHS_diff.h5")
+    A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ; ofile_adv, ofile_diff)
 
-Assemble the LHSs for the advection and diffusion components of the evolution
-problem for the PG equations. Return the sparse matrices `LHS_adv` and
-`LHS_diff` along with the permutation `perm` and its inverse `inv_perm`. Save
-the matrices to separate files `fname_adv` and `fname_diff`.
+Assemble the LHS matrices for the advection and diffusion components of the evolution
+problem for the PG equations. If `ofile`s are given, the data is saved to files.
 """
-function assemble_LHS_adv_diff(arch::AbstractArchitecture, α, γ, κ, B, D, dΩ; fname_adv="LHS_adv.h5", fname_diff="LHS_diff.h5")
+function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ; ofile_adv=nothing, ofile_diff=nothing)
+    # unpack
+    B_trial = mesh.spaces.B_trial
+    B_test = mesh.spaces.B_test
+    dΩ = mesh.dΩ
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+
     # advection matrix
     a_adv(b, d) = ∫( b*d )dΩ
-    @time "assemble LHS_adv" LHS_adv = assemble_matrix(a_adv, B, D)
+    @time "build A_adv" A_adv = assemble_matrix(a_adv, B_trial, B_test)
 
     # diffusion matrix
-    a_diff(b, d) = ∫( b*d + α*γ*∂x(b)*∂x(d)*κ + α*γ*∂y(b)*∂y(d)*κ + α*∂z(b)*∂z(d)*κ )dΩ
-    @time "assemble LHS_diff" LHS_diff = assemble_matrix(a_diff, B, D)
+    θ = Δt/2 * ε^2 / μϱ
+    θα² = θ*α^2
+    a_diff(b, d) = ∫( b*d + θα²*∂x(b)*∂x(d)*κ + θα²*∂y(b)*∂y(d)*κ + θ*∂z(b)*∂z(d)*κ )dΩ
+    @time "build A_diff" A_diff = assemble_matrix(a_diff, B_trial, B_test)
 
-    # Cuthill-McKee DOF reordering
-    @time "RCM perm" perm, inv_perm = RCM_perm(arch, B, D, dΩ)
+    if ofile_adv !== nothing
+        jldsave(ofile_adv; A_adv=A_adv, params=params, κ=κ, Δt=Δt)
+        @info @sprintf("A_adv saved to '%s' (%.3f GB)", ofile_adv, filesize(ofile_adv)/1e9)
+    end
+    if ofile_diff !== nothing
+        jldsave(ofile_diff; A_diff=A_diff, params=params, κ=κ, Δt=Δt)
+        @info @sprintf("A_diff saved to '%s' (%.3f GB)", ofile_diff, filesize(ofile_diff)/1e9)
+    end
 
-    # re-order DOFs
-    LHS_adv = LHS_adv[perm, perm]
-    LHS_diff = LHS_diff[perm, perm]
-
-    # save
-    write_sparse_matrix(LHS_adv,  perm, inv_perm; fname=fname_adv)
-    write_sparse_matrix(LHS_diff, perm, inv_perm; fname=fname_diff)
-
-    return LHS_adv, LHS_diff, perm, inv_perm
+    return A_adv, A_diff
 end
 
 """
-    M, v = assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ)
+    B, b = build_B_diff_b_diff(mesh, params, κ)
 
 Assemble the RHS matrix and vector for the diffusion part of the evolution
 problem for the PG equations.
 """
-function assemble_RHS_diff(perm, α, γ, κ, N², B, D, dΩ)
+function build_B_diff_b_diff(mesh::Mesh, params::Parameters, κ)
+    # unpack
+    B_trial = mesh.spaces.B_trial
+    B_test = mesh.spaces.B_test
+    dΩ = mesh.dΩ
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+    N² = params.N²
+
     # matrix
-    a(b, d) = ∫( b*d - α*γ*∂x(b)*∂x(d)*κ - α*γ*∂y(b)*∂y(d)*κ - α*∂z(b)*∂z(d)*κ )dΩ
-    @time "RHS_diff matrix" M = assemble_matrix(a, B, D)[perm, :]
+    θ = Δt/2 * ε^2 / μϱ
+    θα² = θ*α^2
+    a(b, d) = ∫( b*d - θα²*∂x(b)*∂x(d)*κ - θα²*∂y(b)*∂y(d)*κ - θ*∂z(b)*∂z(d)*κ )dΩ
+    @time "build B_diff" B = assemble_matrix(a, B_trial, B_test)
 
     # vector
-    l(d) = ∫( -2*α*∂z(d)*N²*κ )dΩ
-    @time "RHS_diff vector" v = assemble_vector(l, D)[perm]
+    θN² = θ*N²
+    l(d) = ∫( -2θN²*∂z(d)*κ )dΩ
+    @time "build b_diff" b = assemble_vector(l, B_test)
 
-    return M, v
-end
-
-"""
-    perm, inv_perm = RCM_perm(arch::AbstractArchitecture, X::MultiFieldFESpace, 
-                              Y::MultiFieldFESpace, dΩ::Measure)
-
-Return the reverse Cuthill-McKee permutation and its inverse for a multi-field FE 
-space.
-"""
-function RCM_perm(arch::AbstractArchitecture, X::MultiFieldFESpace, Y::MultiFieldFESpace, dΩ::Measure)
-    # unpack spaces
-    Ux, Uy, Uz, P = unpack_spaces(X)
-    Vx, Vy, Vz, Q = unpack_spaces(Y)
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
-
-    # assemble mass matrices
-    a(u, v) = ∫( u*v )dΩ
-    M_ux = assemble_matrix(a, Ux, Vx)
-    M_uy = assemble_matrix(a, Uy, Vy)
-    M_uz = assemble_matrix(a, Uz, Vz)
-    M_p  = assemble_matrix(a, P, Q)
-
-    # compute permutations
-    perm_ux = RCM_perm(arch, M_ux)
-    perm_uy = RCM_perm(arch, M_uy)
-    perm_uz = RCM_perm(arch, M_uz)
-    perm_p  = RCM_perm(arch, M_p)
-
-    # combine
-    perm = [perm_ux; 
-            perm_uy .+ nx; 
-            perm_uz .+ nx .+ ny; 
-            perm_p  .+ nx .+ ny .+ nz]
-
-    # inverse permutation
-    inv_perm = invperm(perm)
-
-    return perm, inv_perm
-end
-
-"""
-    perm, inv_perm = RCM_perm(arch::AbstractArchitecture, B::Gridap.FESpaces.SingleFieldFESpace, 
-                              D::Gridap.FESpaces.SingleFieldFESpace, dΩ::Measure)
-
-Return the reverse Cuthill-McKee permutation and its inverse for a single-field FE 
-space.
-"""
-function RCM_perm(arch::AbstractArchitecture, B::Gridap.FESpaces.SingleFieldFESpace, 
-                  D::Gridap.FESpaces.SingleFieldFESpace, dΩ::Measure)
-    # assemble mass matrix
-    a(b, d) = ∫( b*d )dΩ
-    M_b = assemble_matrix(a, B, D)
-
-    # compute permutation
-    perm = RCM_perm(arch, M_b)
-
-    # inverse permutation
-    inv_perm = invperm(perm)
-
-    return perm, inv_perm
-end
-
-"""
-    perm = RCM_perm(arch::AbstractArchitecture, M)
-
-Return the reverse Cuthill-McKee permutation of the matrix `M`. If `arch` is 
-`GPU`, the permutation is computed using the CUSOLVER library, otherwise it 
-is computed using the CuthillMcKee library.
-"""
-function RCM_perm(arch::GPU, M)
-    return CUSOLVER.symrcm(M) .+ 1
-end
-function RCM_perm(arch::CPU, M)
-    return CuthillMcKee.symrcm(M, true, false)
+    return B, b
 end
