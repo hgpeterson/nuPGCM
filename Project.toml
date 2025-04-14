@@ -1,7 +1,7 @@
 name = "nuPGCM"
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 authors = ["hgpeterson <hgpeterson@caltech.edu>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 AlgebraicMultigrid = "2169fc97-5a83-5252-b627-83903c6c433c"
