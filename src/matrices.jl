@@ -45,7 +45,7 @@ The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, r
 function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν; 
                                   A_inversion_ofile=nothing)
     A_inversion = build_A_inversion(mesh, params, f, ν; ofile=A_inversion_ofile)
-    B_inversion = build_B_inversion(mesh)
+    B_inversion = build_B_inversion(mesh, params)
     return A_inversion, B_inversion
 end
 
@@ -84,21 +84,14 @@ function build_A_inversion(mesh::Mesh, params::Parameters, f, ν; ofile=nothing)
     α = params.α
 
     # coefficient
-    ε² = ε^2
     α²ε² = α^2*ε^2
-    α⁴ε² = α^4*ε^2
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫( α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν +   ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-           α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν +   ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-           α⁴ε²*∂x(uz)*∂x(vz)*ν + α⁴ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                                                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-    # a((ux, uy, uz, p), (vx, vy, vz, q)) =
-    #     ∫(α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν + α²ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-    #       α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν + α²ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-    #       α²ε²*∂x(uz)*∂x(vz)*ν + α²ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-    #                                                                 ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        ∫(α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν + α²ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
+          α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν + α²ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
+          α²ε²*∂x(uz)*∂x(vz)*ν + α²ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
+                                                                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
@@ -117,27 +110,6 @@ end
 
 Assemble the RHS matrix for the inversion problem.
 """
-function build_B_inversion(mesh::Mesh)
-    # unpack
-    W_test = mesh.spaces.X_test[3]
-    B_trial = mesh.spaces.B_trial
-    dΩ = mesh.dΩ
-
-    # bilinear form
-    a(b, vz) = ∫( b*vz )dΩ
-
-    # assemble
-    @time "build B_inversion" B = assemble_matrix(a, B_trial, W_test)
-
-    # convert to N × nb matrix
-    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
-    N = nu + nv + nw + np
-    I, J, V = findnz(B)
-    I .+= nu + nv
-    B = sparse(I, J, V, N, nb)
-
-    return B
-end
 function build_B_inversion(mesh::Mesh, params::Parameters)
     # unpack
     W_test = mesh.spaces.X_test[3]
@@ -185,9 +157,8 @@ function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ; ofile_adv=nothin
     @time "build A_adv" A_adv = assemble_matrix(a_adv, B_trial, B_test)
 
     # diffusion matrix
-    θ = Δt/2 * ε^2 / μϱ
-    θα² = θ*α^2
-    a_diff(b, d) = ∫( b*d + θα²*∂x(b)*∂x(d)*κ + θα²*∂y(b)*∂y(d)*κ + θ*∂z(b)*∂z(d)*κ )dΩ
+    θ = Δt/2 * α^2 * ε^2 / μϱ
+    a_diff(b, d) = ∫( b*d + θ*∂x(b)*∂x(d)*κ + θ*∂y(b)*∂y(d)*κ + θ*∂z(b)*∂z(d)*κ )dΩ
     @time "build A_diff" A_diff = assemble_matrix(a_diff, B_trial, B_test)
 
     if ofile_adv !== nothing
@@ -220,9 +191,8 @@ function build_B_diff_b_diff(mesh::Mesh, params::Parameters, κ)
     N² = params.N²
 
     # matrix
-    θ = Δt/2 * ε^2 / μϱ
-    θα² = θ*α^2
-    a(b, d) = ∫( b*d - θα²*∂x(b)*∂x(d)*κ - θα²*∂y(b)*∂y(d)*κ - θ*∂z(b)*∂z(d)*κ )dΩ
+    θ = Δt/2 * α^2 * ε^2 / μϱ
+    a(b, d) = ∫( b*d - θ*∂x(b)*∂x(d)*κ - θ*∂y(b)*∂y(d)*κ - θ*∂z(b)*∂z(d)*κ )dΩ
     @time "build B_diff" B = assemble_matrix(a, B_trial, B_test)
 
     # vector
