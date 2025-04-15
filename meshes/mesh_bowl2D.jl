@@ -9,16 +9,16 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-function generate_bowl_mesh(h)
+function generate_bowl_mesh(h, α)
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1)
     gmsh.model.add("bowl2D")
 
-    # H = 1 - x^2
+    # H = α*(1 - x^2)
     gmsh.model.geo.addPoint(-1, 0, 0, h)
-    gmsh.model.geo.addPoint(0, 0, -2, h) # control point
+    gmsh.model.geo.addPoint(0, 0, -2α, h) # control point
     gmsh.model.geo.addPoint(1, 0, 0, h)
-    gmsh.model.geo.addBezier([1, 2, 3], 1) # bezier curve through (-1, 0, 0), (0, 0, -2), (1, 0, 0) is a parabola with z = x^2 - 1
+    gmsh.model.geo.addBezier([1, 2, 3], 1) # bezier curve through (-1, 0, 0), (0, 0, -2α), (1, 0, 0) is a parabola with z = α*(x^2 - 1)
     gmsh.model.geo.addLine(3, 1, 2)
     gmsh.model.geo.addCurveLoop(1:2, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
@@ -51,7 +51,7 @@ function generate_bowl_mesh(h)
     # generate and save
     gmsh.model.mesh.generate(2)
     # gmsh.model.mesh.optimize("Netgen")
-    gmsh.write(@sprintf("bowl2D_%0.2f.msh", h))
+    gmsh.write(@sprintf("bowl2D_%e_%e.msh", h, α))
     gmsh.finalize()
 end
 
@@ -66,7 +66,14 @@ function mesh_plot(p, t)
     plt.close()
 end
 
-h = 0.1
-generate_bowl_mesh(h)
-p, t = get_p_t(@sprintf("bowl2D_%0.2f.msh", h))
-mesh_plot(p, t)
+# params
+h = 0.007
+α = 1/2
+@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+
+# generate
+generate_bowl_mesh(h, α)
+
+# # plot
+# p, t = get_p_t(@sprintf("bowl2D_%e_%e.msh", h, α))
+# mesh_plot(p, t)

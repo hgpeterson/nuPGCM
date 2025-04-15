@@ -8,13 +8,13 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(".")
 
 # architecture and dimension
-arch = GPU()
+arch = CPU()
 dim = 2
 
 # params/funcs
@@ -27,25 +27,27 @@ params = Parameters(ε, α, μϱ, N², Δt)
 f₀ = 1
 β = 0.0
 f(x) = f₀ + β*x[2]
-H(x) = 1 - x[1]^2 - x[2]^2
+H(x) = α*(1 - x[1]^2 - x[2]^2)
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
 T = 5e-2*μϱ/ε^2
+force_build_inversion_matrices = true
+force_build_evolution_matrices = true
 
 # mesh
-h = 0.01
-mesh = Mesh(@sprintf("../meshes/bowl%sD_%0.2f.msh", dim, h))
+h = 7e-3
+mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
 
 # build inversion matrices
-A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
-if !isfile(A_inversion_fname)
+A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+if !isfile(A_inversion_fname) || force_build_inversion_matrices
     @warn "A_inversion file not found, generating..."
     A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
 else
     file = jldopen(A_inversion_fname, "r")
     A_inversion = file["A_inversion"]
     close(file)
-    B_inversion = nuPGCM.build_B_inversion(mesh)
+    B_inversion = nuPGCM.build_B_inversion(mesh, params)
 end
 
 # re-order dofs
@@ -69,8 +71,8 @@ inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 # build evolution matrices and test against saved matrices
 θ = Δt/2 * ε^2 / μϱ
 A_diff_fname = @sprintf("../matrices/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α)
-A_adv_fname = @sprintf("../matrices/A_adv_%sD_%e.jld2", dim, h)
-if !isfile(A_diff_fname) || !isfile(A_adv_fname)
+A_adv_fname = @sprintf("../matrices/A_adv_%sD_%e_%e.jld2", dim, h, α)
+if !isfile(A_diff_fname) || !isfile(A_adv_fname) || force_build_evolution_matrices
     @warn "A_diff or A_adv file not found, generating..."
     A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
                                         A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
@@ -117,6 +119,6 @@ model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolki
 # @time "invert!" invert!(model)
 
 # solve
-run!(model, T)
+run!(model, T; t_plot=T÷5)
 
 println("Done.")
