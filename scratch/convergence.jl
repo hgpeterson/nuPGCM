@@ -11,12 +11,12 @@ plt.close("all")
 
 set_out_dir!(".")
 
-function compute_error(; dim, h, α, showplots=false)
+function solve_problem(; dim, h, α)
     # architecture and dimension
     arch = CPU()
 
     # params/funcs
-    ε = 1e-1
+    ε = 2e-2
     params = Parameters(ε, α, 0., 0., 0.)
     f₀ = 1
     β = 0.0
@@ -26,13 +26,14 @@ function compute_error(; dim, h, α, showplots=false)
     force_build_inversion_matrices = true
 
     # mesh
-    # mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
-    mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e_squash%d.msh", dim, h, 1, 1/α))
+    mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+    # mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e_squash%d.msh", dim, h, 1, 1/α))
     n_dofs = length(mesh.dofs.p_inversion)
-    @info "N = $n_dofs"
+    @info @sprintf("h = %e, n_dofs = %e\n", h, n_dofs)
 
     # build inversion matrices
     A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+    # A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e_squash%d.jld2", dim, h, ε, α, f₀, β, 1/α)
     if force_build_inversion_matrices
         @warn "force_build_inversion_matrices is true, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
@@ -67,13 +68,19 @@ function compute_error(; dim, h, α, showplots=false)
     # make an inverison model
     model = inversion_model(arch, params, mesh, inversion_toolkit)
 
-    # b = α⁻¹z (= N²z^* in dimensional coordinates)
-    set_b!(model, x -> x[3]/α)
+    # # b = α⁻¹z (= N²z^* in dimensional coordinates)
+    # set_b!(model, x -> x[3]/α)
+    # b = exp
+    set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
 
     # invert
     invert!(model)
 
-    # compute error
+    return model
+end
+
+function compute_error(model)
+    α = model.params.α
     u = model.state.u
     v = model.state.v
     w = model.state.w
@@ -93,32 +100,52 @@ function compute_error(; dim, h, α, showplots=false)
     p = FEFunction(P, p.free_values.args[1]) # recompute p as a FEFunction to make sure it is zero-mean
     p0 = interpolate_everywhere(x->x[3]^2/2/α^2, P) # since P is a zero-mean space, Gridap will automatically subtract the mean
     ep_L2 = sqrt(sum( ∫( (p - p0)*(p - p0) )*dΩ ))
-    @printf("              h = %e\n", h)
-    @printf("         n_dofs = %e\n", n_dofs)
     @printf("         |u|_L∞ = %e\n", eu_L∞)
     @printf("         |u|_L2 = %e\n", eu_L2)
     @printf("         |u|_H1 = %e\n", eu_H1)
     @printf("         |p|_L2 = %e\n", ep_L2)
     @printf("|u|_H1 + |p|_L2 = %e\n", eu_H1 + ep_L2)
 
-    if showplots
-        b = model.state.b
-        plot_slice(u, b, 0; y=0, cb_label=L"u", fname=@sprintf("%s/images/u_%1.2e_%1.2e.png", out_dir, h, α))
-        plot_slice(v, b, 0; y=0, cb_label=L"v", fname=@sprintf("%s/images/v_%1.2e_%1.2e.png", out_dir, h, α))
-        plot_slice(w, b, 0; y=0, cb_label=L"w", fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
-        plot_slice(u*u + v*v + w*w, b, 0; y=0, cb_label=L"$|\mathbf{u}|^2$", 
-                   fname=@sprintf("%s/images/u_L2_err_%1.2e_%1.2e.png", out_dir, h, α))
-        plot_slice(u*u + v*v + w*w + 
-                   ∂x(u)*∂x(u) + ∂y(u)*∂y(u) + ∂z(u)*∂z(u) +     
-                   ∂x(v)*∂x(v) + ∂y(v)*∂y(v) + ∂z(v)*∂z(v) +     
-                   ∂x(w)*∂x(w) + ∂y(w)*∂y(w) + ∂z(w)*∂z(w),
-                   b, 0; y=0, cb_label=L"$|\mathbf{u}|^2 + |\nabla\mathbf{u}|^2$", 
-                   fname=@sprintf("%s/images/u_H1_err_%1.2e_%1.2e.png", out_dir, h, α))
-        plot_slice((p - p0)*(p - p0), b, 0; y=0, cb_label=L"$|p - p_a|^2$", 
-                   fname=@sprintf("%s/images/p_err_%1.2e_%1.2e.png", out_dir, h, α))
-    end
+    return eu_L∞, eu_L2, eu_H1, ep_L2
+end
 
-    return n_dofs, eu_L∞, eu_L2, eu_H1, ep_L2
+function save_plots(model; h)
+    α = model.params.α
+    u = model.state.u
+    v = model.state.v
+    w = model.state.w
+    P = model.mesh.spaces.X_trial[4]
+    p = FEFunction(P, model.state.p.free_values.args[1])
+    p0 = interpolate_everywhere(x->x[3]^2/2/α^2, P) 
+    b = model.state.b
+    plot_slice(u, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u", fname=@sprintf("%s/images/u_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(v, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v", fname=@sprintf("%s/images/v_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(w, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w", fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(u*u + v*v + w*w, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u}|^2$", 
+                fname=@sprintf("%s/images/u_L2_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(u*u + v*v + w*w + 
+                ∂x(u)*∂x(u) + ∂y(u)*∂y(u) + ∂z(u)*∂z(u) +     
+                ∂x(v)*∂x(v) + ∂y(v)*∂y(v) + ∂z(v)*∂z(v) +     
+                ∂x(w)*∂x(w) + ∂y(w)*∂y(w) + ∂z(w)*∂z(w),
+                b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u}|^2 + |\nabla\mathbf{u}|^2$", 
+                fname=@sprintf("%s/images/u_H1_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice((p - p0)*(p - p0), b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|p - p_a|^2$", 
+                fname=@sprintf("%s/images/p_err_%1.2e_%1.2e.png", out_dir, h, α))
+end
+
+function plot_w(model; h)
+    α = model.params.α
+    w = model.state.w
+    b = model.state.b
+    plot_slice(w, b, 1/α; y=0, bbox=[-1, -α, 1, 0], fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
+end
+function plot_profiles(model; h)
+    α = model.params.α
+    u = model.state.u
+    v = model.state.v
+    w = model.state.w
+    b = model.state.b
+    plot_profiles(u, v, w, b, 1/α, x->α*(1 - x[1]^2); x=0.5, y=0, fname=@sprintf("%s/images/profiles_%1.2e_%1.2e.png", out_dir, h, α))
 end
 
 function compute_errors(; dim, hs, α)
@@ -128,7 +155,8 @@ function compute_errors(; dim, hs, α)
     eu_H1 = zeros(length(hs))
     ep_L2 = zeros(length(hs))
     for i in eachindex(hs)
-        n_dofs[i], eu_L∞[i], eu_L2[i], eu_H1[i], ep_L2[i] = compute_error(; dim, α, h=hs[i])
+        model = solve_problem(dim=dim, h=hs[i], α=α)
+        n_dofs[i], eu_L∞[i], eu_L2[i], eu_H1[i], ep_L2[i] = compute_error(model)
     end
     println()
     @printf("              h = [%1.5e, %1.5e, %1.5e]\n", hs...)
@@ -236,12 +264,21 @@ function plot_convergence_3D()
     plt.close()
 end
 
-n_dofs, eu_L2, eu_H1, ep_L2 = compute_error(dim=2, h=1e-2, α=1/2, showplots=true)
+# dim = 2
+# h = 2e-2
+# α = 1/2
+# model = solve_problem(; dim, h, α)
+# n_dofs, eu_L2, eu_H1, ep_L2 = compute_error(model)
+# save_plots(model; h)
+# plot_profiles(model; h)
+# plot_w(model; h)
+
 # n_dofs, eu_L∞, eu_L2, eu_H1, ep_L2 = compute_errors(2, [5e-3, 1e-2, 2e-2])
 
-# plot_convergence_2D()
+plot_convergence_2D()
 # plot_convergence_3D()
 
+println("Done.")
 
 ### results for ε = 1e-1 
 
