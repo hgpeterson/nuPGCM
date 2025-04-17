@@ -1,6 +1,7 @@
 using Gmsh: gmsh
+using Printf
 
-function generate_bowl_mesh(h)
+function generate_bowl_mesh(h, α)
     # init
     gmsh.initialize()
 
@@ -8,11 +9,11 @@ function generate_bowl_mesh(h)
     gmsh.model.add("bowl3D")
 
     # points
-    gmsh.model.occ.addPoint(0, 0, -1, h, 1)
-    gmsh.model.occ.addPoint(0.5, 0, -1, h, 2) # control point
+    gmsh.model.occ.addPoint(0, 0, -α, h, 1)
+    gmsh.model.occ.addPoint(0.5, 0, -α, h, 2) # control point
     gmsh.model.occ.addPoint(1, 0, 0, h, 3)
 
-    # curve z = 1 - x^2
+    # curve z = α*(1 - x^2)
     gmsh.model.occ.addBezier([1, 2, 3], 1)
 
     # revolve curve around z-axis (makes surface 1)
@@ -42,7 +43,7 @@ function generate_bowl_mesh(h)
     # gmsh.option.setNumber("Mesh.QualityType", 0)
     # gmsh.option.setNumber("Mesh.OptimizeNetgen", 1)
     # gmsh.option.setNumber("Mesh.OptimizeThreshold", 0.4)
-    gmsh.option.setNumber("Mesh.AllowSwapAngle", 25)
+    # gmsh.option.setNumber("Mesh.AllowSwapAngle", 25)
 
     # generate and save mesh
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
@@ -50,8 +51,14 @@ function generate_bowl_mesh(h)
     # gmsh.model.mesh.optimize("Netgen")
     # gmsh.model.mesh.optimize("HighOrder")
     # gmsh.model.mesh.optimize("HighOrderElastic")
-    gmsh.write("bowl3D.msh")
+    gmsh.write(@sprintf("bowl3D_%e_%e.msh", h, α))
     gmsh.finalize()
 end
 
-generate_bowl_mesh(0.1)
+# params
+h = 4e-2
+α = 1
+@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+
+# generate
+generate_bowl_mesh(h, α)
