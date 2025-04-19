@@ -18,7 +18,7 @@ arch = GPU()
 dim = 2
 
 # params/funcs
-ε = 2e-2
+ε = 1e-1
 α = 1/2
 μϱ = 1e0
 N² = 1e0/α
@@ -29,14 +29,15 @@ f₀ = 1.0
 f(x) = f₀ + β*x[2]
 H(x) = α*(1 - x[1]^2 - x[2]^2)
 ν(x) = 1
-κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
+κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 T = 5e-2*μϱ/ε^2
 force_build_inversion_matrices = true
 force_build_evolution_matrices = true
 
 # mesh
-h = 7e-3
+h = 8e-3
 mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+# mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e_squash%d.msh", dim, h, 1, 1/α))
 
 # build inversion matrices
 A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
@@ -52,6 +53,8 @@ else
     close(file)
     B_inversion = nuPGCM.build_B_inversion(mesh, params)
 end
+@info "Approximate condition number of A_inversion: " cond(A_inversion, 1)
+error()
 
 # re-order dofs
 A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
