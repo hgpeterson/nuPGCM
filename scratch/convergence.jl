@@ -5,6 +5,8 @@ using JLD2
 using Printf
 using PyPlot
 
+import nuPGCM: plot_profiles
+
 pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
@@ -16,7 +18,7 @@ function solve_problem(; dim, h, α)
     arch = CPU()
 
     # params/funcs
-    ε = 2e-2
+    ε = 1e-2
     params = Parameters(ε, α, 0., 0., 0.)
     f₀ = 1
     β = 0.0
@@ -264,18 +266,18 @@ function plot_convergence_3D()
     plt.close()
 end
 
-# dim = 2
-# h = 2e-2
-# α = 1/2
-# model = solve_problem(; dim, h, α)
+dim = 2
+h = 8e-3
+α = 1/2
+model = solve_problem(; dim, h, α)
 # n_dofs, eu_L2, eu_H1, ep_L2 = compute_error(model)
 # save_plots(model; h)
-# plot_profiles(model; h)
+plot_profiles(model; h)
 # plot_w(model; h)
 
 # n_dofs, eu_L∞, eu_L2, eu_H1, ep_L2 = compute_errors(2, [5e-3, 1e-2, 2e-2])
 
-plot_convergence_2D()
+# plot_convergence_2D()
 # plot_convergence_3D()
 
 println("Done.")
