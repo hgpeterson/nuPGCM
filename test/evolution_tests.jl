@@ -13,26 +13,26 @@ set_out_dir!("./test")
 
 function coarse_evolution(dim, arch)
     # params/funcs
-    ε = 1e-1
+    ε = 2e-1
     α = 1/2
     μϱ = 1e1
-    N² = 1.
-    Δt = 1e-4*μϱ/ε^2
+    N² = 1e0/α
+    Δt = 1e-4*μϱ/(α*ε)^2
     params = Parameters(ε, α, μϱ, N², Δt)
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
-    H(x) = 1 - x[1]^2 - x[2]^2
+    H(x) = α*(1 - x[1]^2 - x[2]^2)
     ν(x) = 1
-    κ(x) = 1e-2 + exp(-(x[3] + H(x))/0.1)
-    T = 5e-2*μϱ/ε^2
+    κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
+    T = 5e-2*μϱ/(α*ε)^2
 
     # coarse mesh
     h = 0.1
-    mesh = Mesh(@sprintf("meshes/bowl%sD_%0.2f.msh", dim, h))
+    mesh = Mesh(@sprintf("meshes/bowl%sD_%e_%e.msh", dim, h, α))
 
     # build inversion matrices and test LHS against saved matrix
-    A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
+    A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
@@ -44,7 +44,7 @@ function coarse_evolution(dim, arch)
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
-        B_inversion = nuPGCM.build_B_inversion(mesh)
+        B_inversion = nuPGCM.build_B_inversion(mesh, params)
     end
 
     # re-order dofs
@@ -66,7 +66,7 @@ function coarse_evolution(dim, arch)
     inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
     # build evolution matrices and test against saved matrices
-    θ = Δt/2 * ε^2 / μϱ
+    θ = Δt/2 * (α*ε)^2/μϱ
     A_diff_fname = @sprintf("test/data/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α)
     A_adv_fname = @sprintf("test/data/A_adv_%sD_%e.jld2", dim, h)
     if !isfile(A_diff_fname) || !isfile(A_adv_fname)
@@ -113,14 +113,14 @@ function coarse_evolution(dim, arch)
     # solve
     run!(model, T)
 
-    # # plot for sanity check
-    # sim_plots(model, H, 0)
+    # plot for sanity check
+    sim_plots(model, H, 0)
 
     # compare state with data
     datafile = @sprintf("test/data/evolution_%sD.jld2", dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
-        save(state; ofile=datafile)
+        save_state(model, datafile)
     else
         jldopen(datafile, "r") do file
             u_data = file["u"]
