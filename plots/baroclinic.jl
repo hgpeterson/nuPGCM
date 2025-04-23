@@ -426,9 +426,7 @@ function test_U0()
     plt.close()
 end
 
-
-baroclinic()
+# baroclinic()
 # wBL()
 # test_U0()
-
-println("Done.")
+# println("Done.")
