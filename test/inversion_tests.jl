@@ -13,23 +13,23 @@ set_out_dir!("./test")
 
 function coarse_inversion(dim, arch)
     # params/funcs
-    ε = 1e-1
+    ε = 2e-1
     α = 1/2
-    N² = 1
+    N² = 1e0/α
     params = Parameters(ε, α, 0., N², 0.)
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
-    H(x) = 1 - x[1]^2 - x[2]^2
+    H(x) = α*(1 - x[1]^2 - x[2]^2)
     ν(x) = 1
 
     # coarse mesh
     h = 0.1
-    mesh = Mesh(@sprintf("meshes/bowl%sD_%0.2f.msh", dim, h))
+    mesh = Mesh(@sprintf("meshes/bowl%sD_%e_%e.msh", dim, h, α))
     @assert mesh.dim == dim
 
     # build inversion matrices and test LHS against saved matrix
-    A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.h5", dim, h, ε, α, f₀, β)
+    A_inversion_fname = @sprintf("test/data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
@@ -61,14 +61,14 @@ function coarse_inversion(dim, arch)
     # model
     model = inversion_model(arch, params, mesh, inversion_toolkit)
 
-    # simple test buoyancy field: b = δ exp(-(z + H)/δ)
-    set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/0.1))
+    # simple test buoyancy field: b = δ exp(-(z + H)/(α*δ))
+    set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
 
     # invert
     invert!(model)
 
-    # # plot for sanity check
-    # sim_plots(model, H, 0)
+    # plot for sanity check
+    sim_plots(model, H, 0)
 
     # compare state with data
     datafile = @sprintf("test/data/inversion_%sD.jld2", dim)

@@ -37,22 +37,22 @@ end
     cache = plot_slice(u::CellField, v::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=nothing, fname="slice.png")
 """
-function plot_slice(u::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+function plot_slice(u::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, bbox=[-1, -1, 1, 1], t=nothing, cb_label="", cb_max=0., fname="slice.png")
     # setup grid and cache
     n = 2^8
     if x !== nothing
-        y = range(-1, 1, length=n)
-        z = range(-1, 0, length=n)
+        y = range(bbox[1], bbox[3], length=n)
+        z = range(bbox[2], bbox[4], length=n)
         points = [Point(x, yᵢ, zᵢ) for yᵢ ∈ y, zᵢ ∈ z]
         slice_dir = "x"
     elseif y !== nothing
-        x = range(-1, 1, length=n)
-        z = range(-1, 0, length=n)
+        x = range(bbox[1], bbox[3], length=n)
+        z = range(bbox[2], bbox[4], length=n)
         points = [Point(xᵢ, y, zᵢ) for xᵢ ∈ x, zᵢ ∈ z]
         slice_dir = "y"
     elseif z !== nothing
-        x = range(-1, 1, length=n)
-        y = range(-1, 1, length=n)
+        x = range(bbox[1], bbox[3], length=n)
+        y = range(bbox[2], bbox[4], length=n)
         points = [Point(xᵢ, yᵢ, z) for xᵢ ∈ x, yᵢ ∈ y]
         slice_dir = "z"
     else
@@ -94,34 +94,26 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
 
     # plot
     fig, ax = plt.subplots(1)
-    ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    ax.axis("equal")
     if slice_dir == "x"
         slice_coord = x
         x1 = y 
         x2 = z
         ax.set_xlabel(L"y")
         ax.set_ylabel(L"z")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:0)
     elseif slice_dir == "y"
         slice_coord = y
         x1 = x
         x2 = z
         ax.set_xlabel(L"x")
         ax.set_ylabel(L"z")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:0)
     elseif slice_dir == "z"
         slice_coord = z
         x1 = x
         x2 = y
         ax.set_xlabel(L"x")
         ax.set_ylabel(L"y")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:1)
     end
     if cb_max == 0.
         cb_max = nan_max(abs.(us))
@@ -129,7 +121,7 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     img = ax.pcolormesh(x1, x2, us', shading="nearest", cmap="RdBu_r", vmin=-cb_max, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
     cb = plt.colorbar(img, ax=ax, label=cb_label, fraction=0.025)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
-    ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
+    ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=range(nan_min(bs), nan_max(bs), length=21)[2:end-1])
     if t === nothing
         ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
     else
@@ -391,6 +383,30 @@ function sim_plots(cache, model::Model, i_save)
             plot_slice(cache[5], u, v, b; t=t, fname=@sprintf("%s/images/u_sfc_%03d.png", out_dir, i_save))
         end
     end
+end
+
+function plot_tri_mesh(model::Model, u; cb_label="", fname="tri_mesh.png")
+    p, t = get_p_t(model.mesh.model)
+    u_cell_values = get_cell_dof_values(u)
+    p_to_t = get_p_to_t(t, size(p, 1))
+    uvals = [u_cell_values[p_to_t[i][1][1]][p_to_t[i][1][2]] for i ∈ 1:size(p, 1)]
+
+    fig, ax = plt.subplots(1)
+    umax = maximum(abs.(uvals))
+    img = ax.tripcolor(p[:, 1], p[:, 3], t[:, 1:3] .- 1, uvals, shading="gouraud", vmin=-umax, vmax=umax, cmap="RdBu_r", rasterized=true)
+    # if b !== nothing
+    #     b = unpack_fefunction(b, m)
+    #     ax.tricontour(m.p[:, 1], m.p[:, 2], m.t[:, 1:3] .- 1, b, colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
+    # end
+    cb = plt.colorbar(img, ax=ax, label=cb_label)
+    cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"z")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    savefig(fname)
+    println(fname)
+    plt.close()
 end
 
 function plot_sparsity_pattern(A; fname="sparsity_pattern.png")
