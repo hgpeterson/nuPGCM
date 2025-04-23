@@ -103,7 +103,6 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             msg
             end
-            save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
         end
 
         if mod(i, n_save) == 0
@@ -111,7 +110,7 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
         end
 
         if mod(i, n_plot) == 0
-            sim_plots(model, x->1 - x[1]^2 - x[2]^2, model.state.t) # FIXME need to allow for general H
+            sim_plots(model, x->(1 - x[1]^2 - x[2]^2)*model.params.α, model.state.t) # FIXME need to allow for general H
         end
     end
     return model

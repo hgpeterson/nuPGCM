@@ -1,220 +1,202 @@
 using nuPGCM
-using Statistics
-using Gridap, GridapGmsh
-using IncompleteLU, Krylov, LinearOperators, CuthillMcKee
-using CUDA, CUDA.CUSPARSE, CUDA.CUSOLVER
-using SparseArrays, LinearAlgebra
+using Gridap
+using LinearAlgebra
+using JLD2
 using Printf
 using PyPlot
+
+import nuPGCM: plot_profiles
 
 pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-out_folder = "../out"
+set_out_dir!(".")
 
-# choose architecture
-# arch = CPU()
-arch = GPU()
+function solve_problem(; dim, h, α)
+    # architecture and dimension
+    arch = CPU()
 
-# tolerance and max iterations for iterative solvers
-tol = 1e-5
-itmax = 0
+    # params/funcs
+    ε = 1e-2
+    params = Parameters(ε, α, 0., 0., 0.)
+    f₀ = 1
+    β = 0.0
+    f(x) = f₀ + β*x[2]
+    H(x) = α*(1 - x[1]^2 - x[2]^2)
+    ν(x) = 1
+    force_build_inversion_matrices = true
 
-# Vector type 
-VT = typeof(arch) == CPU ? Vector{Float64} : CuVector{Float64}
+    # mesh
+    mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+    # mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e_squash%d.msh", dim, h, 1, 1/α))
+    n_dofs = length(mesh.dofs.p_inversion)
+    @info @sprintf("h = %e, n_dofs = %e\n", h, n_dofs)
 
-# depth
-H(x) = 1 - x[1]^2 - x[2]^2
-
-# forcing
-ν(x) = 1
-
-# params
-ε² = 1e-2
-γ = 1/4
-f₀ = 1
-β = 0
-f(x) = f₀ + β*x[2]
-
-function compute_error(dim::AbstractDimension, hres; showplots=false)
-    # model
-    model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f.msh", dim, hres))
-    # model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_%0.2f_dm.msh", dim, hres))
-    # model = GmshDiscreteModel(@sprintf("../meshes/bowl%s_exp.msh", dim))
-
-    # FE spaces
-    X, Y, B, D = setup_FESpaces(model)
-    Ux, Uy, Uz, P = unpack_spaces(X)
-    nx = Ux.space.nfree
-    ny = Uy.space.nfree
-    nz = Uz.space.nfree
-    nu = nx + ny + nz
-    np = P.space.space.nfree
-    nb = B.space.nfree
-    N = nu + np - 1
-    @printf("\nN = %d (%d + %d) ∼ 10^%d DOF\n", N, nu, np-1, floor(log10(N)))
-
-    # mesh resolution
-    m = Mesh(model)
-    hs = [norm(m.p[m.t[i, j], :] - m.p[m.t[i, mod1(j+1, dim.n+1)], :]) for i ∈ axes(m.t, 1), j ∈ 1:dim.n+1]
-    h = mean(hs)
-    @printf("mean(h) = %e\n", mean(hs))
-
-    # triangulation and integration measure
-    Ω = Triangulation(model)
-    dΩ = Measure(Ω, 4)
-
-    # filenames for LHS matrices
-    LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-    # LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_dm_%e_%e_%e_%e_%e.h5", dim, hres, ε², γ, f₀, β)
-    # LHS_inversion_fname = @sprintf("../matrices/LHS_inversion_%s_exp_%e_%e_%e_%e.h5", dim, ε², γ, f₀, β)
-
-    # inversion LHS
-    if isfile(LHS_inversion_fname)
-        LHS_inversion, perm_inversion, inv_perm_inversion = read_sparse_matrix(LHS_inversion_fname)
+    # build inversion matrices
+    A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+    # A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e_squash%d.jld2", dim, h, ε, α, f₀, β, 1/α)
+    if force_build_inversion_matrices
+        @warn "force_build_inversion_matrices is true, generating..."
+        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
+    elseif !isfile(A_inversion_fname) 
+        @warn "A_inversion file not found, generating..."
+        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
     else
-        LHS_inversion, perm_inversion, inv_perm_inversion = assemble_LHS_inversion(arch, dim, γ, ε², ν, f, X, Y, dΩ; fname=LHS_inversion_fname)
+        file = jldopen(A_inversion_fname, "r")
+        A_inversion = file["A_inversion"]
+        close(file)
+        B_inversion = nuPGCM.build_B_inversion(mesh, params)
     end
 
-    # inversion RHS
-    RHS_inversion = assemble_RHS_inversion(perm_inversion, B, Y, dΩ)
+    # re-order dofs
+    A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
+    B_inversion = B_inversion[mesh.dofs.p_inversion, :]
 
     # preconditioner
-    if typeof(dim) == TwoD
-        P_inversion = Diagonal(1/h^2*ones(N))
+    if typeof(arch) == CPU
+        @time "lu(A_inversion)" P_inversion = lu(A_inversion)
     else
-        P_inversion = Diagonal(1/h^3*ones(N))
+        P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
     end
 
-    # put on GPU, if needed
-    LHS_inversion = on_architecture(arch, LHS_inversion)
-    RHS_inversion = on_architecture(arch, RHS_inversion)
-    P_inversion = Diagonal(on_architecture(arch, diag(P_inversion)))
+    # move to arch
+    A_inversion = on_architecture(arch, A_inversion)
+    B_inversion = on_architecture(arch, B_inversion)
 
-    # Krylov solver for inversion
-    solver_inversion = GmresSolver(N, N, 20, VT)
-    solver_inversion.x .= on_architecture(arch, zeros(N))
+    # setup inversion toolkit
+    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
-    # inversion functions
-    function invert!(arch::AbstractArchitecture, solver, b)
-        b_arch = on_architecture(arch, b.free_values)
-        if typeof(arch) == GPU
-            RHS = [CUDA.zeros(nx); CUDA.zeros(ny); RHS_inversion*b_arch; CUDA.zeros(np-1)]
-        else
-            RHS = [zeros(nx); zeros(ny); RHS_inversion*b_arch; zeros(np-1)]
-        end
-        Krylov.solve!(solver, LHS_inversion, RHS, solver.x, M=P_inversion, 
-                    atol=tol, rtol=tol, verbose=0, itmax=itmax, restart=true)
-        @printf("inversion GMRES: solved=%s, niter=%d, time=%f\n", solver.stats.solved, solver.stats.niter, solver.stats.timer)
-        return solver
-    end
-    function update_u_p!(ux, uy, uz, p, solver)
-        sol = on_architecture(CPU(), solver.x[inv_perm_inversion])
-        ux.free_values .= sol[1:nx]
-        uy.free_values .= sol[nx+1:nx+ny]
-        uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-        p = FEFunction(P, sol[nx+ny+nz+1:end])
-        return ux, uy, uz, p
-    end
+    # make an inverison model
+    model = inversion_model(arch, params, mesh, inversion_toolkit)
 
-    # b = z should have no flow
-    b  = interpolate_everywhere(x->x[3], B)
-    ux = interpolate_everywhere(0, Ux)
-    uy = interpolate_everywhere(0, Uy)
-    uz = interpolate_everywhere(0, Uz)
-    p  = interpolate_everywhere(0, P)
+    # # b = α⁻¹z (= N²z^* in dimensional coordinates)
+    # set_b!(model, x -> x[3]/α)
+    # b = exp
+    set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
 
     # invert
-    if typeof(arch) == GPU
-        solver_inversion = invert!(arch, solver_inversion, b)
-        ux, uy, uz, p = update_u_p!(ux, uy, uz, p, solver_inversion)
-    else
-        RHS = [zeros(nx); zeros(ny); RHS_inversion*b.free_values; zeros(np-1)]
-        sol = LHS_inversion \ RHS
-        sol = sol[inv_perm_inversion]
-        ux.free_values .= sol[1:nx]
-        uy.free_values .= sol[nx+1:nx+ny]
-        uz.free_values .= sol[nx+ny+1:nx+ny+nz]
-        p = FEFunction(P, sol[nx+ny+nz+1:end])
-    end
+    invert!(model)
 
-    # compute error
-    ∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
-    ∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
-    ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
-    eu_L2 = sqrt(sum( ∫( ux*ux + uy*uy + uz*uz )*dΩ ))
-    eu_H1 = sqrt(sum( ∫( ux*ux + uy*uy + uz*uz + 
-                            ∂x(ux)*∂x(ux) + ∂y(ux)*∂y(ux) + ∂z(ux)*∂z(ux) +
-                            ∂x(uy)*∂x(uy) + ∂y(uy)*∂y(uy) + ∂z(uy)*∂z(uy) +
-                            ∂x(uz)*∂x(uz) + ∂y(uz)*∂y(uz) + ∂z(uz)*∂z(uz) 
-                            )*dΩ ))
-    p0 = interpolate_everywhere(x->x[3]^2/2, P) # since P is a zero-mean space, Gridap will automatically subtract the mean
+    return model
+end
+
+function compute_error(model)
+    α = model.params.α
+    u = model.state.u
+    v = model.state.v
+    w = model.state.w
+    p = model.state.p
+    dΩ = model.mesh.dΩ
+    P = model.mesh.spaces.X_trial[4]
+    umax = maximum(abs.(u.free_values))
+    vmax = maximum(abs.(v.free_values))
+    wmax = maximum(abs.(w.free_values))
+    eu_L∞ = maximum([umax, vmax, wmax])
+    eu_L2 = sqrt(sum( ∫( u*u + v*v + w*w )*dΩ ))
+    eu_H1 = sqrt(sum( ∫( u*u + v*v + w*w + 
+                         ∂x(u)*∂x(u) + ∂y(u)*∂y(u) + ∂z(u)*∂z(u) +
+                         ∂x(v)*∂x(v) + ∂y(v)*∂y(v) + ∂z(v)*∂z(v) +
+                         ∂x(w)*∂x(w) + ∂y(w)*∂y(w) + ∂z(w)*∂z(w) 
+                       )*dΩ ))
+    p = FEFunction(P, p.free_values.args[1]) # recompute p as a FEFunction to make sure it is zero-mean
+    p0 = interpolate_everywhere(x->x[3]^2/2/α^2, P) # since P is a zero-mean space, Gridap will automatically subtract the mean
     ep_L2 = sqrt(sum( ∫( (p - p0)*(p - p0) )*dΩ ))
-    @printf("    h = %e\n", h)
-    @printf(" |u|₂ = %e\n", eu_L2)
-    @printf(" |u|₁ = %e\n", eu_H1)
-    @printf(" |p|₀ = %e\n", ep_L2)
-    @printf("error = %e\n", eu_H1 + ep_L2)
+    @printf("         |u|_L∞ = %e\n", eu_L∞)
+    @printf("         |u|_L2 = %e\n", eu_L2)
+    @printf("         |u|_H1 = %e\n", eu_H1)
+    @printf("         |p|_L2 = %e\n", ep_L2)
+    @printf("|u|_H1 + |p|_L2 = %e\n", eu_H1 + ep_L2)
 
-    if showplots
-        b.free_values .= 0
-        plot_slice(ux*ux + uy*uy + uz*uz, 
-                b; y=0, cb_label=L"$|\mathbf{u}|^2$", 
-                fname=@sprintf("%s/images/u_L2_err_%1.2f.png", out_folder, hres))
-        plot_slice(ux*ux + uy*uy + uz*uz + 
-                ∂x(ux)*∂x(ux) + ∂y(ux)*∂y(ux) + ∂z(ux)*∂z(ux) +     
-                ∂x(uy)*∂x(uy) + ∂y(uy)*∂y(uy) + ∂z(uy)*∂z(uy) +     
-                ∂x(uz)*∂x(uz) + ∂y(uz)*∂y(uz) + ∂z(uz)*∂z(uz),
-                b; y=0, cb_label=L"$|\mathbf{u}|^2 + |\nabla\mathbf{u}|^2$", 
-                fname=@sprintf("%s/images/u_H1_err_%1.2f.png", out_folder, hres))
-        plot_slice((p - p0)*(p - p0), 
-                b; y=0, cb_label=L"$|p - p_a|^2$", fname=@sprintf("%s/images/p_err_%1.2f.png", out_folder, hres))
+    return eu_L∞, eu_L2, eu_H1, ep_L2
+end
+
+function save_plots(model; h)
+    α = model.params.α
+    u = model.state.u
+    v = model.state.v
+    w = model.state.w
+    P = model.mesh.spaces.X_trial[4]
+    p = FEFunction(P, model.state.p.free_values.args[1])
+    p0 = interpolate_everywhere(x->x[3]^2/2/α^2, P) 
+    b = model.state.b
+    plot_slice(u, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u", fname=@sprintf("%s/images/u_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(v, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v", fname=@sprintf("%s/images/v_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(w, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w", fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(u*u + v*v + w*w, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u}|^2$", 
+                fname=@sprintf("%s/images/u_L2_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(u*u + v*v + w*w + 
+                ∂x(u)*∂x(u) + ∂y(u)*∂y(u) + ∂z(u)*∂z(u) +     
+                ∂x(v)*∂x(v) + ∂y(v)*∂y(v) + ∂z(v)*∂z(v) +     
+                ∂x(w)*∂x(w) + ∂y(w)*∂y(w) + ∂z(w)*∂z(w),
+                b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u}|^2 + |\nabla\mathbf{u}|^2$", 
+                fname=@sprintf("%s/images/u_H1_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice((p - p0)*(p - p0), b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|p - p_a|^2$", 
+                fname=@sprintf("%s/images/p_err_%1.2e_%1.2e.png", out_dir, h, α))
+end
+
+function plot_w(model; h)
+    α = model.params.α
+    w = model.state.w
+    b = model.state.b
+    plot_slice(w, b, 1/α; y=0, bbox=[-1, -α, 1, 0], fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
+end
+function plot_profiles(model; h)
+    α = model.params.α
+    u = model.state.u
+    v = model.state.v
+    w = model.state.w
+    b = model.state.b
+    plot_profiles(u, v, w, b, 1/α, x->α*(1 - x[1]^2); x=0.5, y=0, fname=@sprintf("%s/images/profiles_%1.2e_%1.2e.png", out_dir, h, α))
+end
+
+function compute_errors(; dim, hs, α)
+    n_dofs = zeros(length(hs))
+    eu_L∞ = zeros(length(hs))
+    eu_L2 = zeros(length(hs))
+    eu_H1 = zeros(length(hs))
+    ep_L2 = zeros(length(hs))
+    for i in eachindex(hs)
+        model = solve_problem(dim=dim, h=hs[i], α=α)
+        n_dofs[i], eu_L∞[i], eu_L2[i], eu_H1[i], ep_L2[i] = compute_error(model)
     end
-
-    return h, eu_L2, eu_H1, ep_L2
+    println()
+    @printf("              h = [%1.5e, %1.5e, %1.5e]\n", hs...)
+    @printf("         n_dofs = [%1.5e, %1.5e, %1.5e]\n", n_dofs...)
+    @printf("         |u|_L∞ = [%1.5e, %1.5e, %1.5e]\n", eu_L∞...)
+    @printf("         |u|_L2 = [%1.5e, %1.5e, %1.5e]\n", eu_L2...)
+    @printf("         |u|_H2 = [%1.5e, %1.5e, %1.5e]\n", eu_H1...)
+    @printf("         |p|_L2 = [%1.5e, %1.5e, %1.5e]\n", ep_L2...)
+    @printf("|u|_H1 + |p|_L2 = [%1.5e, %1.5e, %1.5e]\n", (eu_H1 + ep_L2)...)
+    return n_dofs, eu_L∞, eu_L2, eu_H1, ep_L2
 end
 
 function plot_convergence_2D()
-    # hs = [0.01, 0.02, 0.05]
-    # hs = [7.96667e-03, 1.57642e-02, 3.80418e-02]
-    hs = [9.96820e-03, 1.98866e-02, 4.91265e-02]
+    # n_dofs = [
+    #     [4.02802e+05, 1.00333e+05, 2.52460e+04]
+    # ]
 
-    errs = [
-        [6.22111e-07, 3.42784e-06, 3.35299e-05], 
-
-        [6.22111e-07, 3.42785e-06, 3.35303e-05], 
-
-        [1.52113e-06, 8.14764e-06, 7.94241e-05], 
-        
-        [1.15721e-04, 6.07887e-04, 5.90033e-03],
-        [1.50023e-04, 6.10646e-04, 5.90069e-03],
-        [9.52791e-04, 7.61190e-04, 5.93063e-03],
-        # [3.35898e-04, 6.14795e-04, 5.90047e-03],
-        # [1.19563e-04, 6.14795e-04, 5.90047e-03],
-
-        [1.15283e-02, 6.01363e-02, 5.67232e-01], 
-        [1.16039e-02, 6.27308e-02, 5.78880e-01],
-        [1.50846e-02, 6.27308e-02, 5.78880e-01],
-        # [1.16003e-02, 6.27349e-02, 5.78861e-01],
-        # [1.48924e-02, 6.27349e-02, 5.78861e-01]
+    hs = [
+        [1.00000e-02, 2.00000e-02, 5.00000e-02],
+        [5.00000e-03, 1.00000e-02, 2.00000e-02]
     ]
+    hmin = minimum(minimum(hs))
+    hmax = maximum(maximum(hs))
+
+    errors = [
+        [1.15721e-04, 6.07887e-04, 5.90033e-03],
+        [6.99864e-05, 3.03114e-04, 1.58356e-03]
+    ]
+    emin = minimum(minimum(errors))
+    emax = maximum(maximum(errors))
+
+    # eu_L∞ = [
+    #     [1.37493e-06, 1.91026e-05, 4.91261e-05]
+    # ]
+
     labels = [
-        L"\varepsilon^2 = 10^{0},  \; f = 0, \; \gamma = 1",
-
-        L"\varepsilon^2 = 10^{0},  \; f = 1, \; \gamma = 1",
-
-        L"\varepsilon^2 = 10^{0},  \; f = 1, \; \gamma = 1/4",
-
-        L"\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4",
-        L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-6}$",
-        L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-5}$",
-        # L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-8}$",
-        # L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-9}$",
-
-        L"\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4",
-        L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-6}$",
-        L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-5}$",
+        L"$\varepsilon = 10^{-1}$, $\alpha = 1/2$, aniso",
+        L"$\varepsilon = 10^{-1}$, $\alpha = 1/2$, iso",
     ]
 
     fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
@@ -224,24 +206,17 @@ function plot_convergence_2D()
     ax.spines["right"].set_visible(true)
     ax.set_xlabel(L"Resolution $h$")
     ax.set_ylabel(L"Error $||\mathbf{u}||_{H^1} + ||p - p_a||_{L^2}$")
-    ax.set_xlim(9e-3, 6e-2)
-    ax.set_ylim(1e-7, 1e0)
+    ax.set_xlim(0.9*hmin, 1.1*hmax)
+    ax.set_ylim(0.9*emin, 1.1*emax)
     ax.grid(true, which="both", color="k", alpha=0.5, linestyle=":", linewidth=0.25)
-    ax.set_axisbelow(true)
-    for i ∈ eachindex(errs)
-        ax.plot(hs, errs[i], "o-", label=labels[i])
+    ax.set_axisbelow(true) # put grid behind lines
+    for i ∈ eachindex(hs)
+        ax.plot(hs[i], errors[i], "o-", label=labels[i])
     end
-    ax.plot(hs, errs[1][2]/hs[2]^2*hs.^2, "k--", label=L"$O(h^2)$")
-    ax.plot(hs, errs[4][2]/hs[2]^2*hs.^2, "k--")
-    ax.plot(hs, errs[7][2]/hs[2]^2*hs.^2, "k--")
-    hs = [1.00810e-02, 2.04083e-02, 5.16216e-02]
-    ax.plot(hs, [7.91502e-03, 4.37259e-02, 4.04744e-01], "o-")
-    ax.plot(hs, [7.94755e-05, 4.43226e-04, 4.27666e-03], "o-")
-    ax.plot(hs, [7.17254e-04, 5.77746e-04, 4.31530e-03], "o-")
+    ax.plot([hmin, hmax], 2emin/hmin^2*[hmin^2, hmax^2], "k--", label=L"$C h^2$")
     ax.legend(loc=(1.05, 0.0))
-    ax.set_title("2D Bowl (Gridap)")
-    savefig(@sprintf("%s/images/convergence2D.png", out_folder))
-    println(@sprintf("%s/images/convergence2D.png", out_folder))
+    savefig(@sprintf("%s/images/convergence2D.png", out_dir))
+    println(@sprintf("%s/images/convergence2D.png", out_dir))
     plt.close()
 end
 
@@ -286,26 +261,74 @@ function plot_convergence_3D()
     ax.plot(hs, errs[2][2]/hs[2]^2*hs.^2, "k--", label=L"$O(h^2)$")
     ax.legend(loc=(1.05, 0.0))
     ax.set_title("3D Bowl (Gridap)")
-    savefig(@sprintf("%s/images/convergence3D.png", out_folder))
-    println(@sprintf("%s/images/convergence3D.png", out_folder))
+    savefig(@sprintf("%s/images/convergence3D.png", out_dir))
+    println(@sprintf("%s/images/convergence3D.png", out_dir))
     plt.close()
 end
 
-showplots = false
-# showplots = true
+dim = 2
+h = 8e-3
+α = 1/2
+model = solve_problem(; dim, h, α)
+# n_dofs, eu_L2, eu_H1, ep_L2 = compute_error(model)
+# save_plots(model; h)
+plot_profiles(model; h)
+# plot_w(model; h)
 
-dim = TwoD()
-# dim = ThreeD()
-
-h5, eu5_L2, eu5_H1, ep5_L2 = compute_error(dim, 0.05; showplots)
-h2, eu2_L2, eu2_H1, ep2_L2 = compute_error(dim, 0.02; showplots)
-h1, eu1_L2, eu1_H1, ep1_L2 = compute_error(dim, 0.01; showplots)
-
-@printf("[%1.5e, %1.5e, %1.5e]\n", h1, h2, h5)
-@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_L2, eu2_L2, eu5_L2)
-@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1, eu2_H1, eu5_H1)
-@printf("[%1.5e, %1.5e, %1.5e]\n", ep1_L2, ep2_L2, ep5_L2)
-@printf("[%1.5e, %1.5e, %1.5e]\n", eu1_H1 + ep1_L2, eu2_H1 + ep2_L2, eu5_H1 + ep5_L2)
+# n_dofs, eu_L∞, eu_L2, eu_H1, ep_L2 = compute_errors(2, [5e-3, 1e-2, 2e-2])
 
 # plot_convergence_2D()
 # plot_convergence_3D()
+
+println("Done.")
+
+### results for ε = 1e-1 
+
+## squashed meshes (originating from H = 1 - x^2 mesh at uniform h = 1e-2 with n_dofs = 201152)
+
+# α = 1:
+#          |u|_L∞ = 8.992144e-07
+#          |u|_L2 = 4.173351e-08
+#          |u|_H1 = 2.526387e-05
+#          |p|_L2 = 3.694708e-07
+# |u|_H1 + |p|_L2 = 2.563334e-05
+
+# α = 1/2:
+#          |u|_L∞ = 2.716970e-06
+#          |u|_L2 = 7.523147e-08
+#          |u|_H1 = 7.185127e-05
+#          |p|_L2 = 2.599289e-07
+# |u|_H1 + |p|_L2 = 7.211120e-05 -> 2.88 times α = 1
+
+# α = 1/4:
+#          |u|_L∞ = 7.698220e-06
+#          |u|_L2 = 1.362149e-07
+#          |u|_H1 = 2.062875e-04
+#          |p|_L2 = 1.826300e-07
+# |u|_H1 + |p|_L2 = 2.064701e-04 -> 8.05 times α = 1
+
+## isotropic meshes
+
+# α = 1/2, h = 5e-3:
+#          n_dofs = 4.028020e+05 -> double the dofs
+#          |u|_L∞ = 1.374932e-06
+#          |u|_L2 = 5.595901e-08
+#          |u|_H1 = 6.970544e-05
+#          |p|_L2 = 2.809806e-07
+# |u|_H1 + |p|_L2 = 6.998642e-05 -> 0.97 times squashed mesh
+
+# α = 1/2, h = 7e-3:
+#          n_dofs = 2.050100e+05 -> same dofs
+#          |u|_L∞ = 3.857573e-06
+#          |u|_L2 = 1.247994e-07
+#          |u|_H1 = 1.143373e-04
+#          |p|_L2 = 4.446257e-07
+# |u|_H1 + |p|_L2 = 1.147819e-04 -> 1.59 times squashed mesh ??
+
+# α = 1/2, h = 1e-2:
+#          n_dofs = 1.003330e+05 -> half the dofs
+#          |u|_L∞ = 1.910264e-05
+#          |u|_L2 = 4.901199e-07
+#          |u|_H1 = 3.017957e-04
+#          |p|_L2 = 1.318180e-06
+# |u|_H1 + |p|_L2 = 3.031139e-04 -> 4.20 times squashed mesh
