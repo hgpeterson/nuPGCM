@@ -1,8 +1,3 @@
-# gradients 
-∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
-∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
-∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
-
 """
     A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
         build_matrices(mesh, params, f, ν, κ; 
@@ -42,10 +37,10 @@ if `A_inversion_ofile` is provided. The matrices are:
 - `B_inversion`: RHS matrix for the inversion problem
 The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
 """
-function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν; 
+function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν, r; 
                                   A_inversion_ofile=nothing)
     A_inversion = build_A_inversion(mesh, params, f, ν; ofile=A_inversion_ofile)
-    B_inversion = build_B_inversion(mesh, params)
+    B_inversion = build_B_inversion(mesh, params, r)
     return A_inversion, B_inversion
 end
 
@@ -80,18 +75,12 @@ function build_A_inversion(mesh::Mesh, params::Parameters, f, ν; ofile=nothing)
     X_trial = mesh.spaces.X_trial
     X_test = mesh.spaces.X_test
     dΩ = mesh.dΩ
-    ε = params.ε
-    α = params.α
 
     # coefficient
-    α²ε² = α^2*ε^2
+    c = params.α^2*params.ε^2
 
-    # bilinear form
-    a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫(α²ε²*∂x(ux)*∂x(vx)*ν + α²ε²*∂y(ux)*∂y(vx)*ν + α²ε²*∂z(ux)*∂z(vx)*ν - uy*vx*f + ∂x(p)*vx +
-          α²ε²*∂x(uy)*∂x(vy)*ν + α²ε²*∂y(uy)*∂y(vy)*ν + α²ε²*∂z(uy)*∂z(vy)*ν + ux*vy*f + ∂y(p)*vy +
-          α²ε²*∂x(uz)*∂x(vz)*ν + α²ε²*∂y(uz)*∂y(vz)*ν + α²ε²*∂z(uz)*∂z(vz)*ν +           ∂z(p)*vz +
-                                                                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    # bilinear form (here ε is the symmetric gradient operator)
+    a((u, p), (v, q)) = ∫( c*ε(v)⊙(ν*ε(u)) + 2*(f×u)⋅v + (∇⋅v)*p + q*(∇⋅u) )dΩ
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
@@ -106,13 +95,13 @@ function build_A_inversion(mesh::Mesh, params::Parameters, f, ν; ofile=nothing)
 end
 
 """
-    B = build_B_inversion(mesh)
+    B = build_B_inversion(mesh, params, r)
 
 Assemble the RHS matrix for the inversion problem.
 """
-function build_B_inversion(mesh::Mesh, params::Parameters)
+function build_B_inversion(mesh::Mesh, params::Parameters, r)
     # unpack
-    W_test = mesh.spaces.X_test[3]
+    X_test = mesh.spaces.X_test
     B_trial = mesh.spaces.B_trial
     dΩ = mesh.dΩ
     α = params.α
@@ -121,17 +110,17 @@ function build_B_inversion(mesh::Mesh, params::Parameters)
     α⁻¹ = 1/α
 
     # bilinear form
-    a(b, vz) = ∫( α⁻¹*b*vz )dΩ
+    a(b, v) = ∫( α⁻¹*b*(r⋅v) )dΩ
 
     # assemble
-    @time "build B_inversion" B = assemble_matrix(a, B_trial, W_test)
+    @time "build B_inversion" B = assemble_matrix(a, B_trial, X_test)
 
-    # convert to N × nb matrix
-    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
-    N = nu + nv + nw + np
-    I, J, V = findnz(B)
-    I .+= nu + nv
-    B = sparse(I, J, V, N, nb)
+    # # convert to N × nb matrix
+    # nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
+    # N = nu + nv + nw + np
+    # I, J, V = findnz(B)
+    # I .+= nu + nv
+    # B = sparse(I, J, V, N, nb)
 
     return B
 end
