@@ -149,7 +149,13 @@ function f_over_H()
 end
 
 function buoyancy()
-    fig, ax = plt.subplots(1, 2, figsize=(19pc, 8pc), gridspec_kw=Dict("width_ratios"=>[1, 2]))
+    width = 39
+    s = 2 # width of spacing
+    c = 1 # width of colorbar
+    p = (width - s - c)/(3 + 1.62) # width of profile plot (assuming b = height = 1.62p)
+    height = p*1.62
+    b = height # width of bowl plot
+    fig, ax = plt.subplots(1, 6, figsize=(width*pc, height*pc), gridspec_kw=Dict("width_ratios"=>[p, p, p, s, b, c]))
 
     # (a) buoyancy profiles
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
@@ -167,32 +173,65 @@ function buoyancy()
         bz = differentiate(b, z)
         ax[1].plot(1 .+ bz, z, c=colors[i, :])
     end
-    ax[1].annotate("", xy=(0.6, -0.57), xytext=(0.42, -0.42), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"), fontsize=6)
-    ax[1].annotate(L"$t = 10^{-2}$", xy=(0.15, -0.4), fontsize=6)
+    ax[1].annotate("", xy=(0.6, -0.57), xytext=(0.42, -0.42), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"))
+    ax[1].annotate(L"$t = 10^{-2}$", xy=(0.15, -0.4))
 
-    # (b) buoyancy gradient
+    # (b) u profile
+    file = jldopen("1D_profile_eps2e-02_T1e-02_x5e-01.jld2", "r")
+    z = file["z"]
+    u = file["u"]
+    v = file["v"]
+    close(file)
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[2].set_xlabel(L"Zonal coordinate $x$")
-    ax[2].set_ylabel(L"Vertical coordinate $z$")
-    ax[2].axis("equal")
-    ax[2].set_xticks([0, 1])
-    ax[2].set_yticks([-1, 0])
+    ax[2].set_xlabel(L"Cross-slope flow $u$"*"\n"*L"($\times 10^{-2}$)")
+    ax[2].set_xlim(-0.4, 1.1)
+    ax[2].set_yticks([])
     ax[2].spines["left"].set_visible(false)
-    ax[2].spines["bottom"].set_visible(false)
+    ax[2].axvline(0, color="k", lw=0.5)
+    ax[2].plot(1e2*u, z, c=colors[end, :], ls="-")
+    ax[2].annotate(L"$\int_{-H}^0 \, u \; dz = 0$", xy=(0.2, -0.2))
+
+    # (c) v profile
+    ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[3].set_xlabel(L"Along-slope flow $v$"*"\n"*L"($\times 10^{-2}$)")
+    ax[3].set_xlim(-3, 13)
+    ax[3].set_yticks([])
+    ax[3].spines["left"].set_visible(false)
+    ax[3].axvline(0, color="k", lw=0.5)
+    ax[3].axvline(1e2*v[end], color="C1", lw=0.5, ls="--")
+    ax[3].plot(1e2*v, z, c=colors[end, :], ls="-")
+    ax[3].annotate(L"$\partial_x P$", xy=(9, -0.7), color="C1")
+    ax[3].annotate(L"$\partial_z v = 0$", xy=(0, -0.75), xytext=(-8, -0.65), arrowprops=Dict("color"=>"k", "arrowstyle"=>"-|>"))
+
+    # spacing
+    ax[4].axis("off")
+
+    # (d) buoyancy gradient in bowl
+    ax[5].annotate("(d)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[5].set_xlabel(L"Zonal coordinate $x$")
+    ax[5].set_ylabel(L"Vertical coordinate $z$")
+    ax[5].axis("equal")
+    ax[5].set_xticks([0, 0.5, 1])
+    ax[5].set_yticks([-1, -0.5, 0])
+    ax[5].spines["left"].set_visible(false)
+    ax[5].spines["bottom"].set_visible(false)
     d = jldopen("buoyancy_eps2e-02_T1e-02.jld2")
     x = d["x"]
     z = d["z"]
+    b = d["b"]
     bx = d["bx"]
     close(d)
     xx = repeat(x, 1, size(z, 2))
-    # vmax = maximum(abs.(bx))
     vmax = 2
-    img = ax[2].pcolormesh(xx, z, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-    ax[2].contour(xx, z, z .+ b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
-    ax[2].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
-    cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy gradient $\partial_x b$", extend="max")
+    img = ax[5].pcolormesh(xx, z, bx, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    # img = ax[5].pcolormesh(xx, z, bx, shading="nearest", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+    ax[5].contour(xx, z, z .+ b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
+    ax[5].plot([0.5, 0.5], [-0.75, 0.0], "r-", alpha=0.7)
 
-    subplots_adjust(wspace=0.5)
+    # colorbar
+    ax[6].axis("off")
+    cb = fig.colorbar(img, ax=ax[6], label=L"Buoyancy gradient $\partial_x b$", extend="max", fraction=0.5)
+    cb.set_ticks([-2, 0, 2])
 
     savefig("buoyancy.png")
     @info "Saved 'buoyancy.png'"
@@ -732,7 +771,7 @@ end
 
 
 # f_over_H()
-# buoyancy()
+buoyancy()
 # zonal_sections_single_field("u")
 # zonal_sections_single_field("v")
 # zonal_sections_single_field("w")
@@ -742,7 +781,7 @@ end
 # zonal_sections()
 # flow_profiles()
 # psi()
-psi_bl()
+# psi_bl()
 # alpha()
 
 println("Done.")
