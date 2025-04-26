@@ -245,6 +245,24 @@ function save(u, v, w, b, params, t, z; filename="data/1D.jld2")
     @info "Saved '$filename'"
 end
 
+function invert(b, z, ν, params)
+    # build matrices
+    LHS_inversion = build_LHS_inversion(z, ν, params)
+    LHS_inversion = lu(LHS_inversion)
+
+    # initialize
+    rhs_inversion = zeros(2*params.nz + 1)
+    sol_inversion = zeros(2*params.nz + 1)
+    u = @view sol_inversion[1:params.nz]
+    v = @view sol_inversion[params.nz+1:2params.nz]
+
+    # invert
+    update_rhs_inversion!(rhs_inversion, z, b, params)
+    ldiv!(sol_inversion, LHS_inversion, rhs_inversion)
+
+    return u, v, u*tan(params.θ)
+end
+
 function sim_setup(params)
     # grid
     z = params.H*chebyshev_nodes(params.nz)
