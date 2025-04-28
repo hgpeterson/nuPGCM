@@ -1,7 +1,7 @@
-struct Parameters
-    ε::Real
-    α::Real
-    μϱ::Real
-    N²::Real
-    Δt::Real
+struct Parameters{T}
+    ε::T
+    α::T
+    μϱ::T
+    N²::T
+    Δt::T
 end
