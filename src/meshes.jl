@@ -1,7 +1,7 @@
-struct Mesh{M, O, DO}
+struct Mesh{M, S, D, O, DO}
     model::M         # unstructured discrete model
-    spaces::Spaces   # trial and test spaces for velocity, pressure, and buoyancy
-    dofs::DoFHandler # degree of freedom handler
+    spaces::S        # trial and test spaces for velocity, pressure, and buoyancy
+    dofs::D          # degree of freedom handler
     Ω::O             # triangulation
     dΩ::DO           # measure
     dim::Int         # dimension of the problem
