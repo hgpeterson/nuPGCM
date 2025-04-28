@@ -69,15 +69,15 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
     t0 = time()
 
     # number of steps to take
-    n_steps = t_final ÷ Δt
+    n_steps = div(t_final, Δt, RoundNearest)
 
     # starting step number (just 1 if t = 0)
-    i_step = model.state.t ÷ Δt + 1
+    i_step = div(model.state.t, Δt, RoundNearest) + 1
 
     # number of steps between saves, plots, and info
-    n_save = t_save ÷ Δt
-    n_plot = t_plot ÷ Δt
-    n_info = n_steps ÷ 100
+    n_save = div(t_save, Δt, RoundNearest)
+    n_plot = div(t_plot, Δt, RoundNearest)
+    n_info = div(n_steps, 100, RoundNearest)
 
     # need to store a half-step buoyancy for advection
     b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
@@ -103,6 +103,8 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             msg
             end
+            flush(stdout)
+            flush(stderr)
         end
 
         if mod(i, n_save) == 0
