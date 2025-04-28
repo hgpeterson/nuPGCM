@@ -73,10 +73,8 @@ function solve_exponential_problem!(model)
 end
 
 function constructed_problem_rhs(model; u0, v0, w0, p0)
-    # rhs is constructed by fᵢ's
     X_test = model.mesh.spaces.X_test
     dΩ = model.mesh.dΩ
-    # l((vx, vy, vz, q)) = ∫( f₁*vx + f₂*vy + f₃*vz + f₄*q )dΩ
     α²ε² = α^2*ε^2
     u0 = interpolate_everywhere(u0, model.mesh.spaces.X_trial[1])
     v0 = interpolate_everywhere(v0, model.mesh.spaces.X_trial[2])
@@ -87,6 +85,14 @@ function constructed_problem_rhs(model; u0, v0, w0, p0)
           α²ε²*∂x(v0)*∂x(vy)*ν + α²ε²*∂y(v0)*∂y(vy)*ν + α²ε²*∂z(v0)*∂z(vy)*ν + u0*vy*f + ∂y(p0)*vy +
           α²ε²*∂x(w0)*∂x(vz)*ν + α²ε²*∂y(w0)*∂y(vz)*ν + α²ε²*∂z(w0)*∂z(vz)*ν +           ∂z(p0)*vz +
                                                                     ∂x(u0)*q + ∂y(v0)*q + ∂z(w0)*q )dΩ
+    @time "rhs" rhs = assemble_vector(l, X_test)
+    rhs = rhs[model.mesh.dofs.p_inversion]
+    return rhs
+end
+function constructed_problem_rhs(model; f₁, f₂, f₃, f₄)
+    X_test = model.mesh.spaces.X_test
+    dΩ = model.mesh.dΩ
+    l((vx, vy, vz, q)) = ∫( f₁*vx + f₂*vy + f₃*vz + f₄*q )dΩ
     @time "rhs" rhs = assemble_vector(l, X_test)
     rhs = rhs[model.mesh.dofs.p_inversion]
     return rhs
@@ -131,15 +137,15 @@ function save_plots(model)
     P = model.mesh.spaces.X_trial[4]
     δp = FEFunction(P, model.state.p.free_values.args[1]) - p0 # have to make sure p is zero-mean
     b = model.state.b
-    # plot_slice(δu, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u - u_0", fname=@sprintf("%s/images/u_%1.2e_%1.2e.png", out_dir, h, α))
-    # plot_slice(δv, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v - v_0", fname=@sprintf("%s/images/v_%1.2e_%1.2e.png", out_dir, h, α))
-    # plot_slice(δw, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w - w_0", fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
-    # plot_slice(δu*δu + δv*δv + δw*δw +
-    #            ∂x(δu)*∂x(δu) + ∂y(δu)*∂y(δu) + ∂z(δu)*∂z(δu) +
-    #            ∂x(δv)*∂x(δv) + ∂y(δv)*∂y(δv) + ∂z(δv)*∂z(δv) +
-    #            ∂x(δw)*∂x(δw) + ∂y(δw)*∂y(δw) + ∂z(δw)*∂z(δw),
-    #            b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u} - \mathbf{u}_0|^2 + |\nabla(\mathbf{u} - \mathbf{u}_0)|^2$", 
-    #            fname=@sprintf("%s/images/u_H1_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(δu, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u - u_0", fname=@sprintf("%s/images/u_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(δv, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v - v_0", fname=@sprintf("%s/images/v_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(δw, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w - w_0", fname=@sprintf("%s/images/w_err_%1.2e_%1.2e.png", out_dir, h, α))
+    plot_slice(δu*δu + δv*δv + δw*δw +
+               ∂x(δu)*∂x(δu) + ∂y(δu)*∂y(δu) + ∂z(δu)*∂z(δu) +
+               ∂x(δv)*∂x(δv) + ∂y(δv)*∂y(δv) + ∂z(δv)*∂z(δv) +
+               ∂x(δw)*∂x(δw) + ∂y(δw)*∂y(δw) + ∂z(δw)*∂z(δw),
+               b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|\mathbf{u} - \mathbf{u}_0|^2 + |\nabla(\mathbf{u} - \mathbf{u}_0)|^2$", 
+               fname=@sprintf("%s/images/u_H1_err_%1.2e_%1.2e.png", out_dir, h, α))
     plot_slice(δp*δp, b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"$|p - p_0|^2$", 
                fname=@sprintf("%s/images/p_err_%1.2e_%1.2e.png", out_dir, h, α))
 end
@@ -278,13 +284,16 @@ end
 function convergence_plot()
     Ns = [
         [549, 2061, 7955, 31458],
+        [549, 2061, 7955, 31458]
     ]
-    ds = [2]
+    ds = [2, 2]
     Es = [
         [2.183774e-01, 2.407354e-02, 6.073092e-03, 2.122945e-03],
+        [4.666244e-01, 7.929378e-02, 1.961613e-02, 6.420322e-03]
     ]
     labels = [
         L"2D, $\varepsilon = 10^{-2}$, $\alpha = 1/2$",
+        L"2D, $\varepsilon = 10^{-2}$, $\alpha = 1/2$, $f_i$'s"
     ]
 
     pc = 1/6 
@@ -304,16 +313,16 @@ function convergence_plot()
     ax.legend(loc=(1.05, 0.0))
     savefig(@sprintf("%s/images/convergence.png", out_dir))
     println(@sprintf("%s/images/convergence.png", out_dir))
-    savefig(@sprintf("%s/images/convergence.pdf", out_dir))
-    println(@sprintf("%s/images/convergence.pdf", out_dir))
+    # savefig(@sprintf("%s/images/convergence.pdf", out_dir))
+    # println(@sprintf("%s/images/convergence.pdf", out_dir))
     plt.close()
 end
 
 # params/funcs
 arch = CPU()
 dim = 2
-h = 5e-3
-ε = 1e-2
+h = 1e-2
+ε = 1e-1
 α = 1/2
 params = Parameters(ε, α, 0., 0., 0.)
 f₀ = 1
@@ -334,21 +343,81 @@ w0(x) = sin(x[3] + H(x))*sin(x[3]) # must have w = 0 at z = -H, 0
 # p0(x) = x[3]^2 - α^2/6 # 3D
 p0(x) = x[3]^2 - 8α^2/35 # 2D
 
-# # -f*v + ∂x(p) - α²ε²∇⋅(ν∇u) = f₁
-# f₁(x) = 
-# #  f*u + ∂y(p) - α²ε²∇⋅(ν∇v) = f₂
-# f₂(x) = 
-# #        ∂z(p) - α⁴ε²∇⋅(ν∇w) = f₃
-# f₃(x) =
-# #      ∂x(u) + ∂y(v) + ∂z(w) = f₄
-# f₄(x) =
+# -f*v + ∂x(p) - α²ε²∇⋅(ν∇u) = f₁
+f₁(x) = f(x) * (x[3] - (-1 + x[1]^2 + x[2]^2) * α) * cos((-1 + x[1]^2 + x[2]^2) * α) -
+    f(x) * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α) - α^2 * ε^2 * (
+    -4 * α * (-1 + x[1]^4 * α^2 + x[2]^4 * α^2 - x[2]^2 * α * (x[3] + α) -
+    x[1]^2 * α * (x[3] + α - 2 * x[2]^2 * α)) * cos((-1 + x[1]^2 + x[2]^2) * α) -
+    4 * α * cos(x[3] - (-1 + x[1]^2 + x[2]^2) * α) +
+    4 * x[3] * α * sin((-1 + x[1]^2 + x[2]^2) * α) +
+    4 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    12 * x[1]^2 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    12 * x[2]^2 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α) -
+    4 * x[1]^2 * α^2 * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α) -
+    4 * x[2]^2 * α^2 * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α))
+# f*u + ∂y(p) - α²ε²∇⋅(ν∇v) = f₂
+f₂(x) = f(x) * (-((x[3] - (-1 + x[1]^2 + x[2]^2) * α) * cos((-1 + x[1]^2 + x[2]^2) * α)) +
+    sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α)) - α^2 * ε^2 * (
+    -4 * α * (-1 + x[1]^4 * α^2 + x[2]^4 * α^2 - x[2]^2 * α * (x[3] + α) -
+    x[1]^2 * α * (x[3] + α - 2 * x[2]^2 * α)) * cos((-1 + x[1]^2 + x[2]^2) * α) -
+    4 * α * cos(x[3] - (-1 + x[1]^2 + x[2]^2) * α) +
+    4 * x[3] * α * sin((-1 + x[1]^2 + x[2]^2) * α) +
+    4 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    12 * x[1]^2 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    12 * x[2]^2 * α^2 * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α) -
+    4 * x[1]^2 * α^2 * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α) -
+    4 * x[2]^2 * α^2 * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α))
+# ∂z(p) - α⁴ε²∇⋅(ν∇w) = f₃
+f₃(x) = 2 * x[3] - α^4 * ε^2 * (
+    2 * cos(x[3]) * cos(x[3] + (1 - x[1]^2 - x[2]^2) * α) -
+    4 * α * cos(x[3] + (1 - x[1]^2 - x[2]^2) * α) * sin(x[3]) -
+    2 * sin(x[3]) * sin(x[3] + (1 - x[1]^2 - x[2]^2) * α) -
+    4 * x[1]^2 * α^2 * sin(x[3]) * sin(x[3] + (1 - x[1]^2 - x[2]^2) * α) -
+    4 * x[2]^2 * α^2 * sin(x[3]) * sin(x[3] + (1 - x[1]^2 - x[2]^2) * α))
+# ∂x(u) + ∂y(v) + ∂z(w) = f₄
+f₄(x) = 2 * x[1] * α * cos((-1 + x[1]^2 + x[2]^2) * α) +
+    2 * x[2] * α * cos((-1 + x[1]^2 + x[2]^2) * α) -
+    2 * x[1] * α * cos(x[3] - (-1 + x[1]^2 + x[2]^2) * α) -
+    2 * x[2] * α * cos(x[3] - (-1 + x[1]^2 + x[2]^2) * α) +
+    cos(x[3] - (-1 + x[1]^2 + x[2]^2) * α) * sin(x[3]) -
+    2 * x[1] * α * (-x[3] + (-1 + x[1]^2 + x[2]^2) * α) * sin((-1 + x[1]^2 + x[2]^2) * α) -
+    2 * x[2] * α * (-x[3] + (-1 + x[1]^2 + x[2]^2) * α) * sin((-1 + x[1]^2 + x[2]^2) * α) +
+    cos(x[3]) * sin(x[3] - (-1 + x[1]^2 + x[2]^2) * α)
 
 # model = setup_model()
-# rhs = constructed_problem_rhs(model; u0, v0, w0, p0)
+# # rhs = constructed_problem_rhs(model; u0, v0, w0, p0)
+# rhs = constructed_problem_rhs(model; f₁, f₂, f₃, f₄)
 # solve_constructed_problem!(model, rhs)
 # compute_error(model)
 # save_plots(model)
 
-convergence_plot()
+u0_fe = interpolate_everywhere(u0, model.mesh.spaces.X_trial[1])
+v0_fe = interpolate_everywhere(v0, model.mesh.spaces.X_trial[2])
+w0_fe = interpolate_everywhere(w0, model.mesh.spaces.X_trial[3])
 
-# println("Done.")
+plot_slice(u0_fe, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u", fname=@sprintf("%s/images/u0_%1.2e_%1.2e.png", out_dir, h, α))
+plot_slice(v0_fe, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v", fname=@sprintf("%s/images/v0_%1.2e_%1.2e.png", out_dir, h, α))
+plot_slice(w0_fe, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w", fname=@sprintf("%s/images/w0_%1.2e_%1.2e.png", out_dir, h, α))
+plot_slice(model.state.u, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"u", fname=@sprintf("%s/images/u_%1.2e_%1.2e.png", out_dir, h, α))
+plot_slice(model.state.v, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"v", fname=@sprintf("%s/images/v_%1.2e_%1.2e.png", out_dir, h, α))
+plot_slice(model.state.w, model.state.b, 0; y=0, bbox=[-1, -α, 1, 0], cb_label=L"w", fname=@sprintf("%s/images/w_%1.2e_%1.2e.png", out_dir, h, α))
+
+# convergence_plot()
+
+println("Done.")
+
+# 549:
+# |δu|_H1 + |δp|_L2 = 4.608457e-01 + 5.778689e-03 = 4.666244e-01
+# 2061:
+# |δu|_H1 + |δp|_L2 = 7.896423e-02 + 3.295511e-04 = 7.929378e-02
+# 7955
+# |δu|_H1 + |δp|_L2 = 1.931750e-02 + 2.986271e-04 = 1.961613e-02
+# 31458
+# |δu|_H1 + |δp|_L2 = 6.287026e-03 + 1.332958e-04 = 6.420322e-03
+
+# 2061:
+# |δu|_H1 + |δp|_L2 = 1.965860e-02 + 1.678712e-03 = 2.133731e-02
+# 7955:
+# |δu|_H1 + |δp|_L2 = 2.025009e-02 + 1.728360e-03 = 2.197845e-02
