@@ -79,6 +79,8 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
     n_plot = div(t_plot, Δt, RoundNearest)
     n_info = div(n_steps, 100, RoundNearest)
 
+    @info "Beginning integration with" n_steps i_step n_save n_plot n_info
+
     # need to store a half-step buoyancy for advection
     b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
     for i ∈ i_step:n_steps
@@ -90,11 +92,16 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
 
         model.state.t += Δt
 
+        # blow-up -> stop
+        u_max = maximum(abs.(u.free_values))
+        v_max = maximum(abs.(v.free_values))
+        w_max = maximum(abs.(w.free_values))
+        b_max = maximum(abs.(b.free_values))
+        if maximum([u_max, v_max, w_max, b_max]) > 1e3
+            throw(ErrorException("Blow-up detected, stopping simulation"))
+        end
+
         if mod(i, n_info) == 0
-            # @info @sprintf("average ∂z(b) = %1.5e", sum(∫(model.params.N² + ∂z(model.state.b))model.mesh.dΩ)/sum(∫(1)model.mesh.dΩ))
-            u_max = maximum(abs.(u.free_values))
-            v_max = maximum(abs.(v.free_values))
-            w_max = maximum(abs.(w.free_values))
             t1 = time()
             @info begin
             msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
