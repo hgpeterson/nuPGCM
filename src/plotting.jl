@@ -349,12 +349,16 @@ function sim_plots(model::Model, H, i_save)
     N² = model.params.N²
     t = model.state.t
     dim = model.mesh.dim
+    α = model.params.α
+
+    # define bounding box
+    bbox = [-1, -α, 1, 0]
 
     @time "plotting" begin
         cache_profiles = plot_profiles(u, v, w, b, N², H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
-        cache_u_slice  = plot_slice(u, b, N²; y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_dir, i_save))
-        cache_v_slice  = plot_slice(v, b, N²; y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_dir, i_save))
-        cache_w_slice  = plot_slice(w, b, N²; y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_dir, i_save))
+        cache_u_slice  = plot_slice(u, b, N²; bbox, y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_dir, i_save))
+        cache_v_slice  = plot_slice(v, b, N²; bbox, y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_dir, i_save))
+        cache_w_slice  = plot_slice(w, b, N²; bbox, y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_dir, i_save))
         if dim == 3 # surface plot only in 3D
             cache_u_sfc = plot_slice(u, v, b, N²; z=0.0, t=t, cb_label=L"Horizontal speed $\sqrt{u^2 + v^2}$", fname=@sprintf("%s/images/u_sfc_%03d.png", out_dir, i_save))
         end
