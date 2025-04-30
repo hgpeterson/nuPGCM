@@ -23,6 +23,13 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
     kwargs = solver_tk.kwargs
     label = solver_tk.label
 
+    # do a direct solve if possible
+    if typeof(P) <: Factorization
+        ldiv!(x, P, y)
+        @debug "Direct $label solve: complete." 
+        return solver_tk
+    end
+
     # solve
     Krylov.solve!(solver, A, y, x; M=P, kwargs...)
 
