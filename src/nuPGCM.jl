@@ -27,8 +27,10 @@ the directory and two subdirectory:
 - `dir`/data for data files.
 """
 function set_out_dir!(dir)
-    global out_dir = dir
-    @info "Output directory set to '$dir'"
+    if out_dir != dir
+        global out_dir = dir
+        @info "Output directory set to '$dir'"
+    end
 
     if !isdir(out_dir)
         @info "Creating directory '$out_dir'"
@@ -106,7 +108,9 @@ State,
 Model,
 set_b!,
 inversion_model,
+rest_state,
 rest_state_model,
+set_state_from_file!,
 run!,
 # IO.jl
 save_state,
