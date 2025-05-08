@@ -2,6 +2,7 @@
 *.h5
 *.vtu
 *.png
+*.svg
 *.pdf
 *.txt
 *.err
