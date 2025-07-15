@@ -9,7 +9,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-function generate_bowl_mesh(h, α)
+function generate_bowl_mesh_2D(h, α)
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1)
     gmsh.model.add("bowl2D")
@@ -52,6 +52,7 @@ function generate_bowl_mesh(h, α)
     gmsh.model.mesh.generate(2)
     # gmsh.model.mesh.optimize("Netgen")
     gmsh.write(@sprintf("bowl2D_%e_%e.msh", h, α))
+    gmsh.write(@sprintf("bowl2D_%e_%e.vtk", h, α))
     gmsh.finalize()
 end
 
@@ -66,13 +67,13 @@ function mesh_plot(p, t)
     plt.close()
 end
 
-# params
-h = 0.007
-α = 1/2
-@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+# # params
+# h = 2e-2
+# α = 1/4
+# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
 
-# generate
-generate_bowl_mesh(h, α)
+# # generate
+# generate_bowl_mesh_2D(h, α)
 
 # # plot
 # p, t = get_p_t(@sprintf("bowl2D_%e_%e.msh", h, α))
