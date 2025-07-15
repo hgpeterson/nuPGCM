@@ -84,64 +84,115 @@ function convergence()
     hs_3D = d["hs"]
     close(d)
 
-    colors = Dict(1=>"C0", 1/2=>"C1", 1/4=>"C2") # colors for α
-    markers = Dict(1=>"o", 1e-1=>"s", 1e-2=>"^") # markers for ε
+    d = jldopen("../scratch/data/errors3D_1e-7.jld2", "r")
+    Es_3D_e7 = d["δu_H1"] .+ d["δp_L2"]
+    E∞s_3D_e7 = d["δu_L∞"]
+    close(d)
 
-    fig, ax = plt.subplots(1, 2, figsize=(33pc, 33pc/2))
-    ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[1].set_xscale("log")
-    ax[1].set_yscale("log")
-    ax[1].set_xlabel(L"Resolution $h$")
-    ax[1].set_ylabel(L"Energy norm error $||\mathbf{u}_h||_{H^1} + ||p_h - p||_{L^2}$")
-    ax[1].set_xlim(1e-3, 1e-1)
-    ax[1].set_ylim(1e-8, 1e2)
-    for i in eachindex(dims_2D), j in eachindex(εs_2D), k in eachindex(αs_2D)
-        ax[1].plot(hs_2D, Es_2D[i, j, k, :], "-", c=colors[αs_2D[k]], marker=markers[εs_2D[j]], ms=2)
+    d = jldopen("../scratch/data/errors3D_1e-8.jld2", "r")
+    Es_3D_e8 = d["δu_H1"] .+ d["δp_L2"]
+    E∞s_3D_e8 = d["δu_L∞"]
+    close(d)
+
+    colors = Dict(1/2=>"C0", 1/4=>"C1") # colors for α
+    markers = Dict(1e-1=>"o", 1e-2=>"^") # markers for ε
+
+    fig, ax = plt.subplots(2, 2, figsize=(33pc, 33pc))
+
+    ax[1, 1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[1, 2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 1].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2, 2].annotate("(d)", xy=(-0.04, 1.05), xycoords="axes fraction")
+
+    ax[1, 1].set_title("2D")
+    ax[1, 2].set_title("3D")
+
+    for a in ax
+        a.set_xscale("log")
+        a.set_yscale("log")
+        a.set_xlabel(L"Resolution $h$")
     end
+
+    ax[1, 1].set_ylabel(L"Energy norm error $||\mathbf{u}_h||_{H^1} + ||p_h - p||_{L^2}$")
+    ax[1, 2].set_ylabel(L"Energy norm error $||\mathbf{u}_h||_{H^1} + ||p_h - p||_{L^2}$")
+    ax[2, 1].set_ylabel(L"Max norm error $||\mathbf{u}_h||_{L^\infty}$")
+    ax[2, 2].set_ylabel(L"Max norm error $||\mathbf{u}_h||_{L^\infty}$")
+
+    ax[1, 1].set_xlim(1e-3, 4e-2)
+    ax[2, 1].set_xlim(1e-3, 4e-2)
+    ax[1, 2].set_xlim(5e-3, 5e-2)
+    ax[2, 2].set_xlim(5e-3, 5e-2)
+    ax[1, 2].set_xticklabels([L"10^{-2}"], minor="off")
+    ax[2, 2].set_xticklabels([L"10^{-2}"], minor="off")
+
+    ax[1, 1].set_ylim(1e-7, 1e1)
+    ax[1, 2].set_ylim(1e-3, 1e2)
+    ax[2, 1].set_ylim(1e-8, 1e0)
+    ax[2, 2].set_ylim(1e-5, 1e0)
+
+    # (a)
+    for i in eachindex(dims_2D), j in eachindex(εs_2D), k in eachindex(αs_2D)
+        if αs_2D[k] == 1 || εs_2D[j] == 1e0
+            continue
+        end
+        ax[1, 1].plot(hs_2D, Es_2D[i, j, k, :], "-", c=colors[αs_2D[k]], marker=markers[εs_2D[j]])
+    end
+    h1, h2 = 2e-3, 2e-2
+    ax[1, 1].plot([h1, h2], 5e-7/h1^2*[h1^2, h2^2], "k-")
+    ax[1, 1].text(x=h2/3, y=1e-7/h1^2*(h2/3)^2, s=L"$h^2$")
+
+    # (b)
     for i in eachindex(dims_3D), j in eachindex(εs_3D), k in eachindex(αs_3D)
         if εs_3D[j] == 1e0
             continue
+        elseif εs_3D[j] == 1e-1 && αs_3D[k] == 1/2
+            err = Es_3D_e7[1, 1, 1, :]
+            err[1] = Es_3D_e8[1, 1, 1, 1]
+            ax[1, 2].plot(hs_3D, err, "-", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
+            continue
         end
-        ax[1].plot(hs_3D, Es_3D[i, j, k, :], "--", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
+        ax[1, 2].plot(hs_3D, Es_3D[i, j, k, :], "-", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
     end
-    h1, h2 = 5e-3, 3e-2
-    ax[1].plot([h1, h2], 2e-7/h1^2*[h1^2, h2^2], "k-")
-    ax[1].text(x=h2/2, y=5e-8/h1^2*(h2/2)^2, s=L"$h^2$")
+    h1, h2 = 1e-2, 2e-2
+    ax[1, 2].plot([h1, h2], 2e-3/h1^2*[h1^2, h2^2], "k-")
+    ax[1, 2].text(x=1.4e-2, y=1e-3/h1^2*(1.4e-2)^2, s=L"$h^2$")
 
-    ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
-    ax[2].set_xscale("log")
-    ax[2].set_yscale("log")
-    ax[2].set_xlabel(L"Resolution $h$")
-    ax[2].set_ylabel(L"Max norm error $||\mathbf{u}_h||_{L^\infty}$")
-    ax[2].set_xlim(1e-3, 1e-1)
-    ax[2].set_ylim(1e-11, 1e1)
+    # (c)
     for i in eachindex(dims_2D), j in eachindex(εs_2D), k in eachindex(αs_2D)
-        ax[2].plot(hs_2D, E∞s_2D[i, j, k, :], "-", c=colors[αs_2D[k]], marker=markers[εs_2D[j]], ms=2)
+        if αs_2D[k] == 1 || εs_2D[j] == 1e0
+            continue
+        end
+        ax[2, 1].plot(hs_2D, E∞s_2D[i, j, k, :], "-", c=colors[αs_2D[k]], marker=markers[εs_2D[j]])
     end
+    h1, h2 = 2e-3, 2e-2
+    ax[2, 1].plot([h1, h2], 2e-8/h1^3*[h1^3, h2^3], "k-")
+    ax[2, 1].text(x=h2/3, y=5e-9/h1^3*(h2/3)^3, s=L"$h^3$")
+
+    # (d)
     for i in eachindex(dims_3D), j in eachindex(εs_3D), k in eachindex(αs_3D)
         if εs_3D[j] == 1e0
             continue
+        elseif εs_3D[j] == 1e-1 && αs_3D[k] == 1/2
+            err = E∞s_3D_e7[1, 1, 1, :]
+            err[1] = E∞s_3D_e8[1, 1, 1, 1]
+            ax[2, 2].plot(hs_3D, err, "-", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
+            continue
         end
-        ax[2].plot(hs_3D, E∞s_3D[i, j, k, :], "--", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
+        ax[2, 2].plot(hs_3D, E∞s_3D[i, j, k, :], "-", c=colors[αs_3D[k]], marker=markers[εs_3D[j]])
     end
-    h1, h2 = 5e-3, 3e-2
-    ax[2].plot([h1, h2], 2e-10/h1^3*[h1^3, h2^3], "k-")
-    ax[2].text(x=h2/2, y=5e-11/h1^3*(h2/2)^3, s=L"$h^3$")
+    h1, h2 = 1e-2, 2e-2
+    ax[2, 2].plot([h1, h2], 2e-5/h1^3*[h1^3, h2^3], "k-")
+    ax[2, 2].text(x=1.4e-2, y=8e-6/h1^3*(1.4e-2)^3, s=L"$h^3$")
 
     custom_handles = [Line2D([0], [0], color="k",  marker=markers[1e-2], linestyle=""),
                       Line2D([0], [0], color="k",  marker=markers[1e-1], linestyle=""),
-                      Line2D([0], [0], color="k",  marker=markers[1], linestyle=""),
-                      Line2D([0], [0], color=colors[1], linestyle="-"),
-                      Line2D([0], [0], color=colors[1/2], linestyle="-"),
                       Line2D([0], [0], color=colors[1/4], linestyle="-"),
-                      Line2D([0], [0], color="k", marker=markers[1], ms=2, linestyle="-"),
-                      Line2D([0], [0], color="k", marker=markers[1], linestyle="--")]
-    custom_labels = [L"$\varepsilon = 10^{-2}$", L"$\varepsilon = 10^{-1}$", L"$\varepsilon = 10^{0}$",
-                     L"$\alpha = 1$", L"$\alpha = 1/2$", L"$\alpha = 1/4$",
-                     "2D", "3D"] 
-    ax[2].legend(custom_handles, custom_labels, loc=(0.8, 0.2))
+                      Line2D([0], [0], color=colors[1/2], linestyle="-")]
+    custom_labels = [L"$\varepsilon = 10^{-2}$", L"$\varepsilon = 10^{-1}$",
+                     L"$\alpha = 1/4$", L"$\alpha = 1/2$",] 
+    ax[1, 2].legend(custom_handles, custom_labels, loc=(0.75, 0.5))
 
-    subplots_adjust(wspace=0.3)
+    subplots_adjust(wspace=0.4, hspace=0.4)
 
     savefig(@sprintf("%s/images/convergence.png", out_dir))
     println(@sprintf("%s/images/convergence.png", out_dir))
@@ -155,7 +206,8 @@ function zonal_sections()
     α = 1/2
 
     # load data
-    d = jldopen(@sprintf("../sims/sim051/data/gridded_n0257_t%016d.jld2", 500))
+    d = jldopen(@sprintf("../sims/sim050/data/gridded_n0257_t%016d.jld2", 250))
+    # d = jldopen(@sprintf("../sims/sim051/data/gridded_n0257_t%016d.jld2", 250))
     x = d["x"]
     y = d["y"]
     σ = d["σ"]
@@ -172,7 +224,7 @@ function zonal_sections()
     z = H[:, j]*σ'
     u = u[:, j, :]
     v = v[:, j, :]
-    w = w[:, j, :]/α
+    w = w[:, j, :]
     fill_nans!(u)
     fill_nans!(v)
     fill_nans!(w)
@@ -184,14 +236,19 @@ function zonal_sections()
     fill_nans!(b)
     b[:, end] .= 0
 
-    fig, ax = plt.subplots(1, 3, figsize=(39pc, 12pc), gridspec_kw=Dict("width_ratios" => [1, 1, 1], "wspace" => 0.3))
-    components = [(u, L"Zonal flow $u_1$"), (v, L"Meridional flow $u_2$"), (w, L"Vertical flow $u_3/\alpha$")]
-    vmax_values = [0.6, 2.0, 0.8]  # adjust these values as needed for colorbar limits
+    fig, ax = plt.subplots(1, 3, figsize=(33pc, 8pc))
+    ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    components = [(u, L"Zonal flow $u_1$"), (v, L"Meridional flow $u_2$"), (w, L"Vertical flow $u_3$")]
+    vmax_values = [0.42, 2.7, 0.27] # f-plane
+    # vmax_values = [0.57, 2.3, 0.33] # β-plane
+    # println(1e2*[maximum(abs.(u)), maximum(abs.(v)), maximum(abs.(w))])
     for i ∈ 1:3
         f, label = components[i]
         vmax = vmax_values[i]
-        img = ax[i].pcolormesh(xx, z/α, 1e2 * f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
-        ax[i].contour(xx, z/α, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
+        img = ax[i].pcolormesh(xx, z, 1e2 * f, shading="gouraud", cmap="RdBu_r", vmin=-vmax, vmax=vmax, rasterized=true)
+        ax[i].contour(xx, z, b, colors="k", linewidths=0.5, alpha=0.3, linestyles="-", levels=-0.9:0.1:-0.1)
         ax[i].set_xlabel(L"Zonal coordinate $x_1$")
         ax[i].set_xticks(-1:1:1)
         ax[i].set_xlim(-1.05, 1.05)
@@ -203,58 +260,91 @@ function zonal_sections()
             ax[i].set_yticklabels([])
             ax[i].set_yticks([])
         else
-            ax[i].set_ylabel(L"Vertical coordinate $x_3/\alpha$")
-            ax[i].set_yticks(-1:1:0)
+            ax[i].set_ylabel(L"Vertical coordinate $x_3$")
+            ax[i].set_yticks([-0.5, 0])
+            ax[i].plot([0.5, 0.5], [-0.75*α, 0], "r-", alpha=0.7)
         end
-        cb = fig.colorbar(img, ax=ax[i], orientation="horizontal", pad=0.3, fraction=0.05)
+        cb = fig.colorbar(img, ax=ax[i], orientation="horizontal", pad=0.4, fraction=0.05)
         cb.set_ticks([-vmax, 0, vmax])
         cb.set_label(label * L" ($\times 10^{-2}$)")
     end
-    savefig("images/zonal_sections.png")
-    println("images/zonal_sections.png")
-    savefig("images/zonal_sections.pdf")
-    println("images/zonal_sections.pdf")
+    savefig("images/zonal_sections_beta0.png")
+    println("images/zonal_sections_beta0.png")
+    savefig("images/zonal_sections_beta0.pdf")
+    println("images/zonal_sections_beta0.pdf")
     plt.close()
 end
 
-function surface_velocity()
+function vertical_sections()
+    # aspect ratio
+    α = 1/2
+
     # load data
-    d = jldopen(@sprintf("../sims/sim051/data/gridded_n0257_t%016d.jld2", 500))
+    d = jldopen(@sprintf("../sims/sim051/data/gridded_n0257_t%016d.jld2", 250))
     x = d["x"]
     y = d["y"]
-    u = d["u"][:, :, end] # surface velocity
-    v = d["v"][:, :, end] # surface velocity
+    σ = d["σ"]
+    H = d["H"]
+    u = d["u"]
+    v = d["v"]
+    w = d["w"]
+    b = d["b"]
     close(d)
 
-    # speed
-    speed = @. sqrt(u^2 + v^2)
+    # plot setup
+    fig, ax = plt.subplots(1, 2, figsize=(27pc, 27pc/1.62/2))
+    for a in ax
+        a.axis("equal")
+        a.set_xlim(-1.05, 1.05)
+        a.set_ylim(-1.05, 1.05)
+        a.spines["left"].set_visible(false)
+        a.spines["bottom"].set_visible(false)
+        a.set_xlabel(L"Zonal coordinate $x_1$")
+        a.set_ylabel(L"Meridional coordinate $x_2$")
+        a.set_xticks(-1:1:1)
+        a.set_yticks(-1:1:1)
+    end
+    ax[2].set_ylabel("")
+    ax[2].set_yticklabels([])
+    ax[2].set_yticks([])
+    ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
 
-    # plot
-    fig, ax = plt.subplots(1)
-    ax.axis("equal")
-    ax.set_xlim(-1.05, 1.05)
-    ax.set_ylim(-1.05, 1.05)
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    ax.set_xlabel(L"Zonal coordinate $x_1$")
-    ax.set_ylabel(L"Meridional coordinate $x_2$")
-    ax.set_xticks(-1:1:1)
-    ax.set_yticks(-1:1:1)
-    cb_max = 2.5
-    arrow_length = 0.08 # inches
+    # surface velocity
+    u_sfc = u[:, :, end]
+    v_sfc = v[:, :, end]
+    speed = @. sqrt(u_sfc^2 + v_sfc^2)
+    cb_max = 2.0
+    arrow_length = 0.1 # inches
     scale = cb_max/1e2/arrow_length
     scale_units = "inches"
-    img = ax.pcolormesh(x, y, 1e2*speed', shading="nearest", cmap="viridis", vmin=0, vmax=cb_max, rasterized=true) # need to use nearest for NaNs
-    cb = plt.colorbar(img, ax=ax, label=L"Surface speed $\sqrt{u_1^2 + u_2^2}$ ($\times 10^{-2}$)")
+    img = ax[1].pcolormesh(x, y, 1e2*speed', shading="nearest", cmap="viridis", vmin=0, vmax=cb_max, rasterized=true) # need to use nearest for NaNs
+    cb = plt.colorbar(img, ax=ax[1], label=L"Surface speed $\sqrt{u_1^2 + u_2^2}$ ($\times 10^{-2}$)", extend="max")
     n = length(x)
     slice = 1:2^3:n
-    ax.quiver(x[slice], y[slice], u[slice, slice]', v[slice, slice]', color="w", pivot="mid", scale=scale, scale_units=scale_units)
-    # plot unit circle to cover up jagged edge
-    ax.plot(cos.(0:0.01:2π), sin.(0:0.01:2π), "k-", lw=1)
-    savefig("surface_velocity.png")
-    println("surface_velocity.png")
-    savefig("surface_velocity.pdf")
-    println("surface_velocity.pdf")
+    ax[1].quiver(x[slice], y[slice], u_sfc[slice, slice]', v_sfc[slice, slice]', color="w", pivot="mid", scale=scale, scale_units=scale_units)
+    ax[1].plot(cos.(0:0.01:2π), sin.(0:0.01:2π), "k-", lw=1)
+
+    # buoyancy at z = -α/2
+    H[H .< 0] .= NaN
+    z = [H[i, j]*σ[k] for i in 1:length(x), j in 1:length(y), k in eachindex(σ)]
+    ks = [argmin(abs.(z[i, j, :] .+ α/2)) for i in 1:length(x), j in 1:length(y)]
+    b = [-0.5 + b[i, j, ks[i, j]] for i in 1:length(x), j in 1:length(y)]
+    b[end-10:end, :] .= NaN
+    fill_nans!(b)
+    vmin = -0.51
+    vmax = -0.47
+    img = ax[2].pcolormesh(x, y, b', shading="nearest", cmap="plasma", vmin=vmin, vmax=vmax, rasterized=true)
+    cb = fig.colorbar(img, ax=ax[2], label=L"Buoyancy $b$ at $x_3/\alpha = -1/2$")
+    cb.set_ticks([vmin, (vmin + vmax)/2, vmax])
+    ax[2].plot(cos.(0:0.01:2π), sin.(0:0.01:2π), "k-", lw=0.5, alpha=0.5)
+
+    subplots_adjust(wspace=0.4)
+
+    savefig("images/vertical_sections.png")
+    println("images/vertical_sections.png")
+    savefig("images/vertical_sections.pdf")
+    println("images/vertical_sections.pdf")
     plt.close()
 end
 
@@ -284,7 +374,7 @@ function aspect_ratios()
     αs = [1/2, 1/4, 1/8, 1/2]
 
     # plot
-    fig, ax = plt.subplots(1, 4, figsize=(39pc, 39pc/4*1.62))
+    fig, ax = plt.subplots(1, 4, figsize=(33pc, 33pc/4*1.62))
     ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
     ax[3].annotate("(c)", xy=(-0.04, 1.05), xycoords="axes fraction")
@@ -332,59 +422,11 @@ function aspect_ratios()
         ax[3].plot(1e2*w[w_mask],      z[w_mask],  "k--", lw=0.5, label=label)
         ax[4].plot(1 .+ bzs[bz_mask],  z[bz_mask], "k--", lw=0.5, label=label)
     end
-    ax[2].legend(loc=(-0.7, 0.6))
+    ax[2].legend(loc=(-0.8, 0.6))
     savefig("images/aspect_ratios.png")
     println("images/aspect_ratios.png")
     savefig("images/aspect_ratios.pdf")
     println("images/aspect_ratios.pdf")
-    plt.close()
-end
-
-function test()
-    # parameters
-    α = 1/2
-
-    # load data
-    d = jldopen(@sprintf("../sims/sim051/data/gridded_n0257_t%016d.jld2", 500))
-    x = d["x"]
-    y = d["y"]
-    σ = d["σ"]
-    H = d["H"]
-    u = d["u"]
-    v = d["v"]
-    w = d["w"]
-    b = d["b"]
-    close(d)
-
-    # prepare data
-    H[H .< 0] .= NaN
-    z = [H[i, j]*σ[k] for i in 1:length(x), j in 1:length(y), k in eachindex(σ)]
-    ks = [argmin(abs.(z[i, j, :] .+ α/2)) for i in 1:length(x), j in 1:length(y)]
-    b = [-0.5 + b[i, j, ks[i, j]] for i in 1:length(x), j in 1:length(y)]
-    b[end-10:end, :] .= NaN
-    fill_nans!(b)
-
-    # plot
-    fig, ax = plt.subplots(1)
-    vmin = -0.51
-    vmax = -0.47
-    img = ax.pcolormesh(x, y, b', shading="nearest", cmap="plasma", vmin=vmin, vmax=vmax, rasterized=true)
-    cb = fig.colorbar(img, ax=ax, label=L"Buoyancy $b$ at $x_3/\alpha = -1/2$")
-    cb.set_ticks([vmin, (vmin + vmax)/2, vmax])
-    ax.plot(cos.(0:0.01:2π), sin.(0:0.01:2π), "k-", lw=0.5, alpha=0.5)
-    ax.set_xlabel(L"Zonal coordinate $x_1$")
-    ax.set_ylabel(L"Meridional coordinate $x_2$")
-    ax.set_xticks(-1:1:1)
-    ax.set_yticks(-1:1:1)
-    ax.set_xlim(-1.05, 1.05)
-    ax.set_ylim(-1.05, 1.05)
-    ax.axis("equal")
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    savefig("images/test.png")
-    println("images/test.png")
-    # savefig("images/test.pdf")
-    # println("images/test.pdf")
     plt.close()
 end
 
@@ -393,6 +435,5 @@ end
 # mesh()
 # convergence()
 # zonal_sections()
-# surface_velocity()
-# aspect_ratios()
-test()
+# vertical_sections()
+aspect_ratios()

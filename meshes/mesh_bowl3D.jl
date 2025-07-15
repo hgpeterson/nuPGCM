@@ -1,7 +1,7 @@
 using Gmsh: gmsh
 using Printf
 
-function generate_bowl_mesh(h, α)
+function generate_bowl_mesh_3D(h, α)
     # init
     gmsh.initialize()
 
@@ -52,13 +52,14 @@ function generate_bowl_mesh(h, α)
     # gmsh.model.mesh.optimize("HighOrder")
     # gmsh.model.mesh.optimize("HighOrderElastic")
     gmsh.write(@sprintf("bowl3D_%e_%e.msh", h, α))
+    gmsh.write(@sprintf("bowl3D_%e_%e.vtk", h, α))
     gmsh.finalize()
 end
 
-# params
-h = 4e-2
-α = 1
-@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+# # params
+# h = 4e-2
+# α = 1
+# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
 
-# generate
-generate_bowl_mesh(h, α)
+# # generate
+# generate_bowl_mesh_3D(h, α)

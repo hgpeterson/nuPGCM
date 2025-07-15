@@ -1,6 +1,7 @@
 *.msh
 *.h5
 *.vtu
+*.vtk
 *.png
 *.svg
 *.pdf

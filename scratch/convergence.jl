@@ -4,6 +4,7 @@ using LinearAlgebra
 using JLD2
 using Printf
 using PyPlot
+using PyCall
 
 import nuPGCM: plot_profiles
 
@@ -15,6 +16,7 @@ ENV["JULIA_DEBUG"] = nuPGCM
 pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
+Line2D = pyimport("matplotlib.lines").Line2D
 
 set_out_dir!(".")
 
@@ -74,7 +76,7 @@ function setup_model(; dim, h, α, ε, f₀=1, β=0, force_build_inversion_matri
     if typeof(arch) == CPU
         inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
     else
-        inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion; atol=1e-3, rtol=1e-3)
+        inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion; atol=1e-8, rtol=1e-8)
     end
 
     # make an inverison model
@@ -200,8 +202,9 @@ function compute_errors(; dims, εs, αs, hs)
         Ns[i, j, k, l] = n_pts(model.mesh)
         solve_flat_isopycnal_problem!(model)
         δu_H1[i, j, k, l], δp_L2[i, j, k, l] = compute_error(model; u0, v0, w0, p0=x->p0(x; α, dim))
-        # max norm for flat isopycnal problem:
+        # max norm for flat isopycnal problem: TODO: change to max of |u|
         δu_L∞[i, j, k, l] = maximum([maximum(abs.(model.state.u.free_values)), maximum(abs.(model.state.v.free_values)), maximum(abs.(model.state.w.free_values))]) 
+        @printf("δu_L∞ = %e\n", δu_L∞[i, j, k, l])
     end
 
     # save file
@@ -217,101 +220,6 @@ function compute_errors(; dims, εs, αs, hs)
     return Ns, δu_L∞, δu_H1, δp_L2
 end
 
-# function plot_convergence_2D()
-#     # n_dofs = [
-#     #     [4.02802e+05, 1.00333e+05, 2.52460e+04]
-#     # ]
-
-#     hs = [
-#         [1.00000e-02, 2.00000e-02, 5.00000e-02],
-#         [5.00000e-03, 1.00000e-02, 2.00000e-02]
-#     ]
-#     hmin = minimum(minimum(hs))
-#     hmax = maximum(maximum(hs))
-
-#     errors = [
-#         [1.15721e-04, 6.07887e-04, 5.90033e-03],
-#         [6.99864e-05, 3.03114e-04, 1.58356e-03]
-#     ]
-#     emin = minimum(minimum(errors))
-#     emax = maximum(maximum(errors))
-
-#     # eu_L∞ = [
-#     #     [1.37493e-06, 1.91026e-05, 4.91261e-05]
-#     # ]
-
-#     labels = [
-#         L"$\varepsilon = 10^{-1}$, $\alpha = 1/2$, aniso",
-#         L"$\varepsilon = 10^{-1}$, $\alpha = 1/2$, iso",
-#     ]
-
-#     fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
-#     ax.set_xscale("log")
-#     ax.set_yscale("log")
-#     ax.spines["top"].set_visible(true)
-#     ax.spines["right"].set_visible(true)
-#     ax.set_xlabel(L"Resolution $h$")
-#     ax.set_ylabel(L"Error $||\mathbf{u}||_{H^1} + ||p - p_a||_{L^2}$")
-#     ax.set_xlim(0.9*hmin, 1.1*hmax)
-#     ax.set_ylim(0.9*emin, 1.1*emax)
-#     ax.grid(true, which="both", color="k", alpha=0.5, linestyle=":", linewidth=0.25)
-#     ax.set_axisbelow(true) # put grid behind lines
-#     for i ∈ eachindex(hs)
-#         ax.plot(hs[i], errors[i], "o-", label=labels[i])
-#     end
-#     ax.plot([hmin, hmax], 2emin/hmin^2*[hmin^2, hmax^2], "k--", label=L"$C h^2$")
-#     ax.legend(loc=(1.05, 0.0))
-#     savefig(@sprintf("%s/images/convergence2D.png", out_dir))
-#     println(@sprintf("%s/images/convergence2D.png", out_dir))
-#     plt.close()
-# end
-
-# function plot_convergence_3D()
-#     hs = [9.62898e-03, 1.88410e-02, 4.45354e-02]
-
-#     errs = [
-#         [1.65234e-01, NaN, NaN],
-#         [1.65596e-01, 6.42308e-01, 3.66494e+00],
-#         [1.701087e-01, NaN, NaN],
-#         [2.101807e-01, NaN, NaN],
-#         [2.438967e-03, 2.211299e-02, 4.085575e-02],
-#         [NaN, 6.901556e-03, 4.039652e-02],
-#     ]
-#     labels = [
-#         L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-6}$",
-#         L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-5}$",
-#         L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-4}$",
-#         L"$\varepsilon^2 = 10^{-4}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-3}$",
-#         L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-4}$",
-#         L"$\varepsilon^2 = 10^{-2}, \; f = 1, \; \gamma = 1/4$, tol$= 10^{-5}$",
-#     ]
-
-#     println((errs[2][1] - errs[1][1])/errs[1][1])
-#     println((errs[3][1] - errs[1][1])/errs[1][1])
-#     println((errs[4][1] - errs[1][1])/errs[1][1])
-
-#     fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
-#     ax.set_xscale("log")
-#     ax.set_yscale("log")
-#     ax.spines["top"].set_visible(true)
-#     ax.spines["right"].set_visible(true)
-#     ax.set_xlabel(L"Resolution $h$")
-#     ax.set_ylabel(L"Error $||\mathbf{u}||_{H^1} + ||p - p_a||_{L^2}$")
-#     ax.set_xlim(7e-3, 5e-2)
-#     ax.set_ylim(1e-4, 1e1)
-#     ax.grid(true, which="both", color="k", alpha=0.5, linestyle=":", linewidth=0.25)
-#     ax.set_axisbelow(true)
-#     for i ∈ eachindex(errs)
-#         ax.plot(hs, errs[i], "o-", label=labels[i])
-#     end
-#     ax.plot(hs, errs[2][2]/hs[2]^2*hs.^2, "k--", label=L"$O(h^2)$")
-#     ax.legend(loc=(1.05, 0.0))
-#     ax.set_title("3D Bowl (Gridap)")
-#     savefig(@sprintf("%s/images/convergence3D.png", out_dir))
-#     println(@sprintf("%s/images/convergence3D.png", out_dir))
-#     plt.close()
-# end
-
 function convergence_plot()
     # # const sol
     # ds = [2, 2]
@@ -326,75 +234,105 @@ function convergence_plot()
     #     [4.666244e-01, 7.929378e-02, 1.961613e-02, 6.420322e-03],
     # ]
 
-    # # flat iso
-    # ds = [2, 2, 2, 2]
-    # αs = [1/2, 1/4, 1/2, 1/4]
-    # εs = [1e-1, 1e-1, 1e-2, 1e-2]
-    # Ns = [
-    #     [2061, 7955, 31458],
-    #     [1122, 4129, 15928],
-    #     [2061, 7955, 31458],
-    #     [1122, 4129, 15928],
-    # ]
-    # Es = [
-    #     [1.615802e-03, 3.114505e-04, 7.210757e-05],
-    #     [3.354335e-02, 4.233492e-03, 7.855286e-04],
-    #     [1.536645e-01, 3.008951e-02, 6.971562e-03],
-    #     [2.942322e+00, 4.077684e-01, 7.765914e-02],
-    # ]
-
-    d = jldopen("errors1.jld2", "r")
-    Es = d["δu_H1"] .+ d["δp_L2"]
-    E∞s = d["δu_L∞"]
-    ds = d["dims"]
-    εs = d["εs"]
-    αs = d["αs"]
-    hs = d["hs"]
+    # d = jldopen("data/errors2D.jld2", "r")
+    d = jldopen("errors2.jld2", "r")
+    Es_2D = d["δu_H1"] .+ d["δp_L2"]
+    E∞s_2D = d["δu_L∞"]
+    dims_2D = d["dims"]
+    εs_2D = d["εs"]
+    αs_2D = d["αs"]
+    hs_2D = d["hs"]
     close(d)
 
+    # d = jldopen("data/errors3D.jld2", "r")
+    d = jldopen("errors3.jld2", "r")
+    Es_3D = d["δu_H1"] .+ d["δp_L2"]
+    E∞s_3D = d["δu_L∞"]
+    dims_3D = d["dims"]
+    εs_3D = d["εs"]
+    αs_3D = d["αs"]
+    hs_3D = d["hs"]
+    close(d)
+
+    colors = ["C0", "C1", "C2"]
+    markers = ["o", "s", "^"]
+
     pc = 1/6 
-    fig, ax = plt.subplots(1, figsize=(19pc, 19pc))
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||\mathbf{u} - \mathbf{u}_0||_{H^1} + ||p - p_0||_{L^2}$")
-    # ax.set_xlim(1e-3, 1e-1)
-    # ax.set_ylim(1e-3, 1e0)
-    for i in eachindex(dims), j in eachindex(εs), k in eachindex(αs)
-        label = @sprintf("%dD, \$\\varepsilon = 10^{%d}\$, \$\\alpha = %1.2f\$", ds[i], log10(εs[j]), αs[k])
-        ax.plot(hs, Es[i, j, k, :], "o-", label=latexstring(label))
+    fig, ax = plt.subplots(1, 2, figsize=(33pc, 33pc/2))
+    ax[1].annotate("(a)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[1].set_xscale("log")
+    ax[1].set_yscale("log")
+    ax[1].set_xlabel(L"Resolution $h$")
+    ax[1].set_ylabel(L"Energy norm error $||\mathbf{u}||_{H^1} + ||p - p_0||_{L^2}$")
+    ax[1].set_xlim(1e-3, 1e-1)
+    ax[1].set_ylim(1e-8, 1e2)
+    for i in eachindex(dims_2D), j in eachindex(εs_2D), k in eachindex(αs_2D)
+        ax[1].plot(hs_2D, Es_2D[i, j, k, :], "-", c=colors[k], marker=markers[j])
     end
-    # h1, h2 = 1e-2, 4e-2
-    # ax.plot([h1, h2], 2e-3/h1^2*[h1^2, h2^2], "k-")
-    # ax.text(x=h2/2, y=1e-3/h1^2*(h2/2)^2, s=L"$h^2$")
-    ax.legend(loc=(1.05, 0.0))
+    for i in eachindex(dims_3D), j in eachindex(εs_3D), k in eachindex(αs_3D)
+        ax[1].plot(hs_3D, Es_3D[i, j, k, :], "--", c=colors[k], marker=markers[j])
+    end
+    h1, h2 = 5e-3, 3e-2
+    ax[1].plot([h1, h2], 2e-7/h1^2*[h1^2, h2^2], "k-")
+    ax[1].text(x=h2/2, y=5e-8/h1^2*(h2/2)^2, s=L"$h^2$")
+
+    ax[2].annotate("(b)", xy=(-0.04, 1.05), xycoords="axes fraction")
+    ax[2].set_xscale("log")
+    ax[2].set_yscale("log")
+    ax[2].set_xlabel(L"Resolution $h$")
+    ax[2].set_ylabel(L"Max norm error $||\mathbf{u}||_{L^\infty}$")
+    ax[2].set_xlim(1e-3, 1e-1)
+    ax[2].set_ylim(1e-11, 1e1)
+    for i in eachindex(dims_2D), j in eachindex(εs_2D), k in eachindex(αs_2D)
+        ax[2].plot(hs_2D, E∞s_2D[i, j, k, :], "-", c=colors[k], marker=markers[j])
+    end
+    for i in eachindex(dims_3D), j in eachindex(εs_3D), k in eachindex(αs_3D)
+        ax[2].plot(hs_3D, E∞s_3D[i, j, k, :], "--", c=colors[k], marker=markers[j])
+    end
+    h1, h2 = 5e-3, 3e-2
+    ax[2].plot([h1, h2], 2e-10/h1^3*[h1^3, h2^3], "k-")
+    ax[2].text(x=h2/2, y=5e-11/h1^3*(h2/2)^3, s=L"$h^3$")
+
+    custom_handles = [Line2D([0], [0], color="k",  marker=markers[1], linestyle=""),
+                      Line2D([0], [0], color="k",  marker=markers[2], linestyle=""),
+                      Line2D([0], [0], color="k",  marker=markers[3], linestyle=""),
+                      Line2D([0], [0], color=colors[1], linestyle="-"),
+                      Line2D([0], [0], color=colors[2], linestyle="-"),
+                      Line2D([0], [0], color=colors[3], linestyle="-"),
+                      Line2D([0], [0], color="k", linestyle="-"),
+                      Line2D([0], [0], color="k", linestyle="--")]
+    custom_labels = [L"$\varepsilon = 10^{-2}$", L"$\varepsilon = 10^{-1}$", L"$\varepsilon = 10^{0}$",
+                     L"$\alpha = 1$", L"$\alpha = 1/2$", L"$\alpha = 1/4$",
+                     "2D", "3D"] 
+    ax[2].legend(custom_handles, custom_labels, loc=(0.8, 0.2))
+
+    subplots_adjust(wspace=0.3)
+
     savefig(@sprintf("%s/images/convergence.png", out_dir))
     println(@sprintf("%s/images/convergence.png", out_dir))
     # savefig(@sprintf("%s/images/convergence.pdf", out_dir))
     # println(@sprintf("%s/images/convergence.pdf", out_dir))
     plt.close()
-
-    pc = 1/6 
-    fig, ax = plt.subplots(1, figsize=(19pc, 19pc))
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(L"Resolution $h$")
-    ax.set_ylabel(L"Error $||\mathbf{u} - \mathbf{u}_0||_{L^\infty}$")
-    for i in eachindex(dims), j in eachindex(εs), k in eachindex(αs)
-        label = @sprintf("%dD, \$\\varepsilon = 10^{%d}\$, \$\\alpha = %1.2f\$", ds[i], log10(εs[j]), αs[k])
-        ax.plot(hs, E∞s[i, j, k, :], "o-", label=latexstring(label))
-    end
-    ax.legend(loc=(1.05, 0.0))
-    savefig(@sprintf("%s/images/convergence_maxnorm.png", out_dir))
-    println(@sprintf("%s/images/convergence_maxnorm.png", out_dir))
-    plt.close()
 end
 
-arch = CPU()
-hs = 2 * (10 .^ range(-3, -2, length=10))
-dims = [2]
-αs = [1, 1/2, 1/4]
-εs = [1e-2, 1e-1, 1e0]
+# arch = CPU()
+# hs = 2 * (10 .^ range(-3, -2, length=10))
+# dims = [2]
+# αs = [1, 1/2, 1/4]
+# εs = [1e-2, 1e-1, 1e0]
+# display(hs)
+# display(dims)
+# display(αs)
+# display(εs)
+# flush(stdout)
+# flush(stderr)
+# compute_errors(; dims, εs, αs, hs)
+
+arch = GPU()
+hs = [1e-2]
+dims = [3]
+αs = [1/2]
+εs = [1e-1]
 display(hs)
 display(dims)
 display(αs)
@@ -461,6 +399,6 @@ compute_errors(; dims, εs, αs, hs)
 # compute_error(model; u0, v0, w0, p0)
 # # save_plots(model)
 
-convergence_plot()
+# convergence_plot()
 
 println("Done.")
