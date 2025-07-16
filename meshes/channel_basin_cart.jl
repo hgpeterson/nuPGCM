@@ -5,7 +5,7 @@ gmsh.initialize()
 gmsh.model.add("channel_basin_cart")
 
 # params
-h = 0.04
+h = 0.08
 L = 2
 W = 1
 L_channel = L/4
@@ -25,15 +25,6 @@ gmsh.model.occ.addPlaneSurface([1], 1)
 
 # extrude to x = W
 gmsh.model.occ.extrude([(2, 1)], W, 0, 0)
-gmsh.model.occ.synchronize()
-gmsh.model.mesh.setSize(gmsh.model.getEntities(0), 0.04)
-
-# periodic boundary condition
-translation = [1, 0, 0, W, 
-               0, 1, 0, 0, 
-               0, 0, 1, 0, 
-               0, 0, 0, 1]
-gmsh.model.mesh.setPeriodic(2, [4], [1], translation)
 gmsh.model.occ.synchronize()
 
 # basin curve
@@ -55,9 +46,18 @@ gmsh.model.occ.synchronize()
 gmsh.model.occ.fuse([(3, 1)], [(3, 2)])
 gmsh.model.occ.synchronize()
 
+# periodic boundary condition
+translation = [1, 0, 0, W, 
+               0, 1, 0, 0, 
+               0, 0, 1, 0, 
+               0, 0, 0, 1]
+gmsh.model.mesh.setPeriodic(2, [4], [2], translation)
+gmsh.model.occ.synchronize()
+
 # define bottom, surface, and interior
 gmsh.model.addPhysicalGroup(0, 8:13, 1, "bot")
-gmsh.model.addPhysicalGroup(1, 1:10, 1, "bot")
+gmsh.model.addPhysicalGroup(1, [1, 2, 3, 4, 6, 7 ,8, 10], 1, "bot")
+gmsh.model.addPhysicalGroup(1, [5, 9], 2, "sfc")
 gmsh.model.addPhysicalGroup(2, [1, 3, 6], 1, "bot")
 gmsh.model.addPhysicalGroup(2, [5], 2, "sfc")
 gmsh.model.addPhysicalGroup(2, [2, 4], 3, "int")
@@ -68,5 +68,4 @@ gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
 
 gmsh.model.mesh.generate(3)
 gmsh.write("channel_basin_cart.msh")
-gmsh.write("channel_basin_cart.vtk")
 gmsh.finalize()
