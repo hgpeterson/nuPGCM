@@ -30,6 +30,25 @@ function nan_eval(cache, u::CellField, x::AbstractVector)
     return [nan_eval(cache, u, x[i]) for i ∈ eachindex(x)]
 end
 
+""" 
+    H = find_H(u, x, y; tol=1e-8)
+
+Find height of water column `H` at point `(x, y)` by bisection method.
+"""
+function find_H(u, x, y; tol=1e-8)
+    z_in = 0
+    z_out = -1
+    while abs(z_in - z_out) > tol
+        z = (z_in + z_out)/2
+        if isnan(nan_eval(u, Point(x, y, z)))
+            z_out = z
+        else
+            z_in = z
+        end
+    end
+    return -z_in
+end
+
 """
     cache = plot_slice(u::CellField, b::CellField, N²::Real,; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
     plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="slice.png")
@@ -131,22 +150,22 @@ function plot_slice(cache::Tuple, u::CellField, b::CellField; t=nothing, fname="
     println(fname)
     plt.close()
 end
-function plot_slice(u::CellField, v::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, cb_label="", cb_max=0., fname="slice.png")
+function plot_slice(u::CellField, v::CellField, b::CellField, N²::Real; x=nothing, y=nothing, z=nothing, t=nothing, bbox=[-1, -1, 1, 1], cb_label="", cb_max=0., fname="slice.png")
     # setup grid and cache
     n = 2^8
     if x !== nothing
-        y = range(-1, 1, length=n)
-        z = range(-1, 0, length=n)
+        y = range(bbox[1], bbox[3], length=n)
+        z = range(bbox[2], bbox[4], length=n)
         points = [Point(x, yᵢ, zᵢ) for yᵢ ∈ y, zᵢ ∈ z]
         slice_dir = "x"
     elseif y !== nothing
-        x = range(-1, 1, length=n)
-        z = range(-1, 0, length=n)
+        x = range(bbox[1], bbox[3], length=n)
+        z = range(bbox[2], bbox[4], length=n)
         points = [Point(xᵢ, y, zᵢ) for xᵢ ∈ x, zᵢ ∈ z]
         slice_dir = "y"
     elseif z !== nothing
-        x = range(-1, 1, length=n)
-        y = range(-1, 1, length=n)
+        x = range(bbox[1], bbox[3], length=n)
+        y = range(bbox[2], bbox[4], length=n)
         points = [Point(xᵢ, yᵢ, z) for xᵢ ∈ x, yᵢ ∈ y]
         slice_dir = "z"
     else
@@ -190,7 +209,7 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
     end
 
     # plot
-    fig, ax = plt.subplots(1)
+    fig, ax = plt.subplots(1, figsize=(3.2, 3.2))
     ax.axis("equal")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
@@ -200,61 +219,68 @@ function plot_slice(cache::Tuple, u::CellField, v::CellField, b::CellField; t=no
         x2 = z
         ax.set_xlabel(L"y")
         ax.set_ylabel(L"z")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:0)
     elseif slice_dir == "y"
         slice_coord = y
         x1 = x
         x2 = z
         ax.set_xlabel(L"x")
         ax.set_ylabel(L"z")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:0)
     elseif slice_dir == "z"
         slice_coord = z
         x1 = x
         x2 = y
         ax.set_xlabel(L"x")
         ax.set_ylabel(L"y")
-        ax.set_xticks(-1:0.5:1)
-        ax.set_yticks(-1:0.5:1)
     end
+    extend = "max"
     if cb_max == 0.
         cb_max = nan_max(speed)
-        scale = nothing
-        scale_units = nothing
-    else
-        scale = cb_max/0.1 # speed of `cb_max` corresponds to 0.1 inch arrow
-        scale_units = "inches"
+        extend = "neither"
     end
-    img = ax.pcolormesh(x1, x2, speed', shading="nearest", cmap="Reds", vmin=0, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
-    cb = plt.colorbar(img, ax=ax, label=cb_label)
+    arrow_length = 0.12 # inches
+    scale = cb_max/arrow_length # speed of `cb_max` corresponds to `arrow_length` inch arrow
+    scale_units = "inches"
+    # ax.set_xticks([-1, 0, 1])
+    # ax.set_yticks([-1.5, 0, 1.5])
+    img = ax.pcolormesh(x1, x2, speed', shading="nearest", cmap="viridis", vmin=0, vmax=cb_max, rasterized=true) # need to use nearest for NaNs in us
+    cb = plt.colorbar(img, ax=ax, label=cb_label, shrink=0.5, extend=extend)
     cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
+    # cb.set_ticks([0, cb_max])
+    # cb.set_ticklabels(["0", "Max"])
     ax.contour(x1, x2, bs', colors="k", linewidths=0.5, linestyles="-", alpha=0.3, levels=-0.95:0.05:-0.05)
     n = length(x1)
-    slice = 1:2^3:n
-    ax.quiver(x1[slice], x2[slice], us[slice, slice]', vs[slice, slice]', color="k", pivot="mid", scale=scale, scale_units=scale_units)
-    if t === nothing
-        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
-    else
-        ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %s\$", slice_dir, slice_coord, sci_notation(t))))
+    # rescale arrows if speed is too large
+    for i ∈ 1:n, j ∈ 1:n
+        if isnan(speed[i, j])
+            continue
+        elseif speed[i, j] > cb_max
+            us[i, j] *= cb_max/speed[i, j]
+            vs[i, j] *= cb_max/speed[i, j]
+        end
     end
+    slice = 1:n÷2^5:n
+    ax.quiver(x1[slice], x2[slice], us[slice, slice]', vs[slice, slice]', color="w", pivot="mid", scale=scale, scale_units=scale_units)
+    # if t === nothing
+    #     ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$", slice_dir, slice_coord)))
+    # else
+    #     ax.set_title(latexstring(@sprintf("Slice at \$%s = %1.2f\$, \$t = %s\$", slice_dir, slice_coord, sci_notation(t))))
+    # end
     savefig(fname)
     println(fname)
     plt.close()
 end
 
 """
-    cache = plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real, H::Function; 
+    cache = plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real; 
                           x::Real, y::Real, t=nothing, fname="profiles.png")
     plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField, b::CellField
                   t=nothing, fname="profiles.png") 
 """
-function plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real,
-                       H::Function; x::Real, y::Real, t=nothing, fname="profiles.png")
+function plot_profiles(ux::CellField, uy::CellField, uz::CellField, b::CellField, N²::Real; 
+                       x::Real, y::Real, t=nothing, fname="profiles.png")
     # setup points
-    H0 = H([x, y])
-    z = range(-H0, 0, length=2^8)
+    H = find_H(b, x, y)
+    z = range(-H, 0, length=2^8)
     points = [Point(x, y, zᵢ) for zᵢ ∈ z]
 
     # compute evaluation caches
@@ -337,10 +363,10 @@ function plot_profiles(cache::Tuple, ux::CellField, uy::CellField, uz::CellField
 end
 
 """
-    cache = sim_plots(model, H, i_save)
+    cache = sim_plots(model, i_save)
     sim_plots(cache, model, i_save)
 """
-function sim_plots(model::Model, H, i_save)
+function sim_plots(model::Model, i_save)
     # unpack
     u = model.state.u
     v = model.state.v
@@ -355,7 +381,7 @@ function sim_plots(model::Model, H, i_save)
     bbox = [-1, -α, 1, 0]
 
     @time "plotting" begin
-        cache_profiles = plot_profiles(u, v, w, b, N², H; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
+        cache_profiles = plot_profiles(u, v, w, b, N²; x=0.5, y=0.0, t=t, fname=@sprintf("%s/images/profiles%03d.png", out_dir, i_save))
         cache_u_slice  = plot_slice(u, b, N²; bbox, y=0.0, t=t, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_yslice_%03d.png", out_dir, i_save))
         cache_v_slice  = plot_slice(v, b, N²; bbox, y=0.0, t=t, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_yslice_%03d.png", out_dir, i_save))
         cache_w_slice  = plot_slice(w, b, N²; bbox, y=0.0, t=t, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_yslice_%03d.png", out_dir, i_save))
