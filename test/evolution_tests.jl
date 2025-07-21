@@ -9,7 +9,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-set_out_dir!("./test")
+set_out_dir!(".")
 
 function coarse_evolution(dim, arch)
     # params/funcs
@@ -25,7 +25,9 @@ function coarse_evolution(dim, arch)
     H(x) = α*(1 - x[1]^2 - x[2]^2)
     ν(x) = 1
     κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-    T = 5e-2*μϱ/(α*ε)^2
+    τx(x) = 0
+    τy(x) = 0
+    n_steps = 500
 
     # coarse mesh
     h = 0.1
@@ -35,21 +37,19 @@ function coarse_evolution(dim, arch)
     A_inversion_fname = @sprintf("data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; A_inversion_ofile=A_inversion_fname)
     else
-        # A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
-        # jldopen(A_inversion_fname, "r") do file
-        #     @test A_inversion ≈ file["A_inversion"]
-        # end
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
         B_inversion = nuPGCM.build_B_inversion(mesh, params)
+        b_inversion = nuPGCM.build_b_inversion(mesh, params, τx, τy)
     end
 
     # re-order dofs
     A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
     B_inversion = B_inversion[mesh.dofs.p_inversion, :]
+    b_inversion = b_inversion[mesh.dofs.p_inversion]
 
     # preconditioner
     if typeof(arch) == CPU
@@ -61,9 +61,10 @@ function coarse_evolution(dim, arch)
     # move to arch
     A_inversion = on_architecture(arch, A_inversion)
     B_inversion = on_architecture(arch, B_inversion)
+    b_inversion = on_architecture(arch, b_inversion)
 
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
+    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_inversion)
 
     # build evolution matrices and test against saved matrices
     θ = Δt/2 * (α*ε)^2/μϱ
@@ -111,10 +112,10 @@ function coarse_evolution(dim, arch)
     model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
 
     # solve
-    run!(model, T)
+    run!(model; n_steps)
 
-    # # plot for sanity check
-    # sim_plots(model, H, 0)
+    # plot for sanity check
+    sim_plots(model, 0)
 
     # compare state with data
     datafile = @sprintf("data/evolution_%sD.jld2", dim)
