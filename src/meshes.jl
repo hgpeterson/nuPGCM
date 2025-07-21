@@ -1,22 +1,28 @@
-struct Mesh{M, S, D, O, DO}
+struct Mesh{M, S, D, O, DO, G, DG}
     model::M         # unstructured discrete model
     spaces::S        # trial and test spaces for velocity, pressure, and buoyancy
     dofs::D          # degree of freedom handler
     Ω::O             # triangulation
     dΩ::DO           # measure
+    Γ::G             # surface boundary triangulation
+    dΓ::DG           # surface boundary measure
     dim::Int         # dimension of the problem
 end
 
 """
-    m = Mesh(ifile)
+    m = Mesh(ifile; degree=4)
 
-Returns a struct holding mesh-related data.
+Build a struct holding mesh-related data.
+
+`degree` is the degree of integration for the measures `dΩ` and `dΓ`.
 """
-function Mesh(ifile)
+function Mesh(ifile; degree=4)
     model = GmshDiscreteModel(ifile)
     spaces = Spaces(model)
     Ω = Triangulation(model)
-    dΩ = Measure(Ω, 4)
+    dΩ = Measure(Ω, degree)
+    Γ = BoundaryTriangulation(model, tags=["sfc"])
+    dΓ = Measure(Γ, degree)
     dofs = DoFHandler(spaces, dΩ)
     if model.grid_topology.polytopes[1] == TRI
         dim = 2
@@ -25,7 +31,7 @@ function Mesh(ifile)
     else
         throw(ArgumentError("Could not determine dimension of mesh."))
     end
-    return Mesh(model, spaces, dofs, Ω, dΩ, dim)
+    return Mesh(model, spaces, dofs, Ω, dΩ, Γ, dΓ, dim)
 end
 
 ### some utility functions for working with meshes

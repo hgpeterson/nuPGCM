@@ -5,7 +5,7 @@
 
 """
     A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
-        build_matrices(mesh, params, f, ν, κ; 
+        build_matrices(mesh, params, f, ν, κ, τx, τy; 
                        A_inversion_ofile=nothing,
                        A_adv_ofile=nothing, A_diff_ofile=nothing)
 
@@ -20,19 +20,20 @@ if `ofile`s are provided. The matrices are:
 - `b_diff`: RHS vector for the diffusion part of the evolution problem
 The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosity, and turbulent 
 diffusivity, respectively. 
+`τx` and `τy` are the surface stress components in the x and y directions.
 """
-function build_matrices(mesh::Mesh, params::Parameters, f, ν, κ; 
+function build_matrices(mesh::Mesh, params::Parameters, f, ν, κ, τx, τy; 
                         A_inversion_ofile=nothing,
                         A_adv_ofile=nothing, A_diff_ofile=nothing)
-    A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; 
+    A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; 
                                    A_inversion_ofile=A_inversion_ofile)
     A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ;
                                       A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
-    return A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff
+    return A_inversion, B_inversion, b_inversion, A_adv, A_diff, B_diff, b_diff
 end
 
 """
-    A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; 
+    A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; 
                                    A_inversion_ofile=nothing)
 
 Build the matrices for the inversion problem of the PG equations.
@@ -40,13 +41,16 @@ The matrices are assembled using the finite element method and can be saved to f
 if `A_inversion_ofile` is provided. The matrices are:
 - `A_inversion`: LHS matrix for the inversion problem
 - `B_inversion`: RHS matrix for the inversion problem
+- `b_inversion`: RHS vectory for the inversion problem
 The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
+`τx` and `τy` are the surface stress components in the x and y directions.
 """
-function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν; 
+function build_inversion_matrices(mesh::Mesh, params::Parameters, f, ν, τx, τy; 
                                   A_inversion_ofile=nothing)
     A_inversion = build_A_inversion(mesh, params, f, ν; ofile=A_inversion_ofile)
     B_inversion = build_B_inversion(mesh, params)
-    return A_inversion, B_inversion
+    b_inversion = build_b_inversion(mesh, params, τx, τy)
+    return A_inversion, B_inversion, b_inversion
 end
 
 """
@@ -106,7 +110,7 @@ function build_A_inversion(mesh::Mesh, params::Parameters, f, ν; ofile=nothing)
 end
 
 """
-    B = build_B_inversion(mesh)
+    B = build_B_inversion(mesh, params)
 
 Assemble the RHS matrix for the inversion problem.
 """
@@ -135,6 +139,35 @@ function build_B_inversion(mesh::Mesh, params::Parameters)
 
     return B
 end
+
+"""
+    b = build_b_inversion(mesh, params, τx, τy)
+
+Assemble the RHS vector for the inversion problem.
+"""
+function build_b_inversion(mesh::Mesh, params::Parameters, τx, τy)
+    # unpack
+    U_test = mesh.spaces.X_test[1]
+    V_test = mesh.spaces.X_test[2]
+    dΓ = mesh.dΓ
+    α = params.α
+
+    # allocate vector of length N
+    nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
+    N = nu + nv + nw + np
+    b = zeros(N)
+
+    # linear forms
+    lx(vx) = ∫( α*vx*τx )dΓ
+    ly(vy) = ∫( α*vy*τy )dΓ
+
+    # assemble
+    b[1:nu] .= assemble_vector(lx, U_test) 
+    b[nu+1:nu+nv] .= assemble_vector(ly, V_test)
+
+    return b
+end
+
 
 """
     A_adv, A_diff = build_A_adv_A_diff(mesh, params, κ; ofile_adv, ofile_diff)
