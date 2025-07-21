@@ -57,7 +57,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model; n_steps, i_step=1, n_save=0, n_plot=0)
+function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     # unpack
     Δt = model.params.Δt
     u = model.state.u
@@ -75,12 +75,10 @@ function run!(model::Model; n_steps, i_step=1, n_save=0, n_plot=0)
     # need to store a half-step buoyancy for advection
     b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
     for i ∈ i_step:n_steps
-        evolve_advection!(model, b_half)
-
+        # Strang split: Δt/2 diffusion, advection, Δt/2 diffusion
         evolve_diffusion!(model)
-
-        invert!(model)
-
+        evolve_advection!(model, b_half)
+        evolve_diffusion!(model)
         model.state.t += Δt
 
         # blow-up -> stop
@@ -106,10 +104,12 @@ function run!(model::Model; n_steps, i_step=1, n_save=0, n_plot=0)
         end
 
         if mod(i, n_save) == 0
+            invert!(model) # sync flow with buoyancy state
             save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
         end
 
         if mod(i, n_plot) == 0
+            invert!(model) # sync flow with buoyancy state
             # sim_plots(model, model.state.t)
             plot_slice(model.state.u, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_channel_basin_xslice_%03d.png", out_dir, i))
             plot_slice(model.state.v, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_channel_basin_xslice_%03d.png", out_dir, i))
@@ -135,19 +135,24 @@ function evolve_advection!(model::Model, b_half)
     solver = model.evolution.solver_adv
     y = solver.y
 
-    # get u_half, v_half, w_half, b_half
+    # sync up flow with current buoyancy state
+    invert!(model)
+
+    # compute b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
     iterative_solve!(solver)
     b_half.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
-    invert!(model, b_half) # u, v, w, p are now updated to half-step values
+
+    # compute u_half, v_half, w_half, p_half
+    invert!(model, b_half)
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
     iterative_solve!(solver)
 
-    # sync state
+    # sync buoyancy to state
     b.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
 
     return model
