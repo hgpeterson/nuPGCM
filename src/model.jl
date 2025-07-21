@@ -57,7 +57,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model, t_final; t_save=0, t_plot=0)
+function run!(model::Model; n_steps, i_step=1, n_save=0, n_plot=0)
     # unpack
     Δt = model.params.Δt
     u = model.state.u
@@ -68,17 +68,8 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
     # start timer
     t0 = time()
 
-    # number of steps to take
-    n_steps = div(t_final, Δt, RoundNearest)
-
-    # starting step number (just 1 if t = 0)
-    i_step = div(model.state.t, Δt, RoundNearest) + 1
-
-    # number of steps between saves, plots, and info
-    n_save = div(t_save, Δt, RoundNearest)
-    n_plot = div(t_plot, Δt, RoundNearest)
+    # number of steps between info print
     n_info = div(n_steps, 100, RoundNearest)
-
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # need to store a half-step buoyancy for advection
@@ -119,7 +110,10 @@ function run!(model::Model, t_final; t_save=0, t_plot=0)
         end
 
         if mod(i, n_plot) == 0
-            sim_plots(model, x->(1 - x[1]^2 - x[2]^2)*model.params.α, model.state.t) # FIXME need to allow for general H
+            # sim_plots(model, model.state.t)
+            plot_slice(model.state.u, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_channel_basin_xslice_%03d.png", out_dir, i))
+            plot_slice(model.state.v, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_channel_basin_xslice_%03d.png", out_dir, i))
+            plot_slice(model.state.w, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_channel_basin_xslice_%03d.png", out_dir, i))
         end
     end
     return model
