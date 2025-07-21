@@ -9,7 +9,7 @@ pygui(false)
 plt.style.use("../plots.mplstyle")
 plt.close("all")
 
-set_out_dir!("./test")
+set_out_dir!(".")
 
 function coarse_inversion(dim, arch)
     # params/funcs
@@ -22,6 +22,8 @@ function coarse_inversion(dim, arch)
     f(x) = f₀ + β*x[2]
     H(x) = α*(1 - x[1]^2 - x[2]^2)
     ν(x) = 1
+    τx(x) = 0
+    τy(x) = 0
 
     # coarse mesh
     h = 0.1
@@ -32,9 +34,9 @@ function coarse_inversion(dim, arch)
     A_inversion_fname = @sprintf("data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; A_inversion_ofile=A_inversion_fname)
     else
-        A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy)
         jldopen(A_inversion_fname, "r") do file
             @test A_inversion ≈ file["A_inversion"]
         end
@@ -43,6 +45,7 @@ function coarse_inversion(dim, arch)
     # re-order dofs
     A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
     B_inversion = B_inversion[mesh.dofs.p_inversion, :]
+    b_inversion = b_inversion[mesh.dofs.p_inversion]
 
     # preconditioner
     if typeof(arch) == CPU
@@ -54,9 +57,10 @@ function coarse_inversion(dim, arch)
     # move to arch
     A_inversion = on_architecture(arch, A_inversion)
     B_inversion = on_architecture(arch, B_inversion)
+    b_inversion = on_architecture(arch, b_inversion)
 
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
+    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_inversion)
 
     # model
     model = inversion_model(arch, params, mesh, inversion_toolkit)
@@ -67,8 +71,8 @@ function coarse_inversion(dim, arch)
     # invert
     invert!(model)
 
-    # # plot for sanity check
-    # sim_plots(model, H, 0)
+    # plot for sanity check
+    sim_plots(model, 0)
 
     # compare state with data
     datafile = @sprintf("data/inversion_%sD.jld2", dim)
