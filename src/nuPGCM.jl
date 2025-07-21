@@ -114,7 +114,7 @@ set_state_from_file!,
 run!,
 # IO.jl
 save_state,
-load_state_from_file!,
+set_state_from_file!,
 # plotting.jl
 nan_eval,
 plot_slice,
