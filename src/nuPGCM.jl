@@ -114,6 +114,7 @@ set_state_from_file!,
 run!,
 # IO.jl
 save_state,
+save_vtk,
 set_state_from_file!,
 # plotting.jl
 nan_eval,
