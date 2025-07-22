@@ -128,7 +128,7 @@ function build_B_inversion(mesh::Mesh, params::Parameters)
     a(b, vz) = ∫( α⁻¹*b*vz )dΩ
 
     # assemble
-    @time "build B_inversion" B = assemble_matrix(a, B_trial, W_test)
+    B = assemble_matrix(a, B_trial, W_test)
 
     # convert to N × nb matrix
     nu, nv, nw, np, nb = get_n_dofs(mesh.dofs)
@@ -189,8 +189,8 @@ function build_A_adv_A_diff(mesh::Mesh, params::Parameters, κ; ofile_adv=nothin
     a_adv(b, d) = ∫( b*d )dΩ
     @time "build A_adv" A_adv = assemble_matrix(a_adv, B_trial, B_test)
 
-    # diffusion matrix
-    θ = Δt/2 * α^2 * ε^2 / μϱ
+    # diffusion matrix (Δt/2 for Crank-Nicolson and Δt/2 for Strange splitting makes Δt/4)
+    θ = Δt/4 * α^2 * ε^2 / μϱ
     a_diff(b, d) = ∫( b*d + θ*∂x(b)*∂x(d)*κ + θ*∂y(b)*∂y(d)*κ + θ*∂z(b)*∂z(d)*κ )dΩ
     @time "build A_diff" A_diff = assemble_matrix(a_diff, B_trial, B_test)
 
@@ -223,12 +223,12 @@ function build_B_diff_b_diff(mesh::Mesh, params::Parameters, κ)
     Δt = params.Δt
     N² = params.N²
 
-    # matrix
-    θ = Δt/2 * α^2 * ε^2 / μϱ
+    # diffusion matrix (Δt/2 for Crank-Nicolson and Δt/2 for Strange splitting makes Δt/4)
+    θ = Δt/4 * α^2 * ε^2 / μϱ
     a(b, d) = ∫( b*d - θ*∂x(b)*∂x(d)*κ - θ*∂y(b)*∂y(d)*κ - θ*∂z(b)*∂z(d)*κ )dΩ
     @time "build B_diff" B = assemble_matrix(a, B_trial, B_test)
 
-    # vector
+    # vector (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
     θN² = θ*N²
     l(d) = ∫( -2θN²*∂z(d)*κ )dΩ
     @time "build b_diff" b = assemble_vector(l, B_test)
