@@ -1,5 +1,67 @@
 module nuPGCM
 
+export 
+    out_dir,
+    set_out_dir!,
+    # architectures.jl
+    AbstractArchitecture,
+    CPU,
+    GPU,
+    on_architecture,
+    architecture,
+    # utils.jl
+    chebyshev_nodes,
+    hrs_mins_secs,
+    sci_notation,
+    trapz,
+    cumtrapz,
+    nan_max,
+    nan_min,
+    # parameters.jl
+    Parameters,
+    # spaces.jl
+    Spaces,
+    # dofs.jl
+    get_n_dof,
+    # meshes.jl
+    Mesh,
+    get_p_t,
+    get_p_to_t,
+    # matrices.jl
+    ∂x,
+    ∂y,
+    ∂z,
+    build_matrices,
+    build_inversion_matrices,
+    build_evolution_matrices,
+    # preconditioners.jl
+    mul!,
+    # inversion.jl
+    InversionToolkit,
+    invert!,
+    # evolution.jl
+    EvolutionToolkit,
+    # model.jl
+    State,
+    Model,
+    set_b!,
+    inversion_model,
+    rest_state,
+    rest_state_model,
+    set_state_from_file!,
+    run!,
+    # IO.jl
+    save_state,
+    load_state_from_file!,
+    # plotting.jl
+    nan_eval,
+    plot_slice,
+    plot_profiles,
+    sim_plots,
+    plot_sparsity_pattern
+
+
+# dependencies
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
@@ -62,64 +124,8 @@ include("model.jl")
 include("IO.jl")
 include("plotting.jl")
 
-export 
-out_dir,
-set_out_dir!,
-# architectures.jl
-AbstractArchitecture,
-CPU,
-GPU,
-on_architecture,
-architecture,
-# utils.jl
-chebyshev_nodes,
-hrs_mins_secs,
-sci_notation,
-trapz,
-cumtrapz,
-nan_max,
-nan_min,
-# parameters.jl
-Parameters,
-# spaces.jl
-Spaces,
-# dofs.jl
-get_n_dof,
-# meshes.jl
-Mesh,
-get_p_t,
-get_p_to_t,
-# matrices.jl
-∂x,
-∂y,
-∂z,
-build_matrices,
-build_inversion_matrices,
-build_evolution_matrices,
-# preconditioners.jl
-mul!,
-# inversion.jl
-InversionToolkit,
-invert!,
-# evolution.jl
-EvolutionToolkit,
-# model.jl
-State,
-Model,
-set_b!,
-inversion_model,
-rest_state,
-rest_state_model,
-set_state_from_file!,
-run!,
-# IO.jl
-save_state,
-load_state_from_file!,
-# plotting.jl
-nan_eval,
-plot_slice,
-plot_profiles,
-sim_plots,
-plot_sparsity_pattern
+# submodules
+include("FiniteElements/FiniteElements.jl")
+using .FiniteElements
 
 end # module
