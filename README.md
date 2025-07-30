@@ -9,30 +9,20 @@ The model is written in [Julia](https://julialang.org/) and can run on a GPU.
 
 ## Installation
 
-If you don't have Julia installed already, [download it here](https://julialang.org/downloads/) (currently, the model has only been verified with Julia version 1.10).
+If you don't have Julia installed already, [download it here](https://julialang.org/downloads/) (currently, the package environment is built with Julia version 1.10).
 
 The model is still in active development and has not yet been added to the official Julia package registry.
 To try it out, manually download the repository:
 ```
 git clone git@github.com:hgpeterson/nuPGCM.git
 cd nuPGCM
+julia --project
 ```
-To install the required dependencies, launch Julia, type `]` to start the Pkg REPL, and type
+To install the required dependencies, type `]` to start the Pkg REPL and type
 ```
-(@v1.10) pkg> activate nuPGCM
-Activating project at `~/nuPGCM`
-
 (nuPGCM) pkg> instantiate
-  No Changes to `~/nuPGCM/Project.toml`
-  No Changes to `~/nuPGCM/Manifest.toml`
-
-(nuPGCM) pkg> precompile
 ```
-
-## Examples
-
-To run the example:
+To run the example, you can backspace out of the Pkg REPL and run 
 ```
-cd examples
-julia --project=../run.jl
+julia> include("examples/run.jl")
 ```
