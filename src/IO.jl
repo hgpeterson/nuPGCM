@@ -18,17 +18,16 @@ function set_state_from_file!(s::State, ifile)
     return s
 end
 
-function save_vtk(s::State, m::Mesh; ofile="state.vtu")
-    writevtk(m.Ω, ofile, cellfields=[
+function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
+    s = m.state
+    b_background = interpolate(x -> m.params.N²*x[3], m.mesh.spaces.B_trial)
+    writevtk(m.mesh.Ω, ofile, cellfields=[
         "u" => s.u, 
         "v" => s.v, 
         "w" => s.w, 
         "p" => s.p, 
-        "b" => s.b
+        "b" => b_background + s.b
     ])
 
     @info "VTK state saved to '$ofile'"
-end
-function save_vtk(m::Model; ofile="state.vtu")
-    save_vtk(m.state, m.mesh; ofile)
 end
