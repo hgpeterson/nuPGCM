@@ -12,7 +12,6 @@ using LinearAlgebra
 using SparseArrays
 using Krylov
 using PyPlot
-using HDF5
 using Printf
 
 # directory where the output files will be saved
