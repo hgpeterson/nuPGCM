@@ -6,14 +6,15 @@ struct Spaces{X, Y, B, C}
 end
 
 """
-    spaces = Spaces(model; order=2)
+    spaces = Spaces(model, b₀; order=2)
 
 Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
+
 `model` is assumed to be an `UnstructuredDiscreteModel` from Gridap. The `X`s are 
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
-buoyancy.
+buoyancy. `b₀` a function for the buoyancy surface boundary condition.
 """
-function Spaces(model; order=2)
+function Spaces(model, b₀; order=2)
     # reference FE 
     reffe_u = ReferenceFE(lagrangian, Float64, order;   space=:P)
     reffe_v = ReferenceFE(lagrangian, Float64, order;   space=:P)
@@ -34,7 +35,7 @@ function Spaces(model; order=2)
     V_trial = TrialFESpace(V_test, [0])
     W_trial = TrialFESpace(W_test, [0, 0])
     P_trial = TrialFESpace(P_test)
-    B_trial = TrialFESpace(B_test, [0])
+    B_trial = TrialFESpace(B_test, b₀)
     X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
 
     return Spaces(X_trial, X_test, B_trial, B_test)

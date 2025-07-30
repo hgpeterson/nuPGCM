@@ -35,18 +35,18 @@ function rest_state(mesh::Mesh; t=0.)
     B = mesh.spaces.B_trial
 
     # define FE functions
-    u = interpolate_everywhere(0, U)
-    v = interpolate_everywhere(0, V)
-    w = interpolate_everywhere(0, W)
-    p = interpolate_everywhere(0, P) 
-    b = interpolate_everywhere(0, B)
+    u = interpolate(0, U)
+    v = interpolate(0, V)
+    w = interpolate(0, W)
+    p = interpolate(0, P) 
+    b = interpolate(0, B)
 
     return State(u, v, w, p, b, t)
 end
 
 function set_b!(model::Model, b::Function)
     # interpolate function onto FE space
-    b_fe = interpolate_everywhere(b, model.state.b.fe_space)
+    b_fe = interpolate(b, model.state.b.fe_space)
 
     model.state.b.free_values .= b_fe.free_values
 
@@ -65,15 +65,20 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     w = model.state.w
     b = model.state.b
 
+    # save initial condition for comparison
+    b0 = interpolate(0, model.mesh.spaces.B_trial)
+    b0.free_values .= b.free_values
+    volume = sum(∫( 1 )*model.mesh.dΩ) # volume of the domain
+
     # start timer
     t0 = time()
 
     # number of steps between info print
-    n_info = div(n_steps, 100, RoundNearest)
+    n_info = max(div(n_steps, 100, RoundNearest), 1)
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # need to store a half-step buoyancy for advection
-    b_half = interpolate_everywhere(0, model.mesh.spaces.B_trial)
+    b_half = interpolate(0, model.mesh.spaces.B_trial)
     for i ∈ i_step:n_steps
         # Strang split: Δt/2 diffusion, advection, Δt/2 diffusion
         evolve_diffusion!(model)
@@ -97,6 +102,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+            msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.mesh.dΩ)/volume)
             msg
             end
             flush(stdout)
@@ -106,6 +112,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
         if mod(i, n_save) == 0
             invert!(model) # sync flow with buoyancy state
             save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
+            save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i))
         end
 
         if mod(i, n_plot) == 0
