@@ -5,17 +5,17 @@ using Printf
 using PyPlot
 
 pygui(false)
-plt.style.use("../plots.mplstyle")
+plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-set_out_dir!(".")
+set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture and dimension
-arch = GPU()
+arch = CPU()
 dim = 2
 
 # params/funcs
-ε = 2e-2
+ε = 1e-1
 α = 1/2
 μϱ = 1e0
 N² = 1e0/α
@@ -27,14 +27,18 @@ f(x) = f₀ + β*x[2]
 H(x) = α*(1 - x[1]^2 - x[2]^2)
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-T = 5e-2*μϱ/ε^2/α^2
+T = 1e-2*μϱ/ε^2/α^2
 
 # mesh
-h = 7e-3
-mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+h = 2e-2
+mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
 
 # build inversion matrices
-A_inversion_fname = @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+if !isdir(joinpath(@__DIR__, "../matrices"))
+    @info "Creating matrices directory"
+    mkdir(joinpath(@__DIR__, "../matrices"))
+end
+A_inversion_fname = joinpath(@__DIR__, @sprintf("../matrices/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β))
 if !isfile(A_inversion_fname) 
     @warn "A_inversion file not found, generating..."
     A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
@@ -51,7 +55,7 @@ B_inversion = B_inversion[mesh.dofs.p_inversion, :]
 
 # preconditioner
 if typeof(arch) == CPU
-    P_inversion = lu(A_inversion)
+    P_inversion = @time "lu(A_inversion)" lu(A_inversion)
 else
     P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
 end
@@ -71,8 +75,8 @@ inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion)
 
 # build evolution matrices and test against saved matrices
 θ = Δt/2 * α^2 * ε^2 / μϱ 
-A_diff_fname = @sprintf("../matrices/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α)
-A_adv_fname = @sprintf("../matrices/A_adv_%sD_%e_%e.jld2", dim, h, α)
+A_diff_fname = joinpath(@__DIR__, @sprintf("../matrices/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α))
+A_adv_fname = joinpath(@__DIR__, @sprintf("../matrices/A_adv_%sD_%e_%e.jld2", dim, h, α))
 if !isfile(A_diff_fname) || !isfile(A_adv_fname)
     @warn "A_diff or A_adv file not found, generating..."
     A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
@@ -115,6 +119,6 @@ evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_dif
 model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
 
 # solve
-run!(model, T; t_plot=T÷5, t_save=T÷5)
+run!(model, T; t_plot=T, t_save=T)
 
 println("Done.")
