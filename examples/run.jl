@@ -28,7 +28,7 @@ b₀(x) = 0  # surface buoyancy boundary condition
 force_build_inversion = false
 force_build_evolution = true
 
-# mesh
+# mesh (see meshes/mesh_bowl2D.jl for an example of how to generate a mesh with Gmsh)
 h = 8e-2
 dim = 3
 mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
