@@ -29,7 +29,7 @@ H(x) = α*(1 - x[1]^2 - x[2]^2)
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 T = 1e-2*μϱ/ε^2/α^2
 
-# mesh
+# mesh (see meshes/mesh_bowl2D.jl for an example of how to generate a mesh with Gmsh)
 h = 2e-2
 mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
 

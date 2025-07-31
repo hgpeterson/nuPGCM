@@ -6,10 +6,10 @@ using Printf
 using PyPlot
 
 pygui(false)
-plt.style.use("../plots.mplstyle")
+plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-set_out_dir!("./test")
+set_out_dir!(joinpath(@__DIR__, ""))
 
 function coarse_evolution(dim, arch)
     # params/funcs
@@ -29,10 +29,10 @@ function coarse_evolution(dim, arch)
 
     # coarse mesh
     h = 0.1
-    mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+    mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
 
     # build inversion matrices and test LHS against saved matrix
-    A_inversion_fname = @sprintf("data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+    A_inversion_fname = @sprintf("%s/data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", out_dir, dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion = build_inversion_matrices(mesh, params, f, ν; A_inversion_ofile=A_inversion_fname)
@@ -67,8 +67,8 @@ function coarse_evolution(dim, arch)
 
     # build evolution matrices and test against saved matrices
     θ = Δt/2 * (α*ε)^2/μϱ
-    A_diff_fname = @sprintf("data/A_diff_%sD_%e_%e_%e.jld2", dim, h, θ, α)
-    A_adv_fname = @sprintf("data/A_adv_%sD_%e.jld2", dim, h)
+    A_diff_fname = @sprintf("%s/data/A_diff_%sD_%e_%e_%e.jld2", out_dir, dim, h, θ, α)
+    A_adv_fname = @sprintf("%s/data/A_adv_%sD_%e.jld2", out_dir, dim, h)
     if !isfile(A_diff_fname) || !isfile(A_adv_fname)
         @warn "A_diff or A_adv file not found, generating..."
         A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
@@ -117,7 +117,7 @@ function coarse_evolution(dim, arch)
     # sim_plots(model, H, 0)
 
     # compare state with data
-    datafile = @sprintf("data/evolution_%sD.jld2", dim)
+    datafile = @sprintf("%s/data/evolution_%sD.jld2", out_dir, dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
         save_state(model, datafile)
