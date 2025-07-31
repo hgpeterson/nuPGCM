@@ -6,10 +6,10 @@ using Printf
 using PyPlot
 
 pygui(false)
-plt.style.use("../plots.mplstyle")
+plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-set_out_dir!(".")
+set_out_dir!(joinpath(@__DIR__, ""))
 
 function coarse_inversion(dim, arch)
     # params/funcs
@@ -27,11 +27,11 @@ function coarse_inversion(dim, arch)
 
     # coarse mesh
     h = 0.1
-    mesh = Mesh(@sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+    mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
     @assert mesh.dim == dim
 
     # build inversion matrices and test LHS against saved matrix
-    A_inversion_fname = @sprintf("data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", dim, h, ε, α, f₀, β)
+    A_inversion_fname = @sprintf("%s/data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", out_dir, dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
         A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; A_inversion_ofile=A_inversion_fname)
@@ -75,7 +75,7 @@ function coarse_inversion(dim, arch)
     sim_plots(model, 0)
 
     # compare state with data
-    datafile = @sprintf("data/inversion_%sD.jld2", dim)
+    datafile = @sprintf("%s/data/inversion_%sD.jld2", out_dir, dim)
     if !isfile(datafile)
         @warn "Data file not found, saving state..."
         save_state(model, datafile)
