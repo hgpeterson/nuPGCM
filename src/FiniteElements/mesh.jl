@@ -1,8 +1,31 @@
-struct Mesh{MF, MI, DVI, DMI}
+struct Mesh{MF, MI, E, VC, TF}
     nodes::MF
     elements::MI
-    boundary_nodes::DVI
-    boundary_elements::DMI
+    element_type::E
+    components::VC
+    dim::Integer
+    bbox::TF
+end
+
+function Base.show(io::IO, mesh::Mesh)
+    println(io, "Mesh with dimension $(mesh.dim)")
+    println(io, "├── Nodes: $(size(mesh.nodes, 1))")
+    println(io, "├── Bounding box: x ∈ [$(mesh.bbox[1]), $(mesh.bbox[2])], y ∈ [$(mesh.bbox[3]), $(mesh.bbox[4])], z ∈ [$(mesh.bbox[5]), $(mesh.bbox[6])]")
+    println(io, "├── Interior elements: $(size(mesh.elements, 1))")
+    println(io, "├── Interior element type: $(mesh.element_type)")
+    print(io, "└── Components: $(length(mesh.components))")
+end
+
+struct MeshComponent{E, MI}
+    name::String
+    element_type::E
+    elements::MI
+end
+
+function Base.show(io::IO, mc::MeshComponent)
+    println(io, "MeshComponent: $(mc.name)")
+    println(io, " ├── Element type: $(mc.element_type)")
+    print(io, "└── Elements: $(size(mc.elements, 1))")
 end
 
 """
@@ -31,51 +54,69 @@ function Mesh(meshfile)
     gmsh.open(meshfile)
 
     # get coordinates for every node in the mesh
-    node_tags, nodes, _ = gmsh.model.mesh.get_nodes()
+    _, nodes, _ = gmsh.model.mesh.get_nodes()
     nodes = Matrix(reshape(nodes, 3, :)') # N × 3 matrix
 
-    # get all the elementary entities in the model
-    # `entities` is as a vector of (`dim`, `tag`) pairs
-    entities = gmsh.model.get_entities()
-    n_entities = length(entities)
+    # bounding box
+    bbox = get_bounding_box(nodes)
 
-    # number of nodes per interior element
-    # if `dim` of last entity is 2, n = 3 (triangle)
-    # if `dim` of last entity is 3, n = 4 (tetrahedron)
-    n = entities[n_entities][1] + 1
+    # determine the dimension of the mesh
+    element_types = gmsh.model.mesh.get_element_types()
+    if gmsh.model.mesh.get_element_type("Tetrahedron", 1) in element_types
+        interior_element_type = Tetrahedron()
+        element_type_code = gmsh.model.mesh.get_element_type("Tetrahedron", 1)
+    elseif gmsh.model.mesh.get_element_type("Triangle", 1) in element_types
+        interior_element_type = Triangle()
+        element_type_code = gmsh.model.mesh.get_element_type("Triangle", 1)
+    elseif gmsh.model.mesh.get_element_type("Line", 1) in element_types
+        interior_element_type = Line()
+        element_type_code = gmsh.model.mesh.get_element_type("Line", 1)
+    end 
+    mesh_dim = dimension(interior_element_type)
+    @info "Mesh dimension = $mesh_dim"
 
-    # interior elements
-    dim = entities[n_entities][1] #FIXME: this assumes the last entity is the interior but there could be multiple disconnected regions
-    tag = entities[n_entities][2]
-    _, _, elements = gmsh.model.mesh.get_elements(dim, tag)
-    @assert length(elements) == 1 "Expected exactly one element type in interior."
-    elements = Matrix(reshape(Int.(elements[1]), n, :)') # M × n matrix
+    # get all the interior elements
+    _, elements = gmsh.model.mesh.get_elements_by_type(element_type_code)
+    elements = Matrix(reshape(Int.(elements), mesh_dim + 1, :)') # M × n matrix
 
-    # surface and bottom nodes and elements
-    boundary_nodes = Dict{String, Vector{Int}}()
-    boundary_elements = Dict{String, Matrix{Int}}()
-    for i in [n_entities-1, n_entities-2]
-        dim = entities[i][1]
-        tag = entities[i][2]
+    # `physical_groups` is a vector of (`dim`, `tag`) integer pairs
+    physical_groups = gmsh.model.get_physical_groups()
+    # physical_group_names = [gmsh.model.get_physical_name(dim, tag) for (dim, tag) in physical_groups]
 
-        # surface or bottom?
-        physical_tags = gmsh.model.get_physical_groups_for_entity(dim, tag)
-        @assert length(physical_tags) == 1 "Mesh must have exactly one physical group per entity."
-        name = gmsh.model.get_physical_name(dim, physical_tags[1])
+    # initialize
+    components = Vector{MeshComponent}()
 
-        # nodes
-        node_tags, _, _ = gmsh.model.mesh.get_nodes(dim, tag)
-        boundary_nodes[name] = Int.(node_tags) # convert to Int
+    for (dim, tag) in physical_groups
+        name = gmsh.model.get_physical_name(dim, tag)
+        entity_tags = gmsh.model.get_entities_for_physical_group(dim, tag)
 
-        # elements
-        _, _, els = gmsh.model.mesh.get_elements(dim, tag)
-        @assert length(els) == 1 "Expected exactly one element type on '$name' boundary."
-        boundary_elements[name] = Matrix(reshape(Int.(els[1]), n-1, :)') # n_elements × n-1 matrix
+        element_type = get_element_type(dim)
+        mc_elements = Matrix{Int}(undef, 0, dim + 1)
+
+        # add the elements for each entity in the physical group (component)
+        for entity_tag in entity_tags
+            _, _, node_tags = gmsh.model.mesh.get_elements(dim, entity_tag)
+            @assert length(node_tags) == 1 "Expected exactly one element type for entity $entity."
+            entity_elements = Matrix(reshape(Int.(node_tags[1]), dim + 1, :)')
+            mc_elements = vcat(mc_elements, entity_elements)
+        end
+
+        push!(components, MeshComponent(name, element_type, mc_elements))
     end
 
     gmsh.finalize()
+    
+    return Mesh(nodes, elements, interior_element_type, components, mesh_dim, bbox)
+end
 
-    return Mesh(nodes, elements, boundary_nodes, boundary_elements)
+function get_bounding_box(nodes)
+    xmin = minimum(nodes[:, 1])
+    xmax = maximum(nodes[:, 1])
+    ymin = minimum(nodes[:, 2])
+    ymax = maximum(nodes[:, 2])
+    zmin = minimum(nodes[:, 3])
+    zmax = maximum(nodes[:, 3])
+    return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
 # struct MeshCache{MF, V}

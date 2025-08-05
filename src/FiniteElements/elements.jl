@@ -1,9 +1,16 @@
 abstract type AbstractElement end
 
+struct Point <: AbstractElement end
 struct Line <: AbstractElement end
 struct Triangle <: AbstractElement end
 struct Tetrahedron <: AbstractElement end
 
+dimension(::Point) = 0
+dimension(::Line) = 1
+dimension(::Triangle) = 2
+dimension(::Tetrahedron) = 3
+
+reference_element(::Point) = [0.0]
 reference_element(::Line) = [-1.0, 
                               1.0]
 reference_element(::Triangle) = [0.0  0.0 
@@ -13,6 +20,25 @@ reference_element(::Tetrahedron) = [0.0  0.0  0.0
                                     1.0  0.0  0.0
                                     0.0  1.0  0.0
                                     0.0  0.0  1.0]
+
+Base.show(io::IO, ::Point) = print(io, "Point")
+Base.show(io::IO, ::Line) = print(io, "Line")
+Base.show(io::IO, ::Triangle) = print(io, "Triangle")
+Base.show(io::IO, ::Tetrahedron) = print(io, "Tetrahedron")
+
+function get_element_type(dim)
+    if dim == 0
+        return Point()
+    elseif dim == 1
+        return Line()
+    elseif dim == 2
+        return Triangle()
+    elseif dim == 3
+        return Tetrahedron()
+    else
+        throw(ArgumentError("Invalid dimension: $dim"))
+    end
+end
 
 """
     A, b = transformation_matrix_vector(element, vertices)
