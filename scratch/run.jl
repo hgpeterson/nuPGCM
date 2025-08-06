@@ -28,26 +28,35 @@ show(params)
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
+H(x) = α
 # H(x) = α*(1 - x[1]^2 - x[2]^2)
-H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
-H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
-H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
+# H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
+# H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
+# H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 # κ(x) = 1
-y0 = -0.5
-τˣ(x) = x[2] > y0 ? 0.0 : -(x[2] + 1)*(x[2] - y0)/(1 - y0)^2
+# y0 = -0.5
+# τˣ(x) = x[2] > y0 ? 0.0 : -(x[2] + 1)*(x[2] - y0)/(1 - y0)^2
+τˣ(x) = 0
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
 T = 1e1
 force_build_inversion_matrices = false
 force_build_evolution_matrices = false
 
+# h    ∫ (∇⋅u)^2 dΩ at t = 0.1
+# 1e-1 3.6e-2
+# 5e-2 2.6e-3
+
 function setup_model()
     # mesh
+    mesh_name = "basin_flat"
+    # mesh_name = "channel_basin_flat"
     # mesh_name = "channel_basin_cart_h0.01_a0.5"
     # mesh_name = "channel_basin_cart_h0.08_a0.5"
-    mesh_name = "channel_basin_cart_more_sfc"
+    # mesh_name = "channel_basin_cart_more_sfc"
+    # mesh_name = @sprintf("bowl3D_%e_%e", 5e-2, α) 
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"), b₀)
     @info "DOFs: $(mesh.dofs.nu + mesh.dofs.nv + mesh.dofs.nw + mesh.dofs.np)" 
     p, t = nuPGCM.get_p_t(mesh.model)
@@ -56,7 +65,7 @@ function setup_model()
     hmin = minimum(hs)
     h = sum(hs) / length(hs)
     hmax = maximum(hs)
-    @info @sprintf("Mesh size: %.2f (hmin = %.2f, hmax = %.2f)", h, hmin, hmax)
+    @info @sprintf("Mesh size: %.2e (hmin = %.2e, hmax = %.2e)", h, hmin, hmax)
     dim = size(t, 2) - 1
     @info "Mesh dimension: $dim"
 
@@ -160,42 +169,43 @@ function setup_model()
     return model
 end
 
-model = setup_model()
+# model = setup_model()
+set_state_from_file!(model.state, "$out_dir/data/state_0000000000010000.jld2")
+save_vtk(model; ofile="$out_dir/data/state_div.vtu")
+# # set_b!(model, x->0)
+# # κ_fe = interpolate_everywhere(κ, model.mesh.spaces.X_trial[1])
+# # b = interpolate_everywhere(x->0, model.mesh.spaces.B_trial)
+# # plot_slice(κ_fe, b, 0; 
+# # # plot_slice(κ, b, 0; 
+# #            bbox=[-1, -α, 1, 0], x=0.5, cb_label=L"Diffusivity $\kappa$", 
+# #            fname=@sprintf("%s/images/kappa.png", out_dir))
 
-# set_b!(model, x->0)
-# κ_fe = interpolate_everywhere(κ, model.mesh.spaces.X_trial[1])
-# b = interpolate_everywhere(x->0, model.mesh.spaces.B_trial)
-# plot_slice(κ_fe, b, 0; 
-# # plot_slice(κ, b, 0; 
-#            bbox=[-1, -α, 1, 0], x=0.5, cb_label=L"Diffusivity $\kappa$", 
-#            fname=@sprintf("%s/images/kappa.png", out_dir))
+# # set initial buoyancy
+# set_b!(model, b₀)
+# # set_b!(model, x->b₀(x)*(α + x[3]))
+# # set_b!(model, x->0)
+# # save_vtk(model; ofile=joinpath(@__DIR__, "data/state_0.vtu"))
+# plot_slice(model.state.b, model.state.b, model.params.N²; 
+#            bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
+#            fname=@sprintf("%s/images/b%03d.png", out_dir, 0))
 
-# set initial buoyancy
-set_b!(model, b₀)
-# set_b!(model, x->b₀(x)*(α + x[3]))
-# set_b!(model, x->0)
-# save_vtk(model; ofile=joinpath(@__DIR__, "data/state_0.vtu"))
-plot_slice(model.state.b, model.state.b, model.params.N²; 
-           bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
-           fname=@sprintf("%s/images/b%03d.png", out_dir, 0))
+# # solve
+# n_steps = Int(round(T / Δt))
+# n_save = n_steps ÷ 100
+# n_plot = Inf
+# run!(model; n_steps, n_save, n_plot)
 
-# solve
-n_steps = Int(round(T / Δt))
-n_save = n_steps ÷ 100
-n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
-
-v_cache = plot_slice(model.state.v, model.state.b, model.params.N²; 
-                     bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", 
-                     fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
-vw_cache = plot_slice(model.state.v, model.state.w, model.state.b, model.params.N²; 
-                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Speed $\sqrt{v^2 + w^2}$", 
-                      fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
-b_cache = plot_slice(model.state.b, model.state.b, model.params.N²; 
-                     bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
-                     fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
-# plot_slice(v_cache,  model.state.v, model.state.b; fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
-# plot_slice(vw_cache, model.state.v, model.state.w, model.state.b; fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
-# plot_slice(b_cache,  model.state.b, model.state.b; fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
+# v_cache = plot_slice(model.state.v, model.state.b, model.params.N²; 
+#                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", 
+#                      fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
+# vw_cache = plot_slice(model.state.v, model.state.w, model.state.b, model.params.N²; 
+#                       bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Speed $\sqrt{v^2 + w^2}$", 
+#                       fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
+# b_cache = plot_slice(model.state.b, model.state.b, model.params.N²; 
+#                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
+#                      fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
+# # plot_slice(v_cache,  model.state.v, model.state.b; fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
+# # plot_slice(vw_cache, model.state.v, model.state.w, model.state.b; fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
+# # plot_slice(b_cache,  model.state.b, model.state.b; fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
 
 println("Done.")

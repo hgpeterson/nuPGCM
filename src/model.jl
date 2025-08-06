@@ -103,6 +103,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.mesh.dΩ)/volume)
+            # msg *= @sprintf("V⁻¹ ∫ (∇⋅u⃗)^2 dx = %.16f\n", sum(∫( (∂x(u) + ∂y(v) + ∂z(w))*(∂x(u) + ∂y(v) + ∂z(w)) )*model.mesh.dΩ)/volume)
             msg
             end
             flush(stdout)
@@ -194,24 +195,4 @@ function sync_flow!(model::Model)
     model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
     model.state.p.free_values.args[1] .= x[nu+nv+nw+1:end]
     return model
-end
-
-function show(model::Model)
-    # Custom show method for the model struct
-    println("Model Summary:")
-    println("Architecture: ", model.arch)
-    println("Parameters: ", model.params)
-    # println("Mesh: ", model.mesh.dim)
-    # println("Inversion Toolkit: ", model.inversion)
-    # if model.evolution !== nothing
-    #     println("Evolution Toolkit: ", model.evolution)
-    # else
-    #     println("Evolution Toolkit: Not used (inversion only)")
-    # end
-    println("Current State: ")
-    println("  Time: ", model.state.t)
-    println("  u max: ", maximum(abs.(model.state.u.free_values)))
-    println("  v max: ", maximum(abs.(model.state.v.free_values)))
-    println("  w max: ", maximum(abs.(model.state.w.free_values)))
-    return nothing
 end

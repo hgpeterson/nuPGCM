@@ -22,7 +22,7 @@ function Mesh(ifile, b₀; degree=4)
     spaces = Spaces(model, b₀)
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
-    Γ = BoundaryTriangulation(model, tags=["sfc"])
+    Γ = BoundaryTriangulation(model, tags=["surface"])
     dΓ = Measure(Γ, degree)
     dofs = DoFHandler(spaces, dΩ)
     if model.grid_topology.polytopes[1] == TRI
