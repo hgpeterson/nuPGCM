@@ -20,19 +20,19 @@ arch = CPU()
 ε = 1e-1
 α = 1/2
 μϱ = 1
-N² = 1/α
+N² = 0
 Δt = 1e-3
 params = Parameters(ε, α, μϱ, N², Δt)
 show(params)
-@info @sprintf("Diffusion timescale: %.2e", α / (α^2 * ε^2 / μϱ))
+@info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
-H(x) = α
+# H(x) = α
 # H(x) = α*(1 - x[1]^2 - x[2]^2)
-# H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
-# H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
-# H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
+H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
+H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
+H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 # κ(x) = 1
@@ -41,24 +41,22 @@ H(x) = α
 τˣ(x) = 0
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
+# b₀(x) = 0.5*(x[2]^2 - 1)
+# b₀(x) = 1
 T = 1e1
-force_build_inversion_matrices = false
-force_build_evolution_matrices = false
-
-# h    ∫ (∇⋅u)^2 dΩ at t = 0.1
-# 1e-1 3.6e-2
-# 5e-2 2.6e-3
+force_build_inversion = false
+force_build_evolution = true
 
 function setup_model()
     # mesh
-    mesh_name = "basin_flat"
+    # mesh_name = "basin_flat"
     # mesh_name = "channel_basin_flat"
-    # mesh_name = "channel_basin_cart_h0.01_a0.5"
-    # mesh_name = "channel_basin_cart_h0.08_a0.5"
-    # mesh_name = "channel_basin_cart_more_sfc"
-    # mesh_name = @sprintf("bowl3D_%e_%e", 5e-2, α) 
-    mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"), b₀)
-    @info "DOFs: $(mesh.dofs.nu + mesh.dofs.nv + mesh.dofs.nw + mesh.dofs.np)" 
+    mesh_name = "channel_basin"
+    # h = 4e-2
+    # mesh_name = @sprintf("channel_basin_%.1e_%.1e", h, α)
+    mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+
+    # resolution
     p, t = nuPGCM.get_p_t(mesh.model)
     edges, _, _ = nuPGCM.all_edges(t)
     hs = [norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)]
@@ -69,26 +67,31 @@ function setup_model()
     dim = size(t, 2) - 1
     @info "Mesh dimension: $dim"
 
+    # FE data
+    spaces = Spaces(mesh, b₀)
+    fed = FEData(mesh, spaces)
+    @info "DOFs: $(fed.dofs.nu + fed.dofs.nv + fed.dofs.nw + fed.dofs.np)" 
+
     # build inversion matrices
     A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
-    if force_build_inversion_matrices
-        @warn "You set `force_build_inversion_matrices` to `true`, building matrices..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+    if force_build_inversion
+        @warn "You set `force_build_inversion` to `true`, building matrices..."
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
     elseif !isfile(A_inversion_fname) 
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
     else
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
-        B_inversion = nuPGCM.build_B_inversion(mesh, params)
-        b_inversion = nuPGCM.build_b_inversion(mesh, params, τˣ, τʸ)
+        B_inversion = nuPGCM.build_B_inversion(fed, params)
+        b_inversion = nuPGCM.build_b_inversion(fed, params, τˣ, τʸ)
     end
 
     # re-order dofs
-    A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
-    B_inversion = B_inversion[mesh.dofs.p_inversion, :]
-    b_inversion = b_inversion[mesh.dofs.p_inversion]
+    A_inversion = A_inversion[fed.dofs.p_inversion, fed.dofs.p_inversion]
+    B_inversion = B_inversion[fed.dofs.p_inversion, :]
+    b_inversion = b_inversion[fed.dofs.p_inversion]
 
     # preconditioner
     if typeof(arch) == CPU
@@ -117,33 +120,17 @@ function setup_model()
     # invert!(model)
     # save_state(model, "$out_dir/data/state.jld2")
 
-    # build evolution matrices and test against saved matrices
-    θ = Δt/2 * α^2 * ε^2 / μϱ 
-    A_diff_fname = joinpath(@__DIR__, "../matrices/A_diff_$mesh_name.jld2")
-    A_adv_fname = joinpath(@__DIR__, "../matrices/A_adv_$mesh_name.jld2")
-    if force_build_evolution_matrices
-        @warn "You set `force_build_evolution_matrices` to `true`, building matrices..."
-        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
-                                            A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
-    elseif !isfile(A_diff_fname) || !isfile(A_adv_fname) 
-        @warn "A_diff or A_adv file not found, generating..."
-        A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(mesh, params, κ; 
-                                            A_adv_ofile=A_adv_fname, A_diff_ofile=A_diff_fname)
-    else
-        file = jldopen(A_adv_fname, "r")
-        A_adv = file["A_adv"]
-        close(file)
-        file = jldopen(A_diff_fname, "r")
-        A_diff = file["A_diff"]
-        close(file)
-        B_diff, b_diff = nuPGCM.build_B_diff_b_diff(mesh, params, κ)
-    end
+    # build evolution matrices
+    A_adv, b_adv, A_diff, B_diff, b_diff = build_evolution_system(fed, params, κ; 
+                                           force_build=force_build_evolution,
+                                           filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
 
     # re-order dofs
-    A_adv  = A_adv[mesh.dofs.p_b, mesh.dofs.p_b]
-    A_diff = A_diff[mesh.dofs.p_b, mesh.dofs.p_b]
-    B_diff = B_diff[mesh.dofs.p_b, :]
-    b_diff = b_diff[mesh.dofs.p_b]
+    A_adv  =  A_adv[fed.dofs.p_b, fed.dofs.p_b]
+    b_adv  =  b_adv[fed.dofs.p_b]
+    A_diff = A_diff[fed.dofs.p_b, fed.dofs.p_b]
+    B_diff = B_diff[fed.dofs.p_b, :]
+    b_diff = b_diff[fed.dofs.p_b]
 
     # preconditioners
     if typeof(arch) == CPU 
@@ -156,44 +143,37 @@ function setup_model()
 
     # move to arch
     A_adv  = on_architecture(arch, A_adv)
+    b_adv  = on_architecture(arch, b_adv)
     A_diff = on_architecture(arch, A_diff)
     B_diff = on_architecture(arch, B_diff)
     b_diff = on_architecture(arch, b_diff)
 
     # setup evolution toolkit
-    evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff)
+    evolution_toolkit = EvolutionToolkit(A_adv, P_adv, b_adv, A_diff, P_diff, B_diff, b_diff)
 
     # put it all together in the `model` struct
-    model = rest_state_model(arch, params, mesh, inversion_toolkit, evolution_toolkit)
+    model = rest_state_model(arch, params, fed, inversion_toolkit, evolution_toolkit)
 
     return model
 end
 
-# model = setup_model()
-set_state_from_file!(model.state, "$out_dir/data/state_0000000000010000.jld2")
-save_vtk(model; ofile="$out_dir/data/state_div.vtu")
-# # set_b!(model, x->0)
-# # κ_fe = interpolate_everywhere(κ, model.mesh.spaces.X_trial[1])
-# # b = interpolate_everywhere(x->0, model.mesh.spaces.B_trial)
-# # plot_slice(κ_fe, b, 0; 
-# # # plot_slice(κ, b, 0; 
-# #            bbox=[-1, -α, 1, 0], x=0.5, cb_label=L"Diffusivity $\kappa$", 
-# #            fname=@sprintf("%s/images/kappa.png", out_dir))
+# set up model
+model = setup_model()
 
-# # set initial buoyancy
-# set_b!(model, b₀)
-# # set_b!(model, x->b₀(x)*(α + x[3]))
-# # set_b!(model, x->0)
-# # save_vtk(model; ofile=joinpath(@__DIR__, "data/state_0.vtu"))
-# plot_slice(model.state.b, model.state.b, model.params.N²; 
-#            bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
-#            fname=@sprintf("%s/images/b%03d.png", out_dir, 0))
+# set initial buoyancy
+set_b!(model, x->b₀(x) + x[3]/α)
+# set_b!(model, x->b₀(x))
+# b_fe = interpolate_everywhere(b₀, model.state.b.fe_space)
+# model.state.b.free_values .= b_fe.free_values
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
-# # solve
+# solve
 # n_steps = Int(round(T / Δt))
 # n_save = n_steps ÷ 100
-# n_plot = Inf
-# run!(model; n_steps, n_save, n_plot)
+n_steps = 100
+n_save = Inf
+n_plot = Inf
+run!(model; n_steps, n_save, n_plot)
 
 # v_cache = plot_slice(model.state.v, model.state.b, model.params.N²; 
 #                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", 
@@ -204,8 +184,8 @@ save_vtk(model; ofile="$out_dir/data/state_div.vtu")
 # b_cache = plot_slice(model.state.b, model.state.b, model.params.N²; 
 #                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
 #                      fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
-# # plot_slice(v_cache,  model.state.v, model.state.b; fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
-# # plot_slice(vw_cache, model.state.v, model.state.w, model.state.b; fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
-# # plot_slice(b_cache,  model.state.b, model.state.b; fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
+# plot_slice(v_cache,  model.state.v, model.state.b; fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
+# plot_slice(vw_cache, model.state.v, model.state.w, model.state.b; fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
+# plot_slice(b_cache,  model.state.b, model.state.b; fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
 
 println("Done.")
