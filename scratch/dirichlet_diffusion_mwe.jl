@@ -4,12 +4,10 @@ using LinearAlgebra
 using Printf
 
 mesh_name = "channel_basin"
-# mesh_name = "basin_flat"
 model = GmshDiscreteModel(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
 # dirichlet boundary condition
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
-# b₀(x) = 1
 
 reffe_b = ReferenceFE(lagrangian, Float64, 2; space=:P)
 B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface"])
@@ -22,9 +20,7 @@ dΩ = Measure(Ω, 4)
 H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
 H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
 H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
-# H(x) = α
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.5*α))
-# κ(x) = 1
 Δt = 1e-4
 
 a_lhs(b, d) = ∫( b*d + Δt/2*(κ*∇(b)⋅∇(d)) )dΩ
@@ -44,12 +40,7 @@ function run()
     b = interpolate(x -> b₀(x) + x[3]/α, B_trial)
     save(b, 0)
     for i in 1:100
-        # l(d) = ∫( b*d - Δt/2*∇(b)⋅∇(d)*κ )dΩ
-        # y = assemble_vector(l, B_test)
-        # b.free_values .= A \ (y - b_diri)
-
         b.free_values .= A \ (B*b.free_values + b_diri)
-
         save(b, i)
     end
 end
