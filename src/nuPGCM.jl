@@ -50,9 +50,9 @@ end
 include("architectures.jl")
 include("utils.jl")
 include("parameters.jl")
+include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
-include("meshes.jl")
 include("matrices.jl")
 include("preconditioners.jl")
 include("iterative_solvers.jl")
@@ -81,21 +81,22 @@ nan_max,
 nan_min,
 # parameters.jl
 Parameters,
-# spaces.jl
-Spaces,
-# dofs.jl
-get_n_dof,
 # meshes.jl
 Mesh,
 get_p_t,
 get_p_to_t,
+# spaces.jl
+Spaces,
+# dofs.jl
+get_n_dof,
+FEData,
 # matrices.jl
 ∂x,
 ∂y,
 ∂z,
 build_matrices,
 build_inversion_matrices,
-build_evolution_matrices,
+build_evolution_system,
 # preconditioners.jl
 mul!,
 # inversion.jl
