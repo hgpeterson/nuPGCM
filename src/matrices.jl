@@ -67,15 +67,12 @@ function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing
     ε = params.ε
     α = params.α
 
-    # coefficient
-    α²ε² = α^2*ε^2
-
     # bilinear form !! ASSUMES ν IS A CONSTANT !!
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫(α²ε²*∇(ux)⋅∇(vx)*ν - uy*vx*f + ∂x(p)*vx +
-          α²ε²*∇(uy)⋅∇(vy)*ν + ux*vy*f + ∂y(p)*vy +
-          α²ε²*∇(uz)⋅∇(vz)*ν +           ∂z(p)*vz +
-                   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+        ∫( α^2*ε^2*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
+           α^2*ε^2*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
+           α^2*ε^2*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
+           ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
@@ -101,11 +98,8 @@ function build_B_inversion(fed::FEData, params::Parameters)
     dΩ = fed.mesh.dΩ
     α = params.α
 
-    # coefficient
-    α⁻¹ = 1/α
-
     # bilinear form
-    a(b, vz) = ∫( α⁻¹*b*vz )dΩ
+    a(b, vz) = ∫( 1/α*(b*vz) )dΩ
 
     # assemble
     B = assemble_matrix(a, B_trial, W_test)
@@ -129,7 +123,10 @@ function build_b_inversion(fed::FEData, params::Parameters, τx, τy)
     # unpack
     U_test = fed.spaces.X_test[1]
     V_test = fed.spaces.X_test[2]
+    W_test = fed.spaces.X_test[3]
+    b_diri = fed.spaces.b_diri
     dΓ = fed.mesh.dΓ
+    dΩ = fed.mesh.dΩ
     α = params.α
 
     # allocate vector of length N
@@ -140,10 +137,12 @@ function build_b_inversion(fed::FEData, params::Parameters, τx, τy)
     # linear forms
     lx(vx) = ∫( α*vx*τx )dΓ
     ly(vy) = ∫( α*vy*τy )dΓ
+    lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
 
     # assemble
     b[1:nu] .= assemble_vector(lx, U_test) 
     b[nu+1:nu+nv] .= assemble_vector(ly, V_test)
+    b[nu+nv+1:nu+nv+nw] .= assemble_vector(lz, W_test)
 
     return b
 end
