@@ -149,7 +149,7 @@ end
 
 
 """
-    A_adv, b_adv, A_diff, B_diff, b_diff = build_evolution_system(fed::FEData, params::Parameters, κ; 
+    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fed::FEData, params::Parameters, κ; 
                         filename="", force_build=false)
 
 Assemble or load matrices and vectors for the PG evolution equation.
@@ -183,7 +183,6 @@ function build_evolution_system(fed::FEData, params::Parameters, κ; filename=""
         B_diff = assemble_matrix(a_diff_rhs, B_trial, B_test)
 
         # assemble vectors (b_diri = b_diri_rhs - b_diri_lhs)
-        b_adv = -build_diri_vector(a_adv, fed.spaces.b_diri, B_test)
         b_diff = build_diri_vector(a_diff_rhs, fed.spaces.b_diri, B_test)
         b_diff .-= build_diri_vector(a_diff_lhs, fed.spaces.b_diri, B_test)
 
@@ -191,12 +190,11 @@ function build_evolution_system(fed::FEData, params::Parameters, κ; filename=""
         l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
         b_diff .+= assemble_vector(l, B_test)
 
-        jldsave(filename; A_adv, b_adv, A_diff, B_diff, b_diff, params, κ)
+        jldsave(filename; A_adv, A_diff, B_diff, b_diff, params, κ)
         @info @sprintf("Evolution system saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
     else
         file = jldopen(filename, "r")
         A_adv = file["A_adv"]
-        b_adv = file["b_adv"]
         A_diff = file["A_diff"]
         B_diff = file["B_diff"]
         b_diff = file["b_diff"]
@@ -208,7 +206,7 @@ function build_evolution_system(fed::FEData, params::Parameters, κ; filename=""
         @info @sprintf("Evolution system loaded from '%s' (%.3f GB)", filename, filesize(filename)/1e9)
     end
 
-    return A_adv, b_adv, A_diff, B_diff, b_diff
+    return A_adv, A_diff, B_diff, b_diff
 end
 function build_diri_vector(a, b_diri, B_test)
     return assemble_vector(d -> a(b_diri, d), B_test)

@@ -129,7 +129,6 @@ end
 
 function evolve_advection!(model::Model, b_half)
     # unpack
-    arch = model.arch
     p_b = model.fed.dofs.p_b
     inv_p_b = model.fed.dofs.inv_p_b
     B_test = model.fed.spaces.B_test
@@ -142,7 +141,6 @@ function evolve_advection!(model::Model, b_half)
     b = model.state.b
     solver_adv = model.evolution.solver_adv
     b_diri = model.fed.spaces.b_diri
-    b_adv = model.evolution.b_adv
 
     # sync up flow with current buoyancy state
     invert!(model)
@@ -150,7 +148,8 @@ function evolve_advection!(model::Model, b_half)
     # compute b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
-    solver_adv.y .= (assemble_vector(l_half, B_test) + assemble_vector(l_half_diri, B_test))[p_b] + b_adv
+    solver_adv.y .=  assemble_vector(l_half, B_test)[p_b]
+    solver_adv.y .-= assemble_vector(l_half_diri, B_test)[p_b]
     iterative_solve!(solver_adv)
     b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -160,7 +159,8 @@ function evolve_advection!(model::Model, b_half)
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
-    solver_adv.y .= (assemble_vector(l_full, B_test) + assemble_vector(l_full_diri, B_test))[p_b] + b_adv
+    solver_adv.y .= assemble_vector(l_full, B_test)[p_b]
+    solver_adv.y .-= assemble_vector(l_full_diri, B_test)[p_b]
     iterative_solve!(solver_adv)
 
     # sync buoyancy to state
@@ -186,6 +186,7 @@ function invert!(model::Model, b)
     sync_flow!(model)
     return model
 end
+
 function sync_flow!(model::Model)
     # TODO: check that this works on GPU
     x = model.inversion.solver.x[model.fed.dofs.inv_p_inversion]
