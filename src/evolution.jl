@@ -1,12 +1,11 @@
 struct EvolutionToolkit{A, V, SA<:IterativeSolverToolkit, SD<:IterativeSolverToolkit}
-    b_adv::V        # RHS advection vector
     B_diff::A       # RHS diffusion matrix
     b_diff::V       # RHS diffusion vector
     solver_adv::SA  # advection iterative solver
     solver_diff::SD # diffusion iterative solver
 end
 
-function EvolutionToolkit(A_adv, P_adv, b_adv, 
+function EvolutionToolkit(A_adv, P_adv, 
                           A_diff, P_diff, B_diff, b_diff;
                           atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=false)
     arch = architecture(A_adv)
@@ -20,7 +19,7 @@ function EvolutionToolkit(A_adv, P_adv, b_adv,
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
     solver_adv = IterativeSolverToolkit(A_adv, P_adv, y, solver, kwargs, "Advection")
     solver_diff = IterativeSolverToolkit(A_diff, P_diff, y, solver, kwargs, "Diffusion")
-    return EvolutionToolkit(b_adv, B_diff, b_diff, solver_adv, solver_diff)
+    return EvolutionToolkit(B_diff, b_diff, solver_adv, solver_diff)
 end
 
 function evolve_diffusion!(evolution::EvolutionToolkit, b)

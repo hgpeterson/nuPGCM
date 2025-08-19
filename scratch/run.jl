@@ -25,6 +25,7 @@ N² = 0
 params = Parameters(ε, α, μϱ, N², Δt)
 show(params)
 @info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
+T = μϱ/ε^2
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
@@ -36,15 +37,11 @@ H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
 ν(x) = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 # κ(x) = 1
-# y0 = -0.5
-# τˣ(x) = x[2] > y0 ? 0.0 : -(x[2] + 1)*(x[2] - y0)/(1 - y0)^2
-τˣ(x) = 0
+τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
+# τˣ(x) = 0
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
-# b₀(x) = 0.5*(x[2]^2 - 1)
-# b₀(x) = 1
-T = 1e1
-force_build_inversion = false
+force_build_inversion = true
 force_build_evolution = true
 
 function setup_model()
@@ -95,7 +92,7 @@ function setup_model()
 
     # preconditioner
     if typeof(arch) == CPU
-        P_inversion = lu(A_inversion)
+        @time "lu(A_inversion)" P_inversion = lu(A_inversion)
     else
         P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
     end
@@ -121,13 +118,12 @@ function setup_model()
     # save_state(model, "$out_dir/data/state.jld2")
 
     # build evolution matrices
-    A_adv, b_adv, A_diff, B_diff, b_diff = build_evolution_system(fed, params, κ; 
-                                           force_build=force_build_evolution,
-                                           filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
+    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fed, params, κ; 
+                                        force_build=force_build_evolution,
+                                        filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
 
     # re-order dofs
     A_adv  =  A_adv[fed.dofs.p_b, fed.dofs.p_b]
-    b_adv  =  b_adv[fed.dofs.p_b]
     A_diff = A_diff[fed.dofs.p_b, fed.dofs.p_b]
     B_diff = B_diff[fed.dofs.p_b, :]
     b_diff = b_diff[fed.dofs.p_b]
@@ -143,13 +139,12 @@ function setup_model()
 
     # move to arch
     A_adv  = on_architecture(arch, A_adv)
-    b_adv  = on_architecture(arch, b_adv)
     A_diff = on_architecture(arch, A_diff)
     B_diff = on_architecture(arch, B_diff)
     b_diff = on_architecture(arch, b_diff)
 
     # setup evolution toolkit
-    evolution_toolkit = EvolutionToolkit(A_adv, P_adv, b_adv, A_diff, P_diff, B_diff, b_diff)
+    evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff)
 
     # put it all together in the `model` struct
     model = rest_state_model(arch, params, fed, inversion_toolkit, evolution_toolkit)
@@ -157,21 +152,24 @@ function setup_model()
     return model
 end
 
-# set up model
-model = setup_model()
+# # set up model
+# model = setup_model()
 
 # set initial buoyancy
 set_b!(model, x->b₀(x) + x[3]/α)
+# set_b!(model, x->b₀(x) + exp(-(x[1] - 0.5)^2/(2*0.25^2) - x[2]^2/(2*0.5^2) - (x[3] + α/2)^2/(2*(α/4)^2)))
+invert!(model) # sync flow with buoyancy state
+# model.state.b.free_values .= b₀(model.state.b.fe_space.points) # set
 # set_b!(model, x->b₀(x))
 # b_fe = interpolate_everywhere(b₀, model.state.b.fe_space)
 # model.state.b.free_values .= b_fe.free_values
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # solve
-# n_steps = Int(round(T / Δt))
+n_steps = Int(round(T / Δt))
+# n_steps = 100
 # n_save = n_steps ÷ 100
-n_steps = 100
-n_save = Inf
+n_save = 100
 n_plot = Inf
 run!(model; n_steps, n_save, n_plot)
 
