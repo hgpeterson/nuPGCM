@@ -1,39 +1,44 @@
+# unit vectors
+x̂ = VectorValue(1.0, 0.0, 0.0)
+ŷ = VectorValue(0.0, 1.0, 0.0)
+ẑ = VectorValue(0.0, 0.0, 1.0)
+
 # gradients 
-∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
-∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
-∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
+∂x(u) = x̂⋅∇(u)
+∂y(u) = ŷ⋅∇(u)
+∂z(u) = ẑ⋅∇(u)
+
+# """
+#     A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
+#         build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
+#                        A_inversion_ofile=nothing,
+#                        A_adv_ofile=nothing, A_diff_ofile=nothing)
+
+# Build the matrices for the inversion and evolution problems of the PG equations.
+# The matrices are assembled using the finite element method and can be saved to files
+# if `ofile`s are provided. The matrices are:
+# - `A_inversion`: LHS matrix for the inversion problem
+# - `B_inversion`: RHS matrix for the inversion problem
+# - `A_adv`: LHS matrix for the advection part of the evolution problem
+# - `A_diff`: LHS matrix for the diffusion part of the evolution problem
+# - `B_diff`: RHS matrix for the diffusion part of the evolution problem
+# - `b_diff`: RHS vector for the diffusion part of the evolution problem
+# The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosity, and turbulent 
+# diffusivity, respectively. 
+# `τx` and `τy` are the surface stress components in the x and y directions.
+# """
+# function build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
+#                         A_inversion_ofile=nothing,
+#                         A_adv_ofile=nothing, A_diff_ofile=nothing)
+#     A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τx, τy; 
+#                                    A_inversion_ofile=A_inversion_ofile)
+#     A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(fed, params, κ;
+#                                       A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
+#     return A_inversion, B_inversion, b_inversion, A_adv, A_diff, B_diff, b_diff
+# end
 
 """
-    A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
-        build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
-                       A_inversion_ofile=nothing,
-                       A_adv_ofile=nothing, A_diff_ofile=nothing)
-
-Build the matrices for the inversion and evolution problems of the PG equations.
-The matrices are assembled using the finite element method and can be saved to files
-if `ofile`s are provided. The matrices are:
-- `A_inversion`: LHS matrix for the inversion problem
-- `B_inversion`: RHS matrix for the inversion problem
-- `A_adv`: LHS matrix for the advection part of the evolution problem
-- `A_diff`: LHS matrix for the diffusion part of the evolution problem
-- `B_diff`: RHS matrix for the diffusion part of the evolution problem
-- `b_diff`: RHS vector for the diffusion part of the evolution problem
-The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosity, and turbulent 
-diffusivity, respectively. 
-`τx` and `τy` are the surface stress components in the x and y directions.
-"""
-function build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
-                        A_inversion_ofile=nothing,
-                        A_adv_ofile=nothing, A_diff_ofile=nothing)
-    A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τx, τy; 
-                                   A_inversion_ofile=A_inversion_ofile)
-    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(fed, params, κ;
-                                      A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
-    return A_inversion, B_inversion, b_inversion, A_adv, A_diff, B_diff, b_diff
-end
-
-"""
-    A_inversion, B_inversion = build_inversion_matrices(fed::FEData, params::Parameters, f, ν, τx, τy; 
+    A_inversion, B_inversion = build_inversion_matrices(fed::FEData, params::Parameters, ν, τˣ, τʸ, τᶻ, z;
                                    A_inversion_ofile=nothing)
 
 Build the matrices for the inversion problem of the PG equations.
@@ -42,24 +47,25 @@ if `A_inversion_ofile` is provided. The matrices are:
 - `A_inversion`: LHS matrix for the inversion problem
 - `B_inversion`: RHS matrix for the inversion problem
 - `b_inversion`: RHS vectory for the inversion problem
-The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
-`τx` and `τy` are the surface stress components in the x and y directions.
+`ν` is the turbulent viscosity.
+`τˣ`, `τʸ`, and `τᶻ` are the surface stress components.
+`z(x)` is a vector giving the local vertical direction.
 """
-function build_inversion_matrices(fed::FEData, params::Parameters, f, ν, τx, τy; 
+function build_inversion_matrices(fed::FEData, params::Parameters, ν, τˣ, τʸ, τᶻ, z; 
                                   A_inversion_ofile=nothing)
-    A_inversion = build_A_inversion(fed, params, f, ν; ofile=A_inversion_ofile)
-    B_inversion = build_B_inversion(fed, params)
-    b_inversion = build_b_inversion(fed, params, τx, τy)
+    A_inversion = build_A_inversion(fed, params, ν; ofile=A_inversion_ofile)
+    B_inversion = build_B_inversion(fed, params, z)
+    b_inversion = build_b_inversion(fed, params, τˣ, τʸ, τᶻ, z)
     return A_inversion, B_inversion, b_inversion
 end
 
 """
-    A = build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile)
+    A = build_A_inversion(fed::FEData, params::Parameters, ν; ofile)
 
 Assemble the LHS matrix `A` for the inversion problem. 
 If `ofile` is given, the data is saved to a file.
 """
-function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing)
+function build_A_inversion(fed::FEData, params::Parameters, ν; ofile=nothing)
     # unpack
     X_trial = fed.spaces.X_trial
     X_test = fed.spaces.X_test
@@ -67,11 +73,11 @@ function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing
     ε = params.ε
     α = params.α
 
-    # bilinear form !! ASSUMES ν IS A CONSTANT !!
+    # bilinear form !! ASSUMES ν IS A CONSTANT AND Ω = (0, 0, 1) !!
     a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫( α^2*ε^2*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
-           α^2*ε^2*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
-           α^2*ε^2*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
+        ∫( α^2*ε^2*(ν*∇(ux)⋅∇(vx)) - uy*vx + ∂x(p)*vx +
+           α^2*ε^2*(ν*∇(uy)⋅∇(vy)) + ux*vy + ∂y(p)*vy +
+           α^2*ε^2*(ν*∇(uz)⋅∇(vz)) +         ∂z(p)*vz +
            ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 
     # assemble 
@@ -79,7 +85,7 @@ function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing
 
     # save
     if ofile !== nothing
-        jldsave(ofile; A_inversion=A, params=params, f=f, ν=ν)
+        jldsave(ofile; A_inversion=A, params=params, ν=ν)
         @info @sprintf("A_inversion saved to '%s' (%.3f GB)", ofile, filesize(ofile)/1e9)
     end
 
@@ -87,46 +93,58 @@ function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing
 end
 
 """
-    B = build_B_inversion(fed::FEData, params)
+    B = build_B_inversion(fed::FEData, params::Parameters, z)
 
 Assemble the RHS matrix for the inversion problem.
+`z(x)` is a vector giving the local vertical direction.
 """
-function build_B_inversion(fed::FEData, params::Parameters)
+function build_B_inversion(fed::FEData, params::Parameters, z)
     # unpack
+    U_test = fed.spaces.X_test[1]
+    V_test = fed.spaces.X_test[2]
     W_test = fed.spaces.X_test[3]
     B_trial = fed.spaces.B_trial
     dΩ = fed.mesh.dΩ
     α = params.α
 
-    # bilinear form
-    a(b, vz) = ∫( 1/α*(b*vz) )dΩ
+    # bilinear forms
+    ax(b, vx) = ∫( 1/α*(b*vx)*(z)⋅x̂ )dΩ
+    ay(b, vy) = ∫( 1/α*(b*vy)*(z)⋅ŷ )dΩ
+    az(b, vz) = ∫( 1/α*(b*vz)*(z)⋅ẑ )dΩ
 
     # assemble
-    B = assemble_matrix(a, B_trial, W_test)
+    Bx = assemble_matrix(ax, B_trial, U_test)
+    By = assemble_matrix(ay, B_trial, V_test)
+    Bz = assemble_matrix(az, B_trial, W_test)
 
     # convert to N × nb matrix
     nu, nv, nw, np, nb = get_n_dofs(fed.dofs)
     N = nu + nv + nw + np
-    I, J, V = findnz(B)
-    I .+= nu + nv
+    Ix, Jx, Vx = findnz(Bx)
+    Iy, Jy, Vy = findnz(By)
+    Iz, Jz, Vz = findnz(Bz)
+    Iy .+= nu
+    Iz .+= nu + nv
+    I = vcat(Ix, Iy, Iz)
+    J = vcat(Jx, Jy, Jz)
+    V = vcat(Vx, Vy, Vz)
     B = sparse(I, J, V, N, nb)
 
     return B
 end
 
 """
-    b = build_b_inversion(mesh::FEData, params::Parameters, τx, τy)
+    b = build_b_inversion(mesh::FEData, params::Parameters, τˣ, τʸ, τᶻ, z)
 
 Assemble the RHS vector for the inversion problem.
 """
-function build_b_inversion(fed::FEData, params::Parameters, τx, τy)
+function build_b_inversion(fed::FEData, params::Parameters, τˣ, τʸ, τᶻ, z)
     # unpack
     U_test = fed.spaces.X_test[1]
     V_test = fed.spaces.X_test[2]
     W_test = fed.spaces.X_test[3]
     b_diri = fed.spaces.b_diri
     dΓ = fed.mesh.dΓ
-    dΩ = fed.mesh.dΩ
     α = params.α
 
     # allocate vector of length N
@@ -135,13 +153,13 @@ function build_b_inversion(fed::FEData, params::Parameters, τx, τy)
     b = zeros(N)
 
     # linear forms
-    lx(vx) = ∫( α*vx*τx )dΓ
-    ly(vy) = ∫( α*vy*τy )dΓ
-    lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
+    lx(vx) = ∫( α*vx*τˣ + 1/α*(b_diri*vx)*(z)⋅x̂ )dΓ
+    ly(vy) = ∫( α*vy*τʸ + 1/α*(b_diri*vy)*(z)⋅ŷ )dΓ
+    lz(vz) = ∫( α*vz*τᶻ + 1/α*(b_diri*vz)*(z)⋅ẑ )dΓ
 
     # assemble
-    b[1:nu] .= assemble_vector(lx, U_test) 
-    b[nu+1:nu+nv] .= assemble_vector(ly, V_test)
+    b[1:nu]             .= assemble_vector(lx, U_test) 
+    b[nu+1:nu+nv]       .= assemble_vector(ly, V_test)
     b[nu+nv+1:nu+nv+nw] .= assemble_vector(lz, W_test)
 
     return b

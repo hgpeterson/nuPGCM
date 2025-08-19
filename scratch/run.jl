@@ -1,4 +1,5 @@
 using nuPGCM
+using Gridap
 using JLD2
 using LinearAlgebra
 using Printf
@@ -28,29 +29,27 @@ show(params)
 T = μϱ/ε^2
 f₀ = 0.0
 β = 1.0
-f(x) = f₀ + β*x[2]
-# H(x) = α
-# H(x) = α*(1 - x[1]^2 - x[2]^2)
-H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
-H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
-H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
 ν(x) = 1
-κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-# κ(x) = 1
-τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
-# τˣ(x) = 0
+κ(x) = 1
+τˣ(x) = 0
 τʸ(x) = 0
-b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
+τᶻ(x) = 0
+b₀(x) = 0
+z(x) = VectorValue(0.0, 0.0, 1.0) # local vertical direction
+# origin = VectorValue(0.5, 0.0, -2α)
+# z(x) = VectorValue((x[1] - origin[1])/√((x[1] - origin[1])^2 + (x[2] - origin[2])^2 + (x[3] - origin[3])^2),  # local vertical direction
+#                    (x[2] - origin[2])/√((x[1] - origin[1])^2 + (x[2] - origin[2])^2 + (x[3] - origin[3])^2), 
+#                    (x[3] - origin[3])/√((x[1] - origin[1])^2 + (x[2] - origin[2])^2 + (x[3] - origin[3])^2)) 
+# z(x) = VectorValue(x[1]/√(x[1]^2 + x[2]^2 + x[3]^2),  # local vertical direction
+#                    x[2]/√(x[1]^2 + x[2]^2 + x[3]^2), 
+#                    x[3]/√(x[1]^2 + x[2]^2 + x[3]^2)) 
 force_build_inversion = true
-force_build_evolution = true
+force_build_evolution = false
 
 function setup_model()
     # mesh
-    # mesh_name = "basin_flat"
-    # mesh_name = "channel_basin_flat"
+    # mesh_name = "ocean_mesh"
     mesh_name = "channel_basin"
-    # h = 4e-2
-    # mesh_name = @sprintf("channel_basin_%.1e_%.1e", h, α)
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # resolution
@@ -73,16 +72,16 @@ function setup_model()
     A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
     if force_build_inversion
         @warn "You set `force_build_inversion` to `true`, building matrices..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, ν, τˣ, τʸ, τᶻ, z; A_inversion_ofile=A_inversion_fname)
     elseif !isfile(A_inversion_fname) 
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, ν, τˣ, τʸ, τᶻ, z; A_inversion_ofile=A_inversion_fname)
     else
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
-        B_inversion = nuPGCM.build_B_inversion(fed, params)
-        b_inversion = nuPGCM.build_b_inversion(fed, params, τˣ, τʸ)
+        B_inversion = nuPGCM.build_B_inversion(fed, params, z)
+        b_inversion = nuPGCM.build_b_inversion(fed, params, τˣ, τʸ, τᶻ, z)
     end
 
     # re-order dofs
@@ -152,11 +151,14 @@ function setup_model()
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
 
 # set initial buoyancy
-set_b!(model, x->b₀(x) + x[3]/α)
+r(x) = x[3] + 1
+# r(x) = √((x[1] - origin[1])^2 + (x[2] - origin[2])^2 + (x[3] - origin[3])^2)
+# r(x) = √(x[1]^2 + x[2]^2 + x[3]^2)
+set_b!(model, x->b₀(x) + (r(x) - 1)/α)
 # set_b!(model, x->b₀(x) + exp(-(x[1] - 0.5)^2/(2*0.25^2) - x[2]^2/(2*0.5^2) - (x[3] + α/2)^2/(2*(α/4)^2)))
 invert!(model) # sync flow with buoyancy state
 # model.state.b.free_values .= b₀(model.state.b.fe_space.points) # set
