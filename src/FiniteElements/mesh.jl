@@ -24,7 +24,7 @@ end
 
 function Base.show(io::IO, mc::MeshComponent)
     println(io, "MeshComponent: $(mc.name)")
-    println(io, " ├── Element type: $(mc.element_type)")
+    println(io, "├── Element type: $(mc.element_type)")
     print(io, "└── Elements: $(size(mc.elements, 1))")
 end
 
