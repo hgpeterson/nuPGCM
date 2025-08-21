@@ -119,6 +119,23 @@ function get_bounding_box(nodes)
     return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
+function get_dirichlet_tags(mesh::Mesh, tags)
+    names = [c.name for c in mesh.components]
+    for tag in tags
+        if !(tag in names)
+            throw(ArgumentError("Tag '$tag' not found in mesh components."))
+        end
+    end
+
+    i_diri = Int[]
+    for c in mesh.components
+        if c.name in tags
+            i_diri = vcat(i_diri, c.elements[:])
+        end
+    end
+    return unique(i_diri)
+end
+
 # struct MeshCache{MF, V}
 #     centroids::MF
 #     surface_centroids::MF
