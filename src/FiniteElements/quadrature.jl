@@ -35,7 +35,7 @@ function Jacobians(m::Mesh)
     dV = zeros(n_elements)
     @showprogress "Computing element Jacobians..." for k in 1:n_elements
         # build transformation matrix ∂x/∂ξ
-        ∂x∂ξ, _ = transformation_matrix_vector(el_type, m.nodes[m.elements[k, :], :])
+        ∂x∂ξ = build_jacobian(el_type, m.nodes[m.elements[k, :], :])
 
         # compute determinant to get volume
         dV[k] = abs(det(∂x∂ξ))
