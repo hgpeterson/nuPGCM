@@ -20,15 +20,13 @@ end
 
 function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
     s = m.state
-    b_background = interpolate(x -> m.params.N²*x[3], m.fed.spaces.B_trial)
+    b_background = interpolate_everywhere(x -> m.params.N²*x[3], m.fed.spaces.B_trial)
     writevtk(m.fed.mesh.Ω, ofile, cellfields=[
         "u" => s.u, 
         "v" => s.v, 
         "w" => s.w, 
         "p" => s.p, 
-        # "b" => b_background + s.b,
-        "b" => s.b,
-        "∇⋅u" => ∂x(s.u) + ∂y(s.v) + ∂z(s.w)
+        "b" => b_background + s.b,
     ])
 
     @info "VTK state saved to '$ofile'"
