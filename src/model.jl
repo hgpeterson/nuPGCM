@@ -101,8 +101,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
-            msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b′ ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
-            msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fed.mesh.dΩ)/volume)
+            msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+            # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fed.mesh.dΩ)/volume)
             # msg *= @sprintf("V⁻¹ ∫ (∇⋅u⃗)^2 dx = %.16f\n", sum(∫( (∂x(u) + ∂y(v) + ∂z(w))*(∂x(u) + ∂y(v) + ∂z(w)) )*model.mesh.dΩ)/volume)
             msg
             end
@@ -118,10 +118,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
 
         if mod(i, n_plot) == 0
             invert!(model) # sync flow with buoyancy state
-            # sim_plots(model, model.state.t)
-            plot_slice(model.state.u, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Zonal flow $u$",      fname=@sprintf("%s/images/u_channel_basin_xslice_%03d.png", out_dir, i))
-            plot_slice(model.state.v, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", fname=@sprintf("%s/images/v_channel_basin_xslice_%03d.png", out_dir, i))
-            plot_slice(model.state.w, model.state.b, model.params.N²; bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Vertical flow $w$",   fname=@sprintf("%s/images/w_channel_basin_xslice_%03d.png", out_dir, i))
+            sim_plots(model, model.state.t)
         end
     end
     return model
@@ -140,6 +137,7 @@ function evolve_advection!(model::Model, b_half)
     w = model.state.w
     b = model.state.b
     solver_adv = model.evolution.solver_adv
+    arch = architecture(solver_adv.y)
     b_diri = model.fed.spaces.b_diri
 
     # sync up flow with current buoyancy state
@@ -148,8 +146,8 @@ function evolve_advection!(model::Model, b_half)
     # compute b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
-    solver_adv.y .=  assemble_vector(l_half, B_test)[p_b]
-    solver_adv.y .-= assemble_vector(l_half_diri, B_test)[p_b]
+    solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
+    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b])
     iterative_solve!(solver_adv)
     b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -159,8 +157,8 @@ function evolve_advection!(model::Model, b_half)
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
-    solver_adv.y .= assemble_vector(l_full, B_test)[p_b]
-    solver_adv.y .-= assemble_vector(l_full_diri, B_test)[p_b]
+    solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
+    solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
     iterative_solve!(solver_adv)
 
     # sync buoyancy to state
@@ -174,7 +172,9 @@ function evolve_diffusion!(model::Model)
     evolve_diffusion!(model.evolution, model.state.b)
 
     # sync solution to state
-    model.state.b.free_values .= model.evolution.solver_diff.x[model.fed.dofs.inv_p_b]
+    model.state.b.free_values .= on_architecture(CPU(),
+                                    model.evolution.solver_diff.x[model.fed.dofs.inv_p_b]
+                                 )
     return model
 end
 
@@ -188,8 +188,7 @@ function invert!(model::Model, b)
 end
 
 function sync_flow!(model::Model)
-    # TODO: check that this works on GPU
-    x = model.inversion.solver.x[model.fed.dofs.inv_p_inversion]
+    x = on_architecture(CPU(), model.inversion.solver.x[model.fed.dofs.inv_p_inversion])
     nu = model.fed.dofs.nu
     nv = model.fed.dofs.nv
     nw = model.fed.dofs.nw
