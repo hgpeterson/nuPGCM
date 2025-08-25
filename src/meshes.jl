@@ -22,7 +22,7 @@ function Mesh(ifile; degree=4)
     return Mesh(model, Ω, dΩ, Γ, dΓ)
 end
 
-function dim(m::Mesh)
+function get_dim(m::Mesh)
     if m.model.grid_topology.polytopes[1] == TRI
         return 2
     elseif m.model.grid_topology.polytopes[1] == TET
