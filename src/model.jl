@@ -12,21 +12,21 @@ end
 struct Model{A, P, F, I, E, S}
     arch::A
     params::P
-    fed::F
+    fe_data::F
     inversion::I
     evolution::E
     state::S
 end
 
-function inversion_model(arch::AbstractArchitecture, params::Parameters, fed::FEData, inversion::InversionToolkit)
+function inversion_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, inversion::InversionToolkit)
     evolution = nothing # this model is only used for calculating the inversion, no need for evolution toolkit
-    state = rest_state(fed.spaces)
-    return Model(arch, params, fed, inversion, evolution, state)
+    state = rest_state(fe_data.spaces)
+    return Model(arch, params, fe_data, inversion, evolution, state)
 end
 
-function rest_state_model(arch::AbstractArchitecture, params::Parameters, fed::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
-    state = rest_state(fed.spaces)
-    return Model(arch, params, fed, inversion, evolution, state)
+function rest_state_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
+    state = rest_state(fe_data.spaces)
+    return Model(arch, params, fe_data, inversion, evolution, state)
 end
 
 function rest_state(spaces::Spaces; t=0.)
@@ -66,9 +66,9 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     b = model.state.b
 
     # save initial condition for comparison
-    b0 = interpolate(0, model.fed.spaces.B_trial)
+    b0 = interpolate(0, model.fe_data.spaces.B_trial)
     b0.free_values .= b.free_values
-    volume = sum(∫( 1 )*model.fed.mesh.dΩ) # volume of the domain
+    volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
 
     # start timer
     t0 = time()
@@ -78,7 +78,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # need to store a half-step buoyancy for advection
-    b_half = interpolate(0, model.fed.spaces.B_trial)
+    b_half = interpolate(0, model.fe_data.spaces.B_trial)
     for i ∈ i_step:n_steps
         # Strang split: Δt/2 diffusion, advection, Δt/2 diffusion
         evolve_diffusion!(model)
@@ -102,7 +102,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
-            # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fed.mesh.dΩ)/volume)
+            # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
             # msg *= @sprintf("V⁻¹ ∫ (∇⋅u⃗)^2 dx = %.16f\n", sum(∫( (∂x(u) + ∂y(v) + ∂z(w))*(∂x(u) + ∂y(v) + ∂z(w)) )*model.mesh.dΩ)/volume)
             msg
             end
@@ -126,10 +126,10 @@ end
 
 function evolve_advection!(model::Model, b_half)
     # unpack
-    p_b = model.fed.dofs.p_b
-    inv_p_b = model.fed.dofs.inv_p_b
-    B_test = model.fed.spaces.B_test
-    dΩ = model.fed.mesh.dΩ
+    p_b = model.fe_data.dofs.p_b
+    inv_p_b = model.fe_data.dofs.inv_p_b
+    B_test = model.fe_data.spaces.B_test
+    dΩ = model.fe_data.mesh.dΩ
     N² = model.params.N²
     Δt = model.params.Δt
     u = model.state.u
@@ -138,16 +138,16 @@ function evolve_advection!(model::Model, b_half)
     b = model.state.b
     solver_adv = model.evolution.solver_adv
     arch = architecture(solver_adv.y)
-    b_diri = model.fed.spaces.b_diri
+    b_diri = model.fe_data.spaces.b_diri
 
     # sync up flow with current buoyancy state
     invert!(model)
 
     # compute b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
+    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
     solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b])
+    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
     iterative_solve!(solver_adv)
     b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -156,7 +156,7 @@ function evolve_advection!(model::Model, b_half)
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-    l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*(N² + ∂z(b_diri)))*d )dΩ
+    l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
     solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
     solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
     iterative_solve!(solver_adv)
@@ -173,7 +173,7 @@ function evolve_diffusion!(model::Model)
 
     # sync solution to state
     model.state.b.free_values .= on_architecture(CPU(),
-                                    model.evolution.solver_diff.x[model.fed.dofs.inv_p_b]
+                                    model.evolution.solver_diff.x[model.fe_data.dofs.inv_p_b]
                                  )
     return model
 end
@@ -188,10 +188,10 @@ function invert!(model::Model, b)
 end
 
 function sync_flow!(model::Model)
-    x = on_architecture(CPU(), model.inversion.solver.x[model.fed.dofs.inv_p_inversion])
-    nu = model.fed.dofs.nu
-    nv = model.fed.dofs.nv
-    nw = model.fed.dofs.nw
+    x = on_architecture(CPU(), model.inversion.solver.x[model.fe_data.dofs.inv_p_inversion])
+    nu = model.fe_data.dofs.nu
+    nv = model.fe_data.dofs.nv
+    nw = model.fe_data.dofs.nw
     model.state.u.free_values .= x[1:nu]
     model.state.v.free_values .= x[nu+1:nu+nv]
     model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
