@@ -31,11 +31,13 @@ function generate_bowl_mesh_3D(h, α)
 
     # sync and define physical groups
     gmsh.model.occ.synchronize()
-    gmsh.model.addPhysicalGroup(0, [1, 3], 2, "bot")
-    gmsh.model.addPhysicalGroup(1, [1, 3], 2, "bot")
-    gmsh.model.addPhysicalGroup(2, [2], 1, "sfc")
-    gmsh.model.addPhysicalGroup(2, [3], 2, "bot")
-    gmsh.model.addPhysicalGroup(3, [1], 3, "int")
+    gmsh.model.addPhysicalGroup(0, [1], 1, "bottom")
+    gmsh.model.addPhysicalGroup(0, [3], 3, "coastline")
+    gmsh.model.addPhysicalGroup(1, [1], 1, "bottom")
+    gmsh.model.addPhysicalGroup(1, [3], 3, "coastline")
+    gmsh.model.addPhysicalGroup(2, [2], 2, "surface")
+    gmsh.model.addPhysicalGroup(2, [3], 1, "bottom")
+    gmsh.model.addPhysicalGroup(3, [1], 4, "interior")
 
     # generate and save mesh
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
@@ -44,10 +46,7 @@ function generate_bowl_mesh_3D(h, α)
     gmsh.finalize()
 end
 
-# params
-h = 0.1
+h = 8e-2
 α = 1/2
 @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
-
-# generate
 generate_bowl_mesh_3D(h, α)
