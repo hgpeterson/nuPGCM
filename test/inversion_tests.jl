@@ -9,43 +9,47 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-set_out_dir!(joinpath(@__DIR__, ""))
+set_out_dir!(@__DIR__)
 
 function coarse_inversion(dim, arch)
     # params/funcs
     ε = 2e-1
     α = 1/2
-    N² = 1e0/α
+    N² = 1/α
     params = Parameters(ε, α, 0., N², 0.)
     f₀ = 1
     β = 0.5
     f(x) = f₀ + β*x[2]
     H(x) = α*(1 - x[1]^2 - x[2]^2)
     ν(x) = 1
-    τx(x) = 0
-    τy(x) = 0
+    τˣ(x) = 0
+    τʸ(x) = 0
+    b₀(x) = 0
 
     # coarse mesh
     h = 0.1
     mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
-    @assert mesh.dim == dim
+
+    # FE data
+    spaces = Spaces(mesh, b₀)
+    fe_data = FEData(mesh, spaces)
 
     # build inversion matrices and test LHS against saved matrix
     A_inversion_fname = @sprintf("%s/data/A_inversion_%sD_%e_%e_%e_%e_%e.jld2", out_dir, dim, h, ε, α, f₀, β)
     if !isfile(A_inversion_fname)
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
     else
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(mesh, params, f, ν, τx, τy)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ)
         jldopen(A_inversion_fname, "r") do file
             @test A_inversion ≈ file["A_inversion"]
         end
     end
 
     # re-order dofs
-    A_inversion = A_inversion[mesh.dofs.p_inversion, mesh.dofs.p_inversion]
-    B_inversion = B_inversion[mesh.dofs.p_inversion, :]
-    b_inversion = b_inversion[mesh.dofs.p_inversion]
+    A_inversion = A_inversion[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
+    B_inversion = B_inversion[fe_data.dofs.p_inversion, :]
+    b_inversion = b_inversion[fe_data.dofs.p_inversion]
 
     # preconditioner
     if typeof(arch) == CPU
@@ -63,7 +67,7 @@ function coarse_inversion(dim, arch)
     inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_inversion)
 
     # model
-    model = inversion_model(arch, params, mesh, inversion_toolkit)
+    model = inversion_model(arch, params, fe_data, inversion_toolkit)
 
     # simple test buoyancy field: b = δ exp(-(z + H)/(α*δ))
     set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
@@ -71,8 +75,8 @@ function coarse_inversion(dim, arch)
     # invert
     invert!(model)
 
-    # plot for sanity check
-    sim_plots(model, 0)
+    # # plot for sanity check
+    # sim_plots(model, 0)
 
     # compare state with data
     datafile = @sprintf("%s/data/inversion_%sD.jld2", out_dir, dim)
