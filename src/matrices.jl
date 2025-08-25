@@ -5,7 +5,7 @@
 
 """
     A_inversion, B_inversion, A_adv, A_diff, B_diff, b_diff =
-        build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
+        build_matrices(fe_data::FEData, params::Parameters, f, ν, κ, τx, τy; 
                        A_inversion_ofile=nothing,
                        A_adv_ofile=nothing, A_diff_ofile=nothing)
 
@@ -22,18 +22,18 @@ The functions `f`, `ν`, and `κ` are the Coriolis parameter, turbulent viscosit
 diffusivity, respectively. 
 `τx` and `τy` are the surface stress components in the x and y directions.
 """
-function build_matrices(fed::FEData, params::Parameters, f, ν, κ, τx, τy; 
+function build_matrices(fe_data::FEData, params::Parameters, f, ν, κ, τx, τy; 
                         A_inversion_ofile=nothing,
                         A_adv_ofile=nothing, A_diff_ofile=nothing)
-    A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τx, τy; 
+    A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τx, τy; 
                                    A_inversion_ofile=A_inversion_ofile)
-    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(fed, params, κ;
+    A_adv, A_diff, B_diff, b_diff = build_evolution_matrices(fe_data, params, κ;
                                       A_adv_ofile=A_adv_ofile, A_diff_ofile=A_diff_ofile)
     return A_inversion, B_inversion, b_inversion, A_adv, A_diff, B_diff, b_diff
 end
 
 """
-    A_inversion, B_inversion = build_inversion_matrices(fed::FEData, params::Parameters, f, ν, τx, τy; 
+    A_inversion, B_inversion = build_inversion_matrices(fe_data::FEData, params::Parameters, f, ν, τx, τy; 
                                    A_inversion_ofile=nothing)
 
 Build the matrices for the inversion problem of the PG equations.
@@ -45,25 +45,25 @@ if `A_inversion_ofile` is provided. The matrices are:
 The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
 `τx` and `τy` are the surface stress components in the x and y directions.
 """
-function build_inversion_matrices(fed::FEData, params::Parameters, f, ν, τx, τy; 
+function build_inversion_matrices(fe_data::FEData, params::Parameters, f, ν, τx, τy; 
                                   A_inversion_ofile=nothing)
-    A_inversion = build_A_inversion(fed, params, f, ν; ofile=A_inversion_ofile)
-    B_inversion = build_B_inversion(fed, params)
-    b_inversion = build_b_inversion(fed, params, τx, τy)
+    A_inversion = build_A_inversion(fe_data, params, f, ν; ofile=A_inversion_ofile)
+    B_inversion = build_B_inversion(fe_data, params)
+    b_inversion = build_b_inversion(fe_data, params, τx, τy)
     return A_inversion, B_inversion, b_inversion
 end
 
 """
-    A = build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile)
+    A = build_A_inversion(fe_data::FEData, params::Parameters, f, ν; ofile)
 
 Assemble the LHS matrix `A` for the inversion problem. 
 If `ofile` is given, the data is saved to a file.
 """
-function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing)
+function build_A_inversion(fe_data::FEData, params::Parameters, f, ν; ofile=nothing)
     # unpack
-    X_trial = fed.spaces.X_trial
-    X_test = fed.spaces.X_test
-    dΩ = fed.mesh.dΩ
+    X_trial = fe_data.spaces.X_trial
+    X_test = fe_data.spaces.X_test
+    dΩ = fe_data.mesh.dΩ
     ε = params.ε
     α = params.α
 
@@ -87,15 +87,15 @@ function build_A_inversion(fed::FEData, params::Parameters, f, ν; ofile=nothing
 end
 
 """
-    B = build_B_inversion(fed::FEData, params)
+    B = build_B_inversion(fe_data::FEData, params)
 
 Assemble the RHS matrix for the inversion problem.
 """
-function build_B_inversion(fed::FEData, params::Parameters)
+function build_B_inversion(fe_data::FEData, params::Parameters)
     # unpack
-    W_test = fed.spaces.X_test[3]
-    B_trial = fed.spaces.B_trial
-    dΩ = fed.mesh.dΩ
+    W_test = fe_data.spaces.X_test[3]
+    B_trial = fe_data.spaces.B_trial
+    dΩ = fe_data.mesh.dΩ
     α = params.α
 
     # bilinear form
@@ -105,7 +105,7 @@ function build_B_inversion(fed::FEData, params::Parameters)
     B = assemble_matrix(a, B_trial, W_test)
 
     # convert to N × nb matrix
-    nu, nv, nw, np, nb = get_n_dofs(fed.dofs)
+    nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
     N = nu + nv + nw + np
     I, J, V = findnz(B)
     I .+= nu + nv
@@ -119,18 +119,18 @@ end
 
 Assemble the RHS vector for the inversion problem.
 """
-function build_b_inversion(fed::FEData, params::Parameters, τx, τy)
+function build_b_inversion(fe_data::FEData, params::Parameters, τx, τy)
     # unpack
-    U_test = fed.spaces.X_test[1]
-    V_test = fed.spaces.X_test[2]
-    W_test = fed.spaces.X_test[3]
-    b_diri = fed.spaces.b_diri
-    dΓ = fed.mesh.dΓ
-    dΩ = fed.mesh.dΩ
+    U_test = fe_data.spaces.X_test[1]
+    V_test = fe_data.spaces.X_test[2]
+    W_test = fe_data.spaces.X_test[3]
+    b_diri = fe_data.spaces.b_diri
+    dΓ = fe_data.mesh.dΓ
+    dΩ = fe_data.mesh.dΩ
     α = params.α
 
     # allocate vector of length N
-    nu, nv, nw, np, nb = get_n_dofs(fed.dofs)
+    nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
     N = nu + nv + nw + np
     b = zeros(N)
 
@@ -149,20 +149,20 @@ end
 
 
 """
-    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fed::FEData, params::Parameters, κ; 
+    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fe_data::FEData, params::Parameters, κ; 
                         filename="", force_build=false)
 
 Assemble or load matrices and vectors for the PG evolution equation.
 """
-function build_evolution_system(fed::FEData, params::Parameters, κ; filename="", force_build=false)
+function build_evolution_system(fe_data::FEData, params::Parameters, κ; filename="", force_build=false)
     if !isfile(filename) || force_build
         !isfile(filename) && @warn "Evolution system file not found, building..." filename
         force_build && @warn "`force_build` set to `true`, building evolution system..." filename
 
         # unpack
-        B_trial = fed.spaces.B_trial
-        B_test = fed.spaces.B_test
-        dΩ = fed.mesh.dΩ
+        B_trial = fe_data.spaces.B_trial
+        B_test = fe_data.spaces.B_test
+        dΩ = fe_data.mesh.dΩ
         ε = params.ε
         α = params.α
         μϱ = params.μϱ
@@ -183,15 +183,17 @@ function build_evolution_system(fed::FEData, params::Parameters, κ; filename=""
         B_diff = assemble_matrix(a_diff_rhs, B_trial, B_test)
 
         # assemble vectors (b_diri = b_diri_rhs - b_diri_lhs)
-        b_diff = build_diri_vector(a_diff_rhs, fed.spaces.b_diri, B_test)
-        b_diff .-= build_diri_vector(a_diff_lhs, fed.spaces.b_diri, B_test)
+        b_diff = build_diri_vector(a_diff_rhs, fe_data.spaces.b_diri, B_test)
+        b_diff .-= build_diri_vector(a_diff_lhs, fe_data.spaces.b_diri, B_test)
 
         # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
         l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
         b_diff .+= assemble_vector(l, B_test)
 
-        jldsave(filename; A_adv, A_diff, B_diff, b_diff, params, κ)
-        @info @sprintf("Evolution system saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
+        if filename != ""
+            jldsave(filename; A_adv, A_diff, B_diff, b_diff, params, κ)
+            @info @sprintf("Evolution system saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
+        end
     else
         file = jldopen(filename, "r")
         A_adv = file["A_adv"]
@@ -199,10 +201,8 @@ function build_evolution_system(fed::FEData, params::Parameters, κ; filename=""
         B_diff = file["B_diff"]
         b_diff = file["b_diff"]
         p0 = file["params"]
-        κ0 = file["κ"]
         close(file)
-        params != p0 && @warn "Parameters mismatch detected!"
-        κ != κ0 && @warn "Turbulent diffusivity mismatch detected!"
+        params != p0 && @warn "Parameters mismatch detected!" #TODO: also detect κ mismatch
         @info @sprintf("Evolution system loaded from '%s' (%.3f GB)", filename, filesize(filename)/1e9)
     end
 
