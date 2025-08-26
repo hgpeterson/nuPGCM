@@ -80,10 +80,12 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     # need to store a half-step buoyancy for advection
     b_half = interpolate(0, model.fe_data.spaces.B_trial)
     for i ∈ i_step:n_steps
-        # Strang split: Δt/2 diffusion, advection, Δt/2 diffusion
-        evolve_diffusion!(model)
-        evolve_advection!(model, b_half)
-        evolve_diffusion!(model)
+        # Strang split evolution equation
+        evolve_hdiffusion!(model)         # Δt/2 horizontal diffusion
+        evolve_vdiffusion!(model)         # Δt/2 vertical diffusion
+        evolve_advection!(model, b_half)  # Δt advection
+        evolve_vdiffusion!(model)         # Δt/2 vertical diffusion
+        evolve_hdiffusion!(model)         # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         # blow-up -> stop
@@ -167,13 +169,45 @@ function evolve_advection!(model::Model, b_half)
     return model
 end
 
-function evolve_diffusion!(model::Model)
+function evolve_vdiffusion!(model::Model)
+    # # rebuild vertical diffusion system
+    # A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
+    # model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
+    # if typeof(model.arch) == CPU 
+    #     model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
+    # else
+    #     T = eltype(model.evolution.solver_vdiff.A)
+    #     model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector{T}(1 ./ diag(model.evolution.solver_vdiff.A))))
+    # end
+    # model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
+    # model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
+
+    # calculate rhs vector
+    arch = model.arch
+    solver_vdiff = model.evolution.solver_vdiff
+    B_vdiff = model.evolution.B_vdiff
+    b_vdiff = model.evolution.b_vdiff
+    b = model.state.b
+    solver_vdiff.y .= B_vdiff*on_architecture(arch, b.free_values) + b_vdiff
+
     # solve
-    evolve_diffusion!(model.evolution, model.state.b)
+    iterative_solve!(solver_vdiff)
+
+    # sync solution to state
+    b.free_values .= on_architecture(CPU(),
+                                solver_vdiff.x[model.fe_data.dofs.inv_p_b]
+                                )
+
+    return model
+end
+
+function evolve_hdiffusion!(model::Model)
+    # solve
+    evolve_hdiffusion!(model.evolution, model.state.b)
 
     # sync solution to state
     model.state.b.free_values .= on_architecture(CPU(),
-                                    model.evolution.solver_diff.x[model.fe_data.dofs.inv_p_b]
+                                    model.evolution.solver_hdiff.x[model.fe_data.dofs.inv_p_b]
                                  )
     return model
 end
