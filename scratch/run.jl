@@ -35,6 +35,7 @@ H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
 ν(x) = 1
 κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
+κ_conv = 10
 τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
@@ -63,6 +64,10 @@ function setup_model()
     spaces = Spaces(mesh, b₀)
     fe_data = FEData(mesh, spaces)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
+
+    # forcings
+    forcings = Forcings(fe_data, κₕ, κᵥ, κ_conv, τˣ, τʸ, b₀)
+    show(forcings)
 
     # build inversion matrices
     A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
@@ -118,50 +123,28 @@ function setup_model()
                             filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
 
     # put it all together in the `model` struct
-    model = rest_state_model(arch, params, fe_data, inversion_toolkit, evolution_toolkit)
+    model = rest_state_model(arch, params, fe_data, forcings, inversion_toolkit, evolution_toolkit)
 
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
 
-# # set initial buoyancy
-# set_b!(model, x->b₀(x) + x[3]/α)
-# invert!(model) # sync flow with buoyancy state
-# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-# load state
-d = jldopen(@sprintf("%s/data/state_%016d.jld2", out_dir, 1000), "r")
-set_b!(model, d["b"])
-close(d)
+# set initial buoyancy
+set_b!(model, x->b₀(x) + x[3]/α)
+invert!(model) # sync flow with buoyancy state
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# d = jldopen(@sprintf("%s/data/state_%016d.jld2", out_dir, 1000), "r")
+# set_b!(model, d["b"])
+# close(d)
 
-using Gridap
-reffe_κ = ReferenceFE(lagrangian, Float64, 1; space=:P)
-κ_test = TestFESpace(model.fe_data.mesh.model, reffe_κ, conformity=:H1)
-κ_trial = TrialFESpace(κ_test)
-κ = interpolate_everywhere(κᵥ, κ_trial)
-dΩ = model.fe_data.mesh.dΩ
-bz = ∂z(model.state.b)
-stability(x) = x < 0 ? 1.0 : 0.0
-a(u, v) = ∫( u*v )dΩ
-l(v) = ∫( (stability∘bz)*v )dΩ
-A = assemble_matrix(a, κ_trial, κ_test)
-y = assemble_vector(l, κ_test)
-sol = clamp.(A\y, 0.0, 1.0)
-κ.free_values .+= 10*sol
-writevtk(model.fe_data.mesh.Ω, "$out_dir/data/kappa_conv.vtu", cellfields=[
-    "b" => model.state.b,
-    "κᵥ" => κ,
-    "∂z(b)" => bz,
-    "stability" => stability∘bz,
-])
-
-# # solve
-# n_steps = Int(round(T / Δt))
-# # n_steps = 100
-# # n_save = n_steps ÷ 100
-# n_save = 100
-# n_plot = Inf
-# run!(model; n_steps, n_save, n_plot)
+# solve
+n_steps = Int(round(T / Δt))
+# n_steps = 100
+# n_save = n_steps ÷ 100
+n_save = 100
+n_plot = Inf
+run!(model; n_steps, n_save, n_plot)
 
 println("Done.")
