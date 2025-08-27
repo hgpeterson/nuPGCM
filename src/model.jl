@@ -9,24 +9,28 @@ mutable struct State{U, P, B}
     t::Real  # time
 end
 
-struct Model{A, P, F, I, E, S}
+struct Model{A<:AbstractArchitecture, P<:Parameters, D<:FEData, F<:Forcings, 
+             I<:InversionToolkit, E<:EvolutionToolkit, S<:State}
     arch::A
     params::P
-    fe_data::F
+    fe_data::D
+    forcings::F
     inversion::I
     evolution::E
     state::S
 end
 
-function inversion_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, inversion::InversionToolkit)
+function inversion_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, 
+                         forcings::Forcings, inversion::InversionToolkit)
     evolution = nothing # this model is only used for calculating the inversion, no need for evolution toolkit
     state = rest_state(fe_data.spaces)
-    return Model(arch, params, fe_data, inversion, evolution, state)
+    return Model(arch, params, fe_data, forcings, inversion, evolution, state)
 end
 
-function rest_state_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
+function rest_state_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, 
+                          forcings::Forcings, inversion::InversionToolkit, evolution::EvolutionToolkit)
     state = rest_state(fe_data.spaces)
-    return Model(arch, params, fe_data, inversion, evolution, state)
+    return Model(arch, params, fe_data, forcings, inversion, evolution, state)
 end
 
 function rest_state(spaces::Spaces; t=0.)
@@ -170,6 +174,8 @@ function evolve_advection!(model::Model, b_half)
 end
 
 function evolve_vdiffusion!(model::Model)
+    update_κᵥ!(model, model.state.b)
+
     # # rebuild vertical diffusion system
     # A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
     # model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
@@ -198,6 +204,11 @@ function evolve_vdiffusion!(model::Model)
                                 solver_vdiff.x[model.fe_data.dofs.inv_p_b]
                                 )
 
+    return model
+end
+
+function update_κᵥ!(model::Model, b; kwargs...)
+    update_κᵥ!(model.forcings, model.fe_data, b; kwargs...)
     return model
 end
 

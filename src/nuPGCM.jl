@@ -52,6 +52,7 @@ include("parameters.jl")
 include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
+include("forcings.jl")
 include("matrices.jl")
 include("iterative_solvers.jl")
 include("inversion.jl")
@@ -88,6 +89,8 @@ Spaces,
 # dofs.jl
 get_n_dof,
 FEData,
+# forcings.jl
+Forcings,
 # matrices.jl
 ∂x,
 ∂y,

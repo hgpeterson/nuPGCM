@@ -27,6 +27,7 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         "w" => s.w, 
         "p" => s.p, 
         "b" => b_background + s.b,
+        "κᵥ" => m.forcings.κᵥ,
     ])
 
     @info "VTK state saved to '$ofile'"
