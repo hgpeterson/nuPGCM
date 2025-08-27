@@ -126,17 +126,42 @@ end
 # # set up model
 # model = setup_model()
 
-# set initial buoyancy
-set_b!(model, x->b₀(x) + x[3]/α)
-invert!(model) # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# # set initial buoyancy
+# set_b!(model, x->b₀(x) + x[3]/α)
+# invert!(model) # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# load state
+d = jldopen(@sprintf("%s/data/state_%016d.jld2", out_dir, 1000), "r")
+set_b!(model, d["b"])
+close(d)
 
-# solve
-n_steps = Int(round(T / Δt))
-# n_steps = 100
-# n_save = n_steps ÷ 100
-n_save = 100
-n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
+using Gridap
+reffe_κ = ReferenceFE(lagrangian, Float64, 1; space=:P)
+κ_test = TestFESpace(model.fe_data.mesh.model, reffe_κ, conformity=:H1)
+κ_trial = TrialFESpace(κ_test)
+κ = interpolate_everywhere(κᵥ, κ_trial)
+dΩ = model.fe_data.mesh.dΩ
+bz = ∂z(model.state.b)
+stability(x) = x < 0 ? 1.0 : 0.0
+a(u, v) = ∫( u*v )dΩ
+l(v) = ∫( (stability∘bz)*v )dΩ
+A = assemble_matrix(a, κ_trial, κ_test)
+y = assemble_vector(l, κ_test)
+sol = clamp.(A\y, 0.0, 1.0)
+κ.free_values .+= 10*sol
+writevtk(model.fe_data.mesh.Ω, "$out_dir/data/kappa_conv.vtu", cellfields=[
+    "b" => model.state.b,
+    "κᵥ" => κ,
+    "∂z(b)" => bz,
+    "stability" => stability∘bz,
+])
+
+# # solve
+# n_steps = Int(round(T / Δt))
+# # n_steps = 100
+# # n_save = n_steps ÷ 100
+# n_save = 100
+# n_plot = Inf
+# run!(model; n_steps, n_save, n_plot)
 
 println("Done.")
