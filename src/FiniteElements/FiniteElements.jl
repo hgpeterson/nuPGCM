@@ -22,8 +22,11 @@ export
     integrate,
     ∫,
 
-    # shape_functions.jl
-    Lagrange,
+    # spaces.jl
+    P1,
+    P2,
+    Bubble,
+    Mini,
     φ,
     ∇φ,
 
@@ -33,7 +36,8 @@ export
 include("elements.jl")
 include("mesh.jl")
 include("quadrature.jl")
-include("shape_functions.jl")
+include("spaces.jl")
+include("dofs.jl")
 include("matrix_assembly.jl")
 include("vtu.jl")
 
