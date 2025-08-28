@@ -65,7 +65,7 @@ Integration weights `w` and points `ξ` for quadrature rules.
 
 The integration should be exact for polynomials up to degree `deg`.
 """
-struct QuadratureRule{W, P}
+struct QuadratureRule{W <: AbstractVector, P <: AbstractMatrix}
     weights::W
     points::P
 end

@@ -136,6 +136,69 @@ function get_dirichlet_tags(mesh::Mesh, tags)
     return unique(i_diri)
 end
 
+"""
+    emap, edges, bndix = all_edges(t)
+
+1) Find all unique `edges` (ne x 2 array) in the tessellation `t`.
+2) Determine indices of boundary edges with `bndix`.
+3) Map local edges to global edges with `emap` (nt x dim+1 array): `emap[k,i]` is the 
+global edge number for local edge `i` in element `k`.
+"""
+function all_edges(t)
+    # dimension of space
+    dim = size(t, 2) - 1
+
+    # get all possible edge index pairs
+    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
+    pairs = [1 2
+             2 3
+             1 3
+             1 4
+             2 4
+             3 4]
+
+    # find all edges
+    etag = t[:, pairs[1, :]]
+    for i=2:ne
+        etag = vcat(etag, t[:, pairs[i, :]])
+    end
+    nedges = size(etag, 1)
+
+    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
+    etag = [sort(etag, dims=2)  1:nedges]
+
+    # now sort so that first column goes from lowest to highest node index
+    etag = sortslices(etag, dims=1)
+
+    # determine if edge is a duplicate or should be kept
+    keep = zeros(Bool, nedges)
+    keep[unique(i -> etag[i, 1:2], 1:size(etag, 1))] .= 1
+
+    # only keep unique edges
+    edges = etag[keep, 1:2]
+
+    # boundary edges
+    if dim == 1 || dim == 2
+        # in 1D and 2D, no duplicates
+        dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
+        dup = [dup; false]
+        dup = dup[keep]
+        bndix = findall(.!dup)
+    elseif dim == 3
+        # in 3D, on boundary face
+        bfaces = boundary_faces(t)
+        _, bedges, _ = all_edges(bfaces)
+        bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
+    end
+
+    # compute mapping to global indices
+    emap = cumsum(keep)
+    invpermute!(emap, etag[:, 3])
+    emap = reshape(emap, :, ne)
+
+    return emap, edges, bndix
+end
+
 # struct MeshCache{MF, V}
 #     centroids::MF
 #     surface_centroids::MF
