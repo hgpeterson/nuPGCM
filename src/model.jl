@@ -174,20 +174,20 @@ function evolve_advection!(model::Model, b_half)
 end
 
 function evolve_vdiffusion!(model::Model)
-    @time "rebuild vdiff system" begin
-    @time "\tupdate κᵥ" update_κᵥ!(model, model.state.b)
+    # @time "rebuild vdiff system" begin
+    update_κᵥ!(model, model.state.b)
 
     # rebuild vertical diffusion system
-    @time "\tbuild system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+    A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
     model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
     # if typeof(model.arch) == CPU 
     #     @time "\tlu" model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
     # else
-        @time "\tmake P" model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(model.evolution.solver_vdiff.A))))
+        model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(model.evolution.solver_vdiff.A))))
     # end
     model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
     model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
-    end
+    # end
 
     # calculate rhs vector
     arch = model.arch
