@@ -135,13 +135,13 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
     # rhs nonzero where ∂z(b) < 0 (i.e. unstable stratification)
     stability(x) = x < 0 ? 1.0 : 0.0
     dΩ = fe_data.mesh.dΩ
-    l(v) = ∫( (stability∘∂z(b))*v )dΩ
+    l(v) = ∫( (stability∘∂z(b))*v )dΩ  #TODO: can we just calculate bz so there's not this step function?
     y = assemble_vector(l, spaces.κ_test)
 
     # κᵥ = κᶜ where unstable
     sol = clamp.(fe_data.Aκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
     where_unstable = sol .== 1.0
-    @debug "Updating κᵥ: $(sum(where_unstable))/$(length(sol)) unstable nodes"
+    @info "Updating κᵥ: $(sum(where_unstable))/$(length(sol)) unstable nodes"
     fe_data.κᵥ.free_values .= fe_data.κᵥ₀.free_values  # reset
     fe_data.κᵥ.free_values[where_unstable] .= params.κᶜ
 

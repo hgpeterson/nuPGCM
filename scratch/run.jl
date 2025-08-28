@@ -8,8 +8,8 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
@@ -22,7 +22,7 @@ arch = CPU()
 μϱ = 1
 N² = 0
 Δt = 1e-3
-κᶜ = 10
+κᶜ = 100
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
