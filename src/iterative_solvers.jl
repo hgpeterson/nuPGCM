@@ -1,4 +1,4 @@
-struct IterativeSolverToolkit{A, P, V, S, K}
+mutable struct IterativeSolverToolkit{A, P, V, S, K}
     A::A               # LHS matrix
     P::P               # preconditioner for A
     x::V               # solution vector

@@ -48,11 +48,10 @@ end
 # include all the module code
 include("architectures.jl")
 include("utils.jl")
-include("parameters.jl")
+include("inputs.jl")
 include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
-include("forcings.jl")
 include("matrices.jl")
 include("iterative_solvers.jl")
 include("inversion.jl")
@@ -78,8 +77,9 @@ trapz,
 cumtrapz,
 nan_max,
 nan_min,
-# parameters.jl
+# inputs.jl
 Parameters,
+Forcings,
 # meshes.jl
 Mesh,
 get_p_t,
@@ -89,8 +89,6 @@ Spaces,
 # dofs.jl
 get_n_dof,
 FEData,
-# forcings.jl
-Forcings,
 # matrices.jl
 ∂x,
 ∂y,

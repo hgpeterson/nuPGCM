@@ -104,13 +104,46 @@ end
 
 ### struct to hold Finite Element data
 
-struct FEData{M, S, D}
+struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler, KV, KV0, AK}
     mesh::M    # mesh data
     spaces::S  # finite element spaces
     dofs::D    # degrees of freedom handler
+    κᵥ::KV     # actual vertical diffusivity FEFunction (enhanced in convective regions)
+    κᵥ₀::KV0   # original vertical diffusivity FEFunction
+    Aκ::AK     # mass matrix for κᵥ
 end
 
-function FEData(mesh::Mesh, spaces::Spaces)
+function FEData(mesh::Mesh, spaces::Spaces, forcings::Forcings)
     dofs = DoFHandler(spaces, mesh.dΩ)
-    return FEData(mesh, spaces, dofs)
+
+    # interpolate vertical diffusivity to FE space so we can update
+    κᵥ  = interpolate_everywhere(forcings.κᵥ, spaces.κ_trial)
+    κᵥ₀ = interpolate_everywhere(forcings.κᵥ, spaces.κ_trial)
+
+    # LHS matrix for updating κᵥ (just a mass matrix)
+    dΩ = mesh.dΩ
+    a(u, v) = ∫( u*v )dΩ
+    Aκ = assemble_matrix(a, spaces.κ_trial, spaces.κ_test)
+    Aκ = lu(Aκ)
+
+    return FEData(mesh, spaces, dofs, κᵥ, κᵥ₀, Aκ)
+end
+
+function update_κᵥ!(fe_data::FEData, params::Parameters, b)
+    spaces = fe_data.spaces
+
+    # rhs nonzero where ∂z(b) < 0 (i.e. unstable stratification)
+    stability(x) = x < 0 ? 1.0 : 0.0
+    dΩ = fe_data.mesh.dΩ
+    l(v) = ∫( (stability∘∂z(b))*v )dΩ
+    y = assemble_vector(l, spaces.κ_test)
+
+    # κᵥ = κᶜ where unstable
+    sol = clamp.(fe_data.Aκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
+    where_unstable = sol .== 1.0
+    @debug "Updating κᵥ: $(sum(where_unstable))/$(length(sol)) unstable nodes"
+    fe_data.κᵥ.free_values .= fe_data.κᵥ₀.free_values  # reset
+    fe_data.κᵥ.free_values[where_unstable] .= params.κᶜ
+
+    return fe_data
 end
