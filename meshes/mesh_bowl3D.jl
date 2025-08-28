@@ -9,9 +9,9 @@ function generate_bowl_mesh_3D(h, α)
     gmsh.model.add("bowl3D")
 
     # points
-    gmsh.model.occ.addPoint(0, 0, -α, h, 1)
-    gmsh.model.occ.addPoint(0.5, 0, -α, h, 2) # control point
-    gmsh.model.occ.addPoint(1, 0, 0, h, 3)
+    gmsh.model.occ.addPoint(0, 0, -α, 1)
+    gmsh.model.occ.addPoint(0.5, 0, -α, 2) # control point
+    gmsh.model.occ.addPoint(1, 0, 0, 3)
 
     # curve z = α*(1 - x^2)
     gmsh.model.occ.addBezier([1, 2, 3], 1)
@@ -31,35 +31,22 @@ function generate_bowl_mesh_3D(h, α)
 
     # sync and define physical groups
     gmsh.model.occ.synchronize()
-    gmsh.model.addPhysicalGroup(0, [1, 3], 2, "bot")
-    gmsh.model.addPhysicalGroup(1, [1, 3], 2, "bot")
-    gmsh.model.addPhysicalGroup(2, [2], 1, "sfc")
-    gmsh.model.addPhysicalGroup(2, [3], 2, "bot")
-    gmsh.model.addPhysicalGroup(3, [1], 3, "int")
-
-    # gmsh.option.setNumber("Mesh.QualityType", 3)
-    # gmsh.option.setNumber("Mesh.Smoothing", 10)
-    # gmsh.option.setNumber("Mesh.Algorithm3D", 7)
-    # gmsh.option.setNumber("Mesh.QualityType", 0)
-    # gmsh.option.setNumber("Mesh.OptimizeNetgen", 1)
-    # gmsh.option.setNumber("Mesh.OptimizeThreshold", 0.4)
-    # gmsh.option.setNumber("Mesh.AllowSwapAngle", 25)
+    gmsh.model.addPhysicalGroup(0, [1], 1, "bottom")
+    gmsh.model.addPhysicalGroup(0, [3], 3, "coastline")
+    gmsh.model.addPhysicalGroup(1, [1], 1, "bottom")
+    gmsh.model.addPhysicalGroup(1, [3], 3, "coastline")
+    gmsh.model.addPhysicalGroup(2, [2], 2, "surface")
+    gmsh.model.addPhysicalGroup(2, [3], 1, "bottom")
+    gmsh.model.addPhysicalGroup(3, [1], 4, "interior")
 
     # generate and save mesh
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
     gmsh.model.mesh.generate(3)
-    # gmsh.model.mesh.optimize("Netgen")
-    # gmsh.model.mesh.optimize("HighOrder")
-    # gmsh.model.mesh.optimize("HighOrderElastic")
-    gmsh.write(@sprintf("bowl3D_%e_%e.msh", h, α))
-    gmsh.write(@sprintf("bowl3D_%e_%e.vtk", h, α))
+    gmsh.write(joinpath(@__DIR__, @sprintf("bowl3D_%e_%e.msh", h, α)))
     gmsh.finalize()
 end
 
-# # params
-# h = 4e-2
-# α = 1
-# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
-
-# # generate
-# generate_bowl_mesh_3D(h, α)
+h = 8e-2
+α = 1/2
+@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+generate_bowl_mesh_3D(h, α)
