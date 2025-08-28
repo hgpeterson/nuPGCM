@@ -8,37 +8,41 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
 arch = CPU()
 
-# params/funcs
+# params
 ε = 1e-1
 α = 1/2
 μϱ = 1
 N² = 0
 Δt = 1e-3
-params = Parameters(ε, α, μϱ, N², Δt)
-show(params)
-@info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
-T = μϱ/ε^2
+κᶜ = 10
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
 H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
 H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
 H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
+params = Parameters(ε, α, μϱ, N², Δt, κᶜ, f, H)
+display(params)
+@info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
+
+# forcings
 ν(x) = 1
 κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-κ_conv = 10
 τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
+forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀)
+
+# rebuild matrices?
 force_build_inversion = false
 force_build_evolution = true
 
@@ -62,27 +66,23 @@ function setup_model()
 
     # FE data
     spaces = Spaces(mesh, b₀)
-    fe_data = FEData(mesh, spaces)
+    fe_data = FEData(mesh, spaces, forcings)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
-
-    # forcings
-    forcings = Forcings(fe_data, κₕ, κᵥ, κ_conv, τˣ, τʸ, b₀)
-    show(forcings)
 
     # build inversion matrices
     A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
     if force_build_inversion
         @warn "You set `force_build_inversion` to `true`, building matrices..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, forcings; A_inversion_ofile=A_inversion_fname)
     elseif !isfile(A_inversion_fname) 
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, forcings; A_inversion_ofile=A_inversion_fname)
     else
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
         B_inversion = nuPGCM.build_B_inversion(fe_data, params)
-        b_inversion = nuPGCM.build_b_inversion(fe_data, params, τˣ, τʸ)
+        b_inversion = nuPGCM.build_b_inversion(fe_data, params, forcings)
     end
 
     # re-order dofs
@@ -118,12 +118,12 @@ function setup_model()
     # save_state(model, "$out_dir/data/state.jld2")
 
     # build evolution system
-    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, κₕ, κᵥ; 
+    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings; 
                             force_build=force_build_evolution,
                             filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
 
     # put it all together in the `model` struct
-    model = rest_state_model(arch, params, fe_data, forcings, inversion_toolkit, evolution_toolkit)
+    model = rest_state_model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
 
     return model
 end
@@ -140,6 +140,7 @@ save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 # close(d)
 
 # solve
+T = μϱ/ε^2
 n_steps = Int(round(T / Δt))
 # n_steps = 100
 # n_save = n_steps ÷ 100

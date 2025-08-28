@@ -9,28 +9,28 @@ mutable struct State{U, P, B}
     t::Real  # time
 end
 
-struct Model{A<:AbstractArchitecture, P<:Parameters, D<:FEData, F<:Forcings, 
+struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData, 
              I<:InversionToolkit, E<:EvolutionToolkit, S<:State}
     arch::A
     params::P
-    fe_data::D
     forcings::F
+    fe_data::D
     inversion::I
     evolution::E
     state::S
 end
 
-function inversion_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, 
-                         forcings::Forcings, inversion::InversionToolkit)
+function inversion_model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
+                         fe_data::FEData, inversion::InversionToolkit)
     evolution = nothing # this model is only used for calculating the inversion, no need for evolution toolkit
     state = rest_state(fe_data.spaces)
-    return Model(arch, params, fe_data, forcings, inversion, evolution, state)
+    return Model(arch, params, forcings, fe_data, inversion, evolution, state)
 end
 
-function rest_state_model(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, 
-                          forcings::Forcings, inversion::InversionToolkit, evolution::EvolutionToolkit)
+function rest_state_model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
+                          fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
     state = rest_state(fe_data.spaces)
-    return Model(arch, params, fe_data, forcings, inversion, evolution, state)
+    return Model(arch, params, forcings, fe_data, inversion, evolution, state)
 end
 
 function rest_state(spaces::Spaces; t=0.)
@@ -174,19 +174,20 @@ function evolve_advection!(model::Model, b_half)
 end
 
 function evolve_vdiffusion!(model::Model)
-    update_κᵥ!(model, model.state.b)
+    @time "rebuild vdiff system" begin
+    @time "\tupdate κᵥ" update_κᵥ!(model, model.state.b)
 
-    # # rebuild vertical diffusion system
-    # A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
-    # model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
+    # rebuild vertical diffusion system
+    @time "\tbuild system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+    model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
     # if typeof(model.arch) == CPU 
-    #     model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
+    #     @time "\tlu" model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
     # else
-    #     T = eltype(model.evolution.solver_vdiff.A)
-    #     model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector{T}(1 ./ diag(model.evolution.solver_vdiff.A))))
+        @time "\tmake P" model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(model.evolution.solver_vdiff.A))))
     # end
-    # model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
-    # model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
+    model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
+    model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
+    end
 
     # calculate rhs vector
     arch = model.arch
@@ -207,8 +208,8 @@ function evolve_vdiffusion!(model::Model)
     return model
 end
 
-function update_κᵥ!(model::Model, b; kwargs...)
-    update_κᵥ!(model.forcings, model.fe_data, b; kwargs...)
+function update_κᵥ!(model::Model, b)
+    update_κᵥ!(model.fe_data, model.params, b)
     return model
 end
 

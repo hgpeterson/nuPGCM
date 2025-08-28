@@ -9,14 +9,14 @@ mutable struct EvolutionToolkit{A<:AbstractArchitecture, M, V, SA<:IterativeSolv
     solver_vdiff::SVD # vertical diffusion iterative solver
 end
 
-function EvolutionToolkit(arch::AbstractArchitecture, fe_data::FEData, params::Parameters, κₕ, κᵥ; 
+function EvolutionToolkit(arch::AbstractArchitecture, fe_data::FEData, params::Parameters, forcings::Forcings; 
                           filename="", force_build=false, kwargs...)
     if isfile(filename) && !force_build
         A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
             load_evolution_system(params, filename)
     else
         A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
-            build_evolution_system(fe_data, params, κₕ, κᵥ; filename)
+            build_evolution_system(fe_data, params, forcings; filename)
     end
 
     # re-order dofs
@@ -31,7 +31,8 @@ function EvolutionToolkit(arch::AbstractArchitecture, fe_data::FEData, params::P
     # preconditioners
     if typeof(arch) == CPU 
         P_hdiff = lu(A_hdiff)
-        P_vdiff = lu(A_vdiff)
+        # P_vdiff = lu(A_vdiff)
+        P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
         P_adv   = lu(A_adv)
     else
         P_hdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_hdiff))))
