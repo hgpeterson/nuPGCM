@@ -101,6 +101,16 @@ Compute the Cuthill-McKee degree of freedom permutation for a mass matrix `M`.
 function compute_dof_perm(M)
     return CuthillMcKee.symrcm(M, true, false)
 end
-# function compute_dof_perm(arch::GPU, M)
-#     return CUSOLVER.symrcm(M) .+ 1
-# end
+
+### struct to hold Finite Element data
+
+struct FEData{M, S, D}
+    mesh::M    # mesh data
+    spaces::S  # finite element spaces
+    dofs::D    # degrees of freedom handler
+end
+
+function FEData(mesh::Mesh, spaces::Spaces)
+    dofs = DoFHandler(spaces, mesh.dΩ)
+    return FEData(mesh, spaces, dofs)
+end

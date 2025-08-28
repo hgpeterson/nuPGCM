@@ -74,7 +74,6 @@ using LinearAlgebra
 using SparseArrays
 using Krylov
 using PyPlot
-using HDF5
 using Printf
 
 # directory where the output files will be saved
@@ -112,11 +111,10 @@ end
 include("architectures.jl")
 include("utils.jl")
 include("parameters.jl")
+include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
-include("meshes.jl")
 include("matrices.jl")
-include("preconditioners.jl")
 include("iterative_solvers.jl")
 include("inversion.jl")
 include("evolution.jl")

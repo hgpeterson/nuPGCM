@@ -5,7 +5,8 @@ struct EvolutionToolkit{A, V, SA<:IterativeSolverToolkit, SD<:IterativeSolverToo
     solver_diff::SD # diffusion iterative solver
 end
 
-function EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff;
+function EvolutionToolkit(A_adv, P_adv, 
+                          A_diff, P_diff, B_diff, b_diff;
                           atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=false)
     arch = architecture(A_adv)
     N = size(A_adv, 1)

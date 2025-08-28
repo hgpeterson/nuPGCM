@@ -1,31 +1,35 @@
-struct Mesh{M, S, D, O, DO}
-    model::M         # unstructured discrete model
-    spaces::S        # trial and test spaces for velocity, pressure, and buoyancy
-    dofs::D          # degree of freedom handler
-    Ω::O             # triangulation
-    dΩ::DO           # measure
-    dim::Int         # dimension of the problem
+struct Mesh{M, O, DO, G, DG}
+    model::M  # unstructured discrete model
+    Ω::O      # triangulation
+    dΩ::DO    # measure
+    Γ::G      # surface boundary triangulation
+    dΓ::DG    # surface boundary measure
 end
 
 """
-    m = Mesh(ifile)
+    m = Mesh(ifile; degree=4)
 
-Returns a struct holding mesh-related data.
+Build a struct holding mesh-related data.
+
+`degree` is the degree of integration for the measures `dΩ` and `dΓ`.
 """
-function Mesh(ifile)
+function Mesh(ifile; degree=4)
     model = GmshDiscreteModel(ifile)
-    spaces = Spaces(model)
     Ω = Triangulation(model)
-    dΩ = Measure(Ω, 4)
-    dofs = DoFHandler(spaces, dΩ)
-    if model.grid_topology.polytopes[1] == TRI
-        dim = 2
-    elseif model.grid_topology.polytopes[1] == TET
-        dim = 3
+    dΩ = Measure(Ω, degree)
+    Γ = BoundaryTriangulation(model, tags=["surface"])
+    dΓ = Measure(Γ, degree)
+    return Mesh(model, Ω, dΩ, Γ, dΓ)
+end
+
+function get_dim(m::Mesh)
+    if m.model.grid_topology.polytopes[1] == TRI
+        return 2
+    elseif m.model.grid_topology.polytopes[1] == TET
+        return 3
     else
         throw(ArgumentError("Could not determine dimension of mesh."))
     end
-    return Mesh(model, spaces, dofs, Ω, dΩ, dim)
 end
 
 ### some utility functions for working with meshes
@@ -70,4 +74,39 @@ function get_p_to_t(t, np)
         end
     end
     return p_to_t
+end
+
+"""
+    edges, boundary_indices, emap = all_edges(t)
+
+Find all unique edges in the triangulation `t` (ne x 2 array)
+Second output is indices to the boundary edges.
+Third output emap (nt x 3 array) is a mapping from local triangle edges
+to the global edge list, i.e., emap[it,k] is the global edge number
+for local edge k (1,2,3) in triangle it.
+"""
+function all_edges(t)
+    etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
+    etag = hcat(sort(etag, dims=2), 1:3*size(t,1))
+    etag = sortslices(etag, dims=1)
+    dup = all(etag[2:end,1:2] - etag[1:end-1,1:2] .== 0, dims=2)[:]
+    keep = .![false;dup]
+    edges = etag[keep,1:2]
+    emap = cumsum(keep)
+    invpermute!(emap, etag[:,3])
+    emap = reshape(emap,:,3)
+    dup = [dup;false]
+    dup = dup[keep]
+    bndix = findall(.!dup)
+    return edges, bndix, emap
+end
+
+"""
+    e = boundary_nodes(t)
+
+Find all boundary nodes in the triangulation `t`.
+"""
+function boundary_nodes(t)
+    edges, boundary_indices, _ = all_edges(t)
+    return unique(edges[boundary_indices,:][:])
 end
