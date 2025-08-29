@@ -3,12 +3,13 @@ function get_global_dof(mesh::Mesh, ::P1)
     return mesh.elements
 end
 function get_global_dof(mesh::Mesh, ::Bubble)
-    n_el = size(mesh.elements, 1)
-    return reshape(collect(1:n_el), n_el, 1)
+    n_elements = size(mesh.elements, 1)
+    return reshape(collect(1:n_elements), n_elements, 1)
 end
 function get_global_dof(mesh::Mesh, ::Mini)
-    n_el = size(mesh.elements, 1)
-    return hcat(mesh.elements, n_el .+ collect(1:n_el))
+    n_nodes = size(mesh.nodes, 1)
+    n_elements = size(mesh.elements, 1)
+    return hcat(mesh.elements, n_nodes .+ collect(1:n_elements))
 end
 function get_global_dof(mesh::Mesh, space::P2)
     n_el = size(mesh.elements, 1)
