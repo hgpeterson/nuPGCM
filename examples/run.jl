@@ -26,9 +26,9 @@ H(x) = α*(1 - x[1]^2 - x[2]^2)  # bathymetry
 τʸ(x) = 0  # meridional wind stress
 b₀(x) = 0  # surface buoyancy boundary condition
 force_build_inversion = false
-force_build_evolution = true
+force_build_evolution = false
 
-# mesh (see meshes/mesh_bowl2D.jl for an example of how to generate a mesh with Gmsh)
+# mesh (see mesh_bowl2D.jl and mesh_bowl3D.jl for examples of how to generate a mesh with Gmsh)
 h = 8e-2
 dim = 3
 mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
@@ -39,8 +39,12 @@ spaces = Spaces(mesh, b₀)
 fe_data = FEData(mesh, spaces)
 @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
+# folder for storing matrix data
+mat_dir = joinpath(@__DIR__, "../matrices")
+!isdir(mat_dir) && mkdir(mat_dir)
+
 # build inversion matrices
-A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
+A_inversion_fname = "$mat_dir/A_inversion_$mesh_name.jld2"
 if force_build_inversion
     @warn "You set `force_build_inversion` to `true`, building matrices..."
     A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
@@ -84,7 +88,7 @@ inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_in
 # build evolution matrices (or load them if `force_build` is false and file exists)
 A_adv, A_diff, B_diff, b_diff = build_evolution_system(fe_data, params, κ; 
                                     force_build=force_build_evolution,
-                                    filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
+                                    filename="$mat_dir/evolution_$mesh_name.jld2")
 
 # re-order dofs
 A_adv  =  A_adv[fe_data.dofs.p_b, fe_data.dofs.p_b]
