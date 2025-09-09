@@ -135,15 +135,53 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
     # rhs nonzero where ∂z(b) < 0 (i.e. unstable stratification)
     stability(x) = x < 0 ? 1.0 : 0.0
     dΩ = fe_data.mesh.dΩ
-    l(v) = ∫( (stability∘∂z(b))*v )dΩ  #TODO: can we just calculate bz so there's not this step function?
+    l(v) = ∫( (stability∘∂z(b))*v )dΩ
     y = assemble_vector(l, spaces.κ_test)
-
-    # κᵥ = κᶜ where unstable
     sol = clamp.(fe_data.Aκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
-    where_unstable = sol .== 1.0
-    @info "Updating κᵥ: $(sum(where_unstable))/$(length(sol)) unstable nodes"
-    fe_data.κᵥ.free_values .= fe_data.κᵥ₀.free_values  # reset
-    fe_data.κᵥ.free_values[where_unstable] .= params.κᶜ
 
-    return fe_data
+    # increase κᵥ where unstable
+    unstable_count = 0    # debug
+    threshold = 1         # minimum value of sol to consider unstable
+    was_modified = false  # bool to track if κᵥ was modified
+    for i in eachindex(sol)
+        κᵥ_i_prev = fe_data.κᵥ.free_values[i]  # for `was_modified`
+        if sol[i] ≥ threshold  # unstable
+            # set κᵥ to κᶜ
+            fe_data.κᵥ.free_values[i] = params.κᶜ
+            unstable_count += 1
+        else  # stable
+            # reset
+            fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]
+        end
+        κᵥ_i_prev != fe_data.κᵥ.free_values[i] && (was_modified = true)
+    end
+    @info "Updating κᵥ: $(unstable_count) unstable nodes"
+
+    # # compute ∂z(b) in κ space
+    # dΩ = fe_data.mesh.dΩ
+    # l(v) = ∫( ∂z(b)*v )dΩ
+    # y = assemble_vector(l, spaces.κ_test)
+    # bz = clamp.(fe_data.Aκ\y, -1, Inf)  # force -1 ≤ ∂z(b) ≤ ∞
+    # # bz = fe_data.Aκ\y
+
+    # # increase κᵥ where unstable
+    # unstable_count = 0  # debug
+    # was_modified = false  # bool to track if κᵥ was modified
+    # for i in eachindex(bz)
+    #     κᵥ_i_prev = fe_data.κᵥ.free_values[i]  # for `was_modified`
+    #     if bz[i] ≤ 0  # unstable
+    #         # increase κᵥ linearly with -∂z(b) up to κᶜ
+    #         fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]*(1 + bz[i]) - params.κᶜ*bz[i]
+    #         # # set κᵥ to κᶜ
+    #         # fe_data.κᵥ.free_values[i] = params.κᶜ
+    #         unstable_count += 1
+    #     else  # stable
+    #         # reset
+    #         fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]
+    #     end
+    #     κᵥ_i_prev != fe_data.κᵥ.free_values[i] && (was_modified = true)
+    # end
+    # @info "Updating κᵥ: $(unstable_count) unstable nodes"
+
+    return fe_data, was_modified
 end
