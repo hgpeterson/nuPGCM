@@ -175,19 +175,21 @@ end
 
 function evolve_vdiffusion!(model::Model)
     # @time "rebuild vdiff system" begin
-    update_κᵥ!(model, model.state.b)
+    model, was_modified = update_κᵥ!(model, model.state.b)
 
-    # rebuild vertical diffusion system
-    A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
-    model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
-    # if typeof(model.arch) == CPU 
-    #     @time "\tlu" model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
-    # else
-        model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(model.evolution.solver_vdiff.A))))
-    # end
-    model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
-    model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
-    # end
+    if was_modified
+        @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
+        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+        model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff[model.fe_data.dofs.p_b, model.fe_data.dofs.p_b])
+        # if typeof(model.arch) == CPU 
+        #     @time "\tlu" model.evolution.solver_vdiff.P = lu(model.evolution.solver_vdiff.A)
+        # else
+            model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(model.evolution.solver_vdiff.A))))
+        # end
+        model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff[model.fe_data.dofs.p_b, :])
+        model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff[model.fe_data.dofs.p_b])
+        # end
+    end
 
     # calculate rhs vector
     arch = model.arch
@@ -209,8 +211,8 @@ function evolve_vdiffusion!(model::Model)
 end
 
 function update_κᵥ!(model::Model, b)
-    update_κᵥ!(model.fe_data, model.params, b)
-    return model
+    _, was_modified = update_κᵥ!(model.fe_data, model.params, b)
+    return model, was_modified
 end
 
 function evolve_hdiffusion!(model::Model)
