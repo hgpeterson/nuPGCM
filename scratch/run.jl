@@ -8,13 +8,13 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 ε = 1e-1
@@ -44,7 +44,6 @@ forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀)
 
 # rebuild matrices?
 force_build_inversion = false
-force_build_evolution = true
 
 function setup_model()
     # mesh
@@ -118,9 +117,7 @@ function setup_model()
     # save_state(model, "$out_dir/data/state.jld2")
 
     # build evolution system
-    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings; 
-                            force_build=force_build_evolution,
-                            filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
+    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
 
     # put it all together in the `model` struct
     model = rest_state_model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
@@ -128,21 +125,18 @@ function setup_model()
     return model
 end
 
-# set up model
-model = setup_model()
+# # set up model
+# model = setup_model()
 
 # set initial buoyancy
 set_b!(model, x->b₀(x) + x[3]/α)
+nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
 invert!(model) # sync flow with buoyancy state
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-# d = jldopen(@sprintf("%s/data/state_%016d.jld2", out_dir, 1000), "r")
-# set_b!(model, d["b"])
-# close(d)
 
 # solve
 T = μϱ/ε^2
 n_steps = Int(round(T / Δt))
-# n_steps = 100
 # n_save = n_steps ÷ 100
 n_save = 100
 n_plot = Inf
