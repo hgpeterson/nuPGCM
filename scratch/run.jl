@@ -42,9 +42,6 @@ display(params)
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀)
 
-# rebuild matrices?
-force_build_inversion = false
-
 function setup_model()
     # mesh
     mesh_name = "channel_basin"
@@ -52,57 +49,13 @@ function setup_model()
     # mesh_name = @sprintf("channel_basin_%.1e_%.1e", h, α)
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
-    # resolution
-    p, t = nuPGCM.get_p_t(mesh.model)
-    edges, _, _ = nuPGCM.all_edges(t)
-    hs = [norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)]
-    hmin = minimum(hs)
-    h = sum(hs) / length(hs)
-    hmax = maximum(hs)
-    @info @sprintf("Mesh size: %.2e (hmin = %.2e, hmax = %.2e)", h, hmin, hmax)
-    dim = size(t, 2) - 1
-    @info "Mesh dimension: $dim"
-
     # FE data
     spaces = Spaces(mesh, b₀)
     fe_data = FEData(mesh, spaces, forcings)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
-    # build inversion matrices
-    A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
-    if force_build_inversion
-        @warn "You set `force_build_inversion` to `true`, building matrices..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, forcings; A_inversion_ofile=A_inversion_fname)
-    elseif !isfile(A_inversion_fname) 
-        @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, forcings; A_inversion_ofile=A_inversion_fname)
-    else
-        file = jldopen(A_inversion_fname, "r")
-        A_inversion = file["A_inversion"]
-        close(file)
-        B_inversion = nuPGCM.build_B_inversion(fe_data, params)
-        b_inversion = nuPGCM.build_b_inversion(fe_data, params, forcings)
-    end
-
-    # re-order dofs
-    A_inversion = A_inversion[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
-    B_inversion = B_inversion[fe_data.dofs.p_inversion, :]
-    b_inversion = b_inversion[fe_data.dofs.p_inversion]
-
-    # preconditioner
-    if typeof(arch) == CPU
-        @time "lu(A_inversion)" P_inversion = lu(A_inversion)
-    else
-        P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
-    end
-
-    # move to arch
-    A_inversion = on_architecture(arch, A_inversion)
-    B_inversion = on_architecture(arch, B_inversion)
-    b_inversion = on_architecture(arch, b_inversion)
-
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_inversion; atol=1e-6, rtol=1e-6)
+    inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
 
     # # quick inversion here:
     # model = inversion_model(arch, params, mesh, inversion_toolkit)
@@ -125,21 +78,21 @@ function setup_model()
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
 
-# set initial buoyancy
-set_b!(model, x->b₀(x) + x[3]/α)
-nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
-invert!(model) # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# # set initial buoyancy
+# set_b!(model, x->b₀(x) + x[3]/α)
+# nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
+# invert!(model) # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
-# solve
-T = μϱ/ε^2
-n_steps = Int(round(T / Δt))
-# n_save = n_steps ÷ 100
-n_save = 100
-n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
+# # solve
+# T = μϱ/ε^2
+# n_steps = Int(round(T / Δt))
+# # n_save = n_steps ÷ 100
+# n_save = 100
+# n_plot = Inf
+# run!(model; n_steps, n_save, n_plot)
 
 println("Done.")
