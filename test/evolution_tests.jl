@@ -23,7 +23,7 @@ function coarse_evolution(dim, arch)
     β = 0.5
     f(x) = f₀ + β*x[2]
     H(x) = α*(1 - x[1]^2 - x[2]^2)
-    ν(x) = 1
+    ν = 1
     κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
     τˣ(x) = 0
     τʸ(x) = 0
