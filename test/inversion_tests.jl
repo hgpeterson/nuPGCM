@@ -21,7 +21,7 @@ function coarse_inversion(dim, arch)
     β = 0.5
     f(x) = f₀ + β*x[2]
     H(x) = α*(1 - x[1]^2 - x[2]^2)
-    ν(x) = 1
+    ν = 1
     τˣ(x) = 0
     τʸ(x) = 0
     b₀(x) = 0

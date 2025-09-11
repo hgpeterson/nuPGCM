@@ -1,7 +1,7 @@
 name = "nuPGCM"
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 authors = ["hgpeterson <hgpeterson@caltech.edu>"]
-version = "0.4.0"
+version = "0.4.1"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"

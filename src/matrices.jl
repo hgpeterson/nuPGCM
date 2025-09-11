@@ -29,17 +29,10 @@ function build_A_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     X_trial = fe_data.spaces.X_trial
     X_test = fe_data.spaces.X_test
     dΩ = fe_data.mesh.dΩ
-    ε = params.ε
-    α = params.α
-    f = params.f
-    ν = forcings.ν
+    α²ε² = params.α^2*params.ε^2
 
-    # bilinear form !! ASSUMES ν IS A CONSTANT !!
-    a((ux, uy, uz, p), (vx, vy, vz, q)) =
-        ∫( α^2*ε^2*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
-           α^2*ε^2*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
-           α^2*ε^2*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
-           ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    # bilinear form
+    a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
@@ -52,6 +45,20 @@ function build_A_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     end
 
     return A
+end
+function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
+    # for general ν, need full stress tensor
+    return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
+              α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
+              α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
+              ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+end
+function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ)
+    # since ν is constant, we can just use the Laplacian here
+    return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
+              α²ε²*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
+              α²ε²*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
+              ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 end
 
 """
