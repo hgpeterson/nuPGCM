@@ -29,16 +29,68 @@ T = μϱ/ε^2
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
-# H(x) = α
-# H(x) = α*(1 - x[1]^2 - x[2]^2)
-# H_basin(x) = α*(x[1]*(1 - x[1]))/(0.5*0.5)
-# H_channel(x) = -α*((x[2] + 1)*(x[2] + 0.5))/(0.25*0.25)
-# H(x) = x[2] > -0.75 ? max(H_channel(x), H_basin(x)) : H_channel(x)
-ν(x) = 1
+function H(xyz)
+    x = xyz[1]
+    y = xyz[2]
+
+    L = 2
+    W = 1
+    L_channel = L/4
+    L_flat_channel = L_channel/4 # length of flat part of channel
+    L_curve_channel = (L_channel - L_flat_channel)/2 # length of each curved part of channel
+    W_flat_basin = W/2 # width of flat part of basin
+    W_curve_basin = (W - W_flat_basin)/2 # width of each curved part of basin
+    L_curve_basin = W_curve_basin # length of curved end of basin
+    H = α*W
+
+    # parabola that has a maximum of H at x_max and a 0 at x_zero
+    parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
+
+    function H_basin(x)
+        if 0 ≤ x ≤ W_curve_basin
+            return parabola(x, W_curve_basin, 0)
+        elseif x ≤ W_curve_basin + W_flat_basin
+            return H
+        elseif x ≤ W
+            return parabola(x, W_curve_basin + W_flat_basin, W)
+        else
+            throw(ArgumentError("x out of bounds"))
+        end
+    end
+
+    if -L/2 ≤ y ≤ -L/2 + L_curve_channel
+        return parabola(y, -L/2 + L_curve_channel, -L/2)
+    elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
+        return H
+    elseif y ≤ -L/2 + L_channel
+        H_channel = parabola(y, -L/2 + L_curve_channel + L_flat_channel, -L/2 + L_channel)
+        return max(H_channel, H_basin(x))
+    elseif y ≤ L/2 - L_curve_basin
+        return H_basin(x)
+    elseif y ≤ L/2
+        if 0 ≤ x ≤ W_curve_basin
+            x₀ = W_curve_basin
+            y₀ = L/2 - L_curve_basin
+            r = √( (x - x₀)^2 + (y - y₀)^2 )
+            return parabola(r, 0, W_curve_basin)
+        elseif W_curve_basin ≤ x ≤ W_curve_basin + W_flat_basin
+            return parabola(y, L/2 - L_curve_basin, L/2)
+        elseif x ≤ W
+            x₀ = W_curve_basin + W_flat_basin
+            y₀ = L/2 - L_curve_basin
+            r = √( (x - x₀)^2 + (y - y₀)^2 )
+            return parabola(r, 0, W_curve_basin)
+        else
+            throw(ArgumentError("x out of bounds"))
+        end
+    else
+        throw(ArgumentError("y out of bounds"))
+    end
+end
+ν = 1
 κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 # κ(x) = 1
 τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
-# τˣ(x) = 0
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
 force_build_inversion = true
@@ -46,11 +98,8 @@ force_build_evolution = true
 
 function setup_model()
     # mesh
-    # mesh_name = "basin_flat"
-    # mesh_name = "channel_basin_flat"
-    mesh_name = "channel_basin"
-    # h = 4e-2
-    # mesh_name = @sprintf("channel_basin_%.1e_%.1e", h, α)
+    h = 8e-2
+    mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # resolution
@@ -66,29 +115,29 @@ function setup_model()
 
     # FE data
     spaces = Spaces(mesh, b₀)
-    fed = FEData(mesh, spaces)
-    @info "DOFs: $(fed.dofs.nu + fed.dofs.nv + fed.dofs.nw + fed.dofs.np)" 
+    fe_data = FEData(mesh, spaces)
+    @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
     # build inversion matrices
     A_inversion_fname = joinpath(@__DIR__, "../matrices/A_inversion_$mesh_name.jld2")
     if force_build_inversion
         @warn "You set `force_build_inversion` to `true`, building matrices..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
     elseif !isfile(A_inversion_fname) 
         @warn "A_inversion file not found, generating..."
-        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fed, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
+        A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
     else
         file = jldopen(A_inversion_fname, "r")
         A_inversion = file["A_inversion"]
         close(file)
-        B_inversion = nuPGCM.build_B_inversion(fed, params)
-        b_inversion = nuPGCM.build_b_inversion(fed, params, τˣ, τʸ)
+        B_inversion = nuPGCM.build_B_inversion(fe_data, params)
+        b_inversion = nuPGCM.build_b_inversion(fe_data, params, τˣ, τʸ)
     end
 
     # re-order dofs
-    A_inversion = A_inversion[fed.dofs.p_inversion, fed.dofs.p_inversion]
-    B_inversion = B_inversion[fed.dofs.p_inversion, :]
-    b_inversion = b_inversion[fed.dofs.p_inversion]
+    A_inversion = A_inversion[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
+    B_inversion = B_inversion[fe_data.dofs.p_inversion, :]
+    b_inversion = b_inversion[fe_data.dofs.p_inversion]
 
     # preconditioner
     if typeof(arch) == CPU
@@ -118,15 +167,15 @@ function setup_model()
     # save_state(model, "$out_dir/data/state.jld2")
 
     # build evolution matrices
-    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fed, params, κ; 
+    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fe_data, params, κ; 
                                         force_build=force_build_evolution,
                                         filename=joinpath(@__DIR__, "../matrices/evolution_$mesh_name.jld2"))
 
     # re-order dofs
-    A_adv  =  A_adv[fed.dofs.p_b, fed.dofs.p_b]
-    A_diff = A_diff[fed.dofs.p_b, fed.dofs.p_b]
-    B_diff = B_diff[fed.dofs.p_b, :]
-    b_diff = b_diff[fed.dofs.p_b]
+    A_adv  =  A_adv[fe_data.dofs.p_b, fe_data.dofs.p_b]
+    A_diff = A_diff[fe_data.dofs.p_b, fe_data.dofs.p_b]
+    B_diff = B_diff[fe_data.dofs.p_b, :]
+    b_diff = b_diff[fe_data.dofs.p_b]
 
     # preconditioners
     if typeof(arch) == CPU 
@@ -147,22 +196,17 @@ function setup_model()
     evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff)
 
     # put it all together in the `model` struct
-    model = rest_state_model(arch, params, fed, inversion_toolkit, evolution_toolkit)
+    model = rest_state_model(arch, params, fe_data, inversion_toolkit, evolution_toolkit)
 
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
 
 # set initial buoyancy
 set_b!(model, x->b₀(x) + x[3]/α)
-# set_b!(model, x->b₀(x) + exp(-(x[1] - 0.5)^2/(2*0.25^2) - x[2]^2/(2*0.5^2) - (x[3] + α/2)^2/(2*(α/4)^2)))
 invert!(model) # sync flow with buoyancy state
-# model.state.b.free_values .= b₀(model.state.b.fe_space.points) # set
-# set_b!(model, x->b₀(x))
-# b_fe = interpolate_everywhere(b₀, model.state.b.fe_space)
-# model.state.b.free_values .= b_fe.free_values
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # solve
@@ -172,18 +216,5 @@ n_steps = Int(round(T / Δt))
 n_save = 100
 n_plot = Inf
 run!(model; n_steps, n_save, n_plot)
-
-# v_cache = plot_slice(model.state.v, model.state.b, model.params.N²; 
-#                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Meridional flow $v$", 
-#                      fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
-# vw_cache = plot_slice(model.state.v, model.state.w, model.state.b, model.params.N²; 
-#                       bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Speed $\sqrt{v^2 + w^2}$", 
-#                       fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
-# b_cache = plot_slice(model.state.b, model.state.b, model.params.N²; 
-#                      bbox=[-1, -model.params.α, 1, 0], x=0.5, cb_label=L"Buoyancy $b$", 
-#                      fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
-# plot_slice(v_cache,  model.state.v, model.state.b; fname=@sprintf("%s/images/v%03d.png", out_dir, n_steps))
-# plot_slice(vw_cache, model.state.v, model.state.w, model.state.b; fname=@sprintf("%s/images/vw%03d.png", out_dir, n_steps))
-# plot_slice(b_cache,  model.state.b, model.state.b; fname=@sprintf("%s/images/b%03d.png", out_dir, n_steps))
 
 println("Done.")
