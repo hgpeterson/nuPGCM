@@ -1,11 +1,11 @@
 mutable struct IterativeSolverToolkit{A, P, V, S, K}
-    A::A               # LHS matrix
-    P::P               # preconditioner for A
-    x::V               # solution vector
-    y::V               # RHS vector
-    solver::S          # iterative solver
-    kwargs::K          # keyword arguments for iterative solver
-    label::String      # label for solver
+    A::A           # LHS matrix
+    P::P           # preconditioner for A
+    x::V           # solution vector
+    y::V           # RHS vector
+    solver::S      # iterative solver
+    kwargs::K      # keyword arguments for iterative solver
+    label::String  # label for solver
 end
 
 function IterativeSolverToolkit(A, P, y, solver, kwargs, label)
