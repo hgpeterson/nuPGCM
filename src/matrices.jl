@@ -30,6 +30,8 @@ function build_A_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     X_test = fe_data.spaces.X_test
     dΩ = fe_data.mesh.dΩ
     α²ε² = params.α^2*params.ε^2
+    f = params.f
+    ν = forcings.ν
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
@@ -127,7 +129,7 @@ end
 
 """
     A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
-        build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings; filename="")
+        build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
 
 Build the matrices for the evolution problem of the PG equations.
 
@@ -145,18 +147,10 @@ A_vdiff b^{n+1} = B_vdiff b^n + b_vdiff
 
 See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`build_vdiffusion_system`](@ref).
 """
-function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings; filename="")
-    isfile(filename) && @warn "Evolution system file already exists and will be overwritten." filename
-
+function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
     A_adv = build_advection_matrix(fe_data)
     A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings.κₕ)
     A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings.κᵥ)
-
-    if filename != ""
-        jldsave(filename; A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff, params, forcings)
-        @info @sprintf("Evolution system saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
-    end
-
     return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
 end
 
@@ -258,25 +252,4 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, κ, directi
     end
 
     return A, B, b
-end
-
-"""
-    A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = load_evolution_system(params, filename)
-
-Load the matrices for the evolution problem from a file.
-"""
-function load_evolution_system(params, filename)
-    file = jldopen(filename, "r")
-    A_adv = file["A_adv"]
-    A_hdiff = file["A_hdiff"]
-    B_hdiff = file["B_hdiff"]
-    b_hdiff = file["b_hdiff"]
-    A_vdiff = file["A_vdiff"]
-    B_vdiff = file["B_vdiff"]
-    b_vdiff = file["b_vdiff"]
-    p0 = file["params"]
-    close(file)
-    params != p0 && @warn "Parameters mismatch detected!" #TODO: also detect κ mismatch
-    @info @sprintf("Evolution system loaded from '%s' (%.3f GB)", filename, filesize(filename)/1e9)
-    return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
 end
