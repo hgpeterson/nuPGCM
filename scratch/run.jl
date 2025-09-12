@@ -8,13 +8,13 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
-arch = GPU()
+arch = CPU()
 
 # params
 ε = 1e-1
@@ -92,7 +92,8 @@ display(params)
 ν(x) = 1
 κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-τˣ(x) = x[2] > -0.5 ? 0.0 : -1e-4*(x[2] + 1)*(x[2] + 0.5)/(1 + 0.5)^2
+τ₀ = 1e-1
+τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
 b₀(x) = x[2] > 0 ? 0.0 : -x[2]^2
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀)
@@ -135,18 +136,18 @@ end
 # set up model
 model = setup_model()
 
-# # set initial buoyancy
-# set_b!(model, x->b₀(x) + x[3]/α)
+# set initial buoyancy
+set_b!(model, x->b₀(x) + x[3]/α)
 # nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
-# invert!(model) # sync flow with buoyancy state
-# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+invert!(model) # sync flow with buoyancy state
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
-# # solve
-# T = μϱ/ε^2
-# n_steps = Int(round(T / Δt))
-# # n_save = n_steps ÷ 100
-# n_save = 100
-# n_plot = Inf
-# run!(model; n_steps, n_save, n_plot)
+# solve
+T = 10*μϱ/ε^2
+n_steps = Int(round(T / Δt))
+# n_save = n_steps ÷ 100
+n_save = 100
+n_plot = Inf
+run!(model; n_steps, n_save, n_plot)
 
 println("Done.")

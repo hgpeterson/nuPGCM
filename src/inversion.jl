@@ -19,10 +19,8 @@ function InversionToolkit(arch::AbstractArchitecture,
                           params::Parameters, 
                           forcings::Forcings; 
                           kwargs...)
-    # build matrices
-    A = build_A_inversion(fe_data, params, forcings)
-    B = build_B_inversion(fe_data, params)
-    b = build_b_inversion(fe_data, params, forcings)
+    # build
+    A, B, b = build_inversion_system(fe_data, params, forcings)
 
     # re-order dofs
     A = A[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
@@ -30,9 +28,9 @@ function InversionToolkit(arch::AbstractArchitecture,
     b = b[fe_data.dofs.p_inversion]
 
     # preconditioner
-    if typeof(arch) == CPU
-        @time "lu(A_inversion)" P = lu(A)
-    else
+    # if typeof(arch) == CPU
+    #     @time "lu(A_inversion)" P = lu(A)
+    # else
         # get resolution
         p, t = get_p_t(fe_data.mesh.model)
         edges, _, _ = all_edges(t)
@@ -45,7 +43,7 @@ function InversionToolkit(arch::AbstractArchitecture,
 
         # use diagonal preconditioner scaled by resolution
         P = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A, 1))))
-    end
+    # end
 
     # move to arch
     A = on_architecture(arch, A)
