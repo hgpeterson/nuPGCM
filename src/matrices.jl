@@ -4,47 +4,35 @@
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 """
-    A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings; 
-                                     filename="")
+    A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
 
 Build the matrices and vectors for the inversion problem of the PG equations.
 """
-function build_inversion_matrices(fe_data::FEData, params::Parameters, forcings::Forcings; 
-                                  filename="")
-    A_inversion = build_A_inversion(fe_data, params, forcings; filename)
+function build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
+    A_inversion = build_A_inversion(fe_data, params, forcings.ν)
     B_inversion = build_B_inversion(fe_data, params)
     b_inversion = build_b_inversion(fe_data, params, forcings)
     return A_inversion, B_inversion, b_inversion
 end
 
 """
-    A = build_A_inversion(fe_data::FEData, params::Parameters, forcings::Forcings; filename="")
+    A = build_A_inversion(fe_data::FEData, params::Parameters, ν)
 
 Assemble the LHS matrix `A` for the inversion problem. 
-If `filename` is given, the data is saved to a file.
 """
-function build_A_inversion(fe_data::FEData, params::Parameters, forcings::Forcings; 
-                           filename="")
+function build_A_inversion(fe_data::FEData, params::Parameters, ν) 
     # unpack
     X_trial = fe_data.spaces.X_trial
     X_test = fe_data.spaces.X_test
     dΩ = fe_data.mesh.dΩ
     α²ε² = params.α^2*params.ε^2
     f = params.f
-    ν = forcings.ν
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
 
     # assemble 
     @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
-
-    # save
-    if filename != ""
-        isfile(filename) && @warn "A_inversion file already exists and will be overwritten." filename
-        jldsave(filename; A_inversion=A, params=params, forcings=forcings)
-        @info @sprintf("A_inversion saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
-    end
 
     return A
 end
@@ -114,8 +102,8 @@ function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     b = zeros(N)
 
     # linear forms
-    lx(vx) = ∫( α*vx*τˣ )dΓ
-    ly(vy) = ∫( α*vy*τʸ )dΓ
+    lx(vx) = ∫( τˣ*vx )dΓ
+    ly(vy) = ∫( τʸ*vy )dΓ
     lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
 
     # assemble

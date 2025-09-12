@@ -27,6 +27,8 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         "w" => s.w, 
         "p" => s.p, 
         "b" => b_background + s.b,
+        "∂z(b)" => ∂z(b_background + s.b),
+        "ν" => m.fe_data.ν,
         "κᵥ" => m.fe_data.κᵥ,
     ])
 

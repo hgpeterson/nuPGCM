@@ -61,7 +61,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
+function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection=true)
     # unpack
     Δt = model.params.Δt
     u = model.state.u
@@ -85,11 +85,13 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
     b_half = interpolate(0, model.fe_data.spaces.B_trial)
     for i ∈ i_step:n_steps
         # Strang split evolution equation
-        evolve_hdiffusion!(model)         # Δt/2 horizontal diffusion
-        evolve_vdiffusion!(model)         # Δt/2 vertical diffusion
-        evolve_advection!(model, b_half)  # Δt advection
-        evolve_vdiffusion!(model)         # Δt/2 vertical diffusion
-        evolve_hdiffusion!(model)         # Δt/2 horizontal diffusion
+        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        if advection
+            evolve_advection!(model, b_half)  # Δt advection
+        end
+        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         # blow-up -> stop
@@ -112,8 +114,6 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             # msg *= @sprintf("V⁻¹ ∫ (∇⋅u⃗)^2 dx = %.16f\n", sum(∫( (∂x(u) + ∂y(v) + ∂z(w))*(∂x(u) + ∂y(v) + ∂z(w)) )*model.mesh.dΩ)/volume)
             msg
             end
-            flush(stdout)
-            flush(stderr)
         end
 
         if mod(i, n_save) == 0
@@ -126,6 +126,20 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf)
             invert!(model) # sync flow with buoyancy state
             sim_plots(model, model.state.t)
         end
+
+        # update ν
+        model, was_modified = update_ν!(model.fe_data, model.params, model.state.b)
+        if was_modified
+            @info "Viscosity ν was modified, rebuilding inversion system"
+            A_inversion = build_A_inversion(model.fe_data, model.params, model.fe_data.ν)
+            perm = model.fe_data.dofs.p_inversion
+            A_inversion = A_inversion[perm, perm]
+            model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+            # keeping same preconditioner (1/h^dim)
+        end
+
+        flush(stdout)
+        flush(stderr)
     end
     return model
 end

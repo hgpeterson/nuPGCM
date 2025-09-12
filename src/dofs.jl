@@ -104,29 +104,58 @@ end
 
 ### struct to hold Finite Element data
 
-struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler, KV, KV0, AK}
+struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler, N, K, A}
     mesh::M    # mesh data
     spaces::S  # finite element spaces
     dofs::D    # degrees of freedom handler
-    κᵥ::KV     # actual vertical diffusivity FEFunction (enhanced in convective regions)
-    κᵥ₀::KV0   # original vertical diffusivity FEFunction
-    Aκ::AK     # mass matrix for κᵥ
+    ν::N       # actual viscosity FEFunction (enhanced in low-stratification regions)
+    ν₀::N      # original viscosity FEFunction
+    κᵥ::K      # actual vertical diffusivity FEFunction (enhanced in convective regions)
+    κᵥ₀::K     # original vertical diffusivity FEFunction
+    Mν::A      # mass matrix for ν
+    Mκ::A      # mass matrix for κᵥ
 end
 
 function FEData(mesh::Mesh, spaces::Spaces, forcings::Forcings)
     dofs = DoFHandler(spaces, mesh.dΩ)
 
-    # interpolate vertical diffusivity to FE space so we can update
+    # interpolate forcings onto FE spaces so we can update
+    ν   = interpolate_everywhere(forcings.ν,  spaces.ν_trial)
+    ν₀  = interpolate_everywhere(forcings.ν,  spaces.ν_trial)
     κᵥ  = interpolate_everywhere(forcings.κᵥ, spaces.κ_trial)
     κᵥ₀ = interpolate_everywhere(forcings.κᵥ, spaces.κ_trial)
 
-    # LHS matrix for updating κᵥ (just a mass matrix)
+    # mass matrices for ν and κᵥ
     dΩ = mesh.dΩ
     a(u, v) = ∫( u*v )dΩ
-    Aκ = assemble_matrix(a, spaces.κ_trial, spaces.κ_test)
-    Aκ = lu(Aκ)
+    Mν = assemble_matrix(a, spaces.ν_trial, spaces.ν_test)
+    Mν = lu(Mν)
+    Mκ = assemble_matrix(a, spaces.κ_trial, spaces.κ_test)
+    Mκ = lu(Mκ)
 
-    return FEData(mesh, spaces, dofs, κᵥ, κᵥ₀, Aκ)
+    return FEData(mesh, spaces, dofs, ν, ν₀, κᵥ, κᵥ₀, Mν, Mκ)
+end
+
+function update_ν!(fe_data::FEData, params::Parameters, b)
+    spaces = fe_data.spaces
+
+    # compute f^2 / ∂z(b)
+    dΩ = fe_data.mesh.dΩ
+    f = params.f
+    l(v) = ∫( (f*f/∂z(b))*v )dΩ
+    y = assemble_vector(l, spaces.ν_test)
+    sol = fe_data.Mν\y
+
+    # ν = maximum(1, f^2 / ∂z(b))
+    was_modified = false  # bool to track if ν was modified
+    T = eltype(sol)
+    for i in eachindex(sol)
+        ν_i_prev = fe_data.ν.free_values[i]  # for `was_modified`
+        fe_data.ν.free_values[i] = max(one(T), sol[i])
+        ν_i_prev != fe_data.ν.free_values[i] && (was_modified = true)
+    end
+
+    return fe_data, was_modified
 end
 
 function update_κᵥ!(fe_data::FEData, params::Parameters, b)
@@ -137,7 +166,7 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
     dΩ = fe_data.mesh.dΩ
     l(v) = ∫( (stability∘∂z(b))*v )dΩ
     y = assemble_vector(l, spaces.κ_test)
-    sol = clamp.(fe_data.Aκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
+    sol = clamp.(fe_data.Mκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
 
     # increase κᵥ where unstable
     unstable_count = 0    # debug
@@ -155,7 +184,7 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
         end
         κᵥ_i_prev != fe_data.κᵥ.free_values[i] && (was_modified = true)
     end
-    @info "Updating κᵥ: $(unstable_count) unstable nodes"
+    @info "κᵥ updated: $(unstable_count) unstable nodes"
 
     # # compute ∂z(b) in κ space
     # dΩ = fe_data.mesh.dΩ
