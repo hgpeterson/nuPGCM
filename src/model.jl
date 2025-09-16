@@ -128,7 +128,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         end
 
         # update ν
-        model, was_modified = update_ν!(model.fe_data, model.params, model.state.b)
+        _, was_modified = update_ν!(model.fe_data, model.params, model.state.b)
         if was_modified
             @info "Viscosity ν was modified, rebuilding inversion system"
             A_inversion = build_A_inversion(model.fe_data, model.params, model.fe_data.ν)
