@@ -14,7 +14,7 @@ ENV["JULIA_DEBUG"] = nothing
 set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 ε = 1e-1
@@ -112,18 +112,6 @@ function setup_model()
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
 
-    # # quick inversion here:
-    # model = inversion_model(arch, params, mesh, inversion_toolkit)
-    # # set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
-    # # set_b!(model, x -> 0.1*exp(-((x[1] - 0.5)^2 + (x[2] + 0.5)^2 + (x[3] + α/2)^2)/2/0.1^2))
-    # # set_b!(model, x -> 0.1*exp(-((x[1] - 0.3)^2 + (x[2] + 0.75)^2 + (x[3] + α/2)^2)/2/0.1^2))
-    # # set_b!(model, x -> 0.1*exp(-((x[1] - 0.3)^2 + x[2]^2 + (x[3] + α/2)^2)/2/0.1^2))
-    # # set_b!(model, x -> 0.1*exp(-(x[1]^2 + (x[3] + 0.5)^2)/2/0.1^2) + 
-    # #                    0.1*exp(-((x[1] - 1)^2 + (x[3] + 0.5)^2)/2/0.1^2))
-    # # set_b!(model, x -> 1/α*x[3])
-    # invert!(model)
-    # save_state(model, "$out_dir/data/state.jld2")
-
     # build evolution system
     evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
 
@@ -133,12 +121,12 @@ function setup_model()
     return model
 end
 
-# set up model
-model = setup_model()
+# # set up model
+# model = setup_model()
 
 # set initial buoyancy
 set_b!(model, x->b₀(x) + x[3]/α)
-# nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
+nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
 invert!(model) # sync flow with buoyancy state
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
