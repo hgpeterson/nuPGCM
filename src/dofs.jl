@@ -142,7 +142,7 @@ function update_ν!(fe_data::FEData, params::Parameters, b)
     # compute f^2 / ∂z(b)
     dΩ = fe_data.mesh.dΩ
     f = params.f
-    l(v) = ∫( (f*f/∂z(b))*v )dΩ
+    l(v) = ∫( (f*(f/∂z(b)))*v )dΩ
     y = assemble_vector(l, spaces.ν_test)
     sol = fe_data.Mν\y
 
