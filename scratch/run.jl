@@ -106,7 +106,7 @@ function setup_model()
 
     # FE data
     spaces = Spaces(mesh, b₀)
-    fe_data = FEData(mesh, spaces, forcings)
+    fe_data = FEData(mesh, spaces, params, forcings)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
     # setup inversion toolkit
@@ -121,14 +121,16 @@ function setup_model()
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
+@save "$out_dir/data/model.jld2" model
+# @load "$out_dir/data/model.jld2" model
 
 # set initial buoyancy
 set_b!(model, x->b₀(x) + x[3]/α)
-nuPGCM.update_κᵥ!(model, model.state.b)  # reset κᵥ
 invert!(model) # sync flow with buoyancy state
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 700))
 
 # solve
 T = 10*μϱ/ε^2

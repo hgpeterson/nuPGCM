@@ -108,6 +108,7 @@ struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler, N, K, A}
     mesh::M    # mesh data
     spaces::S  # finite element spaces
     dofs::D    # degrees of freedom handler
+    f::N       # Coriolis parameter
     ν::N       # actual viscosity FEFunction (enhanced in low-stratification regions)
     ν₀::N      # original viscosity FEFunction
     κᵥ::K      # actual vertical diffusivity FEFunction (enhanced in convective regions)
@@ -116,8 +117,11 @@ struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler, N, K, A}
     Mκ::A      # mass matrix for κᵥ
 end
 
-function FEData(mesh::Mesh, spaces::Spaces, forcings::Forcings)
+function FEData(mesh::Mesh, spaces::Spaces, params::Parameters, forcings::Forcings)
     dofs = DoFHandler(spaces, mesh.dΩ)
+
+    # interpolate f onto FE space for convenience
+    f = interpolate_everywhere(params.f, spaces.ν_trial)
 
     # interpolate forcings onto FE spaces so we can update
     ν   = interpolate_everywhere(forcings.ν,  spaces.ν_trial)
@@ -133,26 +137,27 @@ function FEData(mesh::Mesh, spaces::Spaces, forcings::Forcings)
     Mκ = assemble_matrix(a, spaces.κ_trial, spaces.κ_test)
     Mκ = lu(Mκ)
 
-    return FEData(mesh, spaces, dofs, ν, ν₀, κᵥ, κᵥ₀, Mν, Mκ)
+    return FEData(mesh, spaces, dofs, f, ν, ν₀, κᵥ, κᵥ₀, Mν, Mκ)
 end
 
-function update_ν!(fe_data::FEData, params::Parameters, b)
+function update_ν!(fe_data::FEData, b)
     spaces = fe_data.spaces
 
-    # compute f^2 / ∂z(b)
+    # compute ∂z(b)
     dΩ = fe_data.mesh.dΩ
-    f = params.f
-    l(v) = ∫( (f*(f/∂z(b)))*v )dΩ
+    l(v) = ∫( ∂z(b)*v )dΩ
     y = assemble_vector(l, spaces.ν_test)
-    sol = fe_data.Mν\y
+    bz = fe_data.Mν\y
 
     # ν = maximum(1, f^2 / ∂z(b))
     was_modified = false  # bool to track if ν was modified
-    T = eltype(sol)
-    for i in eachindex(sol)
-        ν_i_prev = fe_data.ν.free_values[i]  # for `was_modified`
-        fe_data.ν.free_values[i] = max(one(T), sol[i])
-        ν_i_prev != fe_data.ν.free_values[i] && (was_modified = true)
+    T = eltype(bz)
+    ν = fe_data.ν.free_values
+    f = fe_data.f.free_values
+    for i in eachindex(ν)
+        νᵢ_prev = ν[i]  # for `was_modified`
+        ν[i] = max(one(T), f[i]^2/bz[i])
+        νᵢ_prev != ν[i] && (was_modified = true)
     end
 
     return fe_data, was_modified
@@ -161,56 +166,29 @@ end
 function update_κᵥ!(fe_data::FEData, params::Parameters, b)
     spaces = fe_data.spaces
 
-    # rhs nonzero where ∂z(b) < 0 (i.e. unstable stratification)
-    stability(x) = x < 0 ? 1.0 : 0.0
+    # compute ∂z(b)
     dΩ = fe_data.mesh.dΩ
-    l(v) = ∫( (stability∘∂z(b))*v )dΩ
-    y = assemble_vector(l, spaces.κ_test)
-    sol = clamp.(fe_data.Mκ\y, 0.0, 1.0)  # have to clamp between 0 and 1 to avoid weird negative values
+    l(v) = ∫( ∂z(b)*v )dΩ
+    y = assemble_vector(l, spaces.ν_test)
+    bz = fe_data.Mν\y
 
     # increase κᵥ where unstable
     unstable_count = 0    # debug
-    threshold = 1         # minimum value of sol to consider unstable
     was_modified = false  # bool to track if κᵥ was modified
-    for i in eachindex(sol)
-        κᵥ_i_prev = fe_data.κᵥ.free_values[i]  # for `was_modified`
-        if sol[i] ≥ threshold  # unstable
+    κᵥ = fe_data.κᵥ.free_values
+    for i in eachindex(κᵥ)
+        κᵥᵢ_prev = κᵥ[i]  # for `was_modified`
+        if bz[i] < 0  # unstable
             # set κᵥ to κᶜ
-            fe_data.κᵥ.free_values[i] = params.κᶜ
+            κᵥ[i] = params.κᶜ
             unstable_count += 1
         else  # stable
             # reset
-            fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]
+            κᵥ[i] = fe_data.κᵥ₀.free_values[i]
         end
-        κᵥ_i_prev != fe_data.κᵥ.free_values[i] && (was_modified = true)
+        κᵥᵢ_prev != κᵥ[i] && (was_modified = true)
     end
     @info "κᵥ updated: $(unstable_count) unstable nodes"
-
-    # # compute ∂z(b) in κ space
-    # dΩ = fe_data.mesh.dΩ
-    # l(v) = ∫( ∂z(b)*v )dΩ
-    # y = assemble_vector(l, spaces.κ_test)
-    # bz = clamp.(fe_data.Aκ\y, -1, Inf)  # force -1 ≤ ∂z(b) ≤ ∞
-    # # bz = fe_data.Aκ\y
-
-    # # increase κᵥ where unstable
-    # unstable_count = 0  # debug
-    # was_modified = false  # bool to track if κᵥ was modified
-    # for i in eachindex(bz)
-    #     κᵥ_i_prev = fe_data.κᵥ.free_values[i]  # for `was_modified`
-    #     if bz[i] ≤ 0  # unstable
-    #         # increase κᵥ linearly with -∂z(b) up to κᶜ
-    #         fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]*(1 + bz[i]) - params.κᶜ*bz[i]
-    #         # # set κᵥ to κᶜ
-    #         # fe_data.κᵥ.free_values[i] = params.κᶜ
-    #         unstable_count += 1
-    #     else  # stable
-    #         # reset
-    #         fe_data.κᵥ.free_values[i] = fe_data.κᵥ₀.free_values[i]
-    #     end
-    #     κᵥ_i_prev != fe_data.κᵥ.free_values[i] && (was_modified = true)
-    # end
-    # @info "Updating κᵥ: $(unstable_count) unstable nodes"
 
     return fe_data, was_modified
 end
