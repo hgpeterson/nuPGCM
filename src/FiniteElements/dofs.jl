@@ -14,15 +14,13 @@ end
 function get_global_dof(mesh::Mesh, space::P2)
     n_el = size(mesh.elements, 1)
     n_nodes_per_el = size(mesh.elements, 2)
-    n_dof_per_el = get_dofs(mesh.element_type, space)
+    element_type = get_element_type(mesh)
+    n_dof_per_el = n_dofs(element_type, space)
 
     global_dof = zeros(eltype(mesh.elements), n_el, n_dof_per_el)
     global_dof[:, 1:n_nodes_per_el] .= mesh.elements
     for k in 1:n_el
-        for i in 1:n_nodes_per_el-1
-            #TODO: need `edges`
-            global_dof[k, n_nodes_per_el + i] = size(mesh.nodes, 1) + edges[k, i]
-        end
+        global_dof[k, n_nodes_per_el+1:end] = size(mesh.nodes, 1) .+ mesh.emap[k, :]
     end
     return global_dof
 end
