@@ -1,113 +1,134 @@
-struct Mesh{MF, MI, E, VC, TF}
-    nodes::MF
-    elements::MI
-    element_type::E
-    components::VC
-    dim::Integer
-    bbox::TF
+struct Mesh{BB, MF, MI, B}
+    bbox::BB           # bounding box (xmin, xmax, ymin, ymax, zmin, zmax)
+    nodes::MF          # N × 3 matrix of node coordinates
+    edges::MI          # ne × 2 matrix of edge node indices
+    faces::MI          # nf × 3 matrix of face node indices
+    elements::MI       # M × n matrix of element node indices
+    boundary_nodes::B  # map from boundary name to node indices
+    boundary_edges::B  # map from boundary name to edge indices
+    boundary_faces::B  # map from boundary name to face indices
 end
 
-function Base.show(io::IO, mesh::Mesh)
-    println(io, "Mesh with dimension $(mesh.dim)")
-    println(io, "├── Nodes: $(size(mesh.nodes, 1))")
-    println(io, "├── Bounding box: x ∈ [$(mesh.bbox[1]), $(mesh.bbox[2])], y ∈ [$(mesh.bbox[3]), $(mesh.bbox[4])], z ∈ [$(mesh.bbox[5]), $(mesh.bbox[6])]")
-    println(io, "├── Interior elements: $(size(mesh.elements, 1))")
-    println(io, "├── Interior element type: $(mesh.element_type)")
-    print(io, "└── Components: $(length(mesh.components))")
-end
-
-struct MeshComponent{E, MI}
-    name::String
-    element_type::E
-    elements::MI
-end
-
-function Base.show(io::IO, mc::MeshComponent)
-    println(io, "MeshComponent: $(mc.name)")
-    println(io, "├── Element type: $(mc.element_type)")
-    print(io, "└── Elements: $(size(mc.elements, 1))")
-end
-
-"""
-    Mesh(meshfile)
-
-Read the data from the Gmsh .msh file `meshfile` and create a `Mesh`. 
-
-Mesh properties
-===============
-
-- `nodes`: An ``N × 3`` matrix where ``N`` is the number of nodes. The ``i``th row 
-           contains the ``(x, y, z)`` coordinates of node ``i``. 
-
-- `elements`: An ``M × n`` matrix where ``M`` is the number of elements and ``n`` 
-              is the number of nodes per element.
-
-- `boundary_nodes`: A dictionary where each key is a boundary name and the values
-                    are vectors indices of the nodes on that boundary.
-
-- `boundary_elements`: A dictionary where each key is a boundary name and the values
-                       are matrices of node indices on that boundary where each row
-                       corresponds to a boundary element.
-"""
-function Mesh(meshfile)
-    gmsh.initialize()
-    gmsh.open(meshfile)
-
-    # get coordinates for every node in the mesh
-    _, nodes, _ = gmsh.model.mesh.get_nodes()
-    nodes = Matrix(reshape(nodes, 3, :)') # N × 3 matrix
-
-    # bounding box
+function Mesh(nodes, elements, boundary_nodes)
     bbox = get_bounding_box(nodes)
-
-    # determine the dimension of the mesh
-    element_types = gmsh.model.mesh.get_element_types()
-    if gmsh.model.mesh.get_element_type("Tetrahedron", 1) in element_types
-        interior_element_type = Tetrahedron()
-        element_type_code = gmsh.model.mesh.get_element_type("Tetrahedron", 1)
-    elseif gmsh.model.mesh.get_element_type("Triangle", 1) in element_types
-        interior_element_type = Triangle()
-        element_type_code = gmsh.model.mesh.get_element_type("Triangle", 1)
-    elseif gmsh.model.mesh.get_element_type("Line", 1) in element_types
-        interior_element_type = Line()
-        element_type_code = gmsh.model.mesh.get_element_type("Line", 1)
-    end 
-    mesh_dim = dimension(interior_element_type)
-    @info "Mesh dimension = $mesh_dim"
-
-    # get all the interior elements
-    _, elements = gmsh.model.mesh.get_elements_by_type(element_type_code)
-    elements = Matrix(reshape(Int.(elements), mesh_dim + 1, :)') # M × n matrix
-
-    # `physical_groups` is a vector of (`dim`, `tag`) integer pairs
-    physical_groups = gmsh.model.get_physical_groups()
-    # physical_group_names = [gmsh.model.get_physical_name(dim, tag) for (dim, tag) in physical_groups]
-
-    # initialize
-    components = Vector{MeshComponent}()
-
-    for (dim, tag) in physical_groups
-        name = gmsh.model.get_physical_name(dim, tag)
-        entity_tags = gmsh.model.get_entities_for_physical_group(dim, tag)
-
-        element_type = get_element_type(dim)
-        mc_elements = Matrix{Int}(undef, 0, dim + 1)
-
-        # add the elements for each entity in the physical group (component)
-        for entity_tag in entity_tags
-            _, _, node_tags = gmsh.model.mesh.get_elements(dim, entity_tag)
-            @assert length(node_tags) == 1 "Expected exactly one element type for entity $entity."
-            entity_elements = Matrix(reshape(Int.(node_tags[1]), dim + 1, :)')
-            mc_elements = vcat(mc_elements, entity_elements)
-        end
-
-        push!(components, MeshComponent(name, element_type, mc_elements))
-    end
-
-    gmsh.finalize()
-    
-    return Mesh(nodes, elements, interior_element_type, components, mesh_dim, bbox)
+    emap, edges, boundary_edges = get_edges(elements, boundary_nodes)
+    fmap, faces, boundary_faces = get_faces(elements, boundary_nodes)
+    return Mesh(bbox, nodes, edges, faces, elements, boundary_nodes, boundary_edges, boundary_faces)
 end
+
+function get_dim(mesh::Mesh)
+    return size(mesh.elements, 2) - 1
+end
+
+function get_element_type(mesh::Mesh)
+    return get_element_type(get_dim(mesh))
+end
+function get_element_type(connectivities::AbstractMatrix{<:Integer})
+    dim = size(connectivities, 2) - 1
+    return get_element_type(dim)
+end
+
+# function Base.show(io::IO, mesh::Mesh)
+#     println(io, "Mesh with dimension $(mesh.dim)")
+#     println(io, "├── Nodes: $(size(mesh.nodes, 1))")
+#     println(io, "├── Bounding box: x ∈ [$(mesh.bbox[1]), $(mesh.bbox[2])], y ∈ [$(mesh.bbox[3]), $(mesh.bbox[4])], z ∈ [$(mesh.bbox[5]), $(mesh.bbox[6])]")
+#     println(io, "├── Interior elements: $(size(mesh.elements, 1))")
+#     println(io, "├── Interior element type: $(mesh.element_type)")
+#     print(io, "└── Components: $(length(mesh.components))")
+# end
+
+# struct MeshComponent{E, MI}
+#     name::String
+#     element_type::E
+#     elements::MI
+# end
+
+# function Base.show(io::IO, mc::MeshComponent)
+#     println(io, "MeshComponent: $(mc.name)")
+#     println(io, "├── Element type: $(mc.element_type)")
+#     print(io, "└── Elements: $(size(mc.elements, 1))")
+# end
+
+# """
+#     Mesh(meshfile)
+
+# Read the data from the Gmsh .msh file `meshfile` and create a `Mesh`. 
+
+# Mesh properties
+# ===============
+
+# - `nodes`: An ``N × 3`` matrix where ``N`` is the number of nodes. The ``i``th row 
+#            contains the ``(x, y, z)`` coordinates of node ``i``. 
+
+# - `elements`: An ``M × n`` matrix where ``M`` is the number of elements and ``n`` 
+#               is the number of nodes per element.
+
+# - `boundary_nodes`: A dictionary where each key is a boundary name and the values
+#                     are vectors indices of the nodes on that boundary.
+
+# - `boundary_elements`: A dictionary where each key is a boundary name and the values
+#                        are matrices of node indices on that boundary where each row
+#                        corresponds to a boundary element.
+# """
+# function Mesh(meshfile)
+#     gmsh.initialize()
+#     gmsh.open(meshfile)
+
+#     # get coordinates for every node in the mesh
+#     _, nodes, _ = gmsh.model.mesh.get_nodes()
+#     nodes = Matrix(reshape(nodes, 3, :)') # N × 3 matrix
+
+#     # bounding box
+#     bbox = get_bounding_box(nodes)
+
+#     # determine the dimension of the mesh
+#     element_types = gmsh.model.mesh.get_element_types()
+#     if gmsh.model.mesh.get_element_type("Tetrahedron", 1) in element_types
+#         interior_element_type = Tetrahedron()
+#         element_type_code = gmsh.model.mesh.get_element_type("Tetrahedron", 1)
+#     elseif gmsh.model.mesh.get_element_type("Triangle", 1) in element_types
+#         interior_element_type = Triangle()
+#         element_type_code = gmsh.model.mesh.get_element_type("Triangle", 1)
+#     elseif gmsh.model.mesh.get_element_type("Line", 1) in element_types
+#         interior_element_type = Line()
+#         element_type_code = gmsh.model.mesh.get_element_type("Line", 1)
+#     end 
+#     mesh_dim = dimension(interior_element_type)
+#     @info "Mesh dimension = $mesh_dim"
+
+#     # get all the interior elements
+#     _, elements = gmsh.model.mesh.get_elements_by_type(element_type_code)
+#     elements = Matrix(reshape(Int.(elements), mesh_dim + 1, :)') # M × n matrix
+
+#     # `physical_groups` is a vector of (`dim`, `tag`) integer pairs
+#     physical_groups = gmsh.model.get_physical_groups()
+#     # physical_group_names = [gmsh.model.get_physical_name(dim, tag) for (dim, tag) in physical_groups]
+
+#     # initialize
+#     components = Vector{MeshComponent}()
+
+#     for (dim, tag) in physical_groups
+#         name = gmsh.model.get_physical_name(dim, tag)
+#         entity_tags = gmsh.model.get_entities_for_physical_group(dim, tag)
+
+#         element_type = get_element_type(dim)
+#         mc_elements = Matrix{Int}(undef, 0, dim + 1)
+
+#         # add the elements for each entity in the physical group (component)
+#         for entity_tag in entity_tags
+#             _, _, node_tags = gmsh.model.mesh.get_elements(dim, entity_tag)
+#             @assert length(node_tags) == 1 "Expected exactly one element type for entity $entity."
+#             entity_elements = Matrix(reshape(Int.(node_tags[1]), dim + 1, :)')
+#             mc_elements = vcat(mc_elements, entity_elements)
+#         end
+
+#         push!(components, MeshComponent(name, element_type, mc_elements))
+#     end
+
+#     gmsh.finalize()
+    
+#     return Mesh(nodes, elements, interior_element_type, components, mesh_dim, bbox)
+# end
 
 function get_bounding_box(nodes)
     xmin = minimum(nodes[:, 1])
@@ -119,34 +140,103 @@ function get_bounding_box(nodes)
     return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
-function get_dirichlet_tags(mesh::Mesh, tags)
-    names = [c.name for c in mesh.components]
-    for tag in tags
-        if !(tag in names)
-            throw(ArgumentError("Tag '$tag' not found in mesh components."))
-        end
-    end
+# function get_dirichlet_tags(mesh::Mesh, tags)
+#     names = [c.name for c in mesh.components]
+#     for tag in tags
+#         if !(tag in names)
+#             throw(ArgumentError("Tag '$tag' not found in mesh components."))
+#         end
+#     end
 
-    i_diri = Int[]
-    for c in mesh.components
-        if c.name in tags
-            i_diri = vcat(i_diri, c.elements[:])
+#     i_diri = Int[]
+#     for c in mesh.components
+#         if c.name in tags
+#             i_diri = vcat(i_diri, c.elements[:])
+#         end
+#     end
+#     return unique(i_diri)
+# end
+function get_dirichlet_tags(mesh::Mesh, tags)  # for legacy code
+    T = eltype(mesh.elements)
+    i_diri = T[]
+    for tag in tags
+        if !(tag in keys(mesh.boundary_nodes))
+            throw(ArgumentError("Tag '$tag' not found in mesh boundary nodes."))
         end
+        i_diri = vcat(i_diri, mesh.boundary_nodes[tag])
     end
     return unique(i_diri)
 end
 
 """
-    emap, edges, bndix = all_edges(t)
+    fmap, faces, boundary_faces = get_faces(elements, boundary_nodes)
 
-1) Find all unique `edges` (ne x 2 array) in the tessellation `t`.
-2) Determine indices of boundary edges with `bndix`.
-3) Map local edges to global edges with `emap` (nt x dim+1 array): `emap[k,i]` is the 
+1) Find all unique `faces` (nf x 3 matrix) in `elements` (M × n matrix).
+2) Determine indices of boundary faces with `boundary_nodes`.
+3) Map local faces to global faces with `fmap` (nt x 4 matrix): `fmap[k,i]` is the 
+global face number for local face `i` in element `k`.
+"""
+function get_faces(elements, boundary_nodes)
+    if size(elements, 2) != 4
+        # no faces for < 3D
+        T = eltype(elements)
+        return Matrix{T}(undef, 0, 3), Matrix{T}(undef, 0, 2), Dict{String, Vector{T}}()
+    end
+
+    # form all faces
+    ftag = [elements[:, [1, 2, 3]] 
+            elements[:, [1, 2, 4]] 
+            elements[:, [1, 3, 4]] 
+            elements[:, [2, 3, 4]]]
+    nn = 3
+    nfaces = size(ftag, 1)
+
+    # sort columns and tag with global indices in last column
+    ftag = hcat(sort(ftag, dims=2), 1:nfaces)
+
+    # sort rows
+    ftag = sortslices(ftag, dims=1)
+
+    # indices of unique faces
+    keep = zeros(Bool, nfaces)
+    keep[unique(i -> ftag[i, 1:nn], 1:nfaces)] .= 1
+
+    # keep unique faces
+    faces = ftag[keep, 1:nn]
+
+    # boundary edges
+    T = eltype(elements)
+    boundary_faces = Dict{String, Vector{T}}()
+    for boundary in keys(boundary_nodes)
+        boundary_faces[boundary] = Vector{T}()
+        for i in axes(faces, 1)
+            if faces[i, 1] in boundary_nodes[boundary] && 
+               faces[i, 2] in boundary_nodes[boundary] &&
+               faces[i, 3] in boundary_nodes[boundary]
+                push!(boundary_faces[boundary], i)
+            end
+        end
+    end
+
+    # mapping from local to global face index
+    fmap = cumsum(keep)
+    invpermute!(fmap, ftag[:, nn+1])
+    fmap = reshape(fmap, :, 4)
+
+    return fmap, faces, boundary_faces
+end
+
+"""
+    emap, edges, boundary_edges = get_edges(elements, boundary_nodes)
+
+1) Find all unique `edges` (ne x 2 matrix) in `elements` (M × dim+1 matrix).
+2) Determine edges on boundary `bndix`.
+3) Map local edges to global edges with `emap` (nt x dim+1 matrix): `emap[k,i]` is the 
 global edge number for local edge `i` in element `k`.
 """
-function all_edges(t)
+function get_edges(elements, boundary_nodes)
     # dimension of space
-    dim = size(t, 2) - 1
+    dim = size(elements, 2) - 1
 
     # get all possible edge index pairs
     ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
@@ -158,9 +248,9 @@ function all_edges(t)
              3 4]
 
     # find all edges
-    etag = t[:, pairs[1, :]]
+    etag = elements[:, pairs[1, :]]
     for i=2:ne
-        etag = vcat(etag, t[:, pairs[i, :]])
+        etag = vcat(etag, elements[:, pairs[i, :]])
     end
     nedges = size(etag, 1)
 
@@ -178,17 +268,15 @@ function all_edges(t)
     edges = etag[keep, 1:2]
 
     # boundary edges
-    if dim == 1 || dim == 2
-        # in 1D and 2D, no duplicates
-        dup = all(etag[2:end, 1:2] .== etag[1:end-1, 1:2], dims=2)[:]
-        dup = [dup; false]
-        dup = dup[keep]
-        bndix = findall(.!dup)
-    elseif dim == 3
-        # in 3D, on boundary face
-        bfaces = boundary_faces(t)
-        _, bedges, _ = all_edges(bfaces)
-        bndix = [findfirst(i -> edges[i, :] == bedges[j, :], 1:size(edges, 1)) for j ∈ axes(bedges, 1)]
+    T = eltype(elements)
+    boundary_edges = Dict{String, Vector{T}}()
+    for boundary in keys(boundary_nodes)
+        boundary_edges[boundary] = Vector{T}()
+        for i in axes(edges, 1)
+            if edges[i, 1] in boundary_nodes[boundary] && edges[i, 2] in boundary_nodes[boundary]
+                push!(boundary_edges[boundary], i)
+            end
+        end
     end
 
     # compute mapping to global indices
@@ -196,7 +284,7 @@ function all_edges(t)
     invpermute!(emap, etag[:, 3])
     emap = reshape(emap, :, ne)
 
-    return emap, edges, bndix
+    return emap, edges, boundary_edges
 end
 
 # struct MeshCache{MF, V}

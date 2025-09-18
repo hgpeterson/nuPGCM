@@ -38,7 +38,7 @@ reference_element(::Tetrahedron) = [0.0  0.0  0.0
                                     0.0  1.0  0.0
                                     0.0  0.0  1.0]
 
-function get_element_type(dim)
+function get_element_type(dim::Integer)
     if dim == 0
         return Point()
     elseif dim == 1
