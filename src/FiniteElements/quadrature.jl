@@ -1,6 +1,7 @@
 struct Jacobians{A, V}
-    ∂ξ∂x::A # Jacobian matrix ∂ξ/∂x for each element
-    dV::V   # volume of each element
+    ∂x∂ξ::A  # Jacobian matrix ∂x/∂ξ for each element
+    ∂ξ∂x::A  # Jacobian matrix ∂ξ/∂x for each element
+    dV::V    # volume of each element
 end
 
 """
@@ -31,20 +32,21 @@ function Jacobians(m::Mesh)
     dim = size(m.elements, 2) - 1
     el_type = get_element_type(dim)
 
+    ∂x∂ξ = zeros(n_elements, dim, dim)
     ∂ξ∂x = zeros(n_elements, dim, dim)
     dV = zeros(n_elements)
     @showprogress "Computing element Jacobians..." for k in 1:n_elements
         # build transformation matrix ∂x/∂ξ
-        ∂x∂ξ = build_jacobian(el_type, m.nodes[m.elements[k, :], :])
+        ∂x∂ξ[k, :, :] = build_jacobian(el_type, m.nodes[m.elements[k, :], :])
 
         # compute determinant to get volume
-        dV[k] = abs(det(∂x∂ξ))
+        dV[k] = abs(det(∂x∂ξ[k, :, :]))
 
         # invert for ∂ξ/∂x
-        ∂ξ∂x[k, :, :] .= inv(∂x∂ξ)
+        ∂ξ∂x[k, :, :] .= inv(∂x∂ξ[k, :, :])
     end
 
-    return Jacobians(∂ξ∂x, dV)
+    return Jacobians(∂x∂ξ, ∂ξ∂x, dV)
 end
 
 function Base.show(io::IO, jacs::Jacobians)
@@ -121,8 +123,8 @@ function QuadratureRule(::Triangle; deg)
         p = [0.33333333333333333333  0.33333333333333333333]
     elseif deg == 2
         w = [0.33333333333333333333
-            0.33333333333333333333
-            0.33333333333333333333]
+             0.33333333333333333333
+             0.33333333333333333333]
         p = [0.66666666666666666667  0.16666666666666666667
              0.16666666666666666667  0.66666666666666666667
              0.16666666666666666667  0.16666666666666666667]

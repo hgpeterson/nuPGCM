@@ -2,7 +2,9 @@ struct Mesh{BB, MF, MI, B}
     bbox::BB           # bounding box (xmin, xmax, ymin, ymax, zmin, zmax)
     nodes::MF          # N × 3 matrix of node coordinates
     edges::MI          # ne × 2 matrix of edge node indices
+    emap::MI           # nt × n matrix mapping local to global edge indices
     faces::MI          # nf × 3 matrix of face node indices
+    fmap::MI           # nt × m matrix mapping local to global face indices
     elements::MI       # M × n matrix of element node indices
     boundary_nodes::B  # map from boundary name to node indices
     boundary_edges::B  # map from boundary name to edge indices
@@ -13,7 +15,7 @@ function Mesh(nodes, elements, boundary_nodes)
     bbox = get_bounding_box(nodes)
     emap, edges, boundary_edges = get_edges(elements, boundary_nodes)
     fmap, faces, boundary_faces = get_faces(elements, boundary_nodes)
-    return Mesh(bbox, nodes, edges, faces, elements, boundary_nodes, boundary_edges, boundary_faces)
+    return Mesh(bbox, nodes, edges, emap, faces, fmap, elements, boundary_nodes, boundary_edges, boundary_faces)
 end
 
 function get_dim(mesh::Mesh)
@@ -163,7 +165,7 @@ function get_dirichlet_tags(mesh::Mesh, tags)  # for legacy code
         if !(tag in keys(mesh.boundary_nodes))
             throw(ArgumentError("Tag '$tag' not found in mesh boundary nodes."))
         end
-        i_diri = vcat(i_diri, mesh.boundary_nodes[tag])
+        i_diri = vcat(i_diri, mesh.boundary_nodes[tag])  # FIXME: need to also consider midpoints
     end
     return unique(i_diri)
 end
@@ -204,7 +206,7 @@ function get_faces(elements, boundary_nodes)
     # keep unique faces
     faces = ftag[keep, 1:nn]
 
-    # boundary edges
+    # boundary edges FIXME: this is slow and will also fail for faces on corners
     T = eltype(elements)
     boundary_faces = Dict{String, Vector{T}}()
     for boundary in keys(boundary_nodes)
@@ -267,7 +269,7 @@ function get_edges(elements, boundary_nodes)
     # only keep unique edges
     edges = etag[keep, 1:2]
 
-    # boundary edges
+    # boundary edges FIXME: this is slow and will also fail for edges on corners
     T = eltype(elements)
     boundary_edges = Dict{String, Vector{T}}()
     for boundary in keys(boundary_nodes)
@@ -285,6 +287,15 @@ function get_edges(elements, boundary_nodes)
     emap = reshape(emap, :, ne)
 
     return emap, edges, boundary_edges
+end
+
+function get_midpoints(mesh::Mesh)
+    n_edges = size(mesh.edges, 1)
+    midpoints = zeros(eltype(mesh.nodes), n_edges, 3)
+    for i in 1:n_edges
+        midpoints[i, :] = (mesh.nodes[mesh.edges[i, 1], :] + mesh.nodes[mesh.edges[i, 2], :])/2
+    end
+    return midpoints
 end
 
 # struct MeshCache{MF, V}

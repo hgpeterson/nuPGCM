@@ -69,6 +69,38 @@ function mass_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::A
     return sparse_csc(global_matrix, n, n)
 end
 
+function rhs_vector(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::AbstractFESpace, f, g;
+                    dirichlet=String[])
+    el = get_element_type(mesh)
+    n_el = size(mesh.elements, 1)
+    n_dof_per_el = n_dofs(el, space)
+
+    T = eltype(quad.weights)
+    global_dof = get_global_dof(mesh, space)
+    n = maximum(global_dof) 
+    rhs = zeros(T, n)
+    local_vector = zeros(T, n_dof_per_el)
+    for k in 1:n_el
+        local_vector .= zero(T)
+        for q in eachindex(quad.weights)
+            φq = φ(el, space, quad.points[q, :])
+            x = transform_from_reference(el, jacs.∂x∂ξ[k], quad.points[q, :], mesh.nodes[mesh.elements[k, :], :])
+            fq = f(x)
+            for i in 1:n_dof_per_el
+                local_vector[i] += quad.weights[q] * φq[i] * fq * jacs.dV[k]
+            end
+        end
+        rhs[global_dof[k, :]] .+= local_vector
+    end
+
+    i_diri = get_dirichlet_tags(mesh, dirichlet)
+    for i in i_diri
+        rhs[i] = g(mesh.nodes[i, :])
+    end
+
+    return rhs
+end
+
 function stiffness_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::AbstractFESpace;
                           dirichlet=String[])
     el = get_element_type(mesh)
@@ -85,6 +117,7 @@ function stiffness_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, spa
         local_matrix .= zero(T)
         for q in eachindex(quad.weights)
             ∇φq = ∇φ(el, space, quad.points[q, :])
+            ∇φq = [jacs.∂ξ∂x[k, :, :]'*∇φq[i] for i in eachindex(∇φq)]  # need to transform derivatives
             for i in 1:n_dof_per_el, j in 1:n_dof_per_el
                 local_matrix[i, j] += quad.weights[q] * dot(∇φq[i], ∇φq[j]) * jacs.dV[k]
             end

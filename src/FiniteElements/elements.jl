@@ -112,6 +112,7 @@ function transform_to_reference(el::Line, x, vertices)
 end
 function transform_to_reference(el::Triangle, x, vertices)
     ∂x∂ξ = build_jacobian(el, vertices)
+    x₁ = vertices[1, :]
     e₁, e₂ = get_local_basis_perp(el, vertices)
     ∂x = x - x₁
     ∂x_e = [dot(∂x, e₁)  dot(∂x, e₂)]
@@ -125,14 +126,26 @@ function transform_to_reference(el::Tetrahedron, x, vertices)
     return ξ₁ .+ ∂x∂ξ\(x .- x₁)
 end
 
-# """
-#     x = transform_from_reference(el::AbstractElement, ξ, vertices)
+"""
+    x = transform_from_reference(el::AbstractElement, ξ, vertices)
 
-# Transform the point ``ξ`` in the reference element to ``x`` in the element defined by `vertices`.
-# """
-# function transform_from_reference(el::AbstractElement, ξ, vertices)
-#     ∂x∂ξ = build_jacobian(el, vertices)
-#     x₁ = vertices[1, :]
-#     ξ₁ = reference_element(el)[1, :]
-#     return x₁ .+ ∂x∂ξ*(ξ .- ξ₁)
-# end
+Transform the point ``ξ`` in the reference element to ``x`` in the element defined by `vertices`.
+"""
+function transform_from_reference(el::Triangle, ξ, vertices)
+    ∂x∂ξ = build_jacobian(el, vertices)
+    return transform_from_reference(el, ∂x∂ξ, ξ, vertices)
+end
+function transform_from_reference(el::Triangle, ∂x∂ξ, ξ, vertices)
+    x₁ = vertices[1, :]
+    e₁, e₂ = get_local_basis_perp(el, vertices)
+    ξ₁ = reference_element(el)[1, :]
+    ∂x_e = ∂x∂ξ*(ξ .- ξ₁)
+    ∂x = ∂x_e[1]*e₁ .+ ∂x_e[2]*e₂
+    return x₁ .+ ∂x
+end
+function transform_from_reference(el::Tetrahedron, ξ, vertices)
+    ∂x∂ξ = build_jacobian(el, vertices)
+    x₁ = vertices[1, :]
+    ξ₁ = reference_element(el)[1, :]
+    return x₁ .+ ∂x∂ξ*(ξ .- ξ₁)
+end
