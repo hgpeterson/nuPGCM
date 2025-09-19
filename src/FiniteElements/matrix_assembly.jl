@@ -120,7 +120,7 @@ function rhs_vector(mesh::Mesh,
         else
             # midpoint position
             edge_index = i - size(mesh.nodes, 1)
-            n1, n2 = mesh.edges[edge_index, :]
+            n1, n2 = mesh.edges[edge_index]
             x = (mesh.nodes[n1, :] + mesh.nodes[n2, :])/2
         end
         rhs[i] = g(x)
