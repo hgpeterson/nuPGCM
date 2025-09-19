@@ -149,14 +149,14 @@ function update_ν!(fe_data::FEData, b)
     y = assemble_vector(l, spaces.ν_test)
     bz = fe_data.Mν\y
 
-    # ν = maximum(1, f^2 / ∂z(b))
+    # ν = maximum(ν₀, f^2 / ∂z(b))
     was_modified = false  # bool to track if ν was modified
-    T = eltype(bz)
     ν = fe_data.ν.free_values
+    ν₀ = fe_data.ν₀.free_values
     f = fe_data.f.free_values
     for i in eachindex(ν)
         νᵢ_prev = ν[i]  # for `was_modified`
-        ν[i] = max(one(T), f[i]^2/bz[i])
+        ν[i] = max(ν₀[i], f[i]^2/bz[i])
         νᵢ_prev != ν[i] && (was_modified = true)
     end
 
@@ -174,16 +174,23 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
 
     # increase κᵥ where unstable
     unstable_count = 0    # debug
+    bz_min = -5          # threshold at which we set κᵥ = κᶜ
     was_modified = false  # bool to track if κᵥ was modified
     κᵥ = fe_data.κᵥ.free_values
+    κᵥ₀ = fe_data.κᵥ₀.free_values
+    κᶜ = params.κᶜ
     for i in eachindex(κᵥ)
         κᵥᵢ_prev = κᵥ[i]  # for `was_modified`
-        if bz[i] < 0  # unstable
-            # set κᵥ to κᶜ
-            κᵥ[i] = params.κᶜ
+        if bz[i] < 0
+            # unstable, enhance
+            if bz[i] < bz_min
+                κᵥ[i] = κᶜ  # cap
+            else
+                κᵥ[i] = κᵥ₀[i] + (κᶜ - κᵥ₀[i])*(bz[i]/bz_min)^2
+            end
             unstable_count += 1
-        else  # stable
-            # reset
+        else  
+            # stable, reset
             κᵥ[i] = fe_data.κᵥ₀.free_values[i]
         end
         κᵥᵢ_prev != κᵥ[i] && (was_modified = true)
