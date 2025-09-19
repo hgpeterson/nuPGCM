@@ -4,7 +4,8 @@ function save_vtu(mesh::Mesh, filename, data::AbstractDict)
     element_type = get_element_type(mesh)
     # cell_type = get_vtk_cell_type(element_type)
     cell_type = get_vtk_cell_type(element_type, P2())
-    global_dof = get_global_dof(mesh, P2())
+    dof_data = DoFData(mesh, P2())
+    global_dof = dof_data.global_dof
     cells = [MeshCell(cell_type, global_dof[k, :]) for k in axes(global_dof, 1)]
     vtk_grid(filename, points, cells, append=false) do vtk
         for (name, values) in data

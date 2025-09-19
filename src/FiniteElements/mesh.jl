@@ -1,7 +1,7 @@
-struct Mesh{BB, MF, MI, B}
+struct Mesh{BB, MF, VS, MI, B}
     bbox::BB           # bounding box (xmin, xmax, ymin, ymax, zmin, zmax)
     nodes::MF          # N × 3 matrix of node coordinates
-    edges::MI          # ne × 2 matrix of edge node indices
+    edges::VS          # ne × 2 matrix of edge node indices
     emap::MI           # nt × n matrix mapping local to global edge indices
     faces::MI          # nf × 3 matrix of face node indices
     fmap::MI           # nt × m matrix mapping local to global face indices
@@ -209,11 +209,13 @@ end
 global edge number for local edge `i` in element `k`.
 """
 function get_edges(elements, boundary_nodes)
+    T = eltype(elements)
+
     # dimension of space
     dim = size(elements, 2) - 1
 
     # get all possible edge index pairs
-    ne = Int64((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
+    ne = T((dim + 1)*dim/2) # number of edges per element = dim + 1 choose 2
     pairs = [1 2
              2 3
              1 3
@@ -222,50 +224,46 @@ function get_edges(elements, boundary_nodes)
              3 4]
 
     # find all edges
-    etag = elements[:, pairs[1, :]]
-    for i=2:ne
-        etag = vcat(etag, elements[:, pairs[i, :]])
+    edges = Set{T}[]
+    n_el = size(elements, 1)
+    emap = zeros(T, n_el, ne)
+    for k in 1:n_el
+        for i in 1:ne
+            edge = Set(elements[k, pairs[i, :]])
+            edge_index = findfirst(==(edge), edges)
+            if edge_index === nothing
+                push!(edges, edge)
+                edge_index = length(edges)
+            end
+            emap[k, i] = edge_index
+        end
     end
-    nedges = size(etag, 1)
-
-    # order node indices so lowest ones are in first column, tag each edge with its global index in 3rd column
-    etag = [sort(etag, dims=2)  1:nedges]
-
-    # now sort so that first column goes from lowest to highest node index
-    etag = sortslices(etag, dims=1)
-
-    # determine if edge is a duplicate or should be kept
-    keep = zeros(Bool, nedges)
-    keep[unique(i -> etag[i, 1:2], 1:size(etag, 1))] .= 1
-
-    # only keep unique edges
-    edges = etag[keep, 1:2]
+    nedges = length(edges)
 
     # boundary edges FIXME: this is slow and will also fail for edges on corners
     T = eltype(elements)
     boundary_edges = Dict{String, Vector{T}}()
     for boundary in keys(boundary_nodes)
         boundary_edges[boundary] = Vector{T}()
-        for i in axes(edges, 1)
-            if edges[i, 1] in boundary_nodes[boundary] && edges[i, 2] in boundary_nodes[boundary]
-                push!(boundary_edges[boundary], i)
+        for i in eachindex(edges)
+            for n in edges[i]
+                if !(n in boundary_nodes[boundary])
+                    continue
+                end
             end
+            push!(boundary_edges[boundary], i)
         end
     end
-
-    # compute mapping to global indices
-    emap = cumsum(keep)
-    invpermute!(emap, etag[:, 3])
-    emap = reshape(emap, :, ne)
 
     return emap, edges, boundary_edges
 end
 
 function get_midpoints(mesh::Mesh)
-    n_edges = size(mesh.edges, 1)
+    n_edges = length(mesh.edges)
     midpoints = zeros(eltype(mesh.nodes), n_edges, 3)
     for i in 1:n_edges
-        midpoints[i, :] = (mesh.nodes[mesh.edges[i, 1], :] + mesh.nodes[mesh.edges[i, 2], :])/2
+        n1, n2 = mesh.edges[i]
+        midpoints[i, :] = (mesh.nodes[n1, :] + mesh.nodes[n2, :])/2
     end
     return midpoints
 end

@@ -39,7 +39,7 @@ function Jacobians(m::Mesh)
         # build transformation matrix ∂x/∂ξ
         ∂x∂ξ[k, :, :] = build_jacobian(el_type, m.nodes[m.elements[k, :], :])
 
-        # compute determinant to get volume
+        # compute determinant of transformation
         dV[k] = abs(det(∂x∂ξ[k, :, :]))
 
         # invert for ∂ξ/∂x
@@ -51,6 +51,7 @@ end
 
 function Base.show(io::IO, jacs::Jacobians)
     println(io, "Jacobians:")
+    println(io, "├── ∂x/∂ξ: ", summary(jacs.∂x∂ξ))
     println(io, "├── ∂ξ/∂x: ", summary(jacs.∂ξ∂x))
     print(io,   "└── dV:    ", summary(jacs.dV))
 end
