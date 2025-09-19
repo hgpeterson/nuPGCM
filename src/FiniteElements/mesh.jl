@@ -142,34 +142,6 @@ function get_bounding_box(nodes)
     return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
-# function get_dirichlet_tags(mesh::Mesh, tags)
-#     names = [c.name for c in mesh.components]
-#     for tag in tags
-#         if !(tag in names)
-#             throw(ArgumentError("Tag '$tag' not found in mesh components."))
-#         end
-#     end
-
-#     i_diri = Int[]
-#     for c in mesh.components
-#         if c.name in tags
-#             i_diri = vcat(i_diri, c.elements[:])
-#         end
-#     end
-#     return unique(i_diri)
-# end
-function get_dirichlet_tags(mesh::Mesh, tags)  # for legacy code
-    T = eltype(mesh.elements)
-    i_diri = T[]
-    for tag in tags
-        if !(tag in keys(mesh.boundary_nodes))
-            throw(ArgumentError("Tag '$tag' not found in mesh boundary nodes."))
-        end
-        i_diri = vcat(i_diri, mesh.boundary_nodes[tag])  # FIXME: need to also consider midpoints
-    end
-    return unique(i_diri)
-end
-
 """
     fmap, faces, boundary_faces = get_faces(elements, boundary_nodes)
 

@@ -30,6 +30,9 @@ export
     φ,
     ∇φ,
 
+    # dofs.jl
+    DoFData,
+
     # vtk.jl
     save_vtu
 

@@ -40,17 +40,30 @@ end
 
 ################################################################################
 
-function mass_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::AbstractFESpace;
+function get_i_diri(dof_data::DoFData, dirichlet)
+    T = eltype(dof_data.global_dof)
+    i_diri = T[]
+    for boundary in dirichlet
+        i_diri = vcat(i_diri, dof_data.boundary_dofs[boundary])
+    end
+    return unique(i_diri)
+end
+
+function mass_matrix(mesh::Mesh, 
+                     jacs::Jacobians, 
+                     quad::QuadratureRule, 
+                     space::AbstractFESpace,
+                     dof_data::DoFData;
                      dirichlet=String[])
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
-    i_diri = get_dirichlet_tags(mesh, dirichlet)
+    i_diri = get_i_diri(dof_data, dirichlet)
 
     T = eltype(quad.weights)
     global_matrix = SparseIJV(T)
-    global_dof = get_global_dof(mesh, space)
+    global_dof = dof_data.global_dof
     local_matrix = zeros(T, n_dof_per_el, n_dof_per_el)
     for k in 1:n_el
         local_matrix .= zero(T)
@@ -69,14 +82,20 @@ function mass_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::A
     return sparse_csc(global_matrix, n, n)
 end
 
-function rhs_vector(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::AbstractFESpace, f, g;
+function rhs_vector(mesh::Mesh, 
+                    jacs::Jacobians, 
+                    quad::QuadratureRule, 
+                    space::AbstractFESpace, 
+                    dof_data::DoFData,
+                    f, 
+                    g;
                     dirichlet=String[])
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
     T = eltype(quad.weights)
-    global_dof = get_global_dof(mesh, space)
+    global_dof = dof_data.global_dof
     n = maximum(global_dof) 
     rhs = zeros(T, n)
     local_vector = zeros(T, n_dof_per_el)
@@ -93,25 +112,38 @@ function rhs_vector(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::Ab
         rhs[global_dof[k, :]] .+= local_vector
     end
 
-    i_diri = get_dirichlet_tags(mesh, dirichlet)
+    i_diri = get_i_diri(dof_data, dirichlet)
     for i in i_diri
-        rhs[i] = g(mesh.nodes[i, :])
+        if i ≤ size(mesh.nodes, 1)
+            # node position
+             x = mesh.nodes[i, :]
+        else
+            # midpoint position
+            edge_index = i - size(mesh.nodes, 1)
+            n1, n2 = mesh.edges[edge_index, :]
+            x = (mesh.nodes[n1, :] + mesh.nodes[n2, :])/2
+        end
+        rhs[i] = g(x)
     end
 
     return rhs
 end
 
-function stiffness_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, space::AbstractFESpace;
+function stiffness_matrix(mesh::Mesh, 
+                          jacs::Jacobians, 
+                          quad::QuadratureRule, 
+                          space::AbstractFESpace,
+                          dof_data::DoFData;
                           dirichlet=String[])
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
-    i_diri = get_dirichlet_tags(mesh, dirichlet)
+    i_diri = get_i_diri(dof_data, dirichlet)
 
     T = eltype(quad.weights)
     global_matrix = SparseIJV(T)
-    global_dof = get_global_dof(mesh, space)
+    global_dof = dof_data.global_dof
     local_matrix = zeros(T, n_dof_per_el, n_dof_per_el)
     for k in 1:n_el
         local_matrix .= zero(T)
@@ -131,68 +163,68 @@ function stiffness_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, spa
     return sparse_csc(global_matrix, n, n)
 end
 
-function stokes_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, 
-                       u_space::AbstractFESpace,
-                       v_space::AbstractFESpace,
-                       w_space::AbstractFESpace,
-                       p_space::AbstractFESpace; 
-                       u_dirichlet=String[],
-                       v_dirichlet=String[],
-                       w_dirichlet=String[])
-    el = mesh.element_type
-    n_el = size(mesh.elements, 1)
-    n_dof_per_el_u = n_dofs(el, u_space)
-    n_dof_per_el_v = n_dofs(el, v_space)
-    n_dof_per_el_w = n_dofs(el, w_space)
-    n_dof_per_el_p = n_dofs(el, p_space)
+# function stokes_matrix(mesh::Mesh, jacs::Jacobians, quad::QuadratureRule, 
+#                        u_space::AbstractFESpace,
+#                        v_space::AbstractFESpace,
+#                        w_space::AbstractFESpace,
+#                        p_space::AbstractFESpace; 
+#                        u_dirichlet=String[],
+#                        v_dirichlet=String[],
+#                        w_dirichlet=String[])
+#     el = mesh.element_type
+#     n_el = size(mesh.elements, 1)
+#     n_dof_per_el_u = n_dofs(el, u_space)
+#     n_dof_per_el_v = n_dofs(el, v_space)
+#     n_dof_per_el_w = n_dofs(el, w_space)
+#     n_dof_per_el_p = n_dofs(el, p_space)
 
-    i_diri_u = get_dirichlet_tags(mesh, u_dirichlet)
-    i_diri_v = get_dirichlet_tags(mesh, v_dirichlet)
-    i_diri_w = get_dirichlet_tags(mesh, w_dirichlet)
+#     i_diri_u = get_dirichlet_tags(mesh, u_dirichlet)
+#     i_diri_v = get_dirichlet_tags(mesh, v_dirichlet)
+#     i_diri_w = get_dirichlet_tags(mesh, w_dirichlet)
 
-    T = eltype(quad.weights)
-    global_matrix = SparseIJV(T)
-    global_dofs_u = get_global_dof(mesh, u_space)
-    global_dofs_v = get_global_dof(mesh, v_space) .+ maximum(global_dofs_u)
-    global_dofs_w = get_global_dof(mesh, w_space) .+ maximum(global_dofs_v)
-    global_dofs_p = get_global_dof(mesh, p_space) .+ maximum(global_dofs_w)
-    local_matrix = zeros(T, n_dof_per_el_v + n_dof_per_el_p, n_dof_per_el_v + n_dof_per_el_p) #TODO: ???
-    for k in 1:n_el
-        local_matrix .= zero(T)
-        for q in eachindex(quad.weights)
-            φq_u = φ(el, u_space, quad.points[q, :])
-            φq_v = φ(el, v_space, quad.points[q, :])
-            φq_w = φ(el, w_space, quad.points[q, :])
-            φq_p = φ(el, p_space, quad.points[q, :])
-            ∇φq_u = ∇φ(el, u_space, quad.points[q, :])
-            ∇φq_v = ∇φ(el, v_space, quad.points[q, :])
-            ∇φq_w = ∇φ(el, w_space, quad.points[q, :])
-            ∇φq_p = ∇φ(el, p_space, quad.points[q, :])
-            for i in 1:n_dof_per_el_u, j in 1:n_dof_per_el_p
-                # v⋅∇p 
-                local_matrix[i, j] += quad.weights[q] * (φq_u[i]*∇φq_p[1][j] + 
-                                                         φq_v[i]*∇φq_p[2][j] + 
-                                                         φq_w[i]*∇φq_p[3][j]) * jacs.dV[k]
-            end
-            for i in 1:n_dof_per_el_p, j in 1:n_dof_per_el_u
-                # q∇⋅u
-                local_matrix[i, j] += quad.weights[q] * (φq_p[i]*(∇φq_u[1][j] +
-                                                                  ∇φq_v[2][j] +
-                                                                  ∇φq_w[3][j])) * jacs.dV[k]
-            end
-            for i in 1:n_dof_per_el_u, j in 1:n_dof_per_el_u
-                # ∇v⊙∇u (constant viscosity for now)
-                local_matrix[i, j] += quad.weights[q] * (dot(∇φq_u[i], ∇φq_u[j]) + 
-                                                         dot(∇φq_v[i], ∇φq_v[j]) + 
-                                                         dot(∇φq_w[i], ∇φq_w[j])) * jacs.dV[k]
-            end
-        end
-        stamp!(global_matrix, local_matrix,
-               vcat(global_dof_v[k, :], global_dof_p[k, :]), i_diri)
-    end
+#     T = eltype(quad.weights)
+#     global_matrix = SparseIJV(T)
+#     global_dofs_u = get_global_dof(mesh, u_space)
+#     global_dofs_v = get_global_dof(mesh, v_space) .+ maximum(global_dofs_u)
+#     global_dofs_w = get_global_dof(mesh, w_space) .+ maximum(global_dofs_v)
+#     global_dofs_p = get_global_dof(mesh, p_space) .+ maximum(global_dofs_w)
+#     local_matrix = zeros(T, n_dof_per_el_v + n_dof_per_el_p, n_dof_per_el_v + n_dof_per_el_p) #TODO: ???
+#     for k in 1:n_el
+#         local_matrix .= zero(T)
+#         for q in eachindex(quad.weights)
+#             φq_u = φ(el, u_space, quad.points[q, :])
+#             φq_v = φ(el, v_space, quad.points[q, :])
+#             φq_w = φ(el, w_space, quad.points[q, :])
+#             φq_p = φ(el, p_space, quad.points[q, :])
+#             ∇φq_u = ∇φ(el, u_space, quad.points[q, :])
+#             ∇φq_v = ∇φ(el, v_space, quad.points[q, :])
+#             ∇φq_w = ∇φ(el, w_space, quad.points[q, :])
+#             ∇φq_p = ∇φ(el, p_space, quad.points[q, :])
+#             for i in 1:n_dof_per_el_u, j in 1:n_dof_per_el_p
+#                 # v⋅∇p 
+#                 local_matrix[i, j] += quad.weights[q] * (φq_u[i]*∇φq_p[1][j] + 
+#                                                          φq_v[i]*∇φq_p[2][j] + 
+#                                                          φq_w[i]*∇φq_p[3][j]) * jacs.dV[k]
+#             end
+#             for i in 1:n_dof_per_el_p, j in 1:n_dof_per_el_u
+#                 # q∇⋅u
+#                 local_matrix[i, j] += quad.weights[q] * (φq_p[i]*(∇φq_u[1][j] +
+#                                                                   ∇φq_v[2][j] +
+#                                                                   ∇φq_w[3][j])) * jacs.dV[k]
+#             end
+#             for i in 1:n_dof_per_el_u, j in 1:n_dof_per_el_u
+#                 # ∇v⊙∇u (constant viscosity for now)
+#                 local_matrix[i, j] += quad.weights[q] * (dot(∇φq_u[i], ∇φq_u[j]) + 
+#                                                          dot(∇φq_v[i], ∇φq_v[j]) + 
+#                                                          dot(∇φq_w[i], ∇φq_w[j])) * jacs.dV[k]
+#             end
+#         end
+#         stamp!(global_matrix, local_matrix,
+#                vcat(global_dof_v[k, :], global_dof_p[k, :]), i_diri)
+#     end
 
-    add_dirichlet!(global_matrix, i_diri)
+#     add_dirichlet!(global_matrix, i_diri)
 
-    n = maximum(vcat(global_dof_v, global_dof_p))
-    return sparse_csc(global_matrix, n, n)
-end
+#     n = maximum(vcat(global_dof_v, global_dof_p))
+#     return sparse_csc(global_matrix, n, n)
+# end
