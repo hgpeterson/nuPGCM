@@ -16,15 +16,15 @@ end
 end
 
 @testset "Transformation matrix/vector" begin
-    vertices_line = [-1.0 0.0 0.0; 1.0 0.0 0.0]
-    ∂x∂ξ = FiniteElements.build_jacobian(Line(), vertices_line)
+    vertices = [-1.0 0.0 0.0; 1.0 0.0 0.0]
+    ∂x∂ξ = FiniteElements.build_jacobian(Line(), vertices)
     @test ∂x∂ξ ≈ 2.0
 
-    vertices_triangle = [0.0 0.0 0.0; 1.0 0.0 0.0; 0.0 1.0 0.0]
-    ∂x∂ξ = FiniteElements.build_jacobian(Triangle(), vertices_triangle)
+    vertices = [0.0 0.0 0.0; 1.0 0.0 0.0; 0.0 1.0 0.0]
+    ∂x∂ξ = FiniteElements.build_jacobian(Triangle(), vertices)
     @test ∂x∂ξ ≈ [1.0 0.0; 0.0 1.0]
 
-    vertices_tetrahedron = [0.0 0.0 0.0; 1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
-    ∂x∂ξ = FiniteElements.build_jacobian(Tetrahedron(), vertices_tetrahedron)
+    vertices = [0.0 0.0 0.0; 1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+    ∂x∂ξ = FiniteElements.build_jacobian(Tetrahedron(), vertices)
     @test ∂x∂ξ ≈ [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
 end

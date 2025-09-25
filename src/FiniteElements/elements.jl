@@ -95,6 +95,10 @@ function get_local_basis_perp(v₁, v₂)
     return e₁, e₂
 end
 
+# function build_jacobian(el::Triangle, vertices)
+#     return [vertices[j+1, i] - vertices[1, i] for i in 1:3, j in 1:2]
+# end
+
 function build_jacobian(::Tetrahedron, vertices)
     return [vertices[j+1, i] - vertices[1, i] for i in 1:3, j in 1:3]
 end
@@ -119,6 +123,25 @@ function transform_to_reference(el::Triangle, x, vertices)
     ξ₁ = reference_element(el)[1, :]
     return ξ₁ .+ ∂x∂ξ \ ∂x_e
 end
+# # Idea: have ∂ξ∂x be a 2×3 matrix that maps from x ∈ R³ to ξ ∈ R²
+# #        and ∂x∂ξ be a 3×2 matrix that maps from ξ ∈ R² to x ∈ R³
+# function transform_to_reference(el::Triangle, x, vertices)
+#     ∂ξ∂x = build_∂ξ∂x(el, vertices)
+#     return transform_to_reference(el, ∂ξ∂x, x, vertices)
+# end
+# function transform_to_reference(::Triangle, ∂ξ∂x, x, vertices)
+#     x₁ = vertices[1, :]
+#     return ∂ξ∂x * (x .- x₁)
+# end
+# function build_∂ξ∂x(::Triangle, vertices)
+#     x₁ = vertices[1, :]
+#     x₂ = vertices[2, :]
+#     x₃ = vertices[3, :]
+#     denom1 = dot(x₂ .- x₁, x₂)
+#     denom2 = dot(x₃ .- x₁, x₃)
+#     return [x₂[1]/denom1  x₂[2]/denom1  x₂[3]/denom1
+#             x₃[1]/denom2  x₃[2]/denom2  x₃[3]/denom2]
+# end
 function transform_to_reference(el::Tetrahedron, x, vertices)
     ∂x∂ξ = build_jacobian(el, vertices)
     x₁ = vertices[1, :]
@@ -143,9 +166,24 @@ function transform_from_reference(el::Triangle, ∂x∂ξ, ξ, vertices)
     ∂x = ∂x_e[1]*e₁ .+ ∂x_e[2]*e₂
     return x₁ .+ ∂x
 end
+# function transform_from_reference(el::Triangle, ∂x∂ξ, ξ, vertices)
+#     x₁ = vertices[1, :]
+#     ξ₁ = reference_element(el)[1, :]
+#     return x₁ .+ ∂x∂ξ*(ξ .- ξ₁)
+# end
 function transform_from_reference(el::Tetrahedron, ξ, vertices)
     ∂x∂ξ = build_jacobian(el, vertices)
     x₁ = vertices[1, :]
     ξ₁ = reference_element(el)[1, :]
     return x₁ .+ ∂x∂ξ*(ξ .- ξ₁)
 end
+
+# function volume(::Line, vertices)
+#     return norm(vertices[2, :] - vertices[1, :])
+# end
+function volume(::Triangle, vertices)
+    return 0.5 * norm(cross(vertices[2, :] - vertices[1, :], vertices[3, :] - vertices[1, :]))
+end
+# function volume(::Tetrahedron, vertices)
+#     return abs(det(build_jacobian(Tetrahedron(), vertices)))/6.0
+# end

@@ -32,6 +32,8 @@ function Jacobians(m::Mesh)
     dim = size(m.elements, 2) - 1
     el_type = get_element_type(dim)
 
+    # ∂x∂ξ = zeros(n_elements, 3, dim)
+    # ∂ξ∂x = zeros(n_elements, dim, 3)
     ∂x∂ξ = zeros(n_elements, dim, dim)
     ∂ξ∂x = zeros(n_elements, dim, dim)
     dV = zeros(n_elements)
@@ -41,9 +43,11 @@ function Jacobians(m::Mesh)
 
         # compute determinant of transformation
         dV[k] = abs(det(∂x∂ξ[k, :, :]))
+        # dV[k] = volume(el_type, m.nodes[m.elements[k, :], :])
 
         # invert for ∂ξ/∂x
         ∂ξ∂x[k, :, :] .= inv(∂x∂ξ[k, :, :])
+        # ∂ξ∂x[k, :, :] = build_∂ξ∂x(el_type, m.nodes[m.elements[k, :], :])
     end
 
     return Jacobians(∂x∂ξ, ∂ξ∂x, dV)
@@ -222,6 +226,7 @@ function QuadratureRule(::Triangle; deg)
         throw(ArgumentError("Degree of integration unsupported."))
     end
     return QuadratureRule(w/2, p) # area of reference triangle is 1/2
+    # return QuadratureRule(w, p)
 end
 
 function QuadratureRule(::Tetrahedron; deg)
