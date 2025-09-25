@@ -12,14 +12,14 @@ function sparse_csc(s::SparseIJV, m, n)
     return sparse(s.I, s.J, s.V, m, n)
 end
 
-function stamp!(global_matrix::SparseIJV, local_matrix, element_nodes, i_diri)
+function stamp!(global_matrix::SparseIJV, local_matrix, element_dof, i_diri)
     for i_local in axes(local_matrix, 1)
-        i_global = element_nodes[i_local]
+        i_global = element_dof[i_local]
         if i_global in i_diri
             continue
         end
         for j_local in axes(local_matrix, 2)
-            j_global = element_nodes[j_local]
+            j_global = element_dof[j_local]
             push!(global_matrix.I, i_global)
             push!(global_matrix.J, j_global)
             push!(global_matrix.V, local_matrix[i_local, j_local])
@@ -103,7 +103,7 @@ function rhs_vector(mesh::Mesh,
         local_vector .= zero(T)
         for q in eachindex(quad.weights)
             φq = φ(el, space, quad.points[q, :])
-            x = transform_from_reference(el, jacs.∂x∂ξ[k], quad.points[q, :], mesh.nodes[mesh.elements[k, :], :])
+            x = transform_from_reference(el, jacs.∂x∂ξ[k, :, :], quad.points[q, :], mesh.nodes[mesh.elements[k, :], :])
             fq = f(x)
             for i in 1:n_dof_per_el
                 local_vector[i] += quad.weights[q] * φq[i] * fq * jacs.dV[k]
@@ -120,7 +120,7 @@ function rhs_vector(mesh::Mesh,
         else
             # midpoint position
             edge_index = i - size(mesh.nodes, 1)
-            n1, n2 = mesh.edges[edge_index]
+            n1, n2 = mesh.edges[edge_index, :]
             x = (mesh.nodes[n1, :] + mesh.nodes[n2, :])/2
         end
         rhs[i] = g(x)
