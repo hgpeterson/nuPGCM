@@ -21,6 +21,7 @@ export
     QuadratureRule,
     integrate,
     ∫,
+    FEData,
 
     # spaces.jl
     P1,
@@ -33,6 +34,10 @@ export
     # dofs.jl
     DoFData,
 
+    # fe_fields.jl
+    FEField,
+    L2_error,
+
     # vtk.jl
     save_vtu
 
@@ -41,6 +46,7 @@ include("mesh.jl")
 include("quadrature.jl")
 include("spaces.jl")
 include("dofs.jl")
+include("fe_fields.jl")
 include("matrix_assembly.jl")
 include("vtu.jl")
 

@@ -9,7 +9,11 @@ function save_vtu(mesh::Mesh, filename, data::AbstractDict)
     cells = [MeshCell(cell_type, global_dof[k, :]) for k in axes(global_dof, 1)]
     vtk_grid(filename, points, cells, append=false) do vtk
         for (name, values) in data
-            vtk[name] = values
+            if typeof(values) <: FEField
+                vtk[name] = values.values
+            else
+                vtk[name] = values
+            end
         end
     end
     @info "VTU file saved to $filename"

@@ -436,3 +436,19 @@ end
 function ∫(f, rule::QuadratureRule)
     return integrate(f, rule)
 end
+
+################################################################################
+
+# a struct to hold mesh and quadrature data
+struct FEData{M<:Mesh, J<:Jacobians, Q<:QuadratureRule}
+    mesh::M
+    jacobians::J
+    quad_rule::Q 
+end
+
+function FEData(mesh::Mesh; quad_deg)
+    jacs = Jacobians(mesh)
+    el = get_element_type(mesh)
+    quad = QuadratureRule(el; deg=quad_deg)
+    return FEData(mesh, jacs, quad)
+end

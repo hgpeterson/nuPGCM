@@ -426,3 +426,27 @@ end
 # function pt_sign(p₁, p₂, p₃)
 #     return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 # end
+
+function Mesh(nx, ny)
+    x = range(0, 1; length=nx)
+    y = range(0, 1; length=ny)
+    nodes = zeros(nx*ny, 3)
+    imap = reshape(1:(nx*ny), nx, ny)
+    for i in 1:nx, j in 1:ny
+        nodes[imap[i, j], :] = [x[i], y[j], 0.0]
+    end
+    elements = zeros(eltype(nx), 2*(nx-1)*(ny-1), 3)
+    k = 1
+    for i in 1:(nx-1), j in 1:(ny-1)
+        n1 = imap[i, j]
+        n2 = imap[i, j+1]
+        n3 = imap[i+1, j]
+        n4 = imap[i+1, j+1]
+        elements[k, :] = [n1, n4, n2]
+        k += 1
+        elements[k, :] = [n1, n3, n4]
+        k += 1
+    end
+    boundary_nodes = Dict("boundary" => unique(vcat(imap[1, :], imap[end, :], imap[:, 1], imap[:, end])))
+    return Mesh(nodes, elements, boundary_nodes)
+end
