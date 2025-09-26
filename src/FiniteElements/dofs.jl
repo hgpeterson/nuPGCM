@@ -1,12 +1,14 @@
-struct DoFData{M, D}
-    global_dof::M    # global_dof[k, i] = global dof of the i-th local dof of element k
+struct DoFData{M, D, I<:Integer}
+    global_dof::M     # global_dof[k, i] = global dof of the i-th local dof of element k
     boundary_dofs::D  # boundary_dofs[key] = vector of global dofs on boundary with given key
+    N::I              # total number of dofs
 end
 
 function DoFData(mesh::Mesh, ::P1)
     global_dof = mesh.elements
     boundary_dofs = mesh.boundary_nodes
-    return DoFData(global_dof, boundary_dofs)
+    N = size(mesh.nodes, 1)
+    return DoFData(global_dof, boundary_dofs, N)
 end
 
 function DoFData(mesh::Mesh, ::Mini)
@@ -14,7 +16,8 @@ function DoFData(mesh::Mesh, ::Mini)
     n_el = size(mesh.elements, 1)
     global_dof = hcat(mesh.elements, n_nodes .+ collect(1:n_el))
     boundary_dofs = mesh.boundary_nodes
-    return DoFData(global_dof, boundary_dofs)
+    N = size(mesh.nodes, 1) + size(mesh.elements, 1)
+    return DoFData(global_dof, boundary_dofs, N)
 end
 
 function DoFData(mesh::Mesh, space::P2)
@@ -37,5 +40,7 @@ function DoFData(mesh::Mesh, space::P2)
                                        n_nodes .+ mesh.boundary_edges[boundary])
     end
 
-    return DoFData(global_dof, boundary_dofs)
+    N = n_nodes + size(mesh.edges, 1)
+
+    return DoFData(global_dof, boundary_dofs, N)
 end
