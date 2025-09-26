@@ -8,15 +8,20 @@ function save_vtu(mesh::Mesh, filename, data::AbstractDict)
     global_dof = dof_data.global_dof
     cells = [MeshCell(cell_type, global_dof[k, :]) for k in axes(global_dof, 1)]
     vtk_grid(filename, points, cells, append=false) do vtk
-        for (name, values) in data
-            if typeof(values) <: FEField
-                vtk[name] = values.values
-            else
-                vtk[name] = values
-            end
+        for (name, field) in data
+            add_field!(vtk, points, cells, name, field)
         end
     end
     @info "VTU file saved to $filename"
+end
+function add_field!(vtk, points, cells, name, field::AbstractArray)
+    vtk[name] = field
+end
+function add_field!(vtk, points, cells, name, field::FEField)
+    vtk[name] = field.values
+end
+function add_field!(vtk, points, cells, name, field::Function)
+    vtk[name] = [field(points[:, i]) for i in axes(points, 2)]
 end
 
 # for fun: save a single array as z-coordinate
