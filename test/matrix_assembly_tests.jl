@@ -34,11 +34,17 @@ n = 100
 mesh = square_mesh(n, n)
 jacs = Jacobians(mesh)
 quad = QuadratureRule(FiniteElements.get_element_type(mesh); deg=4)
-space = Mini()
+space = P2()
 dof_data = DoFData(mesh, space)
-K = FiniteElements.stiffness_matrix(mesh, jacs, quad, space, dof_data; dirichlet=["boundary"])
-rhs = FiniteElements.rhs_vector(mesh, jacs, quad, space, dof_data, f, u₀; dirichlet=["boundary"])
+K = FiniteElements.elasticity_matrix(mesh, jacs, quad, space, dof_data; dirichlet=["boundary"], d=2)
+rhs = FiniteElements.rhs_vector(mesh, jacs, quad, space, dof_data, x->1, x->0; dirichlet=["boundary"])
+n = length(rhs)
+rhs = [rhs; zeros(n)]
 u = K\rhs
+FiniteElements.save_vtu(mesh, joinpath(@__DIR__, "data/u.vtu"), Dict("u" => u[1:n], "v" => u[n+1:2n]))
+# K = FiniteElements.stiffness_matrix(mesh, jacs, quad, space, dof_data; dirichlet=["boundary"])
+# rhs = FiniteElements.rhs_vector(mesh, jacs, quad, space, dof_data, f, u₀; dirichlet=["boundary"])
+# u = K\rhs
 function compute_L2_error(u)
     # u at quadrature points
     el = FiniteElements.get_element_type(mesh)
@@ -63,9 +69,9 @@ function compute_L2_error(u)
 
     return √e
 end
-e = compute_L2_error(u)
-@printf("L2 error: %.2e\n", e)
-e = maximum(abs(u[i] - u₀(mesh.nodes[i, :])) for i in axes(mesh.nodes, 1))
-@printf("Max error at nodes: %.2e\n", e)
+# e = compute_L2_error(u)
+# @printf("L2 error: %.2e\n", e)
+# e = maximum(abs(u[i] - u₀(mesh.nodes[i, :])) for i in axes(mesh.nodes, 1))
+# @printf("Max error at nodes: %.2e\n", e)
 # FiniteElements.save_vtu(mesh, joinpath(@__DIR__, "data/u.vtu"), Dict("u" => u))
 # FiniteElements.save_vtu(mesh, joinpath(@__DIR__, "data/u.vtu"), u)
