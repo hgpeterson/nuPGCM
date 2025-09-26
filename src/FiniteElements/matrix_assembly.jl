@@ -82,22 +82,25 @@ function mass_matrix(mesh::Mesh,
     return sparse_csc(global_matrix, n, n)
 end
 
-function rhs_vector(mesh::Mesh, 
-                    jacs::Jacobians, 
-                    quad::QuadratureRule, 
+function rhs_vector(fe_data::FEData,
                     space::AbstractFESpace, 
                     dof_data::DoFData,
                     f, 
                     g;
                     dirichlet=String[])
+    # unpack
+    mesh = fe_data.mesh
+    jacs = fe_data.jacobians
+    quad = fe_data.quad_rule
+
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
     T = eltype(quad.weights)
     global_dof = dof_data.global_dof
-    n = maximum(global_dof) 
-    rhs = zeros(T, n)
+    N = dof_data.N
+    rhs = zeros(T, N)
     local_vector = zeros(T, n_dof_per_el)
     for k in 1:n_el
         local_vector .= zero(T)
@@ -129,12 +132,15 @@ function rhs_vector(mesh::Mesh,
     return rhs
 end
 
-function stiffness_matrix(mesh::Mesh, 
-                          jacs::Jacobians, 
-                          quad::QuadratureRule, 
+function stiffness_matrix(fe_data::FEData, 
                           space::AbstractFESpace,
                           dof_data::DoFData;
                           dirichlet=String[])
+    # unpack
+    mesh = fe_data.mesh
+    jacs = fe_data.jacobians
+    quad = fe_data.quad_rule
+
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
@@ -163,23 +169,26 @@ function stiffness_matrix(mesh::Mesh,
     return sparse_csc(global_matrix, n, n)
 end
 
-function elasticity_matrix(mesh::Mesh, 
-                           jacs::Jacobians, 
-                           quad::QuadratureRule, 
-                           u_space::AbstractFESpace,
+function elasticity_matrix(fe_data::FEData,
+                           space::AbstractFESpace,
                            dof_data::DoFData;
                            dirichlet=String[],
-                           dirichlet_mask=Tuple[],
+                           dirichlet_mask=Tuple[],  # TODO: make it so you can pick which components have dirichlet conditions
                            d=3)
+    # unpack
+    mesh = fe_data.mesh
+    jacs = fe_data.jacobians
+    quad = fe_data.quad_rule
+
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
-    n_dof_per_el = d*n_dofs(el, u_space)
+    n_dof_per_el = d*n_dofs(el, space)
 
     i_diri0 = get_i_diri(dof_data, dirichlet)
 
     # for velocity vector
-    base(i) = mod1(i, n_dofs(el, u_space))
-    comp(i) = 1 + div(i-1, n_dofs(el, u_space))
+    base(i) = mod1(i, n_dofs(el, space))
+    comp(i) = 1 + div(i-1, n_dofs(el, space))
     n = maximum(dof_data.global_dof)
     global_dof(k, i) = dof_data.global_dof[k, base(i)] + n*(comp(i) - 1)
     i_diri = copy(i_diri0)
@@ -193,7 +202,8 @@ function elasticity_matrix(mesh::Mesh,
     for k in 1:n_el
         local_matrix .= zero(T)
         for q in eachindex(quad.weights)
-            ∇φq_u = ∇φ(el, u_space, quad.points[q, :])
+            ∇φq = ∇φ(el, space, quad.points[q, :])
+            ∇φq .= [jacs.∂ξ∂x[k, :, :]'*∇φq[i] for i in eachindex(∇φq)]  # need to transform derivatives
             for i in 1:n_dof_per_el
                 comp_i = comp(i)
                 base_i = base(i)
@@ -201,12 +211,12 @@ function elasticity_matrix(mesh::Mesh,
                     comp_j = comp(j)
                     base_j = base(j)
                     # ∂ᵢvᵢ∂ⱼuⱼ
-                    local_matrix[i, j] += quad.weights[q] * ∇φq_u[base_i][comp_i]*∇φq_u[base_j][comp_j] * jacs.dV[k]
+                    local_matrix[i, j] += quad.weights[q] * ∇φq[base_i][comp_i]*∇φq[base_j][comp_j] * jacs.dV[k]
                     # ∂ⱼvᵢ∂ᵢuⱼ
-                    local_matrix[i, j] += quad.weights[q] * ∇φq_u[base_i][comp_j]*∇φq_u[base_j][comp_i] * jacs.dV[k]
+                    local_matrix[i, j] += quad.weights[q] * ∇φq[base_i][comp_j]*∇φq[base_j][comp_i] * jacs.dV[k]
                     # ∂ₖvᵢ∂ₖuⱼ
                     if comp_i == comp_j 
-                        local_matrix[i, j] += quad.weights[q] * dot(∇φq_u[base_i], ∇φq_u[base_j]) * jacs.dV[k]
+                        local_matrix[i, j] += quad.weights[q] * dot(∇φq[base_i], ∇φq[base_j]) * jacs.dV[k]
                     end
                 end
             end

@@ -447,6 +447,9 @@ function Mesh(nx, ny)
         elements[k, :] = [n1, n3, n4]
         k += 1
     end
-    boundary_nodes = Dict("boundary" => unique(vcat(imap[1, :], imap[end, :], imap[:, 1], imap[:, end])))
+    boundary_nodes = Dict("left"   => imap[1, :],
+                          "right"  => imap[end, :],
+                          "bottom" => imap[:, 1],
+                          "top"    => imap[:, end])
     return Mesh(nodes, elements, boundary_nodes)
 end

@@ -11,8 +11,10 @@ mesh = Mesh(n, n)
 fe_data = FEData(mesh; quad_deg=4)
 space = P2()
 dof_data = DoFData(mesh, space)
-K = FiniteElements.stiffness_matrix(mesh, fe_data.jacobians, fe_data.quad_rule, space, dof_data; dirichlet=["boundary"])
-rhs = FiniteElements.rhs_vector(mesh, fe_data.jacobians, fe_data.quad_rule, space, dof_data, f, u₀; dirichlet=["boundary"])
+@info "DoFs: $(dof_data.N)"
+dirichlet = ["left", "bottom", "right", "top"]
+@time "build K" K = FiniteElements.stiffness_matrix(fe_data, space, dof_data; dirichlet)
+rhs = FiniteElements.rhs_vector(fe_data, space, dof_data, f, u₀; dirichlet)
 u = FEField(fe_data, space, dof_data)
 u.values .= K\rhs
 
