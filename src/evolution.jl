@@ -46,7 +46,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
         P_adv   = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
     end
     # vertical diffusion matrix will get rebuilt for convection, so always use diagonal preconditioner
-    P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
+    # P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
+    P_vdiff = lu(A_vdiff)
 
     # move to arch
     A_adv   = on_architecture(arch, A_adv)

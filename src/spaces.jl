@@ -19,7 +19,8 @@ Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
 buoyancy. `b₀` a function for the buoyancy surface boundary condition.
 """
-function Spaces(mesh::Mesh, b₀; order=2)
+# function Spaces(mesh::Mesh, b_surface; order=2)
+function Spaces(mesh::Mesh, b_surface, b_basin; order=2)
     model = mesh.model
 
     # reference FE 
@@ -32,22 +33,30 @@ function Spaces(mesh::Mesh, b₀; order=2)
     reffe_κ = ReferenceFE(lagrangian, Float64, 1; space=:P)
 
     # test FESpaces
-    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface"])
+    # U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
+    # V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
+    # W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface"])
+    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bottom", "coastline", "basin bottom"])
+    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bottom", "coastline", "basin bottom"])
+    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface", "basin bottom", "basin"])
     P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
     X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
-    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface"])
+    # B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface"])
+    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface", "basin", "basin bottom"])
     ν_test = TestFESpace(model, reffe_ν, conformity=:H1)
     κ_test = TestFESpace(model, reffe_κ, conformity=:H1)
 
     # trial FESpaces with Dirichlet values
-    U_trial = TrialFESpace(U_test, [0, 0])
-    V_trial = TrialFESpace(V_test, [0, 0])
-    W_trial = TrialFESpace(W_test, [0, 0, 0])
+    # U_trial = TrialFESpace(U_test, [0, 0])
+    # V_trial = TrialFESpace(V_test, [0, 0])
+    # W_trial = TrialFESpace(W_test, [0, 0, 0])
+    U_trial = TrialFESpace(U_test, [0, 0, 0])
+    V_trial = TrialFESpace(V_test, [0, 0, 0])
+    W_trial = TrialFESpace(W_test, [0, 0, 0, 0, 0])
     P_trial = TrialFESpace(P_test)
     X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
-    B_trial = TrialFESpace(B_test, [b₀, b₀])
+    # B_trial = TrialFESpace(B_test, [b_surface, b_surface])
+    B_trial = TrialFESpace(B_test, [b_surface, b_surface, b_basin, b_basin])
     ν_trial = TrialFESpace(ν_test)
     κ_trial = TrialFESpace(κ_test)
 
