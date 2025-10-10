@@ -8,8 +8,8 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
@@ -20,7 +20,7 @@ arch = CPU()
 ε = 1e-1
 α = 1/2
 μϱ = 1
-N² = 0
+N² = 1/α
 Δt = 1e-4
 κᶜ = 100
 f₀ = 0.0
@@ -113,16 +113,15 @@ display(params)
 
 # forcings
 ν(x) = 1
-κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
+κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) + exp(x[3]/(0.1*α))
+κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) + exp(x[3]/(0.1*α))
 τ₀ = 1e-1
-# τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
-τˣ(x) = 0
+τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
 # b_surface(x) = x[2] > 0 ? 0.0 : -x[2]^2
 b_surface(x) = x[2] > 0 ? 0.0 : -4*(x[2] + 0.5)^2
 # b_surface(x) = 0
-b_basin(x) = x[3]/α
+b_basin(x) = 0
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface)
 
 function setup_model()
@@ -159,7 +158,7 @@ model = setup_model()
 # @load "$out_dir/data/model.jld2" model
 
 # set initial buoyancy
-set_b!(model, x->b_surface(x) + x[3]/α)
+set_b!(model, x->0)
 invert!(model) # sync flow with buoyancy state
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 700))
@@ -168,7 +167,7 @@ save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
 # n_save = n_steps ÷ 100
-n_save = 10
+n_save = 100
 n_plot = Inf
 run!(model; n_steps, n_save, n_plot)
 
