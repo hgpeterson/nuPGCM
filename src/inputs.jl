@@ -31,12 +31,18 @@ function Base.show(io::IO, params::Parameters)
 end
 
 struct Forcings{N, KH, KV, TX, TY, B0}
-    ν::N    # viscosity
-    κₕ::KH  # horizontal diffusivity
-    κᵥ::KV  # vertical diffusivity
-    τˣ::TX  # surface zonal wind stress
-    τʸ::TY  # surface meridional wind stress
-    b₀::B0  # surface buoyancy
+    ν::N              # viscosity
+    κₕ::KH            # horizontal diffusivity
+    κᵥ::KV            # vertical diffusivity
+    τˣ::TX            # surface zonal wind stress
+    τʸ::TY            # surface meridional wind stress
+    b₀::B0            # surface buoyancy
+    convection::Bool  # whether to use convection scheme (default false)
+    eddy_param::Bool  # whether to use eddy parameterization (default false)
+end
+
+function Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀; convection=false, eddy_param=false)
+    return Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b₀, convection, eddy_param)
 end
 
 function Base.show(io::IO, f::Forcings)
@@ -46,5 +52,7 @@ function Base.show(io::IO, f::Forcings)
     println(io, "├── κᵥ")
     println(io, "├── τˣ")
     println(io, "├── τʸ")
-      print(io, "└── b₀")
+    println(io, "├── b₀")
+    println(io, "├── convection = ", f.convection)
+      print(io, "└── eddy_param = ", f.eddy_param)
 end

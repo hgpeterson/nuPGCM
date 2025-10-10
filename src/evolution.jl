@@ -38,16 +38,20 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     b_vdiff = b_vdiff[fe_data.dofs.p_b]
 
     # preconditioners
-    if typeof(arch) == CPU 
-        P_hdiff = lu(A_hdiff)
-        P_adv   = lu(A_adv)
-    else
+    if typeof(arch) == GPU 
         P_hdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_hdiff))))
         P_adv   = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
+        P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
+    else
+        P_hdiff = lu(A_hdiff)
+        P_adv   = lu(A_adv)
+        if forcings.convection
+            # vertical diffusion matrix will get rebuilt for convection, so use diagonal preconditioner
+            P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
+        else
+            P_vdiff = lu(A_vdiff)
+        end
     end
-    # vertical diffusion matrix will get rebuilt for convection, so always use diagonal preconditioner
-    # P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
-    P_vdiff = lu(A_vdiff)
 
     # move to arch
     A_adv   = on_architecture(arch, A_adv)
