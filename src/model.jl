@@ -78,7 +78,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     t0 = time()
 
     # number of steps between info print
-    n_info = max(div(n_steps, 100, RoundNearest), 1)
+    n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # need to store a half-step buoyancy for advection
