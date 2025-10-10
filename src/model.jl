@@ -127,24 +127,26 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             sim_plots(model, model.state.t)
         end
 
-        # update ν
-        # _, was_modified = update_ν!(model.fe_data, model.state.b)
-        # if was_modified
-        #     @info "Viscosity ν was modified, rebuilding inversion system"
-        #    A_inversion = build_A_inversion(model.fe_data, model.params, model.fe_data.ν)
+        if model.forcings.eddy_param
+            # # update ν
+            # _, was_modified = update_ν!(model.fe_data, model.state.b)
 
-            # K = 1
-            # α = model.params.α
-            # f = model.params.f
-            # b = model.state.b
-            # ν = K / α * (f * (f / ∂z(b)))
-            # A_inversion = build_A_inversion(model.fe_data, model.params, ν)
-            # perm = model.fe_data.dofs.p_inversion
-            # A_inversion = A_inversion[perm, perm]
-            # model.inversion.solver.A = on_architecture(model.arch, A_inversion)
-            # keeping same preconditioner (1/h^dim)
+            # if was_modified
+            #     @info "Viscosity ν was modified, rebuilding inversion system"
+            #    A_inversion = build_A_inversion(model.fe_data, model.params, model.fe_data.ν)
 
-        # end
+                K = 1
+                α = model.params.α
+                f = model.params.f
+                b = model.state.b
+                ν = K / α * (f * (f / ∂z(b)))
+                A_inversion = build_A_inversion(model.fe_data, model.params, ν)
+                perm = model.fe_data.dofs.p_inversion
+                A_inversion = A_inversion[perm, perm]
+                model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+                # keeping same preconditioner (1/h^dim)
+            # end
+        end
 
         flush(stdout)
         flush(stderr)
@@ -196,20 +198,22 @@ function evolve_advection!(model::Model, b_half)
 end
 
 function evolve_vdiffusion!(model::Model)
-    # model, was_modified = update_κᵥ!(model, model.state.b)
+    if model.forcings.convection
+        model, was_modified = update_κᵥ!(model, model.state.b)
 
-    # if was_modified
-    #     @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
-    #     A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
-    #     perm = model.fe_data.dofs.p_b
-    #     A_vdiff = A_vdiff[perm, perm]
-    #     B_vdiff = B_vdiff[perm, :]
-    #     b_vdiff = b_vdiff[perm]
-    #     model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
-    #     model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
-    #     model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
-    #     model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
-    # end
+        if was_modified
+            @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
+            A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+            perm = model.fe_data.dofs.p_b
+            A_vdiff = A_vdiff[perm, perm]
+            B_vdiff = B_vdiff[perm, :]
+            b_vdiff = b_vdiff[perm]
+            model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
+            model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
+            model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
+            model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
+        end
+    end
 
     # calculate rhs vector
     arch = model.arch
