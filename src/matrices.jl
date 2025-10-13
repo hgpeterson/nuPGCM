@@ -237,6 +237,12 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, κ, directi
         N² = params.N²
         l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
         b .+= assemble_vector(l, B_test)
+
+        # surface flux; TODO: make this an input
+        dΓ = fe_data.mesh.dΓ
+        F(x) = -sin(2π*(x[2] + 1)/0.5)
+        lF(d) = ∫( 2*θ*(F*d) )dΓ
+        b .+= assemble_vector(lF, B_test)
     end
 
     return A, B, b
