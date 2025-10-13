@@ -11,7 +11,12 @@ struct Spaces{X1, X2, B1, B2, N1, N2, K1, K2, BD}
 end
 
 """
-    spaces = Spaces(model, b₀; order=2)
+    spaces = Spaces(mesh::Mesh, u_diri_tags, v_diri_tags, w_diri_tags, b_diri_tags; 
+                u_diri_vals=zeros(length(u_diri_tags)),
+                v_diri_vals=zeros(length(v_diri_tags)),
+                w_diri_vals=zeros(length(w_diri_tags)),
+                b_diri_vals=zeros(length(b_diri_tags)),
+                order=2)
 
 Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 
@@ -19,8 +24,12 @@ Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
 buoyancy. `b₀` a function for the buoyancy surface boundary condition.
 """
-# function Spaces(mesh::Mesh, b_surface; order=2)
-function Spaces(mesh::Mesh, b_surface, b_basin; order=2)
+function Spaces(mesh::Mesh, u_diri_tags, v_diri_tags, w_diri_tags, b_diri_tags; 
+                u_diri_vals=zeros(length(u_diri_tags)),
+                v_diri_vals=zeros(length(v_diri_tags)),
+                w_diri_vals=zeros(length(w_diri_tags)),
+                b_diri_vals=zeros(length(b_diri_tags)),
+                order=2)
     model = mesh.model
 
     # reference FE 
@@ -33,30 +42,22 @@ function Spaces(mesh::Mesh, b_surface, b_basin; order=2)
     reffe_κ = ReferenceFE(lagrangian, Float64, 1; space=:P)
 
     # test FESpaces
-    # U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-    # V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bottom", "coastline"])
-    # W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface"])
-    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=["bottom", "coastline", "basin bottom"])
-    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=["bottom", "coastline", "basin bottom", "basin", "basin top"])
-    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=["bottom", "coastline", "surface", "basin bottom", "basin top"])
+    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=u_diri_tags)
+    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=v_diri_tags)
+    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=w_diri_tags)
     P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
     X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
-    # B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface"])
-    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=["coastline", "surface", "basin", "basin bottom", "basin top"])
+    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=b_diri_tags)
     ν_test = TestFESpace(model, reffe_ν, conformity=:H1)
     κ_test = TestFESpace(model, reffe_κ, conformity=:H1)
 
     # trial FESpaces with Dirichlet values
-    # U_trial = TrialFESpace(U_test, [0, 0])
-    # V_trial = TrialFESpace(V_test, [0, 0])
-    # W_trial = TrialFESpace(W_test, [0, 0, 0])
-    U_trial = TrialFESpace(U_test, [0, 0, 0])
-    V_trial = TrialFESpace(V_test, [0, 0, 0, 0, 0])
-    W_trial = TrialFESpace(W_test, [0, 0, 0, 0, 0])
+    U_trial = TrialFESpace(U_test, u_diri_vals)
+    V_trial = TrialFESpace(V_test, v_diri_vals)
+    W_trial = TrialFESpace(W_test, w_diri_vals)
     P_trial = TrialFESpace(P_test)
     X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
-    # B_trial = TrialFESpace(B_test, [b_surface, b_surface])
-    B_trial = TrialFESpace(B_test, [b_surface, b_surface, b_basin, b_basin, b_basin])
+    B_trial = TrialFESpace(B_test, b_diri_vals)
     ν_trial = TrialFESpace(ν_test)
     κ_trial = TrialFESpace(κ_test)
 

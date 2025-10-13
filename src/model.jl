@@ -138,8 +138,11 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
                 K = 1
                 α = model.params.α
                 f = model.params.f
+                b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
                 b = model.state.b
-                ν = K / α * (f * (f / ∂z(b)))
+                # ν = K / α * (f * (f / ∂z(b)))
+                filter(x) = x > 0 ? x : one(x)
+                ν = filter∘(K / α * (f * (f / ∂z(b_background + b))))
                 A_inversion = build_A_inversion(model.fe_data, model.params, ν)
                 perm = model.fe_data.dofs.p_inversion
                 A_inversion = A_inversion[perm, perm]
@@ -199,11 +202,14 @@ end
 
 function evolve_vdiffusion!(model::Model)
     if model.forcings.convection
-        model, was_modified = update_κᵥ!(model, model.state.b)
+        # model, was_modified = update_κᵥ!(model, model.state.b)
 
-        if was_modified
-            @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
-            A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+        # if was_modified
+        #     @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
+            # A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
+            b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
+            κᵥ = model.params.κᶜ*(1 + tanh∘(-10*(∂z(b_background + model.state.b))))/2 + model.forcings.κᵥ
+            A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
             perm = model.fe_data.dofs.p_b
             A_vdiff = A_vdiff[perm, perm]
             B_vdiff = B_vdiff[perm, :]
@@ -212,7 +218,7 @@ function evolve_vdiffusion!(model::Model)
             model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
             model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
             model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
-        end
+        # end
     end
 
     # calculate rhs vector

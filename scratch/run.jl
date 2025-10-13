@@ -8,20 +8,20 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 ε = 1e-1
 α = 1/2
 μϱ = 1
 N² = 1/α
-Δt = 1e-3
+Δt = 1e-4
 κᶜ = 100
 f₀ = 0.0
 β = 1.0
@@ -115,6 +115,7 @@ display(params)
 ν(x) = 1
 κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) #+ exp(x[3]/(0.1*α))
 κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) #+ exp(x[3]/(0.1*α))
+# τ₀ = 0
 τ₀ = 1e-1
 τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
@@ -124,7 +125,7 @@ b_surface(x) = x[2] > 0 ? 0.0 : -4*(x[2] + 0.5)^2
 b_basin(x) = 0
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface;
                     convection=true,
-                    eddy_param=false)
+                    eddy_param=true)
 display(forcings)
 
 function setup_model()
@@ -138,8 +139,14 @@ function setup_model()
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
-    spaces = Spaces(mesh, b_surface, b_basin)
-    # spaces = Spaces(mesh, b_surface)
+    u_diri_tags = ["bottom", "coastline", "basin bottom"]
+    v_diri_tags = ["bottom", "coastline", "basin bottom", "basin", "basin top"]
+    w_diri_tags = ["bottom", "coastline", "surface", "basin bottom", "basin top"]
+    # b_diri_tags = ["coastline", "surface", "basin", "basin bottom", "basin top"]
+    b_diri_tags = ["basin", "basin bottom", "basin top"]
+    spaces = Spaces(mesh, u_diri_tags, v_diri_tags, w_diri_tags, b_diri_tags; 
+                    # b_diri_vals=[b_surface, b_surface, b_basin, b_basin, b_basin])
+                    b_diri_vals=[b_basin, b_basin, b_basin])
     fe_data = FEData(mesh, spaces, params, forcings)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
