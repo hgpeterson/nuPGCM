@@ -25,7 +25,9 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
     α = m.params.α
     f = m.params.f
     b = m.state.b
-    ν = K / α * (f * (f / ∂z(b)))
+    filter(x) = x > 0 ? x : one(x)
+    ν = filter∘(K / α * (f * (f / ∂z(b_background + b))))
+    κᵥ = m.params.κᶜ*(1 + tanh∘(-10*(∂z(b_background + m.state.b))))/2 + m.forcings.κᵥ
     writevtk(m.fe_data.mesh.Ω, ofile, cellfields=[
         "u" => s.u, 
         "v" => s.v, 
@@ -33,9 +35,8 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         "p" => s.p, 
         "b" => b_background + s.b,
         "∂z(b)" => ∂z(b_background + s.b),
-        # "ν" => m.fe_data.ν,
         "ν" => ν,
-        "κᵥ" => m.fe_data.κᵥ,
+        "κᵥ" => κᵥ,
     ])
 
     @info "VTK state saved to '$ofile'"

@@ -168,7 +168,8 @@ function update_κᵥ!(fe_data::FEData, params::Parameters, b)
 
     # compute ∂z(b)
     dΩ = fe_data.mesh.dΩ
-    l(v) = ∫( ∂z(b)*v )dΩ
+    b_background = interpolate_everywhere(x -> params.N²*x[3], spaces.B_trial)
+    l(v) = ∫( ∂z(b_background + b)*v )dΩ
     y = assemble_vector(l, spaces.ν_test)
     bz = fe_data.Mν\y
 
