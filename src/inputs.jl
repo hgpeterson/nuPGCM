@@ -1,16 +1,17 @@
 struct Parameters{T<:Real, F, H}
-    ε::T   # Ekman number √(ν₀ / (f₀H₀²))
-    α::T   # aspect ratio (H₀ / L₀)
-    μϱ::T  # Prandtl (ν₀ / κ₀) times Burger number (N₀²H₀² / f₀²L₀²)
-    N²::T  # background stratification (nondimensional)
-    Δt::T  # timestep
-    κᶜ::T  # vertical diffusivity in convective regions
-    f::F   # Coriolis parameter (function of x)
-    H::H   # Depth (function of x)
+    ε::T     # Ekman number √(ν₀ / (f₀H₀²))
+    α::T     # aspect ratio (H₀ / L₀)
+    μϱ::T    # Prandtl (ν₀ / κ₀) times Burger number (N₀²H₀² / f₀²L₀²)
+    N²::T    # background stratification (nondimensional)
+    Δt::T    # timestep
+    νₘₐₓ::T  # maximum viscosity for eddy parameterization
+    κᶜ::T    # vertical diffusivity in convective regions
+    f::F     # Coriolis parameter (function of x)
+    H::H     # Depth (function of x)
 
     # inner constructor to ensure all parameters are of the same type
-    function Parameters(ε, α, μϱ, N², Δt, κ_conv, f, H)
-        args = promote(ε, α, μϱ, N², Δt, κ_conv)
+    function Parameters(ε, α, μϱ, N², Δt, νₘₐₓ, κᶜ, f, H)
+        args = promote(ε, α, μϱ, N², Δt, νₘₐₓ, κᶜ)
         T = typeof(args[1])
         f_type = typeof(f)
         H_type = typeof(H)
@@ -20,12 +21,13 @@ end
 
 function Base.show(io::IO, params::Parameters)
     println(summary(params))
-    println(io, @sprintf("├── ε  = %1.1e", params.ε))
-    println(io, @sprintf("├── α  = %1.1e", params.α))
-    println(io, @sprintf("├── μϱ = %1.1e", params.μϱ))
-    println(io, @sprintf("├── N² = %1.1e", params.N²))
-    println(io, @sprintf("├── Δt = %1.1e", params.Δt))
-    println(io, @sprintf("├── κᶜ = %1.1e", params.κᶜ))
+    println(io, @sprintf("├── ε    = %1.1e", params.ε))
+    println(io, @sprintf("├── α    = %1.1e", params.α))
+    println(io, @sprintf("├── μϱ   = %1.1e", params.μϱ))
+    println(io, @sprintf("├── N²   = %1.1e", params.N²))
+    println(io, @sprintf("├── Δt   = %1.1e", params.Δt))
+    println(io, @sprintf("├── νₘₐₓ = %1.1e", params.νₘₐₓ))
+    println(io, @sprintf("├── κᶜ   = %1.1e", params.κᶜ))
     println(io, @sprintf("├── f"))
       print(io, @sprintf("└── H"))
 end

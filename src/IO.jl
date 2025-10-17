@@ -24,19 +24,30 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
     K = 1
     α = m.params.α
     f = m.params.f
-    b = m.state.b
-    filter(x) = x > 0 ? x : one(x)
-    ν = filter∘(K / α * (f * (f / ∂z(b_background + b))))
-    κᵥ = m.params.κᶜ*(1 + tanh∘(-10*(∂z(b_background + m.state.b))))/2 + m.forcings.κᵥ
+    νₘₐₓ = m.params.νₘₐₓ
+    b = b_background + m.state.b
+    filter(x) = x > 1 ? (x < νₘₐₓ ? x : νₘₐₓ) : one(x)
+    ν = filter∘(K / α * (f * (f / ∂z(b))))
+    κᵥ = m.params.κᶜ*(1 + tanh∘(-10*(∂z(b))))/2 + m.forcings.κᵥ
+    # sx = -∂x(b)/∂z(b)
+    # sy = -∂y(b)/∂z(b)
+    # ub = -∂z(K*sx)  # error here because you can't take two derivatives?
+    # vb = -∂z(K*sy)
+    # wb = ∂x(K*sx) + ∂y(K*sy)
     writevtk(m.fe_data.mesh.Ω, ofile, cellfields=[
         "u" => s.u, 
         "v" => s.v, 
         "w" => s.w, 
         "p" => s.p, 
-        "b" => b_background + s.b,
-        "∂z(b)" => ∂z(b_background + s.b),
+        "b" => b,
+        "∂z(b)" => ∂z(b),
         "ν" => ν,
         "κᵥ" => κᵥ,
+        # "sx" => sx,
+        # "sy" => sy,
+        # "ub" => ub,
+        # "vb" => vb,
+        # "wb" => wb,
     ])
 
     @info "VTK state saved to '$ofile'"

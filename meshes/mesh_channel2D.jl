@@ -41,7 +41,7 @@ function generate_channel_mesh_2D(h, α)
     gmsh.finalize()
 end
 
-h = 1e-2
+h = 4e-2
 α = 1/2
 @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
 generate_channel_mesh_2D(h, α)

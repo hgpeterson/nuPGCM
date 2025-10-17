@@ -138,10 +138,11 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
                 K = 1
                 α = model.params.α
                 f = model.params.f
+                νₘₐₓ = model.params.νₘₐₓ
                 b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
-                b = model.state.b
+                
                 # ν = K / α * (f * (f / ∂z(b)))
-                filter(x) = x > 0 ? x : one(x)
+                filter(x) = x > 1 ? (x < νₘₐₓ ? x : νₘₐₓ) : one(x)
                 ν = filter∘(K / α * (f * (f / ∂z(b_background + b))))
                 A_inversion = build_A_inversion(model.fe_data, model.params, ν)
                 perm = model.fe_data.dofs.p_inversion
