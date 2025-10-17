@@ -93,23 +93,31 @@ function rhs_vector(fe_data::FEData,
     jacs = fe_data.jacobians
     quad = fe_data.quad_rule
 
+    # element data
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
+    # define shape function
+    φ = ShapeFunction(el, space)
+
+    # global and local data
     T = eltype(quad.weights)
     global_dof = dof_data.global_dof
     N = dof_data.N
     rhs = zeros(T, N)
     local_vector = zeros(T, n_dof_per_el)
+    fe_values = FEValues(φ, quad)
+    
+    # loop over elements
     for k in 1:n_el
         local_vector .= zero(T)
+        reinit!(fe_values, jacs.∂ξ∂x[k, :, :], compute_gradients=false)
         for q in eachindex(quad.weights)
-            φq = φ(el, space, quad.points[q, :])
             x = transform_from_reference(el, jacs.∂x∂ξ[k, :, :], quad.points[q, :], mesh.nodes[mesh.elements[k, :], :])
             fq = f(x)
             for i in 1:n_dof_per_el
-                local_vector[i] += quad.weights[q] * φq[i] * fq * jacs.dV[k]
+                local_vector[i] += quad.weights[q] * fe_values.value[i, q] * fq * jacs.dV[k]
             end
         end
         rhs[global_dof[k, :]] .+= local_vector
@@ -141,23 +149,32 @@ function stiffness_matrix(fe_data::FEData,
     jacs = fe_data.jacobians
     quad = fe_data.quad_rule
 
+    # element data
     el = get_element_type(mesh)
     n_el = size(mesh.elements, 1)
     n_dof_per_el = n_dofs(el, space)
 
+    # define shape function
+    φ = ShapeFunction(el, space)
+
+    # get dirichlet dofs
     i_diri = get_i_diri(dof_data, dirichlet)
 
+    # global and local data
     T = eltype(quad.weights)
     global_matrix = SparseIJV(T)
     global_dof = dof_data.global_dof
     local_matrix = zeros(T, n_dof_per_el, n_dof_per_el)
+    fe_values = FEValues(φ, quad)
+    
+    # loop over elements
     for k in 1:n_el
         local_matrix .= zero(T)
+        reinit!(fe_values, jacs.∂ξ∂x[k, :, :])
         for q in eachindex(quad.weights)
-            ∇φq = ∇φ(el, space, quad.points[q, :])
-            ∇φq = [jacs.∂ξ∂x[k, :, :]'*∇φq[i] for i in eachindex(∇φq)]  # need to transform derivatives
             for i in 1:n_dof_per_el, j in 1:n_dof_per_el
-                local_matrix[i, j] += quad.weights[q] * dot(∇φq[i], ∇φq[j]) * jacs.dV[k]
+                local_matrix[i, j] += quad.weights[q] * dot(fe_values.gradient[i, q, :], 
+                                                            fe_values.gradient[j, q, :]) * jacs.dV[k]
             end
         end
         stamp!(global_matrix, local_matrix, global_dof[k, :], i_diri)

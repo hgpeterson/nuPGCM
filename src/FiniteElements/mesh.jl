@@ -205,8 +205,13 @@ function get_bounding_box(nodes)
     xmax = maximum(nodes[:, 1])
     ymin = minimum(nodes[:, 2])
     ymax = maximum(nodes[:, 2])
-    zmin = minimum(nodes[:, 3])
-    zmax = maximum(nodes[:, 3])
+    if size(nodes, 2) == 3
+        zmin = minimum(nodes[:, 3])
+        zmax = maximum(nodes[:, 3])
+    else
+        zmin = zero(xmin)
+        zmax = zero(xmin)
+    end
     return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
@@ -342,7 +347,7 @@ end
 
 function get_midpoints(mesh::Mesh)
     n_edges = size(mesh.edges, 1)
-    midpoints = zeros(eltype(mesh.nodes), n_edges, 3)
+    midpoints = zeros(eltype(mesh.nodes), n_edges, size(mesh.nodes, 2))
     for i in 1:n_edges
         n1, n2 = mesh.edges[i, :]
         midpoints[i, :] = (mesh.nodes[n1, :] + mesh.nodes[n2, :])/2
@@ -427,13 +432,14 @@ end
 #     return (p₁[1] - p₃[1])*(p₂[2] - p₃[2]) - (p₂[1] - p₃[1])*(p₁[2] - p₃[2])
 # end
 
+# square mesh
 function Mesh(nx, ny)
     x = range(0, 1; length=nx)
     y = range(0, 1; length=ny)
-    nodes = zeros(nx*ny, 3)
+    nodes = zeros(nx*ny, 2)
     imap = reshape(1:(nx*ny), nx, ny)
     for i in 1:nx, j in 1:ny
-        nodes[imap[i, j], :] = [x[i], y[j], 0.0]
+        nodes[imap[i, j], :] = [x[i], y[j]]
     end
     elements = zeros(eltype(nx), 2*(nx-1)*(ny-1), 3)
     k = 1

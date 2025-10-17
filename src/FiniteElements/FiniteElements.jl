@@ -28,8 +28,6 @@ export
     P2,
     Bubble,
     Mini,
-    φ,
-    ∇φ,
 
     # dofs.jl
     DoFData,
@@ -45,6 +43,7 @@ include("elements.jl")
 include("mesh.jl")
 include("quadrature.jl")
 include("spaces.jl")
+include("fe_values.jl")
 include("dofs.jl")
 include("fe_fields.jl")
 include("matrix_assembly.jl")
