@@ -11,10 +11,10 @@ plt.close("all")
 ENV["JULIA_DEBUG"] = nuPGCM
 # ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, ""))
+set_out_dir!(joinpath(@__DIR__, "channel_2D/b_flux_conv_tanh_nu_eddy10"))
 
 # architecture
-arch = GPU()
+arch = CPU()
 
 # params
 ε = 1e-1
@@ -22,6 +22,7 @@ arch = GPU()
 μϱ = 1
 N² = 1/α
 Δt = 1e-4
+νₘₐₓ = 10
 κᶜ = 100
 f₀ = 0.0
 β = 1.0
@@ -107,7 +108,7 @@ function H(X)
     end
 end
 # H(x) = α*(1 - x[1]^2 - x[2]^2)
-params = Parameters(ε, α, μϱ, N², Δt, κᶜ, f, H)
+params = Parameters(ε, α, μϱ, N², Δt, νₘₐₓ, κᶜ, f, H)
 display(params)
 @info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
 
@@ -134,7 +135,7 @@ function setup_model()
     # mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     # h = 1e-2
     # mesh_name = @sprintf("bowl2D_%e_%e", h, α)
-    h = 1e-2
+    h = 4e-2
     mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
