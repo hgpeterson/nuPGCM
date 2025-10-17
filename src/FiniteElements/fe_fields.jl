@@ -17,17 +17,17 @@ function L2_error(u::FEField, u₀)
     quad = u.fe_data.quad_rule
     space = u.space
     dof_data = u.dofs
+    el = get_element_type(mesh)
+    φ = ShapeFunction(el, space)
 
     # u at quadrature points
-    el = get_element_type(mesh)
     n_dofs_per_el = n_dofs(el, space)
+    fe_values = FEValues(φ, quad)
     uq = zeros(eltype(u.values), size(mesh.elements, 1), length(quad.weights))
     for k in 1:size(mesh.elements, 1)
-        for q in eachindex(quad.weights)
-            φq = φ(el, space, quad.points[q, :])
-            for i in 1:n_dofs_per_el
-                uq[k, q] += u.values[dof_data.global_dof[k, i]] * φq[i]
-            end
+        reinit!(fe_values, jacs.∂ξ∂x[k, :, :]; compute_gradients=false)
+        for q in eachindex(quad.weights), i in 1:n_dofs_per_el
+            uq[k, q] += u.values[dof_data.global_dof[k, i]] * fe_values.value[i, q]
         end
     end
 
