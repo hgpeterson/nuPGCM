@@ -1,31 +1,30 @@
 # Nondimensionalization
 
-To isolate role of the aspect ratio in this problem, the ``\nu``PGCM ultimately solves the nondimensional PG equations, derived below.
-We scale all spatial coordinates by the natural length scale of the domain ``L`` (e.g., the radius of the planet or the width of the basin) and all velocities by the same scale:
+To isolate role of the aspect ratio, the ``\nu``PGCM ultimately solves the nondimensional PG equations, which we will derive here.
+We scale all spatial coordinates by the natural length scale of the domain ``L`` (e.g., the width of the basin) and all velocities by the same scale:
 ```math
-x_i = L \nd{x}_i \quad \mathrm{and} \quad u_i = U \nd{u}_i,
+x = L \nd{x}, \quad y = L \nd{y}, \quad z = L \nd{z} \quad \mathrm{and} \quad u = U \nd{u}, \quad v = U \nd{v}, \quad w = U \nd{w}.
 ```
-for ``i = 1, 2, 3``.
-Although the code supports arbitrary initial conditions, we typically initialize all simulations with flat isopycnals aligned with gravity and constant stratification ``N^2`` such that ``\partial_z b = N^2`` at ``t = 0`` (using the notation ``\partial_z \equiv z_i \partial_{x_i}``).
-A natural scaling for buoyancy, therefore, would be ``b \sim N^2 H`` for some depth scale of the ocean ``H``.
+Although the code supports arbitrary initial conditions, we typically initialize all simulations with flat isopycnals aligned with gravity and constant stratification ``N^2`` such that ``\partial_z b = N^2`` at ``t = 0``.
+A natural scaling for buoyancy, therefore, would be ``b \sim N^2 H_0`` for some depth scale of the ocean ``H_0``.
 Unlike in quasi-geostrophic theory, however, the PG equations do not explicitly impose a background stratification so that, in general, a representative scale for ``N^2`` in the abyssal ocean will depend on the context of the problem.
-We additionally define characteristic scales for the rotation rate and mixing coefficients:
+We additionally define characteristic scales for the Coriolis parameter and mixing coefficients:
 ```math
-\Omega_i \sim \Omega, \quad \nu \sim \nu_0, \quad \kappa \sim \kappa_0.
+f \sim f_0, \quad \nu \sim \nu_0, \quad \kappa \sim \kappa_0.
 ```
-Finally, we assume that the pressure gradient term in the momentum equation scales with the Coriolis term, that the buoyancy also scales with the pressure scale divided by ``H`` from hydrostatic balance, and that time scales advectively:
+Finally, we assume that the pressure gradient term in the momentum equation scales with the Coriolis term, that the buoyancy also scales with the pressure scale divided by ``H_0`` from hydrostatic balance, and that time scales advectively:
 ```math
-p \sim \Omega U L, \quad b \sim \frac{\Omega U L}{H} = N^2 H, \quad t \sim \frac{L}{U}.
+p \sim f U L, \quad b \sim \frac{f U L}{H_0} = N^2 H_0, \quad t \sim \frac{L}{U}.
 ```
 Applying these scales yields the following nondimensional PG equations:
 ```math
 \begin{aligned}
-    2 e_{ijk} \nd{\Omega}_j \nd{u}_k &= -\frac{\partial \nd{p}}{\partial \nd{x}_i} + \alpha^{-1} \nd{b} z_i + \alpha^2 \varepsilon^2 \frac{\partial }{\partial \nd{x}_j} \left( 2 \nd{\nu} \nd{\sigma}_{ij} \right),\\
-    \frac{\partial \nd{u}_i}{\partial \nd{x}_i} &= 0,\\
-    \mu\varrho \left( \frac{\partial \nd{b}}{\partial \nd{t}} + \nd{u}_i \frac{\partial \nd{b}}{\partial \nd{x}_i} \right) &= \alpha^2 \varepsilon^2 \frac{\partial }{\partial \nd{x}_i} \left( \nd{\kappa} \frac{\partial \nd{b}}{\partial \nd{x}_i} \right),
+    \nd{f} \vec{z} \times \nd{\vec{u}} &= -\nd{\nabla} \nd{p} + \alpha^{-1} \nd{b} \vec{z} + \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( 2 \nd{\nu} \nd{\sigma}(\nd{\vec{u}}) \right), \hphantom{\frac12}\\
+    \nd{\nabla} \cdot \nd{\vec{u}} &= 0, \hphantom{\frac12}\\
+    \mu\varrho \left( \pder{\nd{b}}{\nd{t}} + \nd{\vec{u}} \cdot \nd{\nabla}\nd{b} \right) &= \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( \nd{\kappa} \nd{\nabla} \nd{b} \right),
 \end{aligned}
 ```
-where ``\alpha = H / L`` is the aspect ratio, ``\varepsilon^2 = \nu_0 / \Omega H^2`` is the Ekman number, ``\varrho = N^2 H^2 / \Omega^2 L^2`` is the Burger number, and ``\mu = \nu_0/\kappa_0`` is the turbulent Prandtl number.
+where ``\alpha = H_0 / L`` is the aspect ratio, ``\varepsilon^2 = \nu_0 / f_0 H_0^2`` is the Ekman number, ``\varrho = N^2 H_0^2 / f_0^2 L^2`` is the Burger number, and ``\mu = \nu_0/\kappa_0`` is the turbulent Prandtl number.
 
 *Figure here?*
 
@@ -89,9 +88,9 @@ Integrating the buoyancy equation with advection neglected and diffusion only in
 \mu\varrho \prettyint{\nd{z}}{0}{\pder{\nd{b}}{\nd{t}}}{\nd{z}'} = \alpha^2 \varepsilon^2 \nd{\kappa}\pder{\nd{b}}{\nd{z}} \Big|_{\nd{z} = 0},
 ```
 again neglecting the flux in the interior.
-For this to be equal to the net buoyancy input at the surface even as $\alpha \to 0$, we must have
+For the integrated buoyancy forcing to remain unchanged as $\alpha \to 0$, we must then have 
 ```math
-\boxed{\alpha^2 \varepsilon^2 \nd{\kappa}\pder{\nd{b}}{\nd{z}} = \nd{F} \quad \text{at} \quad \nd{z} = 0.}
+\boxed{\frac{\alpha^2 \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} = \nd{F} \quad \text{at} \quad \nd{z} = 0.}
 ```
 
 ## Scales and parameter values
@@ -106,7 +105,28 @@ In the first case, where $\nu_0 \approx 10^{-3}$ m$^2$ s$^{-1}$, the Ekman numbe
 In the eddy-parameterizing case of $\nu_0 \approx 10$ m$^2$ s$^{-1}$, on the other hand, it is enhanced to $\varepsilon \approx 10^{-1}$.
 Given that the nondimensional bottom Ekman layer thickness $\delta/L = \sqrt{2 \nu_0 / (f_0 L^2)} = \sqrt{2} \, \alpha \varepsilon$, these differences are crucial in setting the minimum resolution required for the simulation.
 
-From the wind stress boundary condition, we must have...
+For the surface wind stress boundary condition, we have
+```math
+\frac{\nu_0 U}{L} \nd{\nu} \pder{\nd{u}}{\nd{z}} = \frac{\tau_0}{\rho_0} \nd{\tau}.
+```
+To be consistent with the boundary condition derived above, this implies that the wind stress scale should be
+```math
+\tau_0 = \frac{\rho_0}{\alpha \varepsilon^2} \frac{\nu_0 N^2 H_0^2}{f_0 L^2} = \frac{\rho_0 N^2 H_0^3}{L} \approx 1 \text{ N m}^{-2},
+```
+using the scales chosen above and a reference density of $\rho_0 = 10^3$ kg m$^{-3}$.
+This means that a dimensional wind stress of 0.1 N m$^{-2}$ would translate to a nondimensional value of $\nd{\tau} = 0.1$.
+
+For the surface buoyancy flux, we have
+```math
+\frac{\kappa_0 N^2 H_0}{L} \nd{\kappa} \pder{\nd{b}}{\nd{z}} = F_0 \nd{F},
+```
+which, to be consistent with the for derived above, implies
+```math
+F_0 = \frac{\mu \varrho}{\alpha^2 \varepsilon^2} \frac{\kappa_0 N^2 H_0}{L} = \frac{N^4 H_0^3}{f_0 L} \approx 10^{-5} \text{ m}^2 \text{ s}^{-3},
+```
+using the scales above.
+This means that a typical surface buoyancy flux of about 0.01 mm$^2$ s$^{-3}$ would translate to a nondimensional value of $\nd{F} = 10^{-3}$.
+
 
 ### References
 
