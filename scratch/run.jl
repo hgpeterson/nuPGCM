@@ -11,19 +11,19 @@ plt.close("all")
 ENV["JULIA_DEBUG"] = nuPGCM
 # ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "channel_2D/b_flux_conv_tanh_nu_eddy10"))
+set_out_dir!(joinpath(@__DIR__, "channel_2D/insulating"))
 
 # architecture
 arch = CPU()
 
 # params
-ε = 1e-1
-α = 1/2
+ε = sqrt(1e-1)
+α = 1/8
 μϱ = 1
 N² = 1/α
 Δt = 1e-4
 νₘₐₓ = 10
-κᶜ = 100
+κᶜ = 1000
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
@@ -135,19 +135,18 @@ function setup_model()
     # mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     # h = 1e-2
     # mesh_name = @sprintf("bowl2D_%e_%e", h, α)
-    h = 4e-2
+    h = 2e-2
     mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
-    u_diri_tags = ["bottom", "coastline", "basin bottom"]
-    v_diri_tags = ["bottom", "coastline", "basin bottom", "basin", "basin top"]
-    w_diri_tags = ["bottom", "coastline", "surface", "basin bottom", "basin top"]
-    # b_diri_tags = ["coastline", "surface", "basin", "basin bottom", "basin top"]
-    b_diri_tags = ["basin", "basin bottom", "basin top"]
-    spaces = Spaces(mesh, u_diri_tags, v_diri_tags, w_diri_tags, b_diri_tags; 
-                    # b_diri_vals=[b_surface, b_surface, b_basin, b_basin, b_basin])
-                    b_diri_vals=[b_basin, b_basin, b_basin])
+    u_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0)
+    v_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin"=>0, "basin top"=>0)
+    w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0, "basin bottom"=>0, "basin top"=>0)
+    # b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    # b_diri = Dict("basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    b_diri = Dict()
+    spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
     fe_data = FEData(mesh, spaces, params, forcings)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
@@ -168,18 +167,18 @@ model = setup_model()
 # @save "$out_dir/data/model.jld2" model
 # @load "$out_dir/data/model.jld2" model
 
-# set initial buoyancy
-set_b!(model, x->0)
-invert!(model) # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 700))
+# # set initial buoyancy
+# set_b!(model, x->0)
+# invert!(model) # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 3000))
 
 # solve
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
 # n_save = n_steps ÷ 100
-n_save = 10
+n_save = 100
 n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
+run!(model; n_steps, n_save, n_plot, i_step=3000)
 
 println("Done.")
