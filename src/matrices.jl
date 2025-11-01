@@ -102,8 +102,8 @@ function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     b = zeros(N)
 
     # linear forms
-    lx(vx) = ∫( τˣ*vx )dΓ
-    ly(vy) = ∫( τʸ*vy )dΓ
+    lx(vx) = ∫( α*(τˣ*vx) )dΓ  # b.c. is α²ε²ν∂z(u) = ατ
+    ly(vy) = ∫( α*(τʸ*vy) )dΓ
     lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
 
     # assemble
@@ -209,7 +209,7 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, κ, directi
     Δt = params.Δt
     b_diri = fe_data.spaces.b_diri
 
-    # coefficient for diffusion step (Δt/2 for Crank-Nicolson and Δt/2 for Strange splitting makes Δt/4)
+    # coefficient for diffusion step (Δt/2 for Crank-Nicolson and Δt/2 for Strang splitting makes Δt/4)
     θ = Δt/4 * α^2 * ε^2 / μϱ
 
     function a_lhs(b, d)
@@ -238,11 +238,11 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, κ, directi
         l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
         b .+= assemble_vector(l, B_test)
 
-        # surface flux; TODO: make this an input
-        dΓ = fe_data.mesh.dΓ
-        F(x) = -sin(2π*(x[2] + 1)/0.5)
-        lF(d) = ∫( 2*θ*(F*d) )dΓ
-        b .+= assemble_vector(lF, B_test)
+        # # surface flux; TODO: make this an input
+        # dΓ = fe_data.mesh.dΓ
+        # F(x) = -1e-3*sin(2π*(x[2] + 1)/0.5)
+        # lF(d) = ∫( Δt/2*(F*d) )dΓ  # b.c. is α²ε²/μϱ κ ∂z(b) = F (Δt/2 because of Strang split)
+        # b .+= assemble_vector(lF, B_test)
     end
 
     return A, B, b

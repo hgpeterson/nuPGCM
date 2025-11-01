@@ -108,10 +108,10 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             @info begin
             msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
+            msg *= @sprintf("time per step: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)/(i-i_step+1))...)
             msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
             msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
-            # msg *= @sprintf("V⁻¹ ∫ (∇⋅u⃗)^2 dx = %.16f\n", sum(∫( (∂x(u) + ∂y(v) + ∂z(w))*(∂x(u) + ∂y(v) + ∂z(w)) )*model.mesh.dΩ)/volume)
             msg
             end
         end
@@ -128,28 +128,29 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         end
 
         if model.forcings.eddy_param
-            # # update ν
-            # _, was_modified = update_ν!(model.fe_data, model.state.b)
+            K = 1
+            α = model.params.α
+            f = model.params.f
+            νₘₐₓ = model.params.νₘₐₓ
+            N² = model.params.N²
 
-            # if was_modified
-            #     @info "Viscosity ν was modified, rebuilding inversion system"
-            #    A_inversion = build_A_inversion(model.fe_data, model.params, model.fe_data.ν)
+            b_background = interpolate_everywhere(x -> N²*x[3], model.fe_data.spaces.B_trial)
+            bz = ∂z(b_background + b)
 
-                K = 1
-                α = model.params.α
-                f = model.params.f
-                νₘₐₓ = model.params.νₘₐₓ
-                b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
-                
-                # ν = K / α * (f * (f / ∂z(b)))
-                filter(x) = x > 1 ? (x < νₘₐₓ ? x : νₘₐₓ) : one(x)
-                ν = filter∘(K / α * (f * (f / ∂z(b_background + b))))
-                A_inversion = build_A_inversion(model.fe_data, model.params, ν)
-                perm = model.fe_data.dofs.p_inversion
-                A_inversion = A_inversion[perm, perm]
-                model.inversion.solver.A = on_architecture(model.arch, A_inversion)
-                # keeping same preconditioner (1/h^dim)
-            # end
+            # want to have ν ∼ K f² / (α*bz) but this is funky near α*bz = 0
+            # instead of 1/(α*bz), use c2 / √(c1 + α²bz²) which is: 
+            #   • 1 at α*bz = 1, 
+            #   • νₘₐₓ at α*bz = 0, and 
+            #   • goes like 1/(α*bz) as α*bz → ∞
+            c1 = 1 / (νₘₐₓ^2 - 1)
+            c2 = νₘₐₓ * √c1
+            ν = K * (f * (f * (c2 / (sqrt∘(c1 + α^2 * bz * bz)))))
+
+            A_inversion = build_A_inversion(model.fe_data, model.params, ν)
+            perm = model.fe_data.dofs.p_inversion
+            A_inversion = A_inversion[perm, perm]
+            model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+            # keeping same preconditioner (1/h^dim)
         end
 
         flush(stdout)
