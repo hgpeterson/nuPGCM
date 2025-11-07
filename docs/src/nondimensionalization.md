@@ -28,17 +28,14 @@ where ``\alpha = H_0 / L`` is the aspect ratio, ``\varepsilon^2 = \nu_0 / f_0 H_
 
 *Figure here?*
 
-With all three spatial coordinates scaled by $L$, the effect of the aspect ratio $\alpha$ on the dynamics is made explicit and the domain $\mathcal{D}$ itself must have an aspect ratio of $\alpha$. 
-For an isolated basin with $x_3$ being the vertical coordinate aligned with gravity, this implies that $-\alpha \le x_3 \le 0$ (Fig. \ref{fig:alpha}a).
-If instead $\mathcal{D}$ is the entire ocean, $\alpha$ naturally becomes the thickness of the shell relative to the radius of the sphere (Fig. \ref{fig:alpha}b).
-This scaling guarantees that the viscous friction term in \eqref{eq:inversion-nd} is spatially isotropic, a desirable property for computing numerical solutions.
-More importantly, for $\alpha > 0$ hydrostatic balance is not exactly required, as can be seen by dotting \eqref{eq:inversion-nd} with the local vertical $\vec{z}$:
+With all three spatial coordinates scaled by $L$, the effect of the aspect ratio $\alpha$ on the dynamics is made explicit and the domain $\mathcal{D}$ itself must have an aspect ratio of $\alpha$, i.e., $-\alpha \le z \le 0$ (figure?).
+This scaling guarantees that the viscous friction term in the momentum equation is spatially isotropic, a desirable property for computing numerical solutions.
+More importantly, for $\alpha > 0$ hydrostatic balance is not exactly required, as can be seen by dotting the momentum equation with $\vec{z}$:
 ```math
-\pder{p}{z} = \alpha^{-1} b + \alpha^2 \varepsilon^2 \pder{}{x_j} \left( 2 \nu \sigma_{ij} \right) z_i,
+\pder{\nd{p}}{\nd{z}} = \alpha^{-1} \nd{b} + \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( 2 \nd{\nu} \nd{\sigma}(\nd{\vec{u}}) \right) \cdot \vec{z}.
 ```
-where again $\partial_z \equiv z_i\partial_{x_i}$.
 For the ocean, typical order-of-magnitude length scales are $H \approx 10^3$ m and $L \approx 10^6$ m, implying $\alpha \approx 10^{-3}$.
-Hence, the small aspect ratio assumption is often made, eliminating the diffusion term in \eqref{eq:nonhydrostatic}.
+Hence, the small aspect ratio assumption is often made, eliminating the diffusion term on the RHS.
 While standard finite element techniques may be used to solve the Stokes problem with rotation, they become brittle under this approximation (e.g., [guillen-gonzalez_analysis_2015](@cite)).
 To leverage established methods, we will therefore keep $\alpha$ larger than zero but small enough to capture the qualitative dynamics of the ocean.
 A similar approach was taken by [salmon_simplified_1986](@cite) for a PG model with Rayleigh drag.
@@ -53,12 +50,12 @@ Since the buoyancy flux and wind stress boundary conditions involve vertical der
 
 To illustrate this point, it helps to think about the net meridional transport $\psi$, defined such that
 ```math
-\pder{\psi}{z} = v \quad \text{and} \quad -\pder{\psi}{x} = w.
+-\pder{\psi}{z} = v \quad \text{and} \quad \pder{\psi}{x} = w.
 ```
 Recall that the velocity scale $U = N^2 H_0^2 / f_0 L$.
 As with buoyancy, we want $\psi$ to scale like $U H_0$ (not $U L$), so we have
 ```math
-\alpha \pder{\nd{\psi}}{\nd{z}} = \nd{v}.
+-\alpha \pder{\nd{\psi}}{\nd{z}} = \nd{v}.
 ``` 
 As $\alpha \to 0$, the vertical derivative terms in the $x$-momentum equation should dominate such that
 ```math
@@ -66,10 +63,10 @@ As $\alpha \to 0$, the vertical derivative terms in the $x$-momentum equation sh
 ```
 Integrating in $z$, this gives
 ```math
--\prettyint{\nd{z}}{0}{\nd{f}\nd{v}}{\nd{z}'} = \alpha \nd{f} \nd{\psi} \sim \alpha^2 \varepsilon^2 \nd{\nu} \pder{\nd{u}}{\nd{z}} \Big|_{\nd{z} = 0},
+-\prettyint{\nd{z}}{0}{\nd{f}\nd{v}}{\nd{z}'} = -\alpha \nd{f} \nd{\psi} \sim \alpha^2 \varepsilon^2 \nd{\nu} \pder{\nd{u}}{\nd{z}} \Big|_{\nd{z} = 0},
 ```
 neglecting the pressure gradient term and shear in the interior.
-Here's where the limit comes in: as $\alpha \to 0$, we want this interior transport to be equal to the wind-driven circulation, i.e., $\nd{\psi} \sim \nd{\tau}^x/\nd{f}$.
+Here's where the limit comes in: as $\alpha \to 0$, we want this interior transport to be equal to the wind-driven circulation, i.e., $\nd{\psi} \sim -\nd{\tau}^x/\nd{f}$.
 For this to be true, we must have
 ```math
 \alpha^2 \varepsilon^2 \nd{\nu} \pder{\nd{u}}{\nd{z}} = \alpha \nd{\tau}^x \quad \text{at} \quad \nd{z} = 0,
