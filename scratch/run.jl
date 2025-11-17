@@ -4,6 +4,8 @@ using LinearAlgebra
 using Printf
 using PyPlot
 
+include(joinpath(@__DIR__, "../meshes/mesh_channel2D.jl"))  # for making channel2D mesh
+
 pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
@@ -11,7 +13,7 @@ plt.close("all")
 ENV["JULIA_DEBUG"] = nuPGCM
 # ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "channel_2D/insulating"))
+set_out_dir!(joinpath(@__DIR__, "channel_2D/sim000"))
 
 # architecture
 arch = CPU()
@@ -21,7 +23,7 @@ arch = CPU()
 α = 1/8
 μϱ = 1
 N² = 1/α
-Δt = 1e-4
+Δt = 1e-2
 νₘₐₓ = 10
 κᶜ = 1000
 f₀ = 0.0
@@ -114,9 +116,8 @@ display(params)
 
 # forcings
 ν(x) = 1
-κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) #+ exp(x[3]/(0.1*α))
-κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) #+ exp(x[3]/(0.1*α))
-# τ₀ = 0
+κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
+κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
 τ₀ = 1e-1
 τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
@@ -135,19 +136,22 @@ function setup_model()
     # mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     # h = 1e-2
     # mesh_name = @sprintf("bowl2D_%e_%e", h, α)
-    h = 2e-2
+    h = √2*α*ε/5
     mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
+    if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+        generate_channel_mesh_2D(h, α)
+    end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
     u_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0)
     v_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin"=>0, "basin top"=>0)
     w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0, "basin bottom"=>0, "basin top"=>0)
-    # b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
     # b_diri = Dict("basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
-    b_diri = Dict()
+    # b_diri = Dict()
     spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
-    fe_data = FEData(mesh, spaces, params, forcings)
+    fe_data = FEData(mesh, spaces)
     @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
     # setup inversion toolkit
@@ -157,28 +161,28 @@ function setup_model()
     evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
 
     # put it all together in the `model` struct
-    model = rest_state_model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+    model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
 
     return model
 end
 
 # set up model
 model = setup_model()
-# @save "$out_dir/data/model.jld2" model
-# @load "$out_dir/data/model.jld2" model
 
-# # set initial buoyancy
+# set initial buoyancy
 # set_b!(model, x->0)
-# invert!(model) # sync flow with buoyancy state
-# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 3000))
+set_b!(model, b_surface)
+invert!(model) # sync flow with buoyancy state
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 24300))
 
 # solve
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
 # n_save = n_steps ÷ 100
-n_save = 100
+n_save = 10
 n_plot = Inf
-run!(model; n_steps, n_save, n_plot, i_step=3000)
+run!(model; n_steps, n_save, n_plot)
+# run!(model; n_steps, n_save, n_plot, i_step=24300)
 
 println("Done.")
