@@ -4,7 +4,6 @@ mutable struct InversionToolkit{B, V, S<:IterativeSolverToolkit}
     solver::S  # iterative solver toolkit
 end
 
-
 """
     inversion_toolkit = InversionToolkit(arch::AbstractArchitecture, 
                                          fe_data::FEData, 

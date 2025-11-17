@@ -20,22 +20,24 @@ struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData,
     state::S
 end
 
-function inversion_model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
-                         fe_data::FEData, inversion::InversionToolkit)
+# inversion model
+function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
+               fe_data::FEData, inversion::InversionToolkit)
     evolution = nothing # this model is only used for calculating the inversion, no need for evolution toolkit
     state = rest_state(fe_data.spaces)
     return Model(arch, params, forcings, fe_data, inversion, evolution, state)
 end
 
-function rest_state_model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
-                          fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
+# full model starting from rest
+function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
+               fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit)
     state = rest_state(fe_data.spaces)
     return Model(arch, params, forcings, fe_data, inversion, evolution, state)
 end
 
 function rest_state(spaces::Spaces; t=0.)
     # unpack
-    U, V, W, P = get_U_V_W_P(spaces)
+    U, V, W, P = spaces.X_trial
     B = spaces.B_trial
 
     # define FE functions
@@ -72,7 +74,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     # save initial condition for comparison
     b0 = interpolate(0, model.fe_data.spaces.B_trial)
     b0.free_values .= b.free_values
-    volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
+    # volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
 
     # start timer
     t0 = time()
@@ -84,6 +86,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     # need to store a half-step buoyancy for advection
     b_half = interpolate(0, model.fe_data.spaces.B_trial)
     for i ∈ i_step:n_steps
+        t_step = time()  # another timer for timestep
+
         # Strang split evolution equation
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
@@ -93,6 +97,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
+
+        t_step = time() - t_step
 
         # blow-up -> stop
         u_max = maximum(abs.(u.free_values))
@@ -108,9 +114,10 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             @info begin
             msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-            msg *= @sprintf("time per step: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)/(i-i_step+1))...)
-            msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs((t1-t0)*(n_steps-i)/(i-i_step+1))...)
-            msg *= @sprintf("|u|ₘₐₓ = %.1e, %.1e ≤ b ≤ %.1e\n", max(u_max, v_max, w_max), minimum([b.free_values; 0]), maximum([b.free_values; 0]))
+            msg *= @sprintf("last step duration: %.1e s\n", t_step)
+            msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
+            msg *= @sprintf("|u|ₘₐₓ = %.1e, |v|ₘₐₓ = %.1e, |w|ₘₐₓ = %.1e\n", u_max, v_max, w_max)
+            msg *= @sprintf("%.1e ≤ b ≤ %.1e\n", minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
             msg
             end
@@ -128,7 +135,6 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         end
 
         if model.forcings.eddy_param
-            K = 1
             α = model.params.α
             f = model.params.f
             νₘₐₓ = model.params.νₘₐₓ
@@ -137,19 +143,20 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             b_background = interpolate_everywhere(x -> N²*x[3], model.fe_data.spaces.B_trial)
             bz = ∂z(b_background + b)
 
-            # want to have ν ∼ K f² / (α*bz) but this is funky near α*bz = 0
+            # want to have ν ∼ f² / (α*bz) but this is funky near α*bz = 0
             # instead of 1/(α*bz), use c2 / √(c1 + α²bz²) which is: 
             #   • 1 at α*bz = 1, 
             #   • νₘₐₓ at α*bz = 0, and 
             #   • goes like 1/(α*bz) as α*bz → ∞
             c1 = 1 / (νₘₐₓ^2 - 1)
             c2 = νₘₐₓ * √c1
-            ν = K * (f * (f * (c2 / (sqrt∘(c1 + α^2 * bz * bz)))))
+            ν = f * (f * (c2 / (sqrt∘(c1 + α^2 * bz * bz))))
 
             A_inversion = build_A_inversion(model.fe_data, model.params, ν)
             perm = model.fe_data.dofs.p_inversion
             A_inversion = A_inversion[perm, perm]
             model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+
             # keeping same preconditioner (1/h^dim)
         end
 
@@ -204,23 +211,17 @@ end
 
 function evolve_vdiffusion!(model::Model)
     if model.forcings.convection
-        # model, was_modified = update_κᵥ!(model, model.state.b)
-
-        # if was_modified
-        #     @info "Vertical diffusivity κᵥ was modified, rebuilding vertical diffusion system"
-            # A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.fe_data.κᵥ)
-            b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
-            κᵥ = model.params.κᶜ*(1 + tanh∘(-10*(∂z(b_background + model.state.b))))/2 + model.forcings.κᵥ
-            A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
-            perm = model.fe_data.dofs.p_b
-            A_vdiff = A_vdiff[perm, perm]
-            B_vdiff = B_vdiff[perm, :]
-            b_vdiff = b_vdiff[perm]
-            model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
-            model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
-            model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
-            model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
-        # end
+        b_background = interpolate_everywhere(x -> model.params.N²*x[3], model.fe_data.spaces.B_trial)
+        κᵥ = model.params.κᶜ*(1 + tanh∘(-10*(∂z(b_background + model.state.b))))/2 + model.forcings.κᵥ
+        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, κᵥ)
+        perm = model.fe_data.dofs.p_b
+        A_vdiff = A_vdiff[perm, perm]
+        B_vdiff = B_vdiff[perm, :]
+        b_vdiff = b_vdiff[perm]
+        model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
+        model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
+        model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
+        model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
     end
 
     # calculate rhs vector
@@ -240,11 +241,6 @@ function evolve_vdiffusion!(model::Model)
                                 )
 
     return model
-end
-
-function update_κᵥ!(model::Model, b)
-    _, was_modified = update_κᵥ!(model.fe_data, model.params, b)
-    return model, was_modified
 end
 
 function evolve_hdiffusion!(model::Model)
