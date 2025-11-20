@@ -20,26 +20,24 @@ end
 
 function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
     s = m.state
-    b_background = interpolate_everywhere(x -> m.params.N²*x[3], m.fe_data.spaces.B_trial)
     α = m.params.α
-    f = m.params.f
-    νₘₐₓ = m.params.νₘₐₓ
-    bz = ∂z(b_background + m.state.b)
-    c1 = 1 / (νₘₐₓ^2 - 1)
-    c2 = νₘₐₓ * √c1
-    ν = f * (f * (c2 / (sqrt∘(c1 + α^2 * bz * bz))))
-    κᵥ = m.params.κᶜ*(1 + tanh∘(-10*bz))/2 + m.forcings.κᵥ
+    N² = m.params.N²
+    b = m.state.b
+    B_trial = m.fe_data.spaces.B_trial
+    b_full = interpolate_everywhere(x->N²*x[3], B_trial) + b
+    αbz = α*N² + α*∂z(b)
+    ν = ν_eddy(m.forcings.eddy_param, αbz)
+    κᵥ = κᵥ_convection(m.forcings, αbz)
     writevtk(m.fe_data.mesh.Ω, ofile, cellfields=[
         "u" => s.u, 
         "v" => s.v, 
         "w" => s.w, 
         "p" => s.p, 
-        "b" => b_background + m.state.b,
-        "b_z" => bz,
+        "b" => b_full,
+        "alpha*b_z" => αbz,
         "nu" => ν,
         "kappa_v" => κᵥ,
         "t" => m.state.t,
     ])
-
     @info "VTK state saved to '$ofile'"
 end

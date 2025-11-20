@@ -137,8 +137,8 @@ See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`
 """
 function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
     A_adv = build_advection_matrix(fe_data)
-    A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings.κₕ)
-    A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings.κᵥ)
+    A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ)
+    A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ)
     return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
 end
 
@@ -166,23 +166,23 @@ Assemble the matrices for the horizontal diffusion part of the evolution problem
 
 See also [`build_diffusion_system`](@ref).
 """
-function build_hdiffusion_system(fe_data::FEData, params::Parameters, κₕ)
-    return build_diffusion_system(fe_data, params, κₕ, :horizontal)
+function build_hdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κₕ)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κₕ, :horizontal)
 end
 
 """
-    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, κᵥ)
+    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
 
 Assemble the matrices for the vertical diffusion part of the evolution problem.
 
 See also [`build_diffusion_system`](@ref).
 """
-function build_vdiffusion_system(fe_data::FEData, params::Parameters, κᵥ)
-    return build_diffusion_system(fe_data, params, κᵥ, :vertical)
+function build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κᵥ, :vertical)
 end
 
 """
-    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, κ, direction::Symbol)
+    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
 
 Assemble the matrices for the diffusion part of the evolution problem.
 
@@ -195,7 +195,7 @@ and stiffness matrices, respectively.
 
 `direction` must be either `:horizontal` or `:vertical`.
 """
-function build_diffusion_system(fe_data::FEData, params::Parameters, κ, direction::Symbol)
+function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
     if direction != :horizontal && direction != :vertical
         throw(ArgumentError("direction must be :horizontal or :vertical"))
     end
@@ -238,12 +238,20 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, κ, directi
         l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
         b .+= assemble_vector(l, B_test)
 
-        # # surface flux; TODO: make this an input
-        # dΓ = fe_data.mesh.dΓ
-        # F(x) = -1e-3*sin(2π*(x[2] + 1)/0.5)
-        # lF(d) = ∫( Δt/2*(F*d) )dΓ  # b.c. is α²ε²/μϱ κ ∂z(b) = F (Δt/2 because of Strang split)
-        # b .+= assemble_vector(lF, B_test)
+        # see multiple-dispatched functions below
+        add_surface_flux!(b, forcings.b_surface_bc, Δt, fe_data.mesh.dΓ, B_test)
     end
 
     return A, B, b
+end
+
+function add_surface_flux!(b, bc::SurfaceFluxBC, Δt, dΓ, B_test)
+    l(d) = ∫( Δt/2*(bc.flux*d) )dΓ  # b.c. is α²ε²/μϱ κ ∂z(b) = F (Δt/2 because of Strang split)
+    b .+= assemble_vector(l, B_test)
+    return b
+end
+
+function add_surface_flux!(b, bc::SurfaceDirichletBC, Δt, dΓ, B_test)
+    # `bc` is not a flux condition, continue
+    return b
 end

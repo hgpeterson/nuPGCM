@@ -79,6 +79,10 @@ nan_max,
 nan_min,
 # inputs.jl
 Parameters,
+SurfaceDirichletBC,
+ConvectionParameterization,
+EddyParameterization,
+SurfaceFluxBC,
 Forcings,
 # meshes.jl
 Mesh,
