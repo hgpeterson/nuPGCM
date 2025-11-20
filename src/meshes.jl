@@ -7,17 +7,17 @@ struct Mesh{M, O, DO, G, DG}
 end
 
 """
-    m = Mesh(ifile; degree=4)
+    m = Mesh(ifile; degree=4, surface_tags=["surface"])
 
 Build a struct holding mesh-related data.
 
 `degree` is the degree of integration for the measures `dΩ` and `dΓ`.
 """
-function Mesh(ifile; degree=4)
+function Mesh(ifile; degree=4, surface_tags=["surface"])
     model = GmshDiscreteModel(ifile)
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
-    Γ = BoundaryTriangulation(model, tags=["surface"])
+    Γ = BoundaryTriangulation(model, tags=surface_tags)
     dΓ = Measure(Γ, degree)
     return Mesh(model, Ω, dΩ, Γ, dΓ)
 end

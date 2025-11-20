@@ -45,7 +45,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     else
         P_hdiff = lu(A_hdiff)
         P_adv   = lu(A_adv)
-        if forcings.convection
+        if forcings.conv_param.is_on
             # vertical diffusion matrix will get rebuilt for convection, so use diagonal preconditioner
             P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
         else
