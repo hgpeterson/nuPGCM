@@ -8,9 +8,10 @@ pages = [
     "Overview" => "index.md"
     "PG Equations" => "pg_equations.md"
     "Nondimensionalization" => "nondimensionalization.md"
+    "Numerical Approach" => "numerical_approach.md"
 ]
 
-assets = String["assets/citations.css"]  # this gets deleted??
+assets = String["assets/citations.css"]
 mathengine = Documenter.KaTeX(
                 Dict(:delimiters => [
                          Dict(:left => raw"$",   :right => raw"$",   display => false),

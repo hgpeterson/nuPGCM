@@ -79,15 +79,15 @@ or, more generally,
 ### Surface buoyancy flux
 
 What about the surface buoyancy flux condition?
-Here we want to ensure that the integrated buoyancy tendency remains fixed as $\alpha \to 0$.
+Here we want to ensure that the column-average buoyancy tendency remains fixed as $\alpha \to 0$.
 Integrating the buoyancy equation with advection neglected and diffusion only in the vertical, we have
 ```math
-\mu\varrho \prettyint{\nd{z}}{0}{\pder{\nd{b}}{\nd{t}}}{\nd{z}'} = \alpha^2 \varepsilon^2 \nd{\kappa}\pder{\nd{b}}{\nd{z}} \Big|_{\nd{z} = 0},
+\frac{1}{\alpha} \prettyint{-\alpha}{0}{\pder{\nd{b}}{\nd{t}}}{\nd{z}'} = \frac{\alpha \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} \Big|_{\nd{z} = 0} \equiv \nd{F},
 ```
-again neglecting the flux in the interior.
-For the integrated buoyancy forcing to remain unchanged as $\alpha \to 0$, we must then have 
+assuming $\partial_{\nd{z}} \nd{b} = 0$ at the bottom.
+We therefore define our nondimensional surface buoyancy flux boundary condition as 
 ```math
-\boxed{\frac{\alpha^2 \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} = \nd{F} \quad \text{at} \quad \nd{z} = 0.}
+\boxed{\frac{\alpha^2 \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} = \alpha \nd{F} \quad \text{at} \quad \nd{z} = 0.}
 ```
 
 ## Scales and parameter values
@@ -119,11 +119,10 @@ For the surface buoyancy flux, we have
 ```
 which, to be consistent with the for derived above, implies
 ```math
-F_0 = \frac{\mu \varrho}{\alpha^2 \varepsilon^2} \frac{\kappa_0 N^2 H_0}{L} = \frac{N^4 H_0^3}{f_0 L} \approx 10^{-5} \text{ m}^2 \text{ s}^{-3},
+F_0 = \frac{\mu \varrho}{\alpha \varepsilon^2} \frac{\kappa_0 N^2 H_0}{L} = \frac{N^4 H_0^4}{f_0 L^2} \approx 10^{-8} \text{ m}^2 \text{ s}^{-3},
 ```
 using the scales above.
-This means that a typical surface buoyancy flux of about 0.01 mm$^2$ s$^{-3}$ would translate to a nondimensional value of $\nd{F} = 10^{-3}$.
-
+This means that a typical surface buoyancy flux of about 0.01 mm$^2$ s$^{-3}$ would translate to a nondimensional value of $\nd{F} = 1$.
 
 ### References
 
