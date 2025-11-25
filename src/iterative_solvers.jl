@@ -1,11 +1,11 @@
-struct IterativeSolverToolkit{A, P, V, S, K}
-    A::A               # LHS matrix
-    P::P               # preconditioner for A
-    x::V               # solution vector
-    y::V               # RHS vector
-    solver::S          # iterative solver
-    kwargs::K          # keyword arguments for iterative solver
-    label::String      # label for solver
+mutable struct IterativeSolverToolkit{A, P, V, S, K}
+    A::A           # LHS matrix
+    P::P           # preconditioner for A
+    x::V           # solution vector
+    y::V           # RHS vector
+    solver::S      # iterative solver
+    kwargs::K      # keyword arguments for iterative solver
+    label::String  # label for solver
 end
 
 function IterativeSolverToolkit(A, P, y, solver, kwargs, label)
@@ -25,8 +25,17 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
 
     # do a direct solve if possible
     if typeof(P) <: Factorization
+        t0 = time()
         ldiv!(x, P, y)
-        @debug "Direct $label solve: complete." 
+        t1 = time()
+        @debug "Direct $label solve: time=$(t1-t0)" 
+        return solver_tk
+    end
+    if architecture(A) == CPU() && size(A, 1) < 300_000
+        t0 = time()
+        x .= A\y
+        t1 = time()
+        @debug "Direct $label solve: time=$(t1-t0)" 
         return solver_tk
     end
 
