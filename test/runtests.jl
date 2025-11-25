@@ -8,8 +8,7 @@ using Test
     end
 
     @testset "End-to-end tests" begin
-        include("inversion_tests.jl")
-        include("evolution_tests.jl")
+        include("bowl_mixing_tests.jl")
     end
 
 end
