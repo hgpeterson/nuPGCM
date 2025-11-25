@@ -14,19 +14,33 @@ arch = CPU()
 μϱ = 1     # Prandtl times Burger number
 N² = 1/α   # background stratification (if you want `b` to be a perturbation from N²z)
 Δt = 1e-3  # time step
-params = Parameters(ε, α, μϱ, N², Δt)
-T = 0.1*μϱ/ε^2  # simulation time
 f₀ = 1.0
 β = 0.5
 f(x) = f₀ + β*x[2]  # Coriolis parameter
 H(x) = α*(1 - x[1]^2 - x[2]^2)  # bathymetry
+params = Parameters(ε, α, μϱ, N², Δt, f, H)
+
+# forcings
 ν = 1  # viscosity (can be a function of x)
-κ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))  # diffusivity
+κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) # horizontal diffusivity
+κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α)) # vertical diffusivity
 τˣ(x) = 0  # zonal wind stress
 τʸ(x) = 0  # meridional wind stress
-b₀(x) = 0  # surface buoyancy boundary condition
-force_build_inversion = false
-force_build_evolution = false
+
+# dirichlet surface boundary condition for buoyancy
+b_surface(x) = 0  # surface buoyancy boundary condition
+b_surface_bc = SurfaceDirichletBC(b_surface)
+
+# # flux surface boundary condition for buoyancy
+# b_flux_surface(x) = 0
+# b_surface_bc = SurfaceFluxBC(b_flux_surface)
+
+forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
+
+# # somewhat experimental: convection and eddy parameterizations:
+# conv_param = ConvectionParameterization(κᶜ=1e3, N²min=1e-3)
+# eddy_param = EddyParameterization(f=f, N²min=1e-2)
+# forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 
 # mesh (see mesh_bowl2D.jl and mesh_bowl3D.jl for examples of how to generate a mesh with Gmsh)
 h = 8e-2
@@ -34,95 +48,39 @@ dim = 3
 mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
 mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
-# FE data
-spaces = Spaces(mesh, b₀)
+# dirichlet BCs
+u_diri = Dict("bottom"=>0, "coastline"=>0)
+v_diri = Dict("bottom"=>0, "coastline"=>0)
+w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
+b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface) 
+# b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
+spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
 fe_data = FEData(mesh, spaces)
 @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
-# folder for storing matrix data
-mat_dir = joinpath(@__DIR__, "../matrices")
-!isdir(mat_dir) && mkdir(mat_dir)
+# build inversion system
+inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
 
-# build inversion matrices
-A_inversion_fname = "$mat_dir/A_inversion_$mesh_name.jld2"
-if force_build_inversion
-    @warn "You set `force_build_inversion` to `true`, building matrices..."
-    A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
-elseif !isfile(A_inversion_fname) 
-    @warn "A_inversion file not found, generating..."
-    A_inversion, B_inversion, b_inversion = build_inversion_matrices(fe_data, params, f, ν, τˣ, τʸ; A_inversion_ofile=A_inversion_fname)
-else
-    file = jldopen(A_inversion_fname, "r")
-    A_inversion = file["A_inversion"]
-    close(file)
-    B_inversion = nuPGCM.build_B_inversion(fe_data, params)
-    b_inversion = nuPGCM.build_b_inversion(fe_data, params, τˣ, τʸ)
-end
-
-# re-order dofs
-A_inversion = A_inversion[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
-B_inversion = B_inversion[fe_data.dofs.p_inversion, :]
-b_inversion = b_inversion[fe_data.dofs.p_inversion]
-
-# preconditioner
-if typeof(arch) == CPU
-    @time "lu(A_inversion)" P_inversion = lu(A_inversion)
-else
-    P_inversion = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A_inversion, 1))))
-end
-
-# move to arch
-A_inversion = on_architecture(arch, A_inversion)
-B_inversion = on_architecture(arch, B_inversion)
-b_inversion = on_architecture(arch, b_inversion)
-
-# setup inversion toolkit
-inversion_toolkit = InversionToolkit(A_inversion, P_inversion, B_inversion, b_inversion; atol=1e-6, rtol=1e-6)
-
-# # quick inversion here:
-# model = inversion_model(arch, params, mesh, inversion_toolkit)
+# # if all you want is a quick inversion for the flow given b, do this:
+# model = Model(arch, params, forcings, fe_data, inversion_toolkit)
 # set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
 # invert!(model)
 # save_state(model, "$out_dir/data/state.jld2")
+# save_vtk(model, ofile="$out_dir/data/state.vtu")
 
-# build evolution matrices (or load them if `force_build` is false and file exists)
-A_adv, A_diff, B_diff, b_diff = build_evolution_system(fe_data, params, κ; 
-                                    force_build=force_build_evolution,
-                                    filename="$mat_dir/evolution_$mesh_name.jld2")
-
-# re-order dofs
-A_adv  =  A_adv[fe_data.dofs.p_b, fe_data.dofs.p_b]
-A_diff = A_diff[fe_data.dofs.p_b, fe_data.dofs.p_b]
-B_diff = B_diff[fe_data.dofs.p_b, :]
-b_diff = b_diff[fe_data.dofs.p_b]
-
-# preconditioners
-if typeof(arch) == CPU 
-    P_diff = lu(A_diff)
-    P_adv  = lu(A_adv)
-else
-    P_diff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_diff))))
-    P_adv  = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
-end
-
-# move to arch
-A_adv  = on_architecture(arch, A_adv)
-A_diff = on_architecture(arch, A_diff)
-B_diff = on_architecture(arch, B_diff)
-b_diff = on_architecture(arch, b_diff)
-
-# setup evolution toolkit
-evolution_toolkit = EvolutionToolkit(A_adv, P_adv, A_diff, P_diff, B_diff, b_diff)
+# build evolution system
+evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
 
 # put it all together in the `model` struct
-model = rest_state_model(arch, params, fe_data, inversion_toolkit, evolution_toolkit)
+model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
 
-# set initial buoyancy
-set_b!(model, x->b₀(x))
+# set initial buoyancy (default 0)
+# set_b!(model, x -> x[3]/α)  # use this if N² = 0
 invert!(model) # sync flow with initial condition 
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # solve
+T = 0.1*μϱ/ε^2  # simulation time
 n_steps = Int(round(T / Δt))
 n_save = n_steps ÷ 100
 run!(model; n_steps, n_save)
