@@ -82,7 +82,7 @@ What about the surface buoyancy flux condition?
 Here we want to ensure that the column-average buoyancy tendency remains fixed as $\alpha \to 0$.
 Integrating the buoyancy equation with advection neglected and diffusion only in the vertical, we have
 ```math
-\frac{1}{\alpha} \prettyint{-\alpha}{0}{\pder{\nd{b}}{\nd{t}}}{\nd{z}'} = \frac{\alpha \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} \Big|_{\nd{z} = 0} \equiv \nd{F},
+\frac{1}{\alpha} \prettyint{-\alpha}{0}{\pder{\nd{b}}{\nd{t}}}{\nd{z}} = \frac{\alpha \varepsilon^2}{\mu \varrho} \nd{\kappa}\pder{\nd{b}}{\nd{z}} \Big|_{\nd{z} = 0} \equiv \nd{F},
 ```
 assuming $\partial_{\nd{z}} \nd{b} = 0$ at the bottom.
 We therefore define our nondimensional surface buoyancy flux boundary condition as 
