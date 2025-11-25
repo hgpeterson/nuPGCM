@@ -25,6 +25,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
                           forcings::Forcings; 
                           kwargs...)
     # build
+    @info "Building evolution system..."
     A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
         build_evolution_system(fe_data, params, forcings)
 
@@ -43,13 +44,14 @@ function EvolutionToolkit(arch::AbstractArchitecture,
         P_adv   = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
         P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
     else
-        P_hdiff = lu(A_hdiff)
-        P_adv   = lu(A_adv)
+        @info "Factorizing evolution system..."
+        P_hdiff = @time "lu(A_hdiff)" lu(A_hdiff)
+        P_adv   = @time "lu(A_adv)" lu(A_adv)
         if forcings.conv_param.is_on
             # vertical diffusion matrix will get rebuilt for convection, so use diagonal preconditioner
             P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
         else
-            P_vdiff = lu(A_vdiff)
+            @time "lu(A_vdiff)" P_vdiff = lu(A_vdiff)
         end
     end
 

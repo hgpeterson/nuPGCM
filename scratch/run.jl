@@ -13,7 +13,7 @@ plt.close("all")
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "channel_2D/test"))
+set_out_dir!(joinpath(@__DIR__, "channel_2D/sim008"))
 
 # architecture
 arch = CPU()
@@ -22,8 +22,8 @@ arch = CPU()
 ε = sqrt(1e-1)
 α = 1/8
 μϱ = 1
-N² = 1/α
-Δt = 1e-2
+N² = 0
+Δt = 1e-4
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
@@ -119,17 +119,19 @@ display(params)
 τ₀ = 1e-1
 τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
-# b_surface(x) = x[2] > 0 ? 0.0 : -x[2]^2
-b_surface(x) = x[2] > 0 ? 0.0 : -4*(x[2] + 0.5)^2
 # b_surface(x) = 0
-b_surface_bc = SurfaceDirichletBC(b_surface)
-# b_flux_surface(x) = -1e-3*sin(2π*(x[2] + 1)/0.5)
-# b_surface_bc = SurfaceFluxBC(b_flux_surface)
-b_basin(x) = 0
+# b_surface(x) = x[2] > 0 ? 0.0 : -x[2]^2
+# b_surface(x) = x[2] > 0 ? 0.0 : -4*(x[2] + 0.5)^2
+# b_surface_bc = SurfaceDirichletBC(b_surface)
+F₀ = 1
+b_flux_surface(x) = -F₀*sin(2π*(x[2] + 1)/0.5)
+b_surface_bc = SurfaceFluxBC(b_flux_surface)
+# b_basin(x) = 0
+b_basin(x) = 10*x[3]/α
 conv_param = ConvectionParameterization(κᶜ=1e3, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=1e-1)
+eddy_param = EddyParameterization(f=f, N²min=1e-2)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
-# forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
+# forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)  # turn off conv/eddy params
 display(forcings)
 display(forcings.conv_param)
 display(forcings.eddy_param)
@@ -150,7 +152,8 @@ display(forcings.eddy_param)
 
 function setup_model()
     # mesh
-    h = √2*α*ε/5
+    # h = √2*α*ε/5
+    h = √2*α*ε/10
     mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
     if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
         generate_channel_mesh_2D(h, α)
@@ -162,8 +165,8 @@ function setup_model()
     u_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0)
     v_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin top"=>0, "basin"=>0)
     w_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin top"=>0, "surface"=>0)
-    b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
-    # b_diri = Dict("basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    # b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    b_diri = Dict("basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
     # b_diri = Dict()
     spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
     fe_data = FEData(mesh, spaces)
@@ -181,23 +184,24 @@ function setup_model()
     return model
 end
 
-# # set up model
-# model = setup_model()
+# set up model
+model = setup_model()
 
 # set initial buoyancy
-# set_b!(model, x->0)
-set_b!(model, b_surface)
-invert!(model) # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 24300))
+# # set_b!(model, x->0)
+# set_b!(model, b_basin)
+# # set_b!(model, b_surface)
+# invert!(model) # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 1050))
 
 # solve
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
 # n_save = n_steps ÷ 100
-n_save = 100
+n_save = 10
 n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
-# run!(model; n_steps, n_save, n_plot, i_step=24300)
+# run!(model; n_steps, n_save, n_plot)
+run!(model; n_steps, n_save, n_plot, i_step=1050)
 
 println("Done.")
