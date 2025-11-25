@@ -239,19 +239,25 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
         b .+= assemble_vector(l, B_test)
 
         # see multiple-dispatched functions below
-        add_surface_flux!(b, forcings.b_surface_bc, Δt, fe_data.mesh.dΓ, B_test)
+        add_surface_flux!(b, forcings.b_surface_bc, params, κ, fe_data.mesh.dΓ, B_test)
     end
 
     return A, B, b
 end
 
-function add_surface_flux!(b, bc::SurfaceFluxBC, Δt, dΓ, B_test)
-    l(d) = ∫( Δt/2*(bc.flux*d) )dΓ  # b.c. is α²ε²/μϱ κ ∂z(b) = F (Δt/2 because of Strang split)
+function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_test)
+    N² = params.N²
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+    # b.c. is α²ε²/μϱ κ ∂z(b) = α*F (Δt/2 because of Strang split)
+    l(d) = ∫( Δt/2 * (α*(bc.flux*d) - α^2*ε^2/μϱ*N²*(κ*d)) )dΓ  
     b .+= assemble_vector(l, B_test)
     return b
 end
 
-function add_surface_flux!(b, bc::SurfaceDirichletBC, Δt, dΓ, B_test)
+function add_surface_flux!(b, bc::SurfaceDirichletBC, args...)
     # `bc` is not a flux condition, continue
     return b
 end

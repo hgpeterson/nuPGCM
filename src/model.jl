@@ -89,13 +89,13 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         t_step = time()  # another timer for timestep
 
         # Strang split evolution equation
-        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         if advection
-            @time "adv" evolve_advection!(model, b_half)  # Δt advection
+            @time "advection step" evolve_advection!(model, b_half)  # Δt advection
         end
-        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         if model.forcings.eddy_param.is_on

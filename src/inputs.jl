@@ -148,7 +148,7 @@ function Base.show(io::IO, f::Forcings)
         println(io, "├── conv_param: off")
     end
     if f.eddy_param.is_on
-      print(io, "└── eddy_param:   ", summary(f.eddy_param))
+      print(io, "└── eddy_param: ", summary(f.eddy_param))
     else
       print(io, "└── eddy_param: off")
     end
