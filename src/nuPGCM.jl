@@ -48,7 +48,7 @@ end
 # include all the module code
 include("architectures.jl")
 include("utils.jl")
-include("parameters.jl")
+include("inputs.jl")
 include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
@@ -77,8 +77,13 @@ trapz,
 cumtrapz,
 nan_max,
 nan_min,
-# parameters.jl
+# inputs.jl
 Parameters,
+SurfaceDirichletBC,
+ConvectionParameterization,
+EddyParameterization,
+SurfaceFluxBC,
+Forcings,
 # meshes.jl
 Mesh,
 get_p_t,
