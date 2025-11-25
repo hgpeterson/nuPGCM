@@ -19,6 +19,7 @@ function InversionToolkit(arch::AbstractArchitecture,
                           forcings::Forcings; 
                           kwargs...)
     # build
+    @info "Building inversion system..."
     A, B, b = build_inversion_system(fe_data, params, forcings)
 
     # re-order dofs

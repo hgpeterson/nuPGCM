@@ -32,7 +32,7 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν)
     a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
 
     # assemble 
-    @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
+    @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
 
     return A
 end
@@ -136,9 +136,9 @@ A_vdiff b^{n+1} = B_vdiff b^n + b_vdiff
 See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`build_vdiffusion_system`](@ref).
 """
 function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
-    A_adv = build_advection_matrix(fe_data)
-    A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ)
-    A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ)
+    @time "build advection system" A_adv = build_advection_matrix(fe_data)
+    @time "build hdiffusion system" A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ)
+    @time "build vdiffusion system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ)
     return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
 end
 

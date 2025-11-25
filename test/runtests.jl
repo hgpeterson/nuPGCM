@@ -9,6 +9,8 @@ using Test
 
     @testset "End-to-end tests" begin
         include("bowl_mixing_tests.jl")
+        # include("bowl_wind_tests.jl")
+        # include("bowl_surface_flux_tests.jl")
     end
 
 end
