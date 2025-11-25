@@ -92,7 +92,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         if advection
-            @time "advection step" evolve_advection!(model, b_half)  # Δt advection
+            evolve_advection!(model, b_half)  # Δt advection
         end
         evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
