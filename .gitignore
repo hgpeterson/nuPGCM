@@ -14,5 +14,6 @@
 *.json
 *.gz
 *.log
-sims/*
-docs/build/*
+sims/
+docs/build/
+docs/src/literated/

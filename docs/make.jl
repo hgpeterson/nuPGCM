@@ -1,14 +1,31 @@
 using nuPGCM
 using Documenter
 using DocumenterCitations
+using Literate
+
+const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
+const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
+
+# withenv("JULIA_DEBUG" => "Literate") do
+    Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; execute=true)
+# end
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
-pages = [
-    "Overview" => "index.md"
-    "PG Equations" => "pg_equations.md"
+model_formulation = [
+    "The PG Equations" => "pg_equations.md"
     "Nondimensionalization" => "nondimensionalization.md"
     "Numerical Approach" => "numerical_approach.md"
+]
+
+example_pages = [
+    "Mixing in a bowl" => "literated/bowl_mixing.md"
+]
+
+pages = [
+    "Overview" => "index.md"
+    "Model Formulation" => model_formulation
+    "Examples" => example_pages
 ]
 
 assets = String["assets/citations.css"]
