@@ -104,7 +104,7 @@ end
 
 ### struct to hold Finite Element data
 
-struct FEData{M, S, D}
+struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler}
     mesh::M    # mesh data
     spaces::S  # finite element spaces
     dofs::D    # degrees of freedom handler

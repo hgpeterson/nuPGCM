@@ -4,50 +4,35 @@
 ∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
 
 """
-    A_inversion, B_inversion = build_inversion_matrices(fe_data::FEData, params::Parameters, f, ν, τˣ, τʸ; 
-                                   A_inversion_ofile=nothing)
+    A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
 
-Build the matrices for the inversion problem of the PG equations.
-The matrices are assembled using the finite element method and can be saved to files
-if `A_inversion_ofile` is provided. The matrices are:
-- `A_inversion`: LHS matrix for the inversion problem
-- `B_inversion`: RHS matrix for the inversion problem
-- `b_inversion`: RHS vectory for the inversion problem
-The functions `f` and `ν` are the Coriolis parameter and turbulent viscosity, respectively.
-`τˣ` and `τʸ` are the surface stress components in the x and y directions.
+Build the matrices and vectors for the inversion problem of the PG equations.
 """
-function build_inversion_matrices(fe_data::FEData, params::Parameters, f, ν, τˣ, τʸ; 
-                                  A_inversion_ofile=nothing)
-    A_inversion = build_A_inversion(fe_data, params, f, ν; ofile=A_inversion_ofile)
+function build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
+    A_inversion = build_A_inversion(fe_data, params, forcings.ν)
     B_inversion = build_B_inversion(fe_data, params)
-    b_inversion = build_b_inversion(fe_data, params, τˣ, τʸ)
+    b_inversion = build_b_inversion(fe_data, params, forcings)
     return A_inversion, B_inversion, b_inversion
 end
 
 """
-    A = build_A_inversion(fe_data::FEData, params::Parameters, f, ν; ofile)
+    A = build_A_inversion(fe_data::FEData, params::Parameters, ν)
 
 Assemble the LHS matrix `A` for the inversion problem. 
-If `ofile` is given, the data is saved to a file.
 """
-function build_A_inversion(fe_data::FEData, params::Parameters, f, ν; ofile=nothing)
+function build_A_inversion(fe_data::FEData, params::Parameters, ν) 
     # unpack
     X_trial = fe_data.spaces.X_trial
     X_test = fe_data.spaces.X_test
     dΩ = fe_data.mesh.dΩ
     α²ε² = params.α^2*params.ε^2
+    f = params.f
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
 
     # assemble 
-    @time "build A_inversion" A = assemble_matrix(a, X_trial, X_test)
-
-    # save
-    if ofile !== nothing
-        jldsave(ofile; A_inversion=A, params=params, f=f, ν=ν)
-        @info @sprintf("A_inversion saved to '%s' (%.3f GB)", ofile, filesize(ofile)/1e9)
-    end
+    @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
 
     return A
 end
@@ -67,7 +52,7 @@ function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, 
 end
 
 """
-    B = build_B_inversion(fe_data::FEData, params)
+    B = build_B_inversion(fe_data::FEData, params::Parameters)
 
 Assemble the RHS matrix for the inversion problem.
 """
@@ -95,11 +80,11 @@ function build_B_inversion(fe_data::FEData, params::Parameters)
 end
 
 """
-    b = build_b_inversion(mesh::FEData, params::Parameters, τˣ, τʸ)
+    b = build_b_inversion(mesh::FEData, params::Parameters, forcings::Forcings)
 
 Assemble the RHS vector for the inversion problem.
 """
-function build_b_inversion(fe_data::FEData, params::Parameters, τˣ, τʸ)
+function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcings)
     # unpack
     U_test = fe_data.spaces.X_test[1]
     V_test = fe_data.spaces.X_test[2]
@@ -108,6 +93,8 @@ function build_b_inversion(fe_data::FEData, params::Parameters, τˣ, τʸ)
     dΓ = fe_data.mesh.dΓ
     dΩ = fe_data.mesh.dΩ
     α = params.α
+    τˣ = forcings.τˣ
+    τʸ = forcings.τʸ
 
     # allocate vector of length N
     nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
@@ -115,8 +102,8 @@ function build_b_inversion(fe_data::FEData, params::Parameters, τˣ, τʸ)
     b = zeros(N)
 
     # linear forms
-    lx(vx) = ∫( τˣ*vx )dΓ
-    ly(vy) = ∫( τʸ*vy )dΓ
+    lx(vx) = ∫( α*(τˣ*vx) )dΓ  # b.c. is α²ε²ν∂z(u) = ατ
+    ly(vy) = ∫( α*(τʸ*vy) )dΓ
     lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
 
     # assemble
@@ -129,65 +116,148 @@ end
 
 
 """
-    A_adv, A_diff, B_diff, b_diff = build_evolution_system(fe_data::FEData, params::Parameters, κ; 
-                        filename="", force_build=false)
+    A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
+        build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
 
-Assemble or load matrices and vectors for the PG evolution equation.
+Build the matrices for the evolution problem of the PG equations.
+
+The evolution equation is written as
+```math
+μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ]
+```
+We use Strang splitting to split the evolution into an advection step and two diffusion steps (horizontal and vertical).
+The linear systems are written as
+```math
+A_adv b^{n+1} = b^n + F_adv
+A_hdiff b^{n+1} = B_hdiff b^n + b_hdiff
+A_vdiff b^{n+1} = B_vdiff b^n + b_vdiff
+```
+
+See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`build_vdiffusion_system`](@ref).
 """
-function build_evolution_system(fe_data::FEData, params::Parameters, κ; filename="", force_build=false)
-    if !isfile(filename) || force_build
-        !isfile(filename) && @warn "Evolution system file not found, building..." filename
-        force_build && @warn "`force_build` set to `true`, building evolution system..." filename
+function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
+    @time "build advection system" A_adv = build_advection_matrix(fe_data)
+    @time "build hdiffusion system" A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ)
+    @time "build vdiffusion system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ)
+    return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
+end
 
-        # unpack
-        B_trial = fe_data.spaces.B_trial
-        B_test = fe_data.spaces.B_test
-        dΩ = fe_data.mesh.dΩ
-        ε = params.ε
-        α = params.α
-        μϱ = params.μϱ
-        Δt = params.Δt
-        N² = params.N²
+"""
+    A = build_advection_matrix(fe_data::FEData)
 
-        # coefficient for diffusion step (Δt/2 for Crank-Nicolson and Δt/2 for Strange splitting makes Δt/4)
-        θ = Δt/4 * α^2 * ε^2 / μϱ
+Assemble the LHS matrix `A` for the advection part of the evolution problem.
 
-        # bilinear forms for advection and diffusion
-        a_adv(b, d) = ∫( b*d )dΩ
-        a_diff_lhs(b, d) = ∫( b*d + θ*(κ*∇(b)⋅∇(d)) )dΩ
-        a_diff_rhs(b, d) = ∫( b*d - θ*(κ*∇(b)⋅∇(d)) )dΩ
+It turns out that the advection matrix is just the mass matrix.
+"""
+function build_advection_matrix(fe_data::FEData)
+    B_trial = fe_data.spaces.B_trial
+    B_test = fe_data.spaces.B_test
+    dΩ = fe_data.mesh.dΩ
 
-        # assemble matrices
-        A_adv = assemble_matrix(a_adv, B_trial, B_test)
-        A_diff = assemble_matrix(a_diff_lhs, B_trial, B_test)
-        B_diff = assemble_matrix(a_diff_rhs, B_trial, B_test)
+    a(b, d) = ∫( b*d )dΩ
+    A = assemble_matrix(a, B_trial, B_test)
+    return A
+end
 
-        # assemble vectors (b_diri = b_diri_rhs - b_diri_lhs)
-        b_diff = build_diri_vector(a_diff_rhs, fe_data.spaces.b_diri, B_test)
-        b_diff .-= build_diri_vector(a_diff_lhs, fe_data.spaces.b_diri, B_test)
+"""
+    A, B, b = build_hdiffusion_system(fe_data::FEData, params::Parameters, κₕ)
 
-        # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
-        l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
-        b_diff .+= assemble_vector(l, B_test)
+Assemble the matrices for the horizontal diffusion part of the evolution problem.
 
-        if filename != ""
-            jldsave(filename; A_adv, A_diff, B_diff, b_diff, params, κ)
-            @info @sprintf("Evolution system saved to '%s' (%.3f GB)", filename, filesize(filename)/1e9)
-        end
-    else
-        file = jldopen(filename, "r")
-        A_adv = file["A_adv"]
-        A_diff = file["A_diff"]
-        B_diff = file["B_diff"]
-        b_diff = file["b_diff"]
-        p0 = file["params"]
-        close(file)
-        params != p0 && @warn "Parameters mismatch detected!" #TODO: also detect κ mismatch
-        @info @sprintf("Evolution system loaded from '%s' (%.3f GB)", filename, filesize(filename)/1e9)
+See also [`build_diffusion_system`](@ref).
+"""
+function build_hdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κₕ)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κₕ, :horizontal)
+end
+
+"""
+    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
+
+Assemble the matrices for the vertical diffusion part of the evolution problem.
+
+See also [`build_diffusion_system`](@ref).
+"""
+function build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κᵥ, :vertical)
+end
+
+"""
+    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
+
+Assemble the matrices for the diffusion part of the evolution problem.
+
+We use the Crank-Nicolson scheme, i.e., 
+```math
+A b^{n+1} = B b^n + b
+```
+where ``A = M + θ K`` and ``B = M - θ K`` with ``θ = Δt/4 α² ε² / μϱ`` and `M` and `K` being the mass 
+and stiffness matrices, respectively.
+
+`direction` must be either `:horizontal` or `:vertical`.
+"""
+function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
+    if direction != :horizontal && direction != :vertical
+        throw(ArgumentError("direction must be :horizontal or :vertical"))
     end
 
-    return A_adv, A_diff, B_diff, b_diff
+    B_trial = fe_data.spaces.B_trial
+    B_test = fe_data.spaces.B_test
+    dΩ = fe_data.mesh.dΩ
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+    b_diri = fe_data.spaces.b_diri
+
+    # coefficient for diffusion step (Δt/2 for Crank-Nicolson and Δt/2 for Strang splitting makes Δt/4)
+    θ = Δt/4 * α^2 * ε^2 / μϱ
+
+    function a_lhs(b, d)
+        if direction == :horizontal
+            return ∫( b*d + θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+        else
+            return ∫( b*d + θ*(κ*∂z(b)*∂z(d)) )dΩ
+        end
+    end
+    function a_rhs(b, d)
+        if direction == :horizontal
+            return ∫( b*d - θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+        else
+            return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
+        end
+    end
+
+    A = assemble_matrix(a_lhs, B_trial, B_test)
+    B = assemble_matrix(a_rhs, B_trial, B_test)
+    b   = assemble_vector(d -> a_rhs(b_diri, d), B_test)
+    b .-= assemble_vector(d -> a_lhs(b_diri, d), B_test)
+
+    if direction == :vertical
+        # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
+        N² = params.N²
+        l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
+        b .+= assemble_vector(l, B_test)
+
+        # see multiple-dispatched functions below
+        add_surface_flux!(b, forcings.b_surface_bc, params, κ, fe_data.mesh.dΓ, B_test)
+    end
+
+    return A, B, b
 end
-function build_diri_vector(a, b_diri, B_test)
-    return assemble_vector(d -> a(b_diri, d), B_test)
+
+function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_test)
+    N² = params.N²
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+    # b.c. is α²ε²/μϱ κ ∂z(b) = α*F (Δt/2 because of Strang split)
+    l(d) = ∫( Δt/2 * (α*(bc.flux*d) - α^2*ε^2/μϱ*N²*(κ*d)) )dΓ  
+    b .+= assemble_vector(l, B_test)
+    return b
+end
+
+function add_surface_flux!(b, bc::SurfaceDirichletBC, args...)
+    # `bc` is not a flux condition, continue
+    return b
 end
