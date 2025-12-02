@@ -26,6 +26,7 @@ pages = [
     "Overview" => "index.md"
     "Model Formulation" => model_formulation
     "Examples" => example_pages
+    "References" => "references.md"
 ]
 
 assets = String["assets/citations.css"]
@@ -43,9 +44,12 @@ mathengine = Documenter.KaTeX(
                                 ),
                     )
                 )
-format = Documenter.HTML(; assets, mathengine)
+format = Documenter.HTML(; collapselevel=1, 
+                         assets, 
+                         mathengine)
+                        #  mathengine=MathJax3())
 
-makedocs(; sitename = "νPGCM",
-           plugins=[bib],
-           pages,
-           format)
+makedocs(; sitename="νPGCM",
+         plugins=[bib],
+         pages,
+         format)
