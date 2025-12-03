@@ -1,0 +1,5 @@
+matplotlib==3.10.7
+numpy==2.2.6
+pyvista==0.46.4
+scipy==1.15.3
+tqdm==4.67.1

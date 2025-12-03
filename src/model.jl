@@ -85,8 +85,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
     # need to store a half-step buoyancy for advection
     b_half = interpolate(0, model.fe_data.spaces.B_trial)
+    t_last_info = time()  # another timer for ETR
     for i ∈ i_step:n_steps
-        t_step = time()  # another timer for timestep
 
         # Strang split evolution equation
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
@@ -98,7 +98,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
-        if model.forcings.eddy_param.is_on
+        if model.forcings.eddy_param.is_on && advection
             α = model.params.α
             N² = model.params.N²
             b = model.state.b
@@ -111,8 +111,6 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             # note: keeping same preconditioner (1/h^dim)
         end
 
-        t_step = time() - t_step
-
         # blow-up -> stop
         u_max = maximum(abs.(u.free_values))
         v_max = maximum(abs.(v.free_values))
@@ -124,16 +122,20 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         if mod(i, n_info) == 0
             t1 = time()
+            t_step = (t1 - t_last_info)/n_info
             @info begin
             msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
-            msg *= @sprintf("last step duration: %.1e s\n", t_step)
-            msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
+            if i > n_info  # skip ETR the first time since it will contain compilation time
+                msg *= @sprintf("timestep duration ~ %.1e s\n", t_step)
+                msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
+            end
             msg *= @sprintf("|u|ₘₐₓ = %.1e, |v|ₘₐₓ = %.1e, |w|ₘₐₓ = %.1e\n", u_max, v_max, w_max)
             msg *= @sprintf("%.1e ≤ b ≤ %.1e\n", minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
             msg
             end
+            t_last_info = t1
         end
 
         if mod(i, n_save) == 0
