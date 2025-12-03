@@ -13,9 +13,9 @@ const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
 model_formulation = [
-    "The PG Equations" => "pg_equations.md"
-    "Nondimensionalization" => "nondimensionalization.md"
-    "Numerical Approach" => "numerical_approach.md"
+    "The PG Equations" => "model_formulation/pg_equations.md"
+    "Nondimensionalization" => "model_formulation/nondimensionalization.md"
+    "Numerical Approach" => "model_formulation/numerical_approach.md"
 ]
 
 example_pages = [

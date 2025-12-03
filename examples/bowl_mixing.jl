@@ -85,7 +85,7 @@ mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
 
 # # Define `Spaces`
 
-# As described on the [Numerical Approach](../numerical_approach.md) page, the $nu$PGCM
+# As described on the [Numerical Approach](../model_formulation/numerical_approach.md) page, the $nu$PGCM
 # uses finite elements under the hood to solve the PG equations. Now that we have
 # an unstructured mesh set up, we just need to define our Dirichlet boundary
 # conditions to  be able to set up our finite element spaces. 

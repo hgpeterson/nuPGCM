@@ -1,6 +1,6 @@
 # PG Equations
 
-As discussed in the [overview](index.md), we aim to describe the large-scale ocean circulation using the PG equations, which are derived from the Boussinesq equations by assuming large horizontal scales and small Rossby numbers.
+As discussed in the [overview](../index.md), we aim to describe the large-scale ocean circulation using the PG equations, which are derived from the Boussinesq equations by assuming large horizontal scales and small Rossby numbers.
 In index notation, the dimensional PG equations in Cartesian space $(x, y, z)$ read
 ```math
 \begin{aligned}
