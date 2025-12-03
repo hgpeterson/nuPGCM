@@ -6,6 +6,15 @@ struct Mesh{M, O, DO, G, DG}
     dΓ::DG    # surface boundary measure
 end
 
+function Base.show(io::IO, mesh::Mesh)
+    println(io, "Mesh:")
+    println(io, "├── model: ", mesh.model)
+    println(io, "├── Ω: ", mesh.Ω)
+    println(io, "├── dΩ: ", mesh.dΩ)
+    println(io, "├── Γ: ", mesh.Γ)
+      print(io, "└── dΓ: ", mesh.dΓ)
+end
+
 """
     m = Mesh(ifile; degree=4, surface_tags=["surface"])
 
