@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Improvements to `estimated time remaining` info
+- `Base.show()` implementations for `Mesh`, (`InversionToolkit`, `EvolutionToolkit`, and `Model`)
+
+### Fixed
+
+- Fixed inversion-only `Model` initialization error
 
 ## [0.5.0] - 2025-11-25
 

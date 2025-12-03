@@ -10,7 +10,7 @@ mutable struct State{U, P, B}
 end
 
 struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData, 
-             I<:InversionToolkit, E<:EvolutionToolkit, S<:State}
+             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing}, S<:State}
     arch::A
     params::P
     forcings::F
