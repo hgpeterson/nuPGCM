@@ -81,7 +81,7 @@ Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 h = 8e-2
 dim = 3
 mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
-## mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+mesh = Mesh(joinpath(@__DIR__, "../../../meshes/$mesh_name.msh"))
 
 # # Define `Spaces`
 
@@ -99,10 +99,10 @@ u_diri = Dict("bottom"=>0, "coastline"=>0)
 v_diri = Dict("bottom"=>0, "coastline"=>0)
 w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
 b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface) 
-## b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
-## spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
-## fe_data = FEData(mesh, spaces)
-## @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
+b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
+spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
+fe_data = FEData(mesh, spaces)
+@info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
 # We have enforced the $u = v = w = 0$ on the `"bottom"` and `"coastline"`, $w = 0$ at 
 # the `"surface"`, and $b = 0$ at the `"surface"` and on the `"coastline"`. All other 
@@ -116,33 +116,33 @@ b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface)
 # the discretized PG equations on this mesh. First, we build the inversion
 # system alone, as it does not have a time-dependent piece:
 
-## inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
+inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6);
 
 # At this point, we can already compute the flow field if we know what the 
 # buoyancy field is. To do this, just create a `Model` without an evolution
 # piece, set the buoyancy field, and invert:
  
-## # model = Model(arch, params, forcings, fe_data, inversion_toolkit)
-## # set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
-## # invert!(model)
-## # save_state(model, "$out_dir/data/state.jld2")
-## # save_vtk(model, ofile="$out_dir/data/state.vtu")
+model = Model(arch, params, forcings, fe_data, inversion_toolkit)
+set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
+invert!(model)
+save_state(model, "$out_dir/data/state.jld2")
+save_vtk(model, ofile="$out_dir/data/state.vtu")
  
 # Here we want to see how the flow and buoyancy evolve in time, however, so 
 # we need to build the evolution system.
 
-## evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
+evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings); 
 
 # # Construct `Model`
 
 # Now we put everything together in the `Model` type.
 
-## model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit);
 
 # We can set the intial condition to be whatever we want with `set_b!(model, foo)`
 # where `foo` is a function of `x`. By default, the buoyancy is always set to 0
 # initially. Since we set `N²` to `1/α`, this means that our buoyancy field starts
-# out as `x[3]/α`---a constant stratification. If you had `N² = 0`, then you would
+# out as `x[3]/α`―a constant stratification. If you had `N² = 0`, then you would
 # need to do `set_b!(model, x -> x[3]/α)` to get the same effect. The benefit of 
 # having a nonzero background startification is that the inversion tends to be more
 # accurate for smaller variations in buoyancy.
@@ -150,8 +150,8 @@ b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface)
 # To start with, let's sync up the flow with whatever initial condition we chose
 # and save a `.vtu` file.
  
-## invert!(model) # sync flow with initial condition 
-## save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+invert!(model) # sync flow with initial condition 
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # # `run!`
 
