@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Improvements to `estimated time remaining` info
-- `Base.show()` implementations for `Mesh`, (`InversionToolkit`, `EvolutionToolkit`, and `Model`)
+- `Base.show()` and `Base.summary()` implementations for more types
 
 ### Fixed
 

@@ -10,6 +10,22 @@ mutable struct EvolutionToolkit{A<:AbstractArchitecture, M, V, SA<:IterativeSolv
     solver_vdiff::SVD  # vertical diffusion iterative solver
 end
 
+function Base.summary(evolution::EvolutionToolkit)
+    t = typeof(evolution)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, evolution::EvolutionToolkit)
+    println(io, summary(evolution), ":")
+    println(io, "├── arch: ", evolution.arch)
+    println(io, "├── B_hdiff: ", summary(evolution.B_hdiff))
+    println(io, "├── b_hdiff: ", summary(evolution.b_hdiff))
+    println(io, "├── B_vdiff: ", summary(evolution.B_vdiff))
+    println(io, "├── b_vdiff: ", summary(evolution.b_vdiff))
+    println(io, "├── solver_adv: ", summary(evolution.solver_adv))
+    println(io, "├── solver_hdiff: ", summary(evolution.solver_hdiff))
+      print(io, "└── solver_vdiff: ", summary(evolution.solver_vdiff))
+end
+
 """
     evolution_toolkit = EvolutionToolkit(arch::AbstractArchitecture, 
                                          fe_data::FEData, 
