@@ -19,6 +19,10 @@ struct Parameters{T<:Real, F, H}
     end
 end
 
+function Base.summary(params::Parameters)
+    t = typeof(params)
+    return "$(parentmodule(t)).$(nameof(t)){$(t.parameters[1])}"
+end
 function Base.show(io::IO, params::Parameters)
     println(io, summary(params))
     println(io, @sprintf("├── ε  = %1.1e", params.ε))
@@ -58,6 +62,10 @@ struct ConvectionParameterization{T}
     is_on::Bool
 end
 
+function Base.summary(conv_param::ConvectionParameterization)
+    t = typeof(conv_param)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
 function Base.show(io::IO, conv_param::ConvectionParameterization)
     print(io, "ConvectionParameterization:")
     if conv_param.is_on
@@ -86,8 +94,12 @@ struct EddyParameterization{F, T}
     is_on::Bool
 end
 
+function Base.summary(eddy_param::EddyParameterization)
+    t = typeof(eddy_param)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
 function Base.show(io::IO, eddy_param::EddyParameterization)
-    print(io, "EddyParameterization:")
+    print(io, summary(eddy_param), ":")
     if eddy_param.is_on
         println(io,        "\n├── f")
           print(io, @sprintf("└── N²min = %1.1e", eddy_param.N²min))
@@ -122,20 +134,12 @@ struct Forcings{N, KH, KV, TX, TY,
     eddy_param::EP    # eddy parameterization (default off)
 end
 
-function Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param=nothing, eddy_param=nothing)
-    if conv_param === nothing
-        # by default, no `ConvectionParameterization` (`is_on` == false)
-        conv_param = ConvectionParameterization(0, 0, false)
-    end
-    if eddy_param === nothing
-        # by default, no `EddyParameterization` (`is_on` == false)
-        eddy_param = EddyParameterization(0, 0, false)
-    end
-    return Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc, conv_param, eddy_param)
+function Base.summary(forcings::Forcings)
+    t = typeof(forcings)
+    return "$(parentmodule(t)).$(nameof(t))"
 end
-
 function Base.show(io::IO, f::Forcings)
-    println(io, "Forcings:")
+    println(io, summary(f), ":")
     println(io, "├── ν")
     println(io, "├── κₕ")
     println(io, "├── κᵥ")
@@ -152,6 +156,18 @@ function Base.show(io::IO, f::Forcings)
     else
       print(io, "└── eddy_param: off")
     end
+end
+
+function Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param=nothing, eddy_param=nothing)
+    if conv_param === nothing
+        # by default, no `ConvectionParameterization` (`is_on` == false)
+        conv_param = ConvectionParameterization(0, 0, false)
+    end
+    if eddy_param === nothing
+        # by default, no `EddyParameterization` (`is_on` == false)
+        eddy_param = EddyParameterization(0, 0, false)
+    end
+    return Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc, conv_param, eddy_param)
 end
 
 function κᵥ_convection(forcings::Forcings, αbz)

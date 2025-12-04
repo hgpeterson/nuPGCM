@@ -1,5 +1,3 @@
-import Base: show
-
 mutable struct State{U, P, B}
     u::U     # flow in x direction
     v::U     # flow in y direction
@@ -7,6 +5,20 @@ mutable struct State{U, P, B}
     p::P     # pressure
     b::B     # buoyancy
     t::Real  # time
+end
+
+function Base.summary(state::State)
+    t = typeof(state)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, state::State)
+    println(io, summary(state), ":")
+    println(io, "├── u: ", state.u, " with ", length(state.u.free_values), " DOFs")
+    println(io, "├── v: ", state.v, " with ", length(state.v.free_values), " DOFs")
+    println(io, "├── w: ", state.w, " with ", length(state.w.free_values), " DOFs")
+    println(io, "├── p: ", state.p, " with ", length(state.p.free_values), " DOFs")
+    println(io, "├── b: ", state.b, " with ", length(state.b.free_values), " DOFs")
+      print(io, "└── t: ", state.t)
 end
 
 struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData, 
@@ -18,6 +30,21 @@ struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData,
     inversion::I
     evolution::E
     state::S
+end
+
+function Base.summary(model::Model)
+    t = typeof(model)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, model::Model)
+    println(io, summary(model), ":")
+    println(io, "├── arch: ", model.arch)
+    println(io, "├── params: ", summary(model.params))
+    println(io, "├── forcings: ", summary(model.forcings))
+    println(io, "├── fe_data: ", summary(model.fe_data))
+    println(io, "├── inversion: ", summary(model.inversion))
+    println(io, "├── evolution: ", summary(model.evolution))
+      print(io, "└── state: ", summary(model.state))
 end
 
 # inversion model

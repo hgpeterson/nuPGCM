@@ -8,6 +8,21 @@ mutable struct IterativeSolverToolkit{A, P, V, S, K}
     label::String  # label for solver
 end
 
+function Base.summary(solver::IterativeSolverToolkit)
+    t = typeof(solver)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, solver::IterativeSolverToolkit)
+    println(io, summary(solver), ":")
+    println(io, "├── A: ", summary(solver.A))
+    println(io, "├── P: ", summary(solver.P))
+    println(io, "├── x: ", summary(solver.x))
+    println(io, "├── y: ", summary(solver.y))
+    println(io, "├── solver: ", summary(solver.solver))
+    println(io, "├── kwargs: ", solver.kwargs)
+    println(io, "└── label: \"", solver.label, "\"")
+end
+
 function IterativeSolverToolkit(A, P, y, solver, kwargs, label)
     # x just points to solver.x
     return IterativeSolverToolkit(A, P, solver.x, y, solver, kwargs, label)
