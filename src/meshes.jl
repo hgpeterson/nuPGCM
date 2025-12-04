@@ -6,8 +6,12 @@ struct Mesh{M, O, DO, G, DG}
     dΓ::DG    # surface boundary measure
 end
 
+function Base.summary(mesh::Mesh)
+    t = typeof(mesh)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
 function Base.show(io::IO, mesh::Mesh)
-    println(io, "Mesh:")
+    println(io, summary(mesh), ":")
     println(io, "├── model: ", mesh.model)
     println(io, "├── Ω: ", mesh.Ω)
     println(io, "├── dΩ: ", mesh.dΩ)

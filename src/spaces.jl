@@ -6,6 +6,19 @@ struct Spaces{X1, X2, B1, B2, BD}
     b_diri::BD   # FEFunction that is b₀ on the dirichlet boundary and 0 elsewhere
 end
 
+function Base.summary(spaces::Spaces)
+    t = typeof(spaces)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, spaces::Spaces)
+    println(io, summary(spaces), ":")
+    println(io, "├── X_trial: ", summary(spaces.X_trial))
+    println(io, "├── X_test: ", summary(spaces.X_test))
+    println(io, "├── B_trial: ", summary(spaces.B_trial))
+    println(io, "├── B_test: ", summary(spaces.B_test))
+      print(io, "└── b_diri: ", summary(spaces.b_diri))
+end
+
 """
     spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
 
