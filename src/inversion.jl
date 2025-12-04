@@ -4,6 +4,17 @@ mutable struct InversionToolkit{B, V, S<:IterativeSolverToolkit}
     solver::S  # iterative solver toolkit
 end
 
+function Base.summary(inversion::InversionToolkit)
+    t = typeof(inversion)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, inversion::InversionToolkit)
+    println(io, summary(inversion), ":")
+    println(io, "├── B: ", summary(inversion.B))
+    println(io, "├── b: ", summary(inversion.b))
+      print(io, "└── solver: ", summary(inversion.solver))
+end
+
 """
     inversion_toolkit = InversionToolkit(arch::AbstractArchitecture, 
                                          fe_data::FEData, 

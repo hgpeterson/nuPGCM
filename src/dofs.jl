@@ -1,4 +1,4 @@
-struct DoFHandler{P}
+struct DoFHandler{P, I}
     p_u::P      # dof permutations
     p_v::P
     p_w::P
@@ -11,11 +11,25 @@ struct DoFHandler{P}
     inv_p_p::P
     inv_p_inversion::P
     inv_p_b::P
-    nu::Int     # number of dofs for each field
-    nv::Int
-    nw::Int
-    np::Int
-    nb::Int
+    nu::I     # number of dofs for each field
+    nv::I
+    nw::I
+    np::I
+    nb::I
+end
+
+function Base.summary(dofs::DoFHandler)
+    t = typeof(dofs)
+    return "$t with (nu=$(dofs.nu), nv=$(dofs.nv), nw=$(dofs.nw), np=$(dofs.np), nb=$(dofs.nb)) DOFs"
+end
+function Base.show(io::IO, dofs::DoFHandler)
+    println(io, summary(dofs), ":")
+    println(io, "├── p_u and inv_p_u: ", summary(dofs.p_u), "'s")
+    println(io, "├── p_v and inv_p_v: ", summary(dofs.p_v), "'s")
+    println(io, "├── p_w and inv_p_w: ", summary(dofs.p_w), "'s")
+    println(io, "├── p_p and inv_p_p: ", summary(dofs.p_p), "'s")
+    println(io, "├── p_inversion and inv_p_inversion: ", summary(dofs.p_inversion), "'s")
+      print(io, "└── p_b and inv_p_b: ", summary(dofs.p_b), "'s")
 end
 
 function DoFHandler(spaces, dΩ)
@@ -108,6 +122,17 @@ struct FEData{M<:Mesh, S<:Spaces, D<:DoFHandler}
     mesh::M    # mesh data
     spaces::S  # finite element spaces
     dofs::D    # degrees of freedom handler
+end
+
+function Base.summary(fe_data::FEData)
+    t = typeof(fe_data)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, fe_data::FEData)
+    println(io, summary(fe_data), ":")
+    println(io, "├── mesh: ", summary(fe_data.mesh))
+    println(io, "├── spaces: ", summary(fe_data.spaces))
+      print(io, "└── dofs: ", summary(fe_data.dofs))
 end
 
 function FEData(mesh::Mesh, spaces::Spaces)
