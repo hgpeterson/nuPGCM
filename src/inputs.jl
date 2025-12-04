@@ -30,8 +30,8 @@ function Base.show(io::IO, params::Parameters)
     println(io, @sprintf("├── μϱ = %1.1e", params.μϱ))
     println(io, @sprintf("├── N² = %1.1e", params.N²))
     println(io, @sprintf("├── Δt = %1.1e", params.Δt))
-    println(io, @sprintf("├── f"))
-      print(io, @sprintf("└── H"))
+    println(io,          "├── f: ", params.f)
+      print(io,          "└── H: ", params.H)
 end
 
 #### SurfaceBC types ####
@@ -42,16 +42,26 @@ struct SurfaceDirichletBC{V} <: AbstractSurfaceBC
     value::V
 end
 
-function Base.show(io::IO, ::SurfaceDirichletBC)
-    print(io, "SurfaceDirichletBC\n")
+function Base.summary(surface_bc::SurfaceDirichletBC)
+    t = typeof(surface_bc)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, surface_bc::SurfaceDirichletBC)
+    println(io, summary(surface_bc), ":")
+      print(io, "└── value: ", surface_bc.value)
 end
 
 struct SurfaceFluxBC{F} <: AbstractSurfaceBC
     flux::F
 end
 
-function Base.show(io::IO, ::SurfaceFluxBC)
-    print(io, "SurfaceFluxBC\n")
+function Base.summary(surface_bc::SurfaceFluxBC)
+    t = typeof(surface_bc)
+    return "$(parentmodule(t)).$(nameof(t))"
+end
+function Base.show(io::IO, surface_bc::SurfaceFluxBC)
+    println(io, summary(surface_bc), ":")
+      print(io, "└── flux: ", surface_bc.flux)
 end
 
 #### ConvectionParameterization type ####
@@ -67,7 +77,7 @@ function Base.summary(conv_param::ConvectionParameterization)
     return "$(parentmodule(t)).$(nameof(t))"
 end
 function Base.show(io::IO, conv_param::ConvectionParameterization)
-    print(io, "ConvectionParameterization:")
+    print(io, summary(conv_param), ":")
     if conv_param.is_on
         println(io, @sprintf("\n├── κᶜ    = %1.1e", conv_param.κᶜ))
           print(io,   @sprintf("└── N²min = %1.1e", conv_param.N²min))
@@ -101,7 +111,7 @@ end
 function Base.show(io::IO, eddy_param::EddyParameterization)
     print(io, summary(eddy_param), ":")
     if eddy_param.is_on
-        println(io,        "\n├── f")
+        println(io,        "\n├── f: ", eddy_param.f)
           print(io, @sprintf("└── N²min = %1.1e", eddy_param.N²min))
     else
         print(io, " off")
@@ -140,11 +150,11 @@ function Base.summary(forcings::Forcings)
 end
 function Base.show(io::IO, f::Forcings)
     println(io, summary(f), ":")
-    println(io, "├── ν")
-    println(io, "├── κₕ")
-    println(io, "├── κᵥ")
-    println(io, "├── τˣ")
-    println(io, "├── τʸ")
+    println(io, "├── ν: ", f.ν)
+    println(io, "├── κₕ: ", f.κₕ)
+    println(io, "├── κᵥ: ", f.κᵥ)
+    println(io, "├── τˣ: ", f.τˣ)
+    println(io, "├── τʸ: ", f.τʸ)
     println(io, "├── b_surface_bc: ", summary(f.b_surface_bc))
     if f.conv_param.is_on
         println(io, "├── conv_param: ", summary(f.conv_param))
