@@ -55,3 +55,5 @@ makedocs(; sitename="νPGCM",
          plugins=[bib],
          pages,
          format)
+
+deploydocs(repo="github.com/hgpeterson/nuPGCM.git")
