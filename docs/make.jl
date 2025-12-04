@@ -1,16 +1,15 @@
-using nuPGCM
 using Documenter
 using DocumenterCitations
-using Literate
+# using Literate
 
-const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
-const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
+# const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
+# const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
 
-withenv("JULIA_DEBUG" => "Literate") do
-    Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
-                      execute=true, 
-                      documenter=true)
-end
+# withenv("JULIA_DEBUG" => "Literate") do
+#     Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
+#                       execute=true, 
+#                       documenter=true)
+# end
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
@@ -20,36 +19,34 @@ model_formulation = [
     "Numerical Approach" => "model_formulation/numerical_approach.md"
 ]
 
-example_pages = [
-    "Mixing in a bowl" => "literated/bowl_mixing.md"
-]
+# example_pages = [
+#     "Mixing in a bowl" => "literated/bowl_mixing.md"
+# ]
 
 pages = [
     "Overview" => "index.md"
     "Model Formulation" => model_formulation
-    "Examples" => example_pages
+    # "Examples" => example_pages
     "References" => "references.md"
 ]
 
 assets = String["assets/citations.css"]
-mathengine = Documenter.KaTeX(
-                Dict(:delimiters => [
-                         Dict(:left => raw"$",   :right => raw"$",   display => false),
-                         Dict(:left => raw"$$",  :right => raw"$$",  display => true),
-                         Dict(:left => raw"\[",  :right => raw"\]",  display => true),
-                     ],
-                     :macros => Dict(
-                                "\\pder" => "\\frac{\\partial #1}{\\partial #2}",
-                                "\\prettyint" => "\\int_{#1}^#2 #3 \\; \\text{d}#4",
-                                "\\nd" => "\\tilde",
-                                "\\vec" => "\\bm",
-                                ),
-                    )
-                )
+mathengine = MathJax3(Dict(
+    :tex => Dict(
+        :inlineMath => [["\$","\$"], ["\\(","\\)"]],
+        :tags => "ams",
+        :packages => ["base", "ams", "autoload", "configmacros"],
+        :macros => Dict(
+            :pder => ["\\frac{\\partial #1}{\\partial #2}", 2],
+            :prettyint => ["\\int_{#1}^#2 #3 \\; \\text{d}#4", 4],
+            :nd => "\\tilde",
+            :vec => "\\boldsymbol",
+        )
+    ),
+))
 format = Documenter.HTML(; collapselevel=1, 
                          assets, 
                          mathengine)
-                        #  mathengine=MathJax3())
 
 makedocs(; sitename="νPGCM",
          plugins=[bib],
