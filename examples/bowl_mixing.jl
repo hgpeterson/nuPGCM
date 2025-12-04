@@ -27,7 +27,8 @@ arch = CPU()
 # ## Setting `Parameters` and `Forcings`
 
 # Now we will define our parameters. See the **Model Formulation** docs
-# for more details. 
+# for more details. Our bowl-shaped basin has a simple depth function of
+# $H(x, y) = \alpha (1 - x^2 - y^2)$.
 
 ε = 2e-1   # Ekman number
 α = 1/2    # aspect ratio
@@ -80,12 +81,20 @@ Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 
 h = 8e-2
 dim = 3
-mesh_name = @sprintf("bowl%dD_%e_%e", dim, h, α)
-mesh = Mesh(joinpath(@__DIR__, "../../../meshes/$mesh_name.msh"))
+mesh_file = joinpath(@__DIR__, @sprintf("../../../meshes/bowl%dD_%e_%e.msh", dim, h, α))  # for Literate.jl
+## mesh_file = joinpath(@__DIR__, @sprintf("../meshes/bowl%dD_%e_%e.msh", dim, h, α))  # for running from `examples/`
+mesh = Mesh(mesh_file)
+
+# !!! note 
+#     You may have noticed that the `Mesh` fields are 
+#     [`Gridap`](https://github.com/gridap/Gridap.jl) types. Under the hood, 
+#     `nuPGCM` uses `Gridap` to compute all the finite element integrals. 
+#     When we define the `Model` later, the `State` will contain `Gridap` 
+#     `FEFunction`s.
 
 # # Define `Spaces`
 
-# As described on the [Numerical Approach](../model_formulation/numerical_approach.md) page, the $nu$PGCM
+# As described on the [Numerical Approach](../model_formulation/numerical_approach.md) page, the $\nu$PGCM
 # uses finite elements under the hood to solve the PG equations. Now that we have
 # an unstructured mesh set up, we just need to define our Dirichlet boundary
 # conditions to  be able to set up our finite element spaces. 
@@ -99,24 +108,44 @@ u_diri = Dict("bottom"=>0, "coastline"=>0)
 v_diri = Dict("bottom"=>0, "coastline"=>0)
 w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
 b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface) 
-b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
+## b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
 spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
-fe_data = FEData(mesh, spaces)
-@info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
 # We have enforced the $u = v = w = 0$ on the `"bottom"` and `"coastline"`, $w = 0$ at 
 # the `"surface"`, and $b = 0$ at the `"surface"` and on the `"coastline"`. All other 
 # boundaries are treated "naturally," i.e., the flux across them is zero.
 
-# ! Warning: Be careful about defining your physical groups!
+# !!! warning "Be careful about defining your physical groups!"
+#     Make sure that when you create your `.msh` files you carefully check that
+#     your physical groupd definitions properly account for every entity in the
+#     mesh! For some examples, see the 
+#     [`meshes/`](https://github.com/hgpeterson/nuPGCM/tree/main/meshes) 
+#     folder in the `nuPGCM` repository.
+
+# Our `mesh` and `spaces` are then passed to the `FEData` constructor, which 
+# keeps track of all the finite element data needed to compute build our 
+# linear systems.
+
+fe_data = FEData(mesh, spaces)
+
+# Behind the scenes, this created a `DoFHandler`, which you can use to print
+# out how many degrees of freedom the inversion system will have.
+
+@info "Inversion DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
 # # Build linear systems
 
-# We now have everything we need to build the linear systems that representing 
+# We now have everything we need to build the linear systems that represent
 # the discretized PG equations on this mesh. First, we build the inversion
 # system alone, as it does not have a time-dependent piece:
 
-inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6);
+inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
+
+# The `atol` and `rtol` kwargs are the absolute and relative tolerances, 
+# respectively, used when solving the system iteratively. Make them smaller if
+# you want higher accuracy at the expense of more inversion iterations. Since
+# we are on a CPU and our mesh is quite coarse in this example, however, the 
+# model will actually just do a direct solve, so these tolerances are unused. 
 
 # At this point, we can already compute the flow field if we know what the 
 # buoyancy field is. To do this, just create a `Model` without an evolution
@@ -131,13 +160,13 @@ save_vtk(model, ofile="$out_dir/data/state.vtu")
 # Here we want to see how the flow and buoyancy evolve in time, however, so 
 # we need to build the evolution system.
 
-evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings); 
+evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings)
 
 # # Construct `Model`
 
 # Now we put everything together in the `Model` type.
 
-model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit);
+model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
 
 # We can set the intial condition to be whatever we want with `set_b!(model, foo)`
 # where `foo` is a function of `x`. By default, the buoyancy is always set to 0
@@ -164,4 +193,4 @@ save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 T = 0.1*μϱ/ε^2  # simulation time
 n_steps = Int(round(T / Δt))
 n_save = n_steps ÷ 100
-## run!(model; n_steps, n_save)
+run!(model; n_steps, n_save)
