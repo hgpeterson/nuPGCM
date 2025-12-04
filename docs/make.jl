@@ -6,9 +6,11 @@ using Literate
 const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
 const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
 
-# withenv("JULIA_DEBUG" => "Literate") do
-    Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; execute=true)
-# end
+withenv("JULIA_DEBUG" => "Literate") do
+    Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
+                      execute=true, 
+                      documenter=true)
+end
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
