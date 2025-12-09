@@ -63,6 +63,10 @@ function InversionToolkit(arch::AbstractArchitecture,
     B = on_architecture(arch, B)
     b = on_architecture(arch, b)
 
+    if typeof(arch) == GPU
+        CUDA.memory_status()
+    end
+
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(arch, A, P, B, b; kwargs...)
 

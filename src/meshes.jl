@@ -28,10 +28,13 @@ Build a struct holding mesh-related data.
 """
 function Mesh(ifile; degree=4, surface_tags=["surface"])
     model = GmshDiscreteModel(ifile)
+    @info "Building `Gridap.Triangulation`s and `Gridap.Measure`s..."
+    @time begin
     Ω = Triangulation(model)
     dΩ = Measure(Ω, degree)
     Γ = BoundaryTriangulation(model, tags=surface_tags)
     dΓ = Measure(Γ, degree)
+    end
     return Mesh(model, Ω, dΩ, Γ, dΓ)
 end
 

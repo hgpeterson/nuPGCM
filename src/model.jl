@@ -103,6 +103,11 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     b0.free_values .= b.free_values
     # volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
 
+    if model.forcings.eddy_param.is_on
+        # store inversion matrix without friction to speed up re-builds
+        A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
+    end
+
     # start timer
     t0 = time()
 
@@ -131,7 +136,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             b = model.state.b
             αbz = α*N² + α*∂z(b)
             ν = ν_eddy(model.forcings.eddy_param, αbz)
-            A_inversion = build_A_inversion(model.fe_data, model.params, ν)
+            A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
             perm = model.fe_data.dofs.p_inversion
             A_inversion = A_inversion[perm, perm]
             model.inversion.solver.A = on_architecture(model.arch, A_inversion)
