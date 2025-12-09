@@ -20,7 +20,7 @@ end
 
 Assemble the LHS matrix `A` for the inversion problem. 
 """
-function build_A_inversion(fe_data::FEData, params::Parameters, ν) 
+function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
     # unpack
     X_trial = fe_data.spaces.X_trial
     X_test = fe_data.spaces.X_test
@@ -29,26 +29,48 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν)
     f = params.f
 
     # bilinear form
-    a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
+    a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
 
     # assemble 
     @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
 
     return A
 end
-function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ)
+function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
     # for general ν, need full stress tensor
+    if friction_only
+        return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) +
+                  α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) +
+                  α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) )dΩ
+    elseif frictionless_only
+        return ∫( -(f*uy*vx) + ∂x(p)*vx +
+                    f*ux*vy  + ∂y(p)*vy +
+                               ∂z(p)*vz +
+                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    else
     return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
               α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
               α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
               ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
 end
-function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ)
+end
+function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
     # since ν is constant, we can just use the Laplacian here
-    return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
-              α²ε²*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
-              α²ε²*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
-              ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    if friction_only
+        return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) +
+                  α²ε²*(ν*∇(uy)⋅∇(vy)) +
+                  α²ε²*(ν*∇(uz)⋅∇(vz)) )dΩ
+    elseif frictionless_only
+        return ∫( -(f*uy*vx) + ∂x(p)*vx +
+                    f*ux*vy  + ∂y(p)*vy +
+                               ∂z(p)*vz +
+                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    else
+        return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
+                  α²ε²*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
+                  α²ε²*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
+                  ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    end
 end
 
 """

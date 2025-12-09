@@ -43,18 +43,23 @@ function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
     v_diri_tags = collect(keys(v_diri))
     w_diri_tags = collect(keys(w_diri))
     b_diri_tags = collect(keys(b_diri))
+    @info "Building `Gridap.TestFESpace`s..."
+    @time begin
     U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=(length(u_diri_tags) > 0) ? u_diri_tags : Int[])
     V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=(length(v_diri_tags) > 0) ? v_diri_tags : Int[])
     W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=(length(w_diri_tags) > 0) ? w_diri_tags : Int[])
     P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
     X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
     B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=(length(b_diri_tags) > 0) ? b_diri_tags : Int[])
+    end
 
     # trial FESpaces with Dirichlet values
     u_diri_vals = collect(values(u_diri))
     v_diri_vals = collect(values(v_diri))
     w_diri_vals = collect(values(w_diri))
     b_diri_vals = collect(values(b_diri))
+    @info "Building `Gridap.TrialFESpace`s..."
+    @time begin
     if length(u_diri_vals) > 0
         U_trial = TrialFESpace(U_test, u_diri_vals)
     else
@@ -76,6 +81,7 @@ function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
         B_trial = TrialFESpace(B_test, b_diri_vals)
     else
         B_trial = TrialFESpace(B_test)
+    end
     end
 
     # a FEFunction that is b₀ on the dirichlet boundary and 0 elsewhere
