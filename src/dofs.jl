@@ -64,10 +64,10 @@ function get_n_dofs(spaces::Spaces)
     return get_n_dofs(spaces.X_trial, spaces.B_trial)
 end
 function get_n_dofs(X_trial, B_trial)
-    U, V, W, P = X_trial[1], X_trial[2], X_trial[3], X_trial[4]
-    nu = U.space.nfree
-    nv = V.space.nfree
-    nw = W.space.nfree
+    U, UB, V, VB, W, WB, P = X_trial
+    nu = U.space.nfree + UB.space.nfree
+    nv = V.space.nfree + VB.space.nfree
+    nw = W.space.nfree + WB.space.nfree
     np = P.space.space.nfree - 1 # zero mean constraint removes one dof
     nb = B_trial.space.nfree
     return nu, nv, nw, np, nb
@@ -86,14 +86,21 @@ function compute_dof_perms(spaces::Spaces, dΩ)
     X_trial, X_test, B_trial, B_test = spaces.X_trial, spaces.X_test, spaces.B_trial, spaces.B_test
 
     # unpack spaces
-    U_trial, V_trial, W_trial, P_trial = X_trial[1], X_trial[2], X_trial[3], X_trial[4]
-    U_test, V_test, W_test, P_test = X_test[1], X_test[2], X_test[3], X_test[4]
+    U_trial, UB_trial, V_trial, VB_trial, W_trial, WB_trial, P_trial = X_trial
+    U_test, UB_test, V_test, VB_test, W_test, WB_test, P_test = X_test
+    U_mini_trial = MultiFieldFESpace([U_trial, UB_trial])
+    U_mini_test  = MultiFieldFESpace([U_test, UB_test])
+    V_mini_trial = MultiFieldFESpace([V_trial, VB_trial])
+    V_mini_test  = MultiFieldFESpace([V_test, VB_test])
+    W_mini_trial = MultiFieldFESpace([W_trial, WB_trial])
+    W_mini_test  = MultiFieldFESpace([W_test, WB_test])
 
     # assemble mass matrices for each field
     a(u, v) = ∫( u*v )dΩ
-    M_u = assemble_matrix(a, U_trial, U_test)
-    M_v = assemble_matrix(a, V_trial, V_test)
-    M_w = assemble_matrix(a, W_trial, W_test)
+    a_mini((u,ub), (v,vb)) = a(u+ub, v+vb)
+    M_u = assemble_matrix(a_mini, U_mini_trial, U_mini_test)
+    M_v = assemble_matrix(a_mini, V_mini_trial, V_mini_test)
+    M_w = assemble_matrix(a_mini, W_mini_trial, W_mini_test)
     M_p = assemble_matrix(a, P_trial, P_test)
     M_b = assemble_matrix(a, B_trial, B_test)
 

@@ -20,7 +20,7 @@ function Base.show(io::IO, spaces::Spaces)
 end
 
 """
-    spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
+    spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri)
 
 Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 
@@ -28,15 +28,12 @@ Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
 buoyancy.
 """
-function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
+function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri)
     model = mesh.model
 
     # reference FE 
-    reffe_u = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_v = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_w = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_p = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-    reffe_b = ReferenceFE(lagrangian, Float64, order;   space=:P)
+    reffe_p1 = ReferenceFE(lagrangian, Float64, 1; space=:P)
+    reffe_b  = ReferenceFE(bubble, Float64)
 
     # test FESpaces
     u_diri_tags = collect(keys(u_diri))
@@ -45,12 +42,15 @@ function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
     b_diri_tags = collect(keys(b_diri))
     @info "Building `Gridap.TestFESpace`s..."
     @time begin
-    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=(length(u_diri_tags) > 0) ? u_diri_tags : Int[])
-    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=(length(v_diri_tags) > 0) ? v_diri_tags : Int[])
-    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=(length(w_diri_tags) > 0) ? w_diri_tags : Int[])
-    P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
-    X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
-    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=(length(b_diri_tags) > 0) ? b_diri_tags : Int[])
+    U_test  = TestFESpace(model, reffe_p1, conformity=:H1, dirichlet_tags=(length(u_diri_tags) > 0) ? u_diri_tags : Int[])
+    UB_test = TestFESpace(model, reffe_b)
+    V_test  = TestFESpace(model, reffe_p1, conformity=:H1, dirichlet_tags=(length(v_diri_tags) > 0) ? v_diri_tags : Int[])
+    VB_test = TestFESpace(model, reffe_b)
+    W_test  = TestFESpace(model, reffe_p1, conformity=:H1, dirichlet_tags=(length(w_diri_tags) > 0) ? w_diri_tags : Int[])
+    WB_test = TestFESpace(model, reffe_b)
+    P_test  = TestFESpace(model, reffe_p1, conformity=:H1, constraint=:zeromean)
+    X_test  = MultiFieldFESpace([U_test, UB_test, V_test, VB_test, W_test, WB_test, P_test])
+    B_test  = TestFESpace(model, reffe_p1, conformity=:H1, dirichlet_tags=(length(b_diri_tags) > 0) ? b_diri_tags : Int[])
     end
 
     # trial FESpaces with Dirichlet values
@@ -65,18 +65,21 @@ function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
     else
         U_trial = TrialFESpace(U_test)
     end
+    UB_trial = TrialFESpace(UB_test)
     if length(v_diri_vals) > 0
         V_trial = TrialFESpace(V_test, v_diri_vals)
     else
         V_trial = TrialFESpace(V_test)
     end
+    VB_trial = TrialFESpace(VB_test)
     if length(w_diri_vals) > 0
         W_trial = TrialFESpace(W_test, w_diri_vals)
     else
         W_trial = TrialFESpace(W_test)
     end
+    WB_trial = TrialFESpace(WB_test)
     P_trial = TrialFESpace(P_test)
-    X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
+    X_trial = MultiFieldFESpace([U_trial, UB_trial, V_trial, VB_trial, W_trial, WB_trial, P_trial])
     if length(b_diri_vals) > 0
         B_trial = TrialFESpace(B_test, b_diri_vals)
     else

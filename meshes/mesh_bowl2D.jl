@@ -21,6 +21,7 @@ function generate_bowl_mesh_2D(h, α)
     gmsh.model.addPhysicalGroup(2, [1], 4, "interior")
 
     # generate and save
+    gmsh.option.setNumber("Mesh.SaveWithoutOrphans", 1)  # don't save "orphan" control point
     gmsh.model.mesh.generate(2)
     gmsh.write(joinpath(@__DIR__, @sprintf("bowl2D_%e_%e.msh", h, α)))
     gmsh.finalize()

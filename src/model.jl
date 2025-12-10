@@ -121,13 +121,13 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     for i ∈ i_step:n_steps
 
         # Strang split evolution equation
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         if advection
-            evolve_advection!(model, b_half)  # Δt advection
+            @time "adv" evolve_advection!(model, b_half)  # Δt advection
         end
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         if model.forcings.eddy_param.is_on && advection
@@ -204,24 +204,24 @@ function evolve_advection!(model::Model, b_half)
     b_diri = model.fe_data.spaces.b_diri
 
     # sync up flow with current buoyancy state
-    invert!(model)
+    @time "  invert" invert!(model)
 
     # compute b_half
     l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
     l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
+    @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
+    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
     iterative_solve!(solver_adv)
     b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
     # compute u_half, v_half, w_half, p_half
-    invert!(model, b_half)
+    @time "  invert" invert!(model, b_half)
 
     # full step
     l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
     l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
+    @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
+    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
     iterative_solve!(solver_adv)
 
     # sync buoyancy to state
@@ -237,7 +237,7 @@ function evolve_vdiffusion!(model::Model)
         b = model.state.b
         αbz = α*N² + α*∂z(b)
         κᵥ = κᵥ_convection(model.forcings, αbz)
-        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ)
+        @time "  build vdiff" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ)
         perm = model.fe_data.dofs.p_b
         A_vdiff = A_vdiff[perm, perm]
         B_vdiff = B_vdiff[perm, :]

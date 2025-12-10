@@ -30,6 +30,8 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_onl
 
     # bilinear form
     a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+    a_mini((ux, ubx, uy, uby, uz, ubz, p), (vx, vbx, vy, vby, vz, vbz, q)) = 
+        a((ux+ubx, uy+uby, uz+ubz, p), (vx+vbx, vy+vby, vz+vbz, q))
 
     # assemble 
     @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
@@ -48,11 +50,11 @@ function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; f
                                ∂z(p)*vz +
                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
     else
-    return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
-              α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
-              α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
-              ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-end
+        return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
+                  α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
+                  α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
+                  ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+    end
 end
 function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
     # since ν is constant, we can just use the Laplacian here
@@ -80,16 +82,19 @@ Assemble the RHS matrix for the inversion problem.
 """
 function build_B_inversion(fe_data::FEData, params::Parameters)
     # unpack
-    W_test = fe_data.spaces.X_test[3]
+    W_test  = fe_data.spaces.X_test[5]
+    WB_test = fe_data.spaces.X_test[6]
     B_trial = fe_data.spaces.B_trial
     dΩ = fe_data.mesh.dΩ
     α = params.α
 
     # bilinear form
-    a(b, vz) = ∫( 1/α*(b*vz) )dΩ
+    a(b, w) = ∫( 1/α*(b*w) )dΩ
 
     # assemble
-    B = assemble_matrix(a, B_trial, W_test)
+    B0 = assemble_matrix(a, B_trial, W_test) 
+    BB = assemble_matrix(a, B_trial, WB_test) 
+    B = [B0; BB]
 
     # convert to N × nb matrix
     nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
@@ -108,9 +113,12 @@ Assemble the RHS vector for the inversion problem.
 """
 function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcings)
     # unpack
-    U_test = fe_data.spaces.X_test[1]
-    V_test = fe_data.spaces.X_test[2]
-    W_test = fe_data.spaces.X_test[3]
+    U_test  = fe_data.spaces.X_test[1]
+    UB_test = fe_data.spaces.X_test[2]
+    V_test  = fe_data.spaces.X_test[3]
+    VB_test = fe_data.spaces.X_test[4]
+    W_test  = fe_data.spaces.X_test[5]
+    WB_test = fe_data.spaces.X_test[6]
     b_diri = fe_data.spaces.b_diri
     dΓ = fe_data.mesh.dΓ
     dΩ = fe_data.mesh.dΩ
@@ -129,9 +137,9 @@ function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
 
     # assemble
-    b[1:nu] .= assemble_vector(lx, U_test) 
-    b[nu+1:nu+nv] .= assemble_vector(ly, V_test)
-    b[nu+nv+1:nu+nv+nw] .= assemble_vector(lz, W_test)
+    b[1:nu] .= [assemble_vector(lx, U_test); assemble_vector(lx, UB_test)]
+    b[nu+1:nu+nv] .= [assemble_vector(ly, V_test); assemble_vector(ly, VB_test)]
+    b[nu+nv+1:nu+nv+nw] .= [assemble_vector(lz, W_test); assemble_vector(lz, WB_test)]
 
     return b
 end
@@ -241,11 +249,24 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
             return ∫( b*d + θ*(κ*∂z(b)*∂z(d)) )dΩ
         end
     end
+
+    sponge = true
+    if sponge
+        λ₀ = 1/(7*86400) * 1e8  # (7 day)⁻¹ nondim with 1/f₀ϱ = 1e8 s
+        λ(x) = λ₀*exp(-(x[2] + 0.5)^2/(2*0.01^2))
+        b₀ = 10
+        b_basin(x) = b₀*x[3]/α
+    end
+
     function a_rhs(b, d)
         if direction == :horizontal
             return ∫( b*d - θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
         else
-            return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
+            if sponge
+                return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) - Δt/2*(λ*b*d) )dΩ
+            else
+                return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
+            end
         end
     end
 
@@ -257,7 +278,13 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
     if direction == :vertical
         # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
         N² = params.N²
-        l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
+        function l(d)
+            if sponge
+                return ∫( -2*θ*N²*(κ*∂z(d)) + Δt/2*(λ*(b_basin*d)) )dΩ
+            else
+                return ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
+            end
+        end
         b .+= assemble_vector(l, B_test)
 
         # see multiple-dispatched functions below

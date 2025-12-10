@@ -35,6 +35,7 @@ function generate_channel_mesh_2D(h, α)
     gmsh.model.addPhysicalGroup(1, [3], 5, "basin")
     gmsh.model.addPhysicalGroup(2, [1], 4, "interior")
 
+    gmsh.option.setNumber("Mesh.SaveWithoutOrphans", 1)  # don't save "orphan" control point
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
     gmsh.model.mesh.generate(2)
     gmsh.write(joinpath(@__DIR__, @sprintf("channel2D_h%.2e_a%.2e.msh", h, α)))
