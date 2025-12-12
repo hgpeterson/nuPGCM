@@ -1,15 +1,15 @@
 using Documenter
 using DocumenterCitations
-# using Literate
+using Literate
 
-# const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
-# const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
+const EXAMPLES_DIR = joinpath(@__DIR__, "..", "examples")
+const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
 
-# withenv("JULIA_DEBUG" => "Literate") do
-#     Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
-#                       execute=true, 
-#                       documenter=true)
-# end
+withenv("JULIA_DEBUG" => "Literate") do
+    Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
+                      execute=true, 
+                      documenter=true)
+end
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
@@ -19,14 +19,14 @@ model_formulation = [
     "Numerical Approach" => "model_formulation/numerical_approach.md"
 ]
 
-# example_pages = [
-#     "Mixing in a bowl" => "literated/bowl_mixing.md"
-# ]
+example_pages = [
+    "Mixing in a bowl" => "literated/bowl_mixing.md"
+]
 
 pages = [
     "Overview" => "index.md"
     "Model Formulation" => model_formulation
-    # "Examples" => example_pages
+    "Examples" => example_pages
     "References" => "references.md"
 ]
 
@@ -51,6 +51,7 @@ format = Documenter.HTML(; collapselevel=1,
 makedocs(; sitename="νPGCM",
          plugins=[bib],
          pages,
+         remotes=nothing,  # nuPGCM is dev dependency using local path ".."
          format)
 
 deploydocs(repo="github.com/hgpeterson/nuPGCM.git")

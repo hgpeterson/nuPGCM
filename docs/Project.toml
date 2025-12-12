@@ -1,5 +1,9 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
+Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 nuPGCM = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
+
+[sources]
+nuPGCM = {path = ".."}
