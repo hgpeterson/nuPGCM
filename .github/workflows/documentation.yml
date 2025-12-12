@@ -6,6 +6,7 @@ on:
       - main
     paths: 
       - 'docs/**'
+      - '.github/workflows/documentation.yml'
 
 jobs:
   build:
@@ -28,6 +29,10 @@ jobs:
         shell: julia --color=yes --project=docs {0}
         run: |
           using Pkg
+          ENV["PYTHON"]=""
+          Pkg.build("Conda")
+          Pkg.build("PyCall")
+          Pkg.build("PyPlot")
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - name: Build and deploy
