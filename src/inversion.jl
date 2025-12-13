@@ -38,25 +38,27 @@ function InversionToolkit(arch::AbstractArchitecture,
     B = B[fe_data.dofs.p_inversion, :]
     b = b[fe_data.dofs.p_inversion]
 
-    # preconditioner
-    if typeof(arch) == GPU || forcings.eddy_param.is_on
-        # get resolution
-        p, t = get_p_t(fe_data.mesh.model)
-        edges, _, _ = all_edges(t)
-        hs = [norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)]
-        sort!(hs)
-        h = hs[length(hs) ÷ 2] # median edge length
-        @debug @sprintf("Median edge length h = %.2e", h)
-        dim = size(t, 2) - 1
-        @debug "Mesh dimension: $dim"
+    # # preconditioner
+    # if typeof(arch) == GPU || forcings.eddy_param.is_on
+    #     # get resolution
+    #     p, t = get_p_t(fe_data.mesh.model)
+    #     edges, _, _ = all_edges(t)
+    #     hs = [norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)]
+    #     sort!(hs)
+    #     h = hs[length(hs) ÷ 2] # median edge length
+    #     @debug @sprintf("Median edge length h = %.2e", h)
+    #     dim = size(t, 2) - 1
+    #     @debug "Mesh dimension: $dim"
 
-        # use diagonal preconditioner scaled by resolution
-        P = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A, 1))))
-    else
-        # on CPU and fixed ν → can just LU factor
-        @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
-        @time "lu(A_inversion)" P = lu(A)
-    end
+    #     # use diagonal preconditioner scaled by resolution
+    #     P = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A, 1))))
+    # else
+    #     # # on CPU and fixed ν → can just LU factor
+    #     # @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
+    #     # @time "lu(A_inversion)" P = lu(A)
+    #     P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
+    # end
+    P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
 
     # move to arch
     A = on_architecture(arch, A)

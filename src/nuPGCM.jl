@@ -11,6 +11,7 @@ using JLD2
 using LinearAlgebra
 using SparseArrays
 using Krylov
+using KrylovPreconditioners
 using PyPlot
 using Printf
 
@@ -54,6 +55,7 @@ include("spaces.jl")
 include("dofs.jl")
 include("matrices.jl")
 include("iterative_solvers.jl")
+include("preconditioners.jl")
 include("inversion.jl")
 include("evolution.jl")
 include("model.jl")
