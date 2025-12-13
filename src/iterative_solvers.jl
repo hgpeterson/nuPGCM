@@ -46,13 +46,13 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
         @debug "Direct $label solve: time=$(t1-t0)" 
         return solver_tk
     end
-    if architecture(A) == CPU() && size(A, 1) < 300_000
-        t0 = time()
-        x .= A\y
-        t1 = time()
-        @debug "Direct $label solve: time=$(t1-t0)" 
-        return solver_tk
-    end
+    # if architecture(A) == CPU() && size(A, 1) < 300_000
+    #     t0 = time()
+    #     x .= A\y
+    #     t1 = time()
+    #     @debug "Direct $label solve: time=$(t1-t0)" 
+    #     return solver_tk
+    # end
 
     # solve
     Krylov.solve!(solver, A, y, x; M=P, kwargs...)
