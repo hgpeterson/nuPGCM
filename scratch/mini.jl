@@ -1,6 +1,10 @@
 using Gridap
+using Gridap.ReferenceFEs
 using GridapGmsh
 using Gmsh
+
+# for bubble workaround if using quad mesh (use `conformity=:L2`)
+ReferenceFEs.Conformity(::GenericRefFE{Bubble}, ::Symbol) = L2Conformity()
 
 # Make sure `∇(b)` and `Δ(b)` are both continuous.
 function b((x, y))
@@ -75,14 +79,14 @@ end
 
 ################################################################################
 
-function generate_mesh(h=1)
+function generate_mesh(; h=1, L=3)
     gmsh.initialize()
     gmsh.option.setNumber("General.Terminal", 1)
     gmsh.model.add("mesh")
     gmsh.model.geo.addPoint(0, 0, 0)
-    gmsh.model.geo.addPoint(3, 0, 0)
-    gmsh.model.geo.addPoint(3, 3, 0) 
-    gmsh.model.geo.addPoint(0, 3, 0) 
+    gmsh.model.geo.addPoint(L, 0, 0)
+    gmsh.model.geo.addPoint(L, L, 0) 
+    gmsh.model.geo.addPoint(0, L, 0) 
     gmsh.model.geo.addLine(1, 2)
     gmsh.model.geo.addLine(2, 3)
     gmsh.model.geo.addLine(3, 4)
@@ -90,16 +94,19 @@ function generate_mesh(h=1)
     gmsh.model.geo.addCurveLoop(1:4, 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
     gmsh.model.geo.synchronize()
-    gmsh.model.addPhysicalGroup(0, [1], 1, "tag_1")
-    gmsh.model.addPhysicalGroup(0, [2], 2, "dirichlet")
-    gmsh.model.addPhysicalGroup(0, 3:4, 3, "neumann")
-    gmsh.model.addPhysicalGroup(1, [1], 2, "dirichlet")
-    gmsh.model.addPhysicalGroup(1, 2:4, 3, "neumann")
-    gmsh.model.addPhysicalGroup(2, [1], 4, "interior")
+    # gmsh.model.addPhysicalGroup(0, [1], 1, "tag_1")
+    # gmsh.model.addPhysicalGroup(0, [2], 2, "dirichlet")
+    # gmsh.model.addPhysicalGroup(0, 1:2, 2, "dirichlet")
+    # gmsh.model.addPhysicalGroup(0, 3:4, 3, "neumann")
+    # gmsh.model.addPhysicalGroup(1, [1], 2, "dirichlet")
+    # gmsh.model.addPhysicalGroup(1, 2:4, 3, "neumann")
+    # gmsh.model.addPhysicalGroup(2, [1], 4, "interior")
+    gmsh.model.addPhysicalGroup(0, 1:4, 1, "dirichlet")
+    gmsh.model.addPhysicalGroup(1, 1:4, 1, "dirichlet")
+    gmsh.model.addPhysicalGroup(2, [1], 2, "interior")
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
-    # gmsh.option.setNumber("Mesh.RecombineAll", 1)  # rectangles
-    # gmsh.option.setNumber("Mesh.Algorithm", 8)  # rectangles
-    gmsh.option.setNumber("Mesh.SaveWithoutOrphans", 1)
+    gmsh.option.setNumber("Mesh.RecombineAll", 1)  # rectangles
+    gmsh.option.setNumber("Mesh.Algorithm", 8)  # rectangles
     gmsh.model.mesh.generate(2)
     gmsh.write("mesh.msh")
     gmsh.finalize()
@@ -112,9 +119,12 @@ function gmsh_test()
     reffe_b = ReferenceFE(bubble, VectorValue{2, Float64})
     reffe_p = ReferenceFE(lagrangian, Float64, 1)
 
-    V = TestFESpace(model, reffe_u, dirichlet_tags=["tag_1", "dirichlet"], conformity=:H1)
-    R = TestFESpace(model, reffe_b)
-    Q = TestFESpace(model, reffe_p, dirichlet_tags="tag_1", conformity=:H1)
+    # V = TestFESpace(model, reffe_u, dirichlet_tags=["tag_1", "dirichlet"], conformity=:H1)
+    V = TestFESpace(model, reffe_u, dirichlet_tags="dirichlet", conformity=:H1)
+    # R = TestFESpace(model, reffe_b)
+    R = TestFESpace(model, reffe_b, conformity=:L2)  # for quad mesh
+    # Q = TestFESpace(model, reffe_p, dirichlet_tags="tag_1", conformity=:H1)
+    Q = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
 
     U = TrialFESpace(V, u)
     B = TrialFESpace(R)
@@ -124,15 +134,15 @@ function gmsh_test()
     X = MultiFieldFESpace([U, B, P])
 
     Ω = Triangulation(model)
-    Γ = BoundaryTriangulation(model, labels, tags = "neumann")
-    n_Γ = get_normal_vector(Γ)
+    # Γ = BoundaryTriangulation(model, tags="neumann")
+    # n_Γ = get_normal_vector(Γ)
 
     degree = 4
     dΩ = Measure(Ω, degree)
-    dΓ = Measure(Γ, degree)
+    # dΓ = Measure(Γ, degree)
 
     a((u, p), (v, q)) = ∫(∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u))*dΩ
-    l((v, q)) = ∫(v⋅f + q*g)*dΩ + ∫(v⋅(n_Γ⋅∇u) - (n_Γ⋅v)*p)*dΓ
+    l((v, q)) = ∫(v⋅f + q*g)*dΩ #+ ∫(v⋅(n_Γ⋅∇u) - (n_Γ⋅v)*p)*dΓ
 
     mini_a((u, b, p), (v, r, q)) = a((u + b, p), (v+r, q))
     mini_l((v, r, q)) = l((v+r, q))
@@ -158,6 +168,59 @@ end
 
 ################################################################################
 
+function gmsh_test_TH()
+    u(x) = VectorValue( x[1]^2 + 2*x[2]^2, -x[1]^2 )
+    p(x) = x[1] + 3*x[2]
+    f(x) = -Δ(u)(x) + ∇(p)(x)
+    g(x) = (∇⋅u)(x)
+    ∇u(x) = ∇(u)(x)
+
+    model = GmshDiscreteModel("mesh.msh")
+
+    order = 2
+
+    reffe_u = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
+    reffe_p = ReferenceFE(lagrangian,Float64,order-1)
+
+    V = TestFESpace(model,reffe_u,dirichlet_tags="dirichlet",conformity=:H1)
+    Q = TestFESpace(model,reffe_p,conformity=:H1)
+
+    U = TrialFESpace(V,u)
+    P = TrialFESpace(Q)
+
+    Y = MultiFieldFESpace([V,Q])
+    X = MultiFieldFESpace([U,P])
+
+    Ω = Triangulation(model)
+    Γ = BoundaryTriangulation(model,tags="neumann")
+    n_Γ = get_normal_vector(Γ)
+
+    degree = order
+    dΩ = Measure(Ω,degree)
+    dΓ = Measure(Γ,degree)
+
+    a((u,p),(v,q)) = ∫( ∇(v)⊙∇(u) - (∇⋅v)*p + q*(∇⋅u) )*dΩ
+
+    l((v,q)) = ∫( v⋅f + q*g )*dΩ + ∫( v⋅(n_Γ⋅∇u) - (n_Γ⋅v)*p )*dΓ
+
+    op = AffineFEOperator(a,l,X,Y)
+
+    uh, ph = solve(op)
+
+    eu = u - uh
+    ep = p - ph
+
+    l2(u) = sqrt(sum( ∫( u⊙u )*dΩ ))
+    h1(u) = sqrt(sum( ∫( u⊙u + ∇(u)⊙∇(u) )*dΩ ))
+
+    @info eu_l2 = l2(eu)
+    @info eu_h1 = h1(eu)
+    @info ep_l2 = l2(ep)
+end
+
 # gridap_test()
-generate_mesh()
+generate_mesh(; L=3, h=1)
 gmsh_test()
+
+# # passes for Taylor-Hood
+# gmsh_test_TH()
