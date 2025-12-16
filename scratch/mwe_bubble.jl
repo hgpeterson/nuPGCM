@@ -14,8 +14,12 @@ gmsh.model.geo.addLine(3, 1)
 gmsh.model.geo.addCurveLoop(1:2, 1)
 gmsh.model.geo.addPlaneSurface([1], 1)
 gmsh.model.geo.synchronize()
+# gmsh.option.setNumber("Mesh.RecombineAll", 1)  # rectangles
+# gmsh.option.setNumber("Mesh.Algorithm", 8)  # rectangles
+gmsh.model.addPhysicalGroup(0, [1,3], 1, "boundary")
+gmsh.model.addPhysicalGroup(1, [1,2], 1, "boundary")
+gmsh.model.addPhysicalGroup(2, [1], 1, "boundary")
 gmsh.model.mesh.generate(2)
-# gmsh.option.setNumber("Mesh.SaveWithoutOrphans", 1)  # removes need for workaround
 gmsh.write("mesh.msh")
 gmsh.finalize()
 
