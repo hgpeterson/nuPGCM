@@ -1,113 +1,84 @@
 using nuPGCM
 using JLD2
-using LinearAlgebra
 using Printf
-using PyPlot
 
-include(joinpath(@__DIR__, "../meshes/mesh_channel2D.jl"))  # for making channel2D mesh
-
-pygui(false)
-plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
-plt.close("all")
+include(joinpath(@__DIR__, "../meshes/channel_basin.jl"))  # for making channel_basin mesh
 
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "channel_2D/sim008"))
+set_out_dir!(joinpath(@__DIR__, "../sims/sim014"))
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 ε = sqrt(1e-1)
 α = 1/8
 μϱ = 1
 N² = 0
-Δt = 1e-4
+Δt = 1e-3
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
-# function H(xyz)
-#     x = xyz[1]
-#     y = xyz[2]
-
-#     L = 2
-#     W = 1
-#     L_channel = L/4
-#     L_flat_channel = L_channel/4 # length of flat part of channel
-#     L_curve_channel = (L_channel - L_flat_channel)/2 # length of each curved part of channel
-#     W_flat_basin = W/2 # width of flat part of basin
-#     W_curve_basin = (W - W_flat_basin)/2 # width of each curved part of basin
-#     L_curve_basin = W_curve_basin # length of curved end of basin
-#     H = α*W
-
-#     # parabola that has a maximum of H at x_max and a 0 at x_zero
-#     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
-
-#     function H_basin(x)
-#         if 0 ≤ x ≤ W_curve_basin
-#             return parabola(x, W_curve_basin, 0)
-#         elseif x ≤ W_curve_basin + W_flat_basin
-#             return H
-#         elseif x ≤ W
-#             return parabola(x, W_curve_basin + W_flat_basin, W)
-#         else
-#             throw(ArgumentError("x out of bounds"))
-#         end
-#     end
-
-#     if -L/2 ≤ y ≤ -L/2 + L_curve_channel
-#         return parabola(y, -L/2 + L_curve_channel, -L/2)
-#     elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
-#         return H
-#     elseif y ≤ -L/2 + L_channel
-#         H_channel = parabola(y, -L/2 + L_curve_channel + L_flat_channel, -L/2 + L_channel)
-#         return max(H_channel, H_basin(x))
-#     elseif y ≤ L/2 - L_curve_basin
-#         return H_basin(x)
-#     elseif y ≤ L/2
-#         if 0 ≤ x ≤ W_curve_basin
-#             x₀ = W_curve_basin
-#             y₀ = L/2 - L_curve_basin
-#             r = √( (x - x₀)^2 + (y - y₀)^2 )
-#             return parabola(r, 0, W_curve_basin)
-#         elseif W_curve_basin ≤ x ≤ W_curve_basin + W_flat_basin
-#             return parabola(y, L/2 - L_curve_basin, L/2)
-#         elseif x ≤ W
-#             x₀ = W_curve_basin + W_flat_basin
-#             y₀ = L/2 - L_curve_basin
-#             r = √( (x - x₀)^2 + (y - y₀)^2 )
-#             return parabola(r, 0, W_curve_basin)
-#         else
-#             throw(ArgumentError("x out of bounds"))
-#         end
-#     else
-#         throw(ArgumentError("y out of bounds"))
-#     end
-# end
-function H(X)
-    x = X[1]
-    y = X[2]
+function H(xyz)
+    x = xyz[1]
+    y = xyz[2]
 
     L = 2
     W = 1
     L_channel = L/4
-    L_flat_channel = L_channel/4
-    L_curve_channel = (L_channel - L_flat_channel)/2
+    L_flat_channel = L_channel/4 # length of flat part of channel
+    L_curve_channel = (L_channel - L_flat_channel)/2 # length of each curved part of channel
+    W_flat_basin = W/2 # width of flat part of basin
+    W_curve_basin = (W - W_flat_basin)/2 # width of each curved part of basin
+    L_curve_basin = W_curve_basin # length of curved end of basin
     H = α*W
 
     # parabola that has a maximum of H at x_max and a 0 at x_zero
     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
 
+    function H_basin(x)
+        if 0 ≤ x ≤ W_curve_basin
+            return parabola(x, W_curve_basin, 0)
+        elseif x ≤ W_curve_basin + W_flat_basin
+            return H
+        elseif x ≤ W
+            return parabola(x, W_curve_basin + W_flat_basin, W)
+        else
+            throw(ArgumentError("x out of bounds"))
+        end
+    end
+
     if -L/2 ≤ y ≤ -L/2 + L_curve_channel
         return parabola(y, -L/2 + L_curve_channel, -L/2)
-    elseif y ≤ -L/2 + 2L_curve_channel + L_flat_channel
+    elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
         return H
+    elseif y ≤ -L/2 + L_channel
+        H_channel = parabola(y, -L/2 + L_curve_channel + L_flat_channel, -L/2 + L_channel)
+        return max(H_channel, H_basin(x))
+    elseif y ≤ L/2 - L_curve_basin
+        return H_basin(x)
+    elseif y ≤ L/2
+        if 0 ≤ x ≤ W_curve_basin
+            x₀ = W_curve_basin
+            y₀ = L/2 - L_curve_basin
+            r = √( (x - x₀)^2 + (y - y₀)^2 )
+            return parabola(r, 0, W_curve_basin)
+        elseif W_curve_basin ≤ x ≤ W_curve_basin + W_flat_basin
+            return parabola(y, L/2 - L_curve_basin, L/2)
+        elseif x ≤ W
+            x₀ = W_curve_basin + W_flat_basin
+            y₀ = L/2 - L_curve_basin
+            r = √( (x - x₀)^2 + (y - y₀)^2 )
+            return parabola(r, 0, W_curve_basin)
+        else
+            throw(ArgumentError("x out of bounds"))
+        end
     else
         throw(ArgumentError("y out of bounds"))
     end
 end
-# H(x) = α*(1 - x[1]^2 - x[2]^2)
 params = Parameters(ε, α, μϱ, N², Δt, f, H)
 display(params)
 @info @sprintf("Diffusion timescale: %.2e", μϱ/ε^2)
@@ -119,15 +90,14 @@ display(params)
 τ₀ = 1e-1
 τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
+b₀ = 10  # maybe try 30 based on F18?
 # b_surface(x) = 0
-# b_surface(x) = x[2] > 0 ? 0.0 : -x[2]^2
-# b_surface(x) = x[2] > 0 ? 0.0 : -4*(x[2] + 0.5)^2
-# b_surface_bc = SurfaceDirichletBC(b_surface)
-F₀ = 1
-b_flux_surface(x) = -F₀*sin(2π*(x[2] + 1)/0.5)
-b_surface_bc = SurfaceFluxBC(b_flux_surface)
-# b_basin(x) = 0
-b_basin(x) = 10*x[3]/α
+b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
+# b_surface(x) = x[2] > 0 ? 0.0 : -b₀*(x[2] + 0.5)^2/0.5^2
+b_surface_bc = SurfaceDirichletBC(b_surface)
+# F₀ = 1
+# b_flux_surface(x) = x[2] > -0.5 ? 0.0 : -F₀*sin(2π*(x[2] + 1)/0.5)
+# b_surface_bc = SurfaceFluxBC(b_flux_surface)
 conv_param = ConvectionParameterization(κᶜ=1e3, N²min=1e-3)
 eddy_param = EddyParameterization(f=f, N²min=1e-2)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
@@ -152,21 +122,25 @@ display(forcings.eddy_param)
 
 function setup_model()
     # mesh
+    # h = √2*α*ε
+    h = √2*α*ε/2
     # h = √2*α*ε/5
-    h = √2*α*ε/10
-    mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
+    # h = √2*α*ε/10
+    # mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
+    mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-        generate_channel_mesh_2D(h, α)
+        mesh_channel_basin(h, α)
     end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
     # make_bc_dicts() ??
-    u_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0)
-    v_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin top"=>0, "basin"=>0)
-    w_diri = Dict("bottom"=>0, "coastline"=>0, "basin bottom"=>0, "basin top"=>0, "surface"=>0)
-    # b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface, "basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
-    b_diri = Dict("basin"=>b_basin, "basin bottom"=>b_basin, "basin top"=>b_basin)
+    u_diri = Dict("bottom"=>0, "coastline"=>0)
+    v_diri = Dict("bottom"=>0, "coastline"=>0)
+    w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
+    # SurfaceDirichletBC:
+    b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface)
+    # SurfaceFluxBC:
     # b_diri = Dict()
     spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
     fe_data = FEData(mesh, spaces)
@@ -186,22 +160,24 @@ end
 
 # set up model
 model = setup_model()
+display(model)
 
 # set initial buoyancy
-# # set_b!(model, x->0)
-# set_b!(model, b_basin)
-# # set_b!(model, b_surface)
-# invert!(model) # sync flow with buoyancy state
-# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, 1050))
+# set_b!(model, x -> 0)  # when N² is set
+# set_b!(model, x -> b₀*x[3]/α)  # when N² = 0 
+set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
+invert!(model)  # sync flow with buoyancy state
+save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# i_step = 1400
+# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
+# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", joinpath(@__DIR__, "channel_2D/sim008"), i_step))
 
 # solve
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
-# n_save = n_steps ÷ 100
 n_save = 10
 n_plot = Inf
-# run!(model; n_steps, n_save, n_plot)
-run!(model; n_steps, n_save, n_plot, i_step=1050)
+run!(model; n_steps, n_save, n_plot)
+# run!(model; n_steps, n_save, n_plot, i_step)
 
 println("Done.")
