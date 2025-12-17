@@ -125,7 +125,12 @@ end
 function ν_eddy(eddy_param::EddyParameterization, αbz)
     f = eddy_param.f
     N²min = eddy_param.N²min
-    return f * (f / (sqrt∘(N²min +  αbz * αbz)))
+
+    # this function converges to max(ν₁, ν₂) as γ → ∞
+    γ = 10  # smoothing factor
+    ν₀ = 1  # minimum viscosity value
+    ν₁ = f * (f / (sqrt∘(N²min +  αbz * αbz)))  # eddy value
+    return (log∘(exp(γ*ν₀) + exp∘(γ*ν₁)) / γ)  # LogSumExp
 end
 
 #### Forcings type ####
