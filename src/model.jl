@@ -1,7 +1,6 @@
-mutable struct State{U, P, B}
-    u::U     # flow in x direction
-    v::U     # flow in y direction
-    w::U     # flow in z direction
+mutable struct State{U, UB, P, B}
+    u::U     # linear part of flow
+    ub::UB   # bubble part of flow
     p::P     # pressure
     b::B     # buoyancy
     t::Real  # time
@@ -14,8 +13,7 @@ end
 function Base.show(io::IO, state::State)
     println(io, summary(state), ":")
     println(io, "├── u: ", state.u, " with ", length(state.u.free_values), " DOFs")
-    println(io, "├── v: ", state.v, " with ", length(state.v.free_values), " DOFs")
-    println(io, "├── w: ", state.w, " with ", length(state.w.free_values), " DOFs")
+    println(io, "├── ub: ", state.ub, " with ", length(state.ub.free_values), " DOFs")
     println(io, "├── p: ", state.p, " with ", length(state.p.free_values), " DOFs")
     println(io, "├── b: ", state.b, " with ", length(state.b.free_values), " DOFs")
       print(io, "└── t: ", state.t)
@@ -64,17 +62,18 @@ end
 
 function rest_state(spaces::Spaces; t=0.)
     # unpack
-    U, V, W, P = spaces.X_trial
-    B = spaces.B_trial
+    U = spaces.U
+    UB = spaces.UB
+    P = spaces.P
+    B = spaces.B
 
     # define FE functions
-    u = interpolate(0, U)
-    v = interpolate(0, V)
-    w = interpolate(0, W)
+    u = interpolate(VectorValue(0, 0, 0), U)
+    ub = interpolate(VectorValue(0, 0, 0), UB)
     p = interpolate(0, P) 
     b = interpolate(0, B)
 
-    return State(u, v, w, p, b, t)
+    return State(u, ub, p, b, t)
 end
 
 function set_b!(model::Model, b::Function)
@@ -94,12 +93,11 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     # unpack
     Δt = model.params.Δt
     u = model.state.u
-    v = model.state.v
-    w = model.state.w
+    ub = model.state.ub
     b = model.state.b
 
     # save initial condition for comparison
-    b0 = interpolate(0, model.fe_data.spaces.B_trial)
+    b0 = interpolate(0, model.fe_data.spaces.B)
     b0.free_values .= b.free_values
     # volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
 
@@ -116,7 +114,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # need to store a half-step buoyancy for advection
-    b_half = interpolate(0, model.fe_data.spaces.B_trial)
+    b_half = interpolate(0, model.fe_data.spaces.B)
     t_last_info = time()  # another timer for ETR
     for i ∈ i_step:n_steps
 
@@ -145,10 +143,9 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         # blow-up -> stop
         u_max = maximum(abs.(u.free_values))
-        v_max = maximum(abs.(v.free_values))
-        w_max = maximum(abs.(w.free_values))
+        ub_max = maximum(abs.(ub.free_values))
         b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, v_max, w_max, b_max]) > 1e3
+        if maximum([u_max, ub_max, b_max]) > 1e3
             throw(ErrorException("Blow-up detected, stopping simulation"))
         end
 
@@ -162,7 +159,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
                 msg *= @sprintf("timestep duration ~ %.1e s\n", t_step)
                 msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
             end
-            msg *= @sprintf("|u|ₘₐₓ = %.1e, |v|ₘₐₓ = %.1e, |w|ₘₐₓ = %.1e\n", u_max, v_max, w_max)
+            msg *= @sprintf("|u|ₘₐₓ = %.1e, |ub|ₘₐₓ = %.1e\n", u_max, ub_max)
             msg *= @sprintf("%.1e ≤ b ≤ %.1e\n", minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
             msg
@@ -191,13 +188,10 @@ function evolve_advection!(model::Model, b_half)
     # unpack
     p_b = model.fe_data.dofs.p_b
     inv_p_b = model.fe_data.dofs.inv_p_b
-    B_test = model.fe_data.spaces.B_test
+    D = model.fe_data.spaces.D
     dΩ = model.fe_data.mesh.dΩ
     N² = model.params.N²
     Δt = model.params.Δt
-    u = model.state.u
-    v = model.state.v
-    w = model.state.w
     b = model.state.b
     solver_adv = model.evolution.solver_adv
     arch = architecture(solver_adv.y)
@@ -207,10 +201,12 @@ function evolve_advection!(model::Model, b_half)
     @time "  invert" invert!(model)
 
     # compute b_half
-    l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
+    u = model.state.u + model.state.ub
+    w = u⋅z⃗
+    l_half(d) = ∫( b*d - Δt/2*(u⋅∇(b) + w*N²)*d )dΩ
+    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u⋅∇(b_diri))*d )dΩ
+    @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, D)[p_b])
+    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, D)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
     iterative_solve!(solver_adv)
     b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -218,10 +214,12 @@ function evolve_advection!(model::Model, b_half)
     @time "  invert" invert!(model, b_half)
 
     # full step
-    l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-    l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
+    u = model.state.u + model.state.ub
+    w = u⋅z⃗
+    l_full(d) = ∫( b*d - Δt*(u⋅∇(b_half) + w*N²)*d )dΩ
+    l_full_diri(d) = ∫( b_diri*d - Δt*(u⋅∇(b_diri))*d )dΩ
+    @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, D)[p_b])
+    @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, D)[p_b])
     iterative_solve!(solver_adv)
 
     # sync buoyancy to state
@@ -290,11 +288,9 @@ end
 function sync_flow!(model::Model)
     x = on_architecture(CPU(), model.inversion.solver.x[model.fe_data.dofs.inv_p_inversion])
     nu = model.fe_data.dofs.nu
-    nv = model.fe_data.dofs.nv
-    nw = model.fe_data.dofs.nw
+    nub = model.fe_data.dofs.nub
     model.state.u.free_values .= x[1:nu]
-    model.state.v.free_values .= x[nu+1:nu+nv]
-    model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
-    model.state.p.free_values.args[1] .= x[nu+nv+nw+1:end]
+    model.state.ub.free_values .= x[nu+1:nu+nub]
+    model.state.p.free_values.args[1] .= x[nu+nub+1:end]
     return model
 end

@@ -1,6 +1,7 @@
 module nuPGCM
 
 using Gridap
+using Gridap.ReferenceFEs  # for Bubble function conformity workaround (https://github.com/gridap/Gridap.jl/issues/1195)
 using GridapGmsh
 using Gmsh: gmsh
 using CUDA

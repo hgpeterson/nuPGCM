@@ -5,7 +5,7 @@ using Printf
 set_out_dir!(@__DIR__)
 
 # params/funcs
-arch = CPU()
+arch = GPU()
 dim = 3
 ε = 2e-1
 α = 1/2
@@ -32,11 +32,12 @@ h = 0.1
 mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
 
 # FE data
-u_diri = Dict("bottom"=>0, "coastline"=>0)
-v_diri = Dict("bottom"=>0, "coastline"=>0)
-w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
-b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface)
-spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
+# u_diri = Dict("bottom"=>0, "coastline"=>0)
+# v_diri = Dict("bottom"=>0, "coastline"=>0)
+# w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
+# b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface)
+# spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
+spaces = Spaces(mesh)
 fe_data = FEData(mesh, spaces)
 
 # setup inversion toolkit
@@ -49,4 +50,4 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings)
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
 
 # solve
-run!(model; n_steps)
+run!(model; n_steps, n_save=5)

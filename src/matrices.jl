@@ -1,7 +1,12 @@
+# unit vectors
+x⃗ = VectorValue(1.0, 0.0, 0.0)
+y⃗ = VectorValue(0.0, 1.0, 0.0)
+z⃗ = VectorValue(0.0, 0.0, 1.0)
+
 # gradients 
-∂x(u) = VectorValue(1.0, 0.0, 0.0)⋅∇(u)
-∂y(u) = VectorValue(0.0, 1.0, 0.0)⋅∇(u)
-∂z(u) = VectorValue(0.0, 0.0, 1.0)⋅∇(u)
+∂x(u) = x⃗⋅∇(u)
+∂y(u) = y⃗⋅∇(u)
+∂z(u) = z⃗⋅∇(u)
 
 """
     A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
@@ -22,58 +27,59 @@ Assemble the LHS matrix `A` for the inversion problem.
 """
 function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
     # unpack
-    X_trial = fe_data.spaces.X_trial
-    X_test = fe_data.spaces.X_test
+    X = fe_data.spaces.X
+    Y = fe_data.spaces.Y
     dΩ = fe_data.mesh.dΩ
     α²ε² = params.α^2*params.ε^2
     f = params.f
 
     # bilinear form
-    a((ux, uy, uz, p), (vx, vy, vz, q)) = bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
-    a_mini((ux, ubx, uy, uby, uz, ubz, p), (vx, vbx, vy, vby, vz, vbz, q)) = 
-        a((ux+ubx, uy+uby, uz+ubz, p), (vx+vbx, vy+vby, vz+vbz, q))
+    a((u, p), (v, q)) = bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+    a_mini((u, ub, p), (v, vb, q)) = a((u+ub, p), (v+vb, q))
 
     # assemble 
-    @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
+    @time "build inversion system" A = assemble_matrix(a_mini, X, Y)
 
     return A
 end
-function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
-    # for general ν, need full stress tensor
-    if friction_only
-        return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) +
-                  α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) +
-                  α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) )dΩ
-    elseif frictionless_only
-        return ∫( -(f*uy*vx) + ∂x(p)*vx +
-                    f*ux*vy  + ∂y(p)*vy +
-                               ∂z(p)*vz +
-                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-    else
-        return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
-                  α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
-                  α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
-                  ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-    end
+function bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+    σ = Gridap.symmetric_gradient
+    return ∫( 2*α²ε²*ν*σ(u)⊙σ(v) - (∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
+#     # for general ν, need full stress tensor
+#     if friction_only
+#         return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) +
+#                   α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) +
+#                   α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) )dΩ
+#     elseif frictionless_only
+#         return ∫( -(f*uy*vx) + ∂x(p)*vx +
+#                     f*ux*vy  + ∂y(p)*vy +
+#                                ∂z(p)*vz +
+#                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+#     else
+#         return ∫( α²ε²*(ν*(∇(ux)⋅∇(vx) + ∂x(ux)*∂x(vx) +                 ∂x(uy)*∂y(vx) +                 ∂x(uz)*∂z(vx))) - f*uy*vx + ∂x(p)*vx +
+#                   α²ε²*(ν*(              ∂y(ux)*∂x(vy) +   ∇(uy)⋅∇(vy) + ∂y(uy)*∂y(vy) +                 ∂y(uz)*∂z(vy))) + f*ux*vy + ∂y(p)*vy +
+#                   α²ε²*(ν*(              ∂z(ux)*∂x(vz) +                 ∂z(uy)*∂y(vz) +   ∇(uz)⋅∇(vz) + ∂z(uz)*∂z(vz))) +           ∂z(p)*vz +
+#                   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+#     end
 end
-function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
-    # since ν is constant, we can just use the Laplacian here
-    if friction_only
-        return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) +
-                  α²ε²*(ν*∇(uy)⋅∇(vy)) +
-                  α²ε²*(ν*∇(uz)⋅∇(vz)) )dΩ
-    elseif frictionless_only
-        return ∫( -(f*uy*vx) + ∂x(p)*vx +
-                    f*ux*vy  + ∂y(p)*vy +
-                               ∂z(p)*vz +
-                    ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-    else
-        return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
-                  α²ε²*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
-                  α²ε²*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
-                  ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
-    end
-end
+# function bilinear_form((ux, uy, uz, p), (vx, vy, vz, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
+#     # since ν is constant, we can just use the Laplacian here
+#     if friction_only
+#         return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) +
+#                   α²ε²*(ν*∇(uy)⋅∇(vy)) +
+#                   α²ε²*(ν*∇(uz)⋅∇(vz)) )dΩ
+#     elseif frictionless_only
+#         return ∫( -(f*uy*vx) + ∂x(p)*vx +
+#                     f*ux*vy  + ∂y(p)*vy +
+#                                ∂z(p)*vz +
+#                     ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+#     else
+#         return ∫( α²ε²*(ν*∇(ux)⋅∇(vx)) - f*uy*vx + ∂x(p)*vx +
+#                   α²ε²*(ν*∇(uy)⋅∇(vy)) + f*ux*vy + ∂y(p)*vy +
+#                   α²ε²*(ν*∇(uz)⋅∇(vz)) +           ∂z(p)*vz +
+#                   ∂x(ux)*q + ∂y(uy)*q + ∂z(uz)*q )dΩ
+#     end
+# end
 
 """
     B = build_B_inversion(fe_data::FEData, params::Parameters)
@@ -82,25 +88,24 @@ Assemble the RHS matrix for the inversion problem.
 """
 function build_B_inversion(fe_data::FEData, params::Parameters)
     # unpack
-    W_test  = fe_data.spaces.X_test[5]
-    WB_test = fe_data.spaces.X_test[6]
-    B_trial = fe_data.spaces.B_trial
+    V  = fe_data.spaces.Y[1]
+    VB = fe_data.spaces.Y[2]
+    B_trial = fe_data.spaces.B
     dΩ = fe_data.mesh.dΩ
     α = params.α
 
     # bilinear form
-    a(b, w) = ∫( 1/α*(b*w) )dΩ
+    a(b, v) = ∫( 1/α*(b*(z⃗⋅v)) )dΩ
 
     # assemble
-    B0 = assemble_matrix(a, B_trial, W_test) 
-    BB = assemble_matrix(a, B_trial, WB_test) 
+    B0 = assemble_matrix(a, B_trial, V) 
+    BB = assemble_matrix(a, B_trial, VB) 
     B = [B0; BB]
 
     # convert to N × nb matrix
-    nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
-    N = nu + nv + nw + np
+    nu, nub, np, nb = get_n_dofs(fe_data.dofs)
+    N = nu + nub + np
     I, J, V = findnz(B)
-    I .+= nu + nv
     B = sparse(I, J, V, N, nb)
 
     return B
@@ -113,12 +118,8 @@ Assemble the RHS vector for the inversion problem.
 """
 function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcings)
     # unpack
-    U_test  = fe_data.spaces.X_test[1]
-    UB_test = fe_data.spaces.X_test[2]
-    V_test  = fe_data.spaces.X_test[3]
-    VB_test = fe_data.spaces.X_test[4]
-    W_test  = fe_data.spaces.X_test[5]
-    WB_test = fe_data.spaces.X_test[6]
+    V  = fe_data.spaces.Y[1]
+    VB = fe_data.spaces.Y[2]
     b_diri = fe_data.spaces.b_diri
     dΓ = fe_data.mesh.dΓ
     dΩ = fe_data.mesh.dΩ
@@ -127,19 +128,17 @@ function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcin
     τʸ = forcings.τʸ
 
     # allocate vector of length N
-    nu, nv, nw, np, nb = get_n_dofs(fe_data.dofs)
-    N = nu + nv + nw + np
+    nu, nub, np, nb = get_n_dofs(fe_data.dofs)
+    N = nu + nub + np
     b = zeros(N)
 
-    # linear forms
-    lx(vx) = ∫( α*(τˣ*vx) )dΓ  # b.c. is α²ε²ν∂z(u) = ατ
-    ly(vy) = ∫( α*(τʸ*vy) )dΓ
-    lz(vz) = ∫( 1/α*(b_diri*vz) )dΩ # correction due to Dirichlet boundary condition
+    # linear form
+    l(v) = ∫( α*(τˣ*(x⃗⋅v) + τʸ*(y⃗⋅v)) )dΓ + # b.c. is α²ε²ν∂z(u) = ατ
+           ∫( 1/α*(b_diri*(z⃗⋅v)) )dΩ        # correction due to Dirichlet boundary condition
 
     # assemble
-    b[1:nu] .= [assemble_vector(lx, U_test); assemble_vector(lx, UB_test)]
-    b[nu+1:nu+nv] .= [assemble_vector(ly, V_test); assemble_vector(ly, VB_test)]
-    b[nu+nv+1:nu+nv+nw] .= [assemble_vector(lz, W_test); assemble_vector(lz, WB_test)]
+    b[1:nu] .= assemble_vector(l, V)
+    b[nu+1:nu+nub] .= assemble_vector(l, VB)
 
     return b
 end
@@ -180,12 +179,12 @@ Assemble the LHS matrix `A` for the advection part of the evolution problem.
 It turns out that the advection matrix is just the mass matrix.
 """
 function build_advection_matrix(fe_data::FEData)
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
+    B = fe_data.spaces.B
+    D = fe_data.spaces.D
     dΩ = fe_data.mesh.dΩ
 
     a(b, d) = ∫( b*d )dΩ
-    A = assemble_matrix(a, B_trial, B_test)
+    A = assemble_matrix(a, B, D)
     return A
 end
 
@@ -230,8 +229,8 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
         throw(ArgumentError("direction must be :horizontal or :vertical"))
     end
 
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
+    B = fe_data.spaces.B
+    D = fe_data.spaces.D
     dΩ = fe_data.mesh.dΩ
     ε = params.ε
     α = params.α
@@ -250,51 +249,33 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
         end
     end
 
-    sponge = true
-    if sponge
-        λ₀ = 1/(7*86400) * 1e8  # (7 day)⁻¹ nondim with 1/f₀ϱ = 1e8 s
-        λ(x) = λ₀*exp(-(x[2] + 0.5)^2/(2*0.01^2))
-        b₀ = 10
-        b_basin(x) = b₀*x[3]/α
-    end
-
     function a_rhs(b, d)
         if direction == :horizontal
             return ∫( b*d - θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
         else
-            if sponge
-                return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) - Δt/2*(λ*b*d) )dΩ
-            else
-                return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
-            end
+            return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
         end
     end
 
-    A = assemble_matrix(a_lhs, B_trial, B_test)
-    B = assemble_matrix(a_rhs, B_trial, B_test)
-    b   = assemble_vector(d -> a_rhs(b_diri, d), B_test)
-    b .-= assemble_vector(d -> a_lhs(b_diri, d), B_test)
+    A = assemble_matrix(a_lhs, B, D)
+    B = assemble_matrix(a_rhs, B, D)
+    b   = assemble_vector(d -> a_rhs(b_diri, d), D)
+    b .-= assemble_vector(d -> a_lhs(b_diri, d), D)
 
     if direction == :vertical
         # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
         N² = params.N²
-        function l(d)
-            if sponge
-                return ∫( -2*θ*N²*(κ*∂z(d)) + Δt/2*(λ*(b_basin*d)) )dΩ
-            else
-                return ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
-            end
-        end
-        b .+= assemble_vector(l, B_test)
+        l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
+        b .+= assemble_vector(l, D)
 
         # see multiple-dispatched functions below
-        add_surface_flux!(b, forcings.b_surface_bc, params, κ, fe_data.mesh.dΓ, B_test)
+        add_surface_flux!(b, forcings.b_surface_bc, params, κ, fe_data.mesh.dΓ, D)
     end
 
     return A, B, b
 end
 
-function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_test)
+function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, D)
     N² = params.N²
     ε = params.ε
     α = params.α
@@ -302,7 +283,7 @@ function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_
     Δt = params.Δt
     # b.c. is α²ε²/μϱ κ ∂z(b) = α*F (Δt/2 because of Strang split)
     l(d) = ∫( Δt/2 * (α*(bc.flux*d) - α^2*ε^2/μϱ*N²*(κ*d)) )dΓ  
-    b .+= assemble_vector(l, B_test)
+    b .+= assemble_vector(l, D)
     return b
 end
 
