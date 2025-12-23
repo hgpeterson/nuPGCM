@@ -1,0 +1,18 @@
+using Gmsh
+gmsh.initialize()
+gmsh.option.setNumber("General.Terminal", 1)
+gmsh.model.add("mesh")
+gmsh.model.geo.addPoint(0, 0, 0)
+gmsh.model.geo.addPoint(1, 2, 0)  # control point
+gmsh.model.geo.addPoint(2, 0, 0) 
+gmsh.model.geo.addBezier([1, 2, 3])
+gmsh.model.geo.addLine(3, 1)
+gmsh.model.geo.addCurveLoop(1:2, 1)
+gmsh.model.geo.addPlaneSurface([1], 1)
+gmsh.model.geo.synchronize()
+gmsh.model.addPhysicalGroup(0, [1,3], 1, "boundary")
+gmsh.model.addPhysicalGroup(1, [1,2], 1, "boundary")
+gmsh.model.addPhysicalGroup(2, [1], 1, "boundary")
+gmsh.model.mesh.generate(2)
+gmsh.write("mesh.msh")
+gmsh.finalize()
