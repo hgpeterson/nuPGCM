@@ -127,7 +127,7 @@ function mesh_channel_basin(h, α)
     gmsh.finalize()
 end
 
-h = 0.08
-α = 1/2
-mesh_channel_basin(h, α)
-@info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
+# h = 0.08
+# α = 1/2
+# mesh_channel_basin(h, α)
+# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))

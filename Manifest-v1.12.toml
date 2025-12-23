@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "35029574a540de87e9425b7886c237e9a7c9ba4c"
+project_hash = "1b673c40f254641c948aefd7cf12b68187233ca9"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "8b2b045b22740e4be20654175cc38291d48539db"
@@ -1752,7 +1752,7 @@ uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.64.0+1"
 
 [[deps.nuPGCM]]
-deps = ["BenchmarkTools", "CUDA", "CuthillMcKee", "Documenter", "DocumenterCitations", "Gmsh", "Gridap", "GridapGmsh", "JLD2", "Krylov", "LinearAlgebra", "Literate", "Printf", "ProgressMeter", "PyCall", "PyPlot", "Revise", "SparseArrays", "WriteVTK"]
+deps = ["BenchmarkTools", "CUDA", "CuthillMcKee", "Documenter", "DocumenterCitations", "Gmsh", "Gridap", "GridapGmsh", "JLD2", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Literate", "Printf", "ProgressMeter", "PyCall", "PyPlot", "Revise", "SparseArrays", "WriteVTK"]
 path = "."
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.5.0"

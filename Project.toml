@@ -1,7 +1,7 @@
 name = "nuPGCM"
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
-version = "0.5.0"
 authors = ["hgpeterson <hgpeterson@caltech.edu>"]
+version = "0.5.0"
 
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
@@ -24,10 +24,6 @@ PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
-
-[compat]
-KrylovPreconditioners = "0.3.7"
-CUDA = "5.8.5"
 
 [extras]
 CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"

@@ -125,7 +125,7 @@ end
 function ν_eddy(eddy_param::EddyParameterization, αbz)
     f = eddy_param.f
     N²min = eddy_param.N²min
-    return f * (f / (sqrt∘(N²min +  αbz * αbz)))
+    return 1 + f * (f / (sqrt∘(N²min +  αbz * αbz)))
 end
 
 #### Forcings type ####

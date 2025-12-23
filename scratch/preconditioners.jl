@@ -2,18 +2,21 @@ using nuPGCM
 using JLD2
 using Printf
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+include(joinpath(@__DIR__, "../meshes/mesh_bowl2D.jl"))
+include(joinpath(@__DIR__, "../meshes/mesh_bowl3D.jl"))
+
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
 set_out_dir!(@__DIR__)
 
 # params/funcs
 arch = GPU()
 dim = 3
-ε = 2e-1
-α = 1/2
+ε = 0.9
+α = 1
 μϱ = 1e1
-N² = 1/α
+N² = 0 # 1/α
 Δt = 1e-4*μϱ/(α*ε)^2
 f₀ = 1
 β = 0.5
@@ -30,9 +33,17 @@ b_surface_bc = SurfaceDirichletBC(b_surface)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
 n_steps = 500
 
-# coarse mesh
+# mesh
 h = 0.1
-mesh = Mesh(joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α)))
+mesh_file = joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
+if !isfile(mesh_file)
+    if dim == 2
+        generate_bowl_mesh_2D(h, α)
+    elseif dim == 3
+        generate_bowl_mesh_3D(h, α)
+    end
+end
+mesh = Mesh(mesh_file)
 
 # FE data
 u_diri = Dict("bottom"=>0, "coastline"=>0)
@@ -45,24 +56,50 @@ fe_data = FEData(mesh, spaces)
 # setup inversion toolkit
 inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings)
 
-# # test inversion
-# model = Model(arch, params, forcings, fe_data, inversion_toolkit)
-# set_b!(model, x->sin(x[1]))
-# invert!(model)
+# test inversion
+model = Model(arch, params, forcings, fe_data, inversion_toolkit)
+set_b!(model, x->x[3]/α)
+invert!(model)
 # A = model.inversion.solver.A
 # y = model.inversion.solver.y
 # x = A\y
 
-# build evolution system
-evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
+# # build evolution system
+# evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
 
-# put it all together in the `model` struct
-model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+# # put it all together in the `model` struct
+# model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+
+# # initial condition
 # set_b!(model, x->0)
+# invert!(model)  # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
-# solve
-run!(model; n_steps, n_save=10)
+# # solve
+# run!(model; n_steps, n_save=10)
+
+##### Single inversions (b = x[3]/α)
+
+# 2D: 
+# diagonal (GPU): solved=true, niter=1299, time=5.34464849
+# block diagonal (GPU, kp_ilu0(A)): solved=true, niter=336, time=1.6568106439999999
+#     CG M_p solve: niter~10, time~0.002
+# block diagonal (CPU, lu(A)): solved=true, niter=80, time=0.01853101
+#     CG M_p solve: niter~10, time~1e-5
+
+# 3D:
+# diagonal (GPU): solved=true, niter=2245, time=1.1532209679999998
+# block diagonal (GPU, kp_ilu0(A)): solved=true, niter=2947, time=156.02089263500002
+#     CG M_p solve: niter~10, time~0.02
+# block diagonal (CPU, lu(A)): solved=true, niter=1259, time=186.778199777
+#     CG M_p solve: niter~10, time~0.0002
+
+##### Time-dependent sims
 
 # 2D:
 # old way: 2:56 total, 0.27 s per step at end
 # block preconditioner: 3:17 total, 0.29 s per step at end
+
+# 3D:
+# CPU LU: 0:56 total, 0.11 s per step at end
+# diagonal preconditioner: 07:53 total, 0.89 s per step at end (inversion in ~1000 iterations, ~1 s at beginning)

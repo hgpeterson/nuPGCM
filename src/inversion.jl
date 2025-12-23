@@ -38,7 +38,7 @@ function InversionToolkit(arch::AbstractArchitecture,
     B = B[fe_data.dofs.p_inversion, :]
     b = b[fe_data.dofs.p_inversion]
 
-    # # preconditioner
+    # preconditioner
     # if typeof(arch) == GPU || forcings.eddy_param.is_on
     #     # get resolution
     #     p, t = get_p_t(fe_data.mesh.model)
@@ -53,10 +53,9 @@ function InversionToolkit(arch::AbstractArchitecture,
     #     # use diagonal preconditioner scaled by resolution
     #     P = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A, 1))))
     # else
-    #     # # on CPU and fixed ν → can just LU factor
-    #     # @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
-    #     # @time "lu(A_inversion)" P = lu(A)
-    #     P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
+    #     # on CPU and fixed ν → can just LU factor
+    #     @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
+    #     @time "lu(A_inversion)" P = lu(A)
     # end
     P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
 
