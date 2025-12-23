@@ -1,7 +1,7 @@
 using Gmsh: gmsh
 using Printf
 
-function mesh_channel_basin(h, α)
+function mesh_channel_basin(h, α; curved_southern_bdy=true)
     # params
     L = 2
     W = 1
@@ -20,13 +20,22 @@ function mesh_channel_basin(h, α)
     gmsh.model.add("channel_basin")
 
     # channel
-    p1 = gmsh.model.occ.addPoint(0, -L/2,                                        0)
-    p2 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel,                     -H)
-    p3 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel + L_flat_channel,    -H)
-    p4 = gmsh.model.occ.addPoint(0, -L/2 + L_channel,                            0)
-    p5 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel/2,                   -H) # control point
-    p6 = gmsh.model.occ.addPoint(0, -L/2 + 3L_curve_channel/2 + L_flat_channel, -H) # control point
-    l1 = gmsh.model.occ.addBezier([p1, p5, p2])
+    if curved_southern_bdy
+        p1 = gmsh.model.occ.addPoint(0, -L/2,                                        0)
+        p2 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel,                     -H)
+        p3 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel + L_flat_channel,    -H)
+        p4 = gmsh.model.occ.addPoint(0, -L/2 + L_channel,                            0)
+        p5 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel/2,                   -H) # control point
+        p6 = gmsh.model.occ.addPoint(0, -L/2 + 3L_curve_channel/2 + L_flat_channel, -H) # control point
+        l1 = gmsh.model.occ.addBezier([p1, p5, p2])
+    else
+        p1 = gmsh.model.occ.addPoint(0, -L/2,                                        0)
+        p2 = gmsh.model.occ.addPoint(0, -L/2,                                       -H)
+        p3 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel + L_flat_channel,    -H)
+        p4 = gmsh.model.occ.addPoint(0, -L/2 + L_channel,                            0)
+        p6 = gmsh.model.occ.addPoint(0, -L/2 + 3L_curve_channel/2 + L_flat_channel, -H) # control point
+        l1 = gmsh.model.occ.addLine(p1, p2)
+    end
     l2 = gmsh.model.occ.addLine(p2, p3)
     l3 = gmsh.model.occ.addBezier([p3, p6, p4])
     l4 = gmsh.model.occ.addLine(p4, p1)
