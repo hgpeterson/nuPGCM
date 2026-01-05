@@ -132,7 +132,11 @@ function mesh_channel_basin(h, α; curved_southern_bdy=true)
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
 
     gmsh.model.mesh.generate(3)
-    gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e.msh", h, α)))
+    if curved_southern_bdy
+        gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e.msh", h, α)))
+    else
+        gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e_vert_sb.msh", h, α)))
+    end
     gmsh.finalize()
 end
 

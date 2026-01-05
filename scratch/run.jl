@@ -7,7 +7,7 @@ include(joinpath(@__DIR__, "../meshes/channel_basin.jl"))  # for making channel_
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "../sims/sim014"))
+set_out_dir!(joinpath(@__DIR__, "../sims/sim015"))
 
 # architecture
 arch = GPU()
@@ -21,6 +21,7 @@ N² = 0
 f₀ = 0.0
 β = 1.0
 f(x) = f₀ + β*x[2]
+curved_southern_bdy = false
 function H(xyz)
     x = xyz[1]
     y = xyz[2]
@@ -51,7 +52,11 @@ function H(xyz)
     end
 
     if -L/2 ≤ y ≤ -L/2 + L_curve_channel
-        return parabola(y, -L/2 + L_curve_channel, -L/2)
+        if curved_southern_bdy
+            return parabola(y, -L/2 + L_curve_channel, -L/2)
+        else
+            return H
+        end
     elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
         return H
     elseif y ≤ -L/2 + L_channel
@@ -127,9 +132,13 @@ function setup_model()
     # h = √2*α*ε/5
     # h = √2*α*ε/10
     # mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
-    mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
+    if curved_southern_bdy
+        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
+    else
+        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e_vert_sb", h, α)
+    end
     if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-        mesh_channel_basin(h, α)
+        mesh_channel_basin(h, α; curved_southern_bdy)
     end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
@@ -165,19 +174,19 @@ display(model)
 # set initial buoyancy
 # set_b!(model, x -> 0)  # when N² is set
 # set_b!(model, x -> b₀*x[3]/α)  # when N² = 0 
-set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
-invert!(model)  # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
-# i_step = 1400
-# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
+# set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
+# invert!(model)  # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+i_step = 5200
+set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
 # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", joinpath(@__DIR__, "channel_2D/sim008"), i_step))
 
 # solve
 T = 10*μϱ/ε^2
 n_steps = Int(round(T / Δt))
-n_save = 10
+n_save = 100
 n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
-# run!(model; n_steps, n_save, n_plot, i_step)
+# run!(model; n_steps, n_save, n_plot)
+run!(model; n_steps, n_save, n_plot, i_step)
 
 println("Done.")
