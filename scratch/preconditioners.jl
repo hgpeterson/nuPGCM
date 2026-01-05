@@ -13,10 +13,10 @@ set_out_dir!(@__DIR__)
 # params/funcs
 arch = GPU()
 dim = 3
-ε = 0.9
-α = 1
-μϱ = 1e1
-N² = 0 # 1/α
+ε = 1/2
+α = 1/2
+μϱ = 1
+N² = 1/α
 Δt = 1e-4*μϱ/(α*ε)^2
 f₀ = 1
 β = 0.5
@@ -31,10 +31,11 @@ params = Parameters(ε, α, μϱ, N², Δt, f, H)
 b_surface(x) = 0
 b_surface_bc = SurfaceDirichletBC(b_surface)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
-n_steps = 500
+T = 0.1*μϱ/ε^2
+n_steps = T ÷ Δt
 
 # mesh
-h = 0.1
+h = 0.2*α
 mesh_file = joinpath(@__DIR__, @sprintf("../meshes/bowl%sD_%e_%e.msh", dim, h, α))
 if !isfile(mesh_file)
     if dim == 2
@@ -52,17 +53,16 @@ w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
 b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface)
 spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
 fe_data = FEData(mesh, spaces)
+@info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
 
 # setup inversion toolkit
 inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings)
 
 # test inversion
 model = Model(arch, params, forcings, fe_data, inversion_toolkit)
-set_b!(model, x->x[3]/α)
+# set_b!(model, x->x[3]/α)
+set_state_from_file!(model.state, @sprintf("%s/data/state_a%e.jld2", out_dir, α))
 invert!(model)
-# A = model.inversion.solver.A
-# y = model.inversion.solver.y
-# x = A\y
 
 # # build evolution system
 # evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
@@ -72,11 +72,15 @@ invert!(model)
 
 # # initial condition
 # set_b!(model, x->0)
-# invert!(model)  # sync flow with buoyancy state
-# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# # invert!(model)  # sync flow with buoyancy state
+# # save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # # solve
-# run!(model; n_steps, n_save=10)
+# n_save = n_steps
+# run!(model; n_steps, n_save, advection=false)
+
+# mv(@sprintf("%s/data/state_%016d.vtu", out_dir, n_steps), @sprintf("%s/data/state_a%e.vtu", out_dir, α), force=true)
+# mv(@sprintf("%s/da$ta/state_%016d.jld2", out_dir, n_steps), @sprintf("%s/data/state_a%e.jld2", out_dir, α), force=true)
 
 ##### Single inversions (b = x[3]/α)
 

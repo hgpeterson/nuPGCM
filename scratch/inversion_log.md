@@ -86,3 +86,73 @@ Tridiagonal $P$ with $\tilde S^{-1} = K_p^{-1}$ where $K_p$ is just the ($1/f$-w
 
 Different forms of $\tilde A^{-1}$:
 - $\tilde A^{-1} = \left(\begin{array}{c c c} 0 & -M^{-1} & 0 \\ M^{-1} & 0 & 0 \\ 0 & 0 & K^{-1} \end{array}\right)$
+
+# Experiment Set 2 (January 2026)
+
+- νPGCM v0.5.0
+- 3D bowl
+- $b$ from spin-up ($\mu\varrho = \varepsilon = 1$, $t = 0.1$)
+- $h = 0.2\alpha$
+- DoFs: 
+    - $\alpha = 1$: 4,201
+    - $\alpha = 1/2$: 15,946
+    - $\alpha = 1/4$: 64,597
+    - $\alpha = 1/8$: 261,736
+- $f = 1 + y/2$
+
+## $\alpha = 1$
+
+### $\varepsilon = 1$ ($\delta/h = \varepsilon\sqrt{2}/0.2 \approx 7.07$)
+
+
+- `P = I/h^3`: `niter=8402, time=8.492303261 (solved=false)` 
+- `P = BlockDiagonal(lu(A))`: `niter=41, time=0.113108237`
+- `P = BlockDiagonal(lu(A_no_f))`: `niter=41, time=7.955e-02`
+- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=41, time=5.196e+00`
+
+### $\varepsilon = 1/2$ ($\delta/h = \varepsilon\sqrt{2}/0.2 \approx 3.54$)
+
+- `P = I/h^3`: `niter=8189, time=4.004770284999999`
+- `P = BlockDiagonal(lu(A))`: `niter=61, time=0.210336316`
+- `P = BlockDiagonal(lu(A_no_f))`: `niter=61, time=1.668e-01`
+- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=61, time=7.887e+00`
+
+### $\varepsilon = 1/4$ ($\delta/h \approx 1.77$)
+ 
+- `P = I/h^3`: `niter=2043, time=1.023896494`
+- `P = BlockDiagonal(lu(A))`: `niter=101, time=0.31602084399999997`
+- `P = BlockDiagonal(lu(A_no_f))`: `niter=521, time=1.034e+00`
+- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=341, time=4.367e+01`
+
+## $\alpha = 1/2$
+
+### $\varepsilon = 1$
+
+- `P = I/h^3`: `niter=31892, time=16.070321899 (solved=false)`
+- `P = BlockDiagonal(lu(A))`: `niter=41, time=10.705225942`
+- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=41, time=1.938e+01`
+
+### $\varepsilon = 1/2$
+
+- `P = I/h^3`: `niter=11973, time=5.9686630780000005`
+- `P = BlockDiagonal(lu(A))`: `niter=121, time=31.244824391`
+- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=381, time=1.870e+02`
+
+### $\varepsilon = 1/4$
+
+- `P = I/h^3`: `niter=3356, time=1.6807564229999998`
+- `P = BlockDiagonal(lu(A))`: `niter=1581, time=406.867088986`
+
+## $\alpha = 1/4$
+
+### $\varepsilon = 1$
+
+- `P = I/h^3`: `niter=36265, time=21.393152276`
+
+### $\varepsilon = 1/2$
+
+- `P = I/h^3`: `niter=17303, time=10.389196127`
+
+### $\varepsilon = 1/4$
+
+- `P = I/h^3`: `niter=6794, time=3.9851888`

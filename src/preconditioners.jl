@@ -24,10 +24,11 @@ function LinearAlgebra.mul!(y, cgp::CgPreconditioner, x)
     Krylov.solve!(cgp.solver, cgp.matrix, x, M=cgp.preconditioner, ldiv=cgp.ldiv,
                   atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=0)
     @debug begin 
+        label = cgp.label
         solved = cgp.solver.stats.solved
         niter = cgp.solver.stats.niter 
         time = cgp.solver.stats.timer
-        "$(cgp.label) iterative solve: solved=$solved, niter=$niter, time=$time" 
+        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%1.3e", label, solved, niter, time)
     end
     y .= cgp.solver.x
     return y
@@ -70,22 +71,13 @@ function BlockDiagonalPreconditioner(arch::AbstractArchitecture, params::Paramet
     A = A_inversion[1:N, 1:N]
     # B = A_inversion[N+1:end, 1:N]
     # BT = A_inversion[1:N, N+1:end]
+    nu = fe_data.dofs.nu
+    nv = fe_data.dofs.nv
+    A[1:nu, nu+1:nu+nv] .= 0  # remove Coriolis terms
+    A[nu+1:nu+nv, 1:nu] .= 0  # remove Coriolis terms
+    dropzeros!(A)
 
-    # # P⁻¹ = CG with A and its LU-factorization
-    # P = A
-    # P_prec = lu(A)
-    # P⁻¹ = CgPreconditioner(P, P_prec; ldiv=true, label="P-block")
-
-    # P⁻¹ = CG with A and its Incomplete LU-factorization
-    P = on_architecture(arch, A)
-    P_prec = KrylovPreconditioners.kp_ilu0(P)
-    P⁻¹ = CgPreconditioner(P, P_prec; ldiv=true, label="P-block")
-
-    # # P⁻¹ = CG with A and its diagonal
-    # P = A
-    # P_prec = Diagonal(on_architecture(arch, Vector(1 ./ diag(P))))
-    # P = on_architecture(arch, P)
-    # P⁻¹ = CgPreconditioner(P, P_prec; ldiv=false, label="P-block")
+    P⁻¹ = P_block(arch, A)
 
     # T⁻¹ = CG with pressure mass matrix and its diagonal
     a(p, q) = ∫( p*q )dΩ
@@ -96,6 +88,21 @@ function BlockDiagonalPreconditioner(arch::AbstractArchitecture, params::Paramet
 
     return BlockDiagonalPreconditioner(P⁻¹, T⁻¹, N, np-1)
 end
+
+function P_block(::CPU, A)
+    # P⁻¹ = CG with A and its LU-factorization
+    P = A
+    P_prec = lu(P)
+    return CgPreconditioner(P, P_prec; ldiv=true, label="P-block")
+end
+
+function P_block(::GPU, A)
+    # P⁻¹ = CG with A and its Incomplete LU-factorization
+    P = on_architecture(GPU(), A)
+    P_prec = KrylovPreconditioners.kp_ilu0(P)
+    return CgPreconditioner(P, P_prec; ldiv=true, label="P-block")
+end
+
 
 function LinearAlgebra.mul!(y, bdp::BlockDiagonalPreconditioner, x)
     y1 = @view y[1:bdp.n]

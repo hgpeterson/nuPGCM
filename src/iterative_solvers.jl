@@ -43,7 +43,7 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
         t0 = time()
         ldiv!(x, P, y)
         t1 = time()
-        @debug "Direct $label solve: time=$(t1-t0)" 
+        @debug @sprintf("Direct %s solve: time=%1.3e", label, t1-t0)
         return solver_tk
     end
     # if architecture(A) == CPU() && size(A, 1) < 300_000
@@ -61,7 +61,7 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
         solved = solver.stats.solved
         niter = solver.stats.niter 
         time = solver.stats.timer
-        "$label iterative solve: solved=$solved, niter=$niter, time=$time" 
+        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%1.3e", label, solved, niter, time)
     end
 
     return solver_tk
