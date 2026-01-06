@@ -21,14 +21,15 @@ function CgPreconditioner(matrix, preconditioner; ldiv=false, label="")
 end
 
 function LinearAlgebra.mul!(y, cgp::CgPreconditioner, x)
-    Krylov.solve!(cgp.solver, cgp.matrix, x, M=cgp.preconditioner, ldiv=cgp.ldiv,
-                  atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=0)
+    Krylov.solve!(cgp.solver, cgp.matrix, x, # y, 
+                  M=cgp.preconditioner, ldiv=cgp.ldiv, atol=1e-6, rtol=1e-6)
     @debug begin 
         label = cgp.label
         solved = cgp.solver.stats.solved
         niter = cgp.solver.stats.niter 
         time = cgp.solver.stats.timer
-        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%1.3e", label, solved, niter, time)
+        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%1.3e", 
+                 label, solved, niter, time)
     end
     y .= cgp.solver.x
     return y

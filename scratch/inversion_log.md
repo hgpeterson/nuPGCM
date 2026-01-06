@@ -94,65 +94,91 @@ Different forms of $\tilde A^{-1}$:
 - $b$ from spin-up ($\mu\varrho = \varepsilon = 1$, $t = 0.1$)
 - $h = 0.2\alpha$
 - DoFs: 
-    - $\alpha = 1$: 4,201
-    - $\alpha = 1/2$: 15,946
-    - $\alpha = 1/4$: 64,597
-    - $\alpha = 1/8$: 261,736
+    - $\alpha = 1$: 4201
+    - $\alpha = 1/2$: 15946
+    - $\alpha = 1/4$: 64597
+    - $\alpha = 1/8$: 261736
 - $f = 1 + y/2$
 
 ## $\alpha = 1$
 
 ### $\varepsilon = 1$ ($\delta/h = \varepsilon\sqrt{2}/0.2 \approx 7.07$)
 
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 8402       | 8.492e+00 (solved=false) |
+| `BlockDiagonal(lu(A))`           | 41         | 1.131e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 41         | 7.955e-02 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 41         | 5.196e+00 |
 
-- `P = I/h^3`: `niter=8402, time=8.492303261 (solved=false)` 
-- `P = BlockDiagonal(lu(A))`: `niter=41, time=0.113108237`
-- `P = BlockDiagonal(lu(A_no_f))`: `niter=41, time=7.955e-02`
-- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=41, time=5.196e+00`
+### $\varepsilon = 1/2$ ($\delta/h \approx 3.54$)
 
-### $\varepsilon = 1/2$ ($\delta/h = \varepsilon\sqrt{2}/0.2 \approx 3.54$)
-
-- `P = I/h^3`: `niter=8189, time=4.004770284999999`
-- `P = BlockDiagonal(lu(A))`: `niter=61, time=0.210336316`
-- `P = BlockDiagonal(lu(A_no_f))`: `niter=61, time=1.668e-01`
-- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=61, time=7.887e+00`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 8189       | 4.005e+00 |
+| `BlockDiagonal(lu(A))`           | 61         | 2.103e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 61         | 1.668e-01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 61         | 7.887e+00 |
 
 ### $\varepsilon = 1/4$ ($\delta/h \approx 1.77$)
  
-- `P = I/h^3`: `niter=2043, time=1.023896494`
-- `P = BlockDiagonal(lu(A))`: `niter=101, time=0.31602084399999997`
-- `P = BlockDiagonal(lu(A_no_f))`: `niter=521, time=1.034e+00`
-- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=341, time=4.367e+01`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 2043       | 1.024e+00 |
+| `BlockDiagonal(lu(A))`           | 101        | 3.160e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 521        | 1.034e+00 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 341        | 4.367e+01 |
 
 ## $\alpha = 1/2$
 
 ### $\varepsilon = 1$
 
-- `P = I/h^3`: `niter=31892, time=16.070321899 (solved=false)`
-- `P = BlockDiagonal(lu(A))`: `niter=41, time=10.705225942`
-- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=41, time=1.938e+01`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 31892      | 1.607e+01 (solved=false) |
+| `BlockDiagonal(lu(A))`           | 41         | 1.071e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 41         | 8.790e+00 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 41         | 1.938e+01 |
 
 ### $\varepsilon = 1/2$
 
-- `P = I/h^3`: `niter=11973, time=5.9686630780000005`
-- `P = BlockDiagonal(lu(A))`: `niter=121, time=31.244824391`
-- `P = BlockDiagonal(kp_ilu0(A_no_f))`: `niter=381, time=1.870e+02`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 11973      | 5.969e+00 |
+| `BlockDiagonal(lu(A))`           | 121        | 3.124e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 281        | 5.648e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 381        | 1.870e+02 |
 
 ### $\varepsilon = 1/4$
 
-- `P = I/h^3`: `niter=3356, time=1.6807564229999998`
-- `P = BlockDiagonal(lu(A))`: `niter=1581, time=406.867088986`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 3356       | 1.681e+00 |
+| `BlockDiagonal(lu(A))`           | 1581       | 4.069e+02 |
 
 ## $\alpha = 1/4$
 
 ### $\varepsilon = 1$
 
-- `P = I/h^3`: `niter=36265, time=21.393152276`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 36265      | 2.139e+01 |
+| `BlockDiagonal(lu(A))`           | 61         | 4.407e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 61         | 4.097e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 61         | 1.213e+02 |
 
 ### $\varepsilon = 1/2$
 
-- `P = I/h^3`: `niter=17303, time=10.389196127`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 17303      | 1.039e+01 |
+| `BlockDiagonal(lu(A))`           | 61         | 4.398e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 81         | 5.453e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 81         | 1.491e+02 |
 
 ### $\varepsilon = 1/4$
 
-- `P = I/h^3`: `niter=6794, time=3.9851888`
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 6794       | 3.985e+00 |
+| `BlockDiagonal(lu(A))`           | 554        | 3.988e+02 |

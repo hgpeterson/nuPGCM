@@ -11,10 +11,10 @@ ENV["JULIA_DEBUG"] = nuPGCM
 set_out_dir!(@__DIR__)
 
 # params/funcs
-arch = GPU()
+arch = CPU()
 dim = 3
-ε = 1/2
-α = 1/2
+ε = 1/4
+α = 1/4
 μϱ = 1
 N² = 1/α
 Δt = 1e-4*μϱ/(α*ε)^2
@@ -81,29 +81,3 @@ invert!(model)
 
 # mv(@sprintf("%s/data/state_%016d.vtu", out_dir, n_steps), @sprintf("%s/data/state_a%e.vtu", out_dir, α), force=true)
 # mv(@sprintf("%s/da$ta/state_%016d.jld2", out_dir, n_steps), @sprintf("%s/data/state_a%e.jld2", out_dir, α), force=true)
-
-##### Single inversions (b = x[3]/α)
-
-# 2D: 
-# diagonal (GPU): solved=true, niter=1299, time=5.34464849
-# block diagonal (GPU, kp_ilu0(A)): solved=true, niter=336, time=1.6568106439999999
-#     CG M_p solve: niter~10, time~0.002
-# block diagonal (CPU, lu(A)): solved=true, niter=80, time=0.01853101
-#     CG M_p solve: niter~10, time~1e-5
-
-# 3D:
-# diagonal (GPU): solved=true, niter=2245, time=1.1532209679999998
-# block diagonal (GPU, kp_ilu0(A)): solved=true, niter=2947, time=156.02089263500002
-#     CG M_p solve: niter~10, time~0.02
-# block diagonal (CPU, lu(A)): solved=true, niter=1259, time=186.778199777
-#     CG M_p solve: niter~10, time~0.0002
-
-##### Time-dependent sims
-
-# 2D:
-# old way: 2:56 total, 0.27 s per step at end
-# block preconditioner: 3:17 total, 0.29 s per step at end
-
-# 3D:
-# CPU LU: 0:56 total, 0.11 s per step at end
-# diagonal preconditioner: 07:53 total, 0.89 s per step at end (inversion in ~1000 iterations, ~1 s at beginning)
