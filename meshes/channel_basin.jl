@@ -118,8 +118,14 @@ function mesh_channel_basin(h, α; curved_southern_bdy=true)
     gmsh.model.occ.synchronize()
 
     # define bottom, surface, coastline, and interior
-    gmsh.model.addPhysicalGroup(0, [68, 69, 76, 77, 78, 79, 80, 81], 1, "bottom")
-    gmsh.model.addPhysicalGroup(0, [66, 67, 70, 71, 72, 73, 74, 75], 3, "coastline")
+    bottom_pts = [68, 69, 76, 77, 78, 79, 80, 81]
+    coastline_pts = [66, 67, 70, 71, 72, 73, 74, 75]
+    if !curved_southern_bdy
+        bottom_pts .-= 1
+        coastline_pts .-= 1
+    end
+    gmsh.model.addPhysicalGroup(0, bottom_pts, 1, "bottom")
+    gmsh.model.addPhysicalGroup(0, coastline_pts, 3, "coastline")
     gmsh.model.addPhysicalGroup(1, vcat([2, 3, 4], 12:28), 1, "bottom")
     gmsh.model.addPhysicalGroup(1, [5, 11], 2, "surface")
     gmsh.model.addPhysicalGroup(1, [1, 6, 7, 8, 9, 10], 3, "coastline")
