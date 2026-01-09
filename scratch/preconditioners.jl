@@ -11,10 +11,10 @@ ENV["JULIA_DEBUG"] = nuPGCM
 set_out_dir!(@__DIR__)
 
 # params/funcs
-arch = CPU()
+arch = GPU()
 dim = 3
-ε = 1/4
-α = 1/4
+ε = 1/2
+α = 1/2
 μϱ = 1
 N² = 1/α
 Δt = 1e-4*μϱ/(α*ε)^2

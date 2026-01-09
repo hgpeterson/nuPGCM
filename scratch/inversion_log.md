@@ -148,6 +148,9 @@ Different forms of $\tilde A^{-1}$:
 | `BlockDiagonal(lu(A))`           | 121        | 3.124e+01 |
 | `BlockDiagonal(lu(A_no_f))`      | 281        | 5.648e+01 |
 | `BlockDiagonal(kp_ilu0(A_no_f))` | 381        | 1.870e+02 |
+| `BlockDiagonal(kp_ilu0(A_no_f))`, `itmax=10,4` | 561        | 1.795e+02 |
+| `BlockDiagonal(kp_ilu0(Au, Av, Aw))` | 401        | 2.945+02 |
+| `BlockDiagonal(kp_ilu0(Au, Av, Aw))`, `itmax=10,4` | 401        | 2.162e+02 |
 
 ### $\varepsilon = 1/4$
 
