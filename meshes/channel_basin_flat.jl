@@ -124,7 +124,8 @@ function mesh_channel_basin_flat(h, α)
     gmsh.model.addPhysicalGroup(0, p[:, :, 1][:], 1, "bottom")
     gmsh.model.addPhysicalGroup(0, p[:, :, 2][:], 3, "coastline")
     gmsh.model.addPhysicalGroup(1, l_bot, 1, "bottom")
-    gmsh.model.addPhysicalGroup(1, l_sfc, 3, "coastline")
+    gmsh.model.addPhysicalGroup(1, l_sfc[[1, 5]], 2, "surface")
+    gmsh.model.addPhysicalGroup(1, l_sfc[[2, 3, 4, 6]], 3, "coastline")
     gmsh.model.addPhysicalGroup(2, [s_bot, s_basin_east, 
                                     s_basin_west, s_south, s_north], 1, "bottom")
     gmsh.model.addPhysicalGroup(2, [s_sfc], 2, "surface")
@@ -135,11 +136,11 @@ function mesh_channel_basin_flat(h, α)
     gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
 
     gmsh.model.mesh.generate(3)
-    gmsh.write(joinpath(@__DIR__, "channel_basin_flat.msh"))
+    gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_flat_h%.2e_a%.2e.msh", h, α)))
     gmsh.finalize()
 end
 
-h = 0.08
-α = 1/2 # H/W
+h = 0.02
+α = 1/8 # H/W
 mesh_channel_basin_flat(h, α)
 @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
