@@ -38,7 +38,7 @@ function InversionToolkit(arch::AbstractArchitecture,
     B = B[fe_data.dofs.p_inversion, :]
     b = b[fe_data.dofs.p_inversion]
 
-    # preconditioner
+    # # preconditioner
     # if typeof(arch) == GPU || forcings.eddy_param.is_on
     #     # get resolution
     #     p, t = get_p_t(fe_data.mesh.model)

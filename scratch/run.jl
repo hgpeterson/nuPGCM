@@ -4,10 +4,10 @@ using Printf
 
 include(joinpath(@__DIR__, "../meshes/channel_basin.jl"))  # for making channel_basin mesh
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "../sims/sim014"))
+set_out_dir!(joinpath(@__DIR__))
 
 # architecture
 arch = GPU()
@@ -127,10 +127,11 @@ function setup_model()
     # h = √2*α*ε/5
     # h = √2*α*ε/10
     # mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
-    mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
-    if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-        mesh_channel_basin(h, α)
-    end
+    # mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
+    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+    # if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+    #     mesh_channel_basin(h, α)
+    # end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
@@ -148,6 +149,7 @@ function setup_model()
 
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
+    return Model(arch, params, forcings, fe_data, inversion_toolkit)
 
     # build evolution system
     evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
@@ -167,17 +169,64 @@ display(model)
 # set_b!(model, x -> b₀*x[3]/α)  # when N² = 0 
 set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
 invert!(model)  # sync flow with buoyancy state
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+save_state(model, @sprintf("%s/data/state_0_0_1e-6.jld2", out_dir))
+save_vtk(model, ofile=@sprintf("%s/data/state_0_0_1e-6.vtu", out_dir))
 # i_step = 1400
 # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
 # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", joinpath(@__DIR__, "channel_2D/sim008"), i_step))
 
-# solve
-T = 10*μϱ/ε^2
-n_steps = Int(round(T / Δt))
-n_save = 10
-n_plot = Inf
-run!(model; n_steps, n_save, n_plot)
-# run!(model; n_steps, n_save, n_plot, i_step)
+# "true" solution
+d = jldopen("$out_dir/data/state_1e-8.jld2", "r")
+u = d["u"]
+v = d["v"]
+w = d["w"]
+p = d["p"]
+close(d)
+
+u0 = model.state.u.free_values
+v0 = model.state.v.free_values
+w0 = model.state.w.free_values
+p0 = model.state.p.free_values.args[1]
+@info "Errors" maximum(abs.(u - u0)) maximum(abs.(v - v0)) maximum(abs.(w - w0)) maximum(abs.(p - p0))
+
+# # errors
+# for tol in ["1e-4", "1e-5", "1e-6", "1e-7"]
+#     d = jldopen("$out_dir/data/state_$tol.jld2", "r")
+#     u0 = d["u"]
+#     v0 = d["v"]
+#     w0 = d["w"]
+#     p0 = d["p"]
+#     close(d)
+#     @info "$tol Errors" maximum(abs.(u - u0)) maximum(abs.(v - v0)) maximum(abs.(w - w0)) maximum(abs.(p - p0))
+# end
+
+# # solve
+# T = 10*μϱ/ε^2
+# n_steps = Int(round(T / Δt))
+# n_save = 10
+# n_plot = Inf
+# run!(model; n_steps, n_save, n_plot)
+# # run!(model; n_steps, n_save, n_plot, i_step)
 
 println("Done.")
+
+# ┌ Info: 1e-4 Errors
+# │   maximum(abs.(u - u0)) = 0.2852682526937367
+# │   maximum(abs.(v - v0)) = 0.20160124152529424
+# │   maximum(abs.(w - w0)) = 0.31479727623627346
+# └   maximum(abs.(p - p0)) = 0.3897494835100044
+# ┌ Info: 1e-5 Errors
+# │   maximum(abs.(u - u0)) = 0.02850210800041736
+# │   maximum(abs.(v - v0)) = 0.02014147415951728
+# │   maximum(abs.(w - w0)) = 0.03144865254251186
+# └   maximum(abs.(p - p0)) = 0.03893567785287666
+# ┌ Info: 1e-6 Errors
+# │   maximum(abs.(u - u0)) = 0.0028245878576159122
+# │   maximum(abs.(v - v0)) = 0.0019961107961697366
+# │   maximum(abs.(w - w0)) = 0.003116614647678744
+# └   maximum(abs.(p - p0)) = 0.0038587561377272372
+# ┌ Info: 1e-7 Errors
+# │   maximum(abs.(u - u0)) = 0.000256809226098359
+# │   maximum(abs.(v - v0)) = 0.00018147802332157958
+# │   maximum(abs.(w - w0)) = 0.00028335919738884004
+# └   maximum(abs.(p - p0)) = 0.00035081549714299776

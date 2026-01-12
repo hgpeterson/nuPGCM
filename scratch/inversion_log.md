@@ -145,6 +145,10 @@ Different forms of $\tilde A^{-1}$:
 | Preconditioner                   | iterations | time (s)  |
 | -                                | -          | -         |
 | `I/h^3`                          | 11973      | 5.969e+00 |
+| `BloackDiagonal(I/h^3)`          | 421        | 7.191e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=20, 4` | 1561        | 4.201e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=30, 4` | 1061        | 3.664e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=40, 4` | 1181        | 4.921e+00 |
 | `BlockDiagonal(lu(A))`           | 121        | 3.124e+01 |
 | `BlockDiagonal(lu(A_no_f))`      | 281        | 5.648e+01 |
 | `BlockDiagonal(kp_ilu0(A_no_f))` | 381        | 1.870e+02 |
