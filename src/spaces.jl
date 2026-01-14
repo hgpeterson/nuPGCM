@@ -20,7 +20,7 @@ function Base.show(io::IO, spaces::Spaces)
 end
 
 """
-    spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
+    spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; u_order=2, b_order=2)
 
 Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 
@@ -28,15 +28,15 @@ Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
 buoyancy.
 """
-function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; order=2)
+function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; u_order=2, b_order=2)
     model = mesh.model
 
     # reference FE 
-    reffe_u = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_v = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_w = ReferenceFE(lagrangian, Float64, order;   space=:P)
-    reffe_p = ReferenceFE(lagrangian, Float64, order-1; space=:P)
-    reffe_b = ReferenceFE(lagrangian, Float64, order;   space=:P)
+    reffe_u = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
+    reffe_v = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
+    reffe_w = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
+    reffe_p = ReferenceFE(lagrangian, Float64, u_order-1; space=:P)
+    reffe_b = ReferenceFE(lagrangian, Float64, b_order;   space=:P)
 
     # test FESpaces
     u_diri_tags = collect(keys(u_diri))

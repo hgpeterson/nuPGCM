@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional separate order for buoyancy
 - Optional order-1 timestepping scheme
 - Optimization for inversion matrix rebuild when `EddyParameterization` is used
 - Some more time printing
