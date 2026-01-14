@@ -28,56 +28,36 @@ Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
 multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
 buoyancy.
 """
-function Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; u_order=2, b_order=2)
+function Spaces(mesh::Mesh; u_diri_tags=Int[], u_diri_masks=Int[], u_diri_vals=nothing, 
+                            b_diri_tags=Int[], b_diri_vals=nothing, 
+                            u_order=2, b_order=2)
     model = mesh.model
 
     # reference FE 
-    reffe_u = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
-    reffe_v = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
-    reffe_w = ReferenceFE(lagrangian, Float64, u_order;   space=:P)
-    reffe_p = ReferenceFE(lagrangian, Float64, u_order-1; space=:P)
-    reffe_b = ReferenceFE(lagrangian, Float64, b_order;   space=:P)
+    reffe_u = ReferenceFE(lagrangian, VectorValue{3, Float64}, u_order;   space=:P)
+    reffe_p = ReferenceFE(lagrangian, Float64,                 u_order-1; space=:P)
+    reffe_b = ReferenceFE(lagrangian, Float64,                 b_order;   space=:P)
 
     # test FESpaces
-    u_diri_tags = collect(keys(u_diri))
-    v_diri_tags = collect(keys(v_diri))
-    w_diri_tags = collect(keys(w_diri))
-    b_diri_tags = collect(keys(b_diri))
     @info "Building `Gridap.TestFESpace`s..."
     @time begin
-    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=(length(u_diri_tags) > 0) ? u_diri_tags : Int[])
-    V_test = TestFESpace(model, reffe_v, conformity=:H1, dirichlet_tags=(length(v_diri_tags) > 0) ? v_diri_tags : Int[])
-    W_test = TestFESpace(model, reffe_w, conformity=:H1, dirichlet_tags=(length(w_diri_tags) > 0) ? w_diri_tags : Int[])
+    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=u_diri_tags, dirichlet_masks=u_diri_masks)
     P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
-    X_test = MultiFieldFESpace([U_test, V_test, W_test, P_test])
-    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=(length(b_diri_tags) > 0) ? b_diri_tags : Int[])
+    X_test = MultiFieldFESpace([U_test, P_test])
+    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=b_diri_tags)
     end
 
     # trial FESpaces with Dirichlet values
-    u_diri_vals = collect(values(u_diri))
-    v_diri_vals = collect(values(v_diri))
-    w_diri_vals = collect(values(w_diri))
-    b_diri_vals = collect(values(b_diri))
     @info "Building `Gridap.TrialFESpace`s..."
     @time begin
-    if length(u_diri_vals) > 0
-        U_trial = TrialFESpace(U_test, u_diri_vals)
+    if u_diri_vals !== nothing
+        U_trial = TrialFESpace(U_test, [VectorValue(v) for v in u_diri_vals])
     else
         U_trial = TrialFESpace(U_test)
     end
-    if length(v_diri_vals) > 0
-        V_trial = TrialFESpace(V_test, v_diri_vals)
-    else
-        V_trial = TrialFESpace(V_test)
-    end
-    if length(w_diri_vals) > 0
-        W_trial = TrialFESpace(W_test, w_diri_vals)
-    else
-        W_trial = TrialFESpace(W_test)
-    end
     P_trial = TrialFESpace(P_test)
-    X_trial = MultiFieldFESpace([U_trial, V_trial, W_trial, P_trial])
-    if length(b_diri_vals) > 0
+    X_trial = MultiFieldFESpace([U_trial, P_trial])
+    if b_diri_vals !== nothing
         B_trial = TrialFESpace(B_test, b_diri_vals)
     else
         B_trial = TrialFESpace(B_test)
