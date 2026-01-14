@@ -1,5 +1,5 @@
 mutable struct EvolutionToolkit{A<:AbstractArchitecture, M, V, SA<:IterativeSolverToolkit, 
-                                SHD<:IterativeSolverToolkit, SVD<:IterativeSolverToolkit}
+                                SHD<:IterativeSolverToolkit, SVD<:IterativeSolverToolkit, I}
     arch::A            # architecture (CPU or GPU)
     B_hdiff::M         # RHS horizontal diffusion matrix
     b_hdiff::V         # RHS horizontal diffusion vector
@@ -8,6 +8,7 @@ mutable struct EvolutionToolkit{A<:AbstractArchitecture, M, V, SA<:IterativeSolv
     solver_adv::SA     # advection iterative solver
     solver_hdiff::SHD  # horizontal diffusion iterative solver
     solver_vdiff::SVD  # vertical diffusion iterative solver
+    order::I           # order of timestepping scheme
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -23,7 +24,8 @@ function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, "├── b_vdiff: ", summary(evolution.b_vdiff))
     println(io, "├── solver_adv: ", summary(evolution.solver_adv))
     println(io, "├── solver_hdiff: ", summary(evolution.solver_hdiff))
-      print(io, "└── solver_vdiff: ", summary(evolution.solver_vdiff))
+    println(io, "├── solver_vdiff: ", summary(evolution.solver_vdiff))
+      print(io, "└── order: ", evolution.order)
 end
 
 """
@@ -31,6 +33,7 @@ end
                                          fe_data::FEData, 
                                          params::Parameters, 
                                          forcings::Forcings; 
+                                         order=2,
                                          kwargs...)
                 
 Set up the evolution toolkit, which contains the matrices and solvers for the evolution problem.
@@ -39,11 +42,12 @@ function EvolutionToolkit(arch::AbstractArchitecture,
                           fe_data::FEData, 
                           params::Parameters, 
                           forcings::Forcings; 
+                          order=2,
                           kwargs...)
     # build
     @info "Building evolution system..."
     A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
-        build_evolution_system(fe_data, params, forcings)
+        build_evolution_system(fe_data, params, forcings; order)
 
     # re-order dofs
     A_adv  =  A_adv[fe_data.dofs.p_b, fe_data.dofs.p_b]
@@ -60,9 +64,9 @@ function EvolutionToolkit(arch::AbstractArchitecture,
         P_adv   = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_adv))))
         P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
     else
-        @info "Factorizing evolution system..."
-        P_adv   = @time "lu(A_adv)" lu(A_adv)
-        P_hdiff = @time "lu(A_hdiff)" lu(A_hdiff)
+        @warn "LU-factoring evolution matrices with $(fe_data.dofs.nb) DOFs..."
+        @time "lu(A_adv)" P_adv = lu(A_adv)
+        @time "lu(A_hdiff)" P_hdiff = lu(A_hdiff)
         if forcings.conv_param.is_on
             # vertical diffusion matrix will get rebuilt for convection, so use diagonal preconditioner
             P_vdiff = Diagonal(on_architecture(arch, Vector(1 ./ diag(A_vdiff))))
@@ -83,13 +87,14 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     return EvolutionToolkit(arch, 
                             A_adv, P_adv, 
                             A_hdiff, P_hdiff, B_hdiff, b_hdiff, 
-                            A_vdiff, P_vdiff, B_vdiff, b_vdiff; kwargs...)
+                            A_vdiff, P_vdiff, B_vdiff, b_vdiff; order, kwargs...)
 end
 
 function EvolutionToolkit(arch::AbstractArchitecture,
                           A_adv, P_adv, 
                           A_hdiff, P_hdiff, B_hdiff, b_hdiff,
                           A_vdiff, P_vdiff, B_vdiff, b_vdiff;
+                          order,
                           atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=false)
     # rhs vector for solvers
     N = size(A_adv, 1)
@@ -115,7 +120,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
                             B_vdiff, b_vdiff, 
                             solver_adv, 
                             solver_hdiff, 
-                            solver_vdiff)
+                            solver_vdiff,
+                            order)
 end
 
 """

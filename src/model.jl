@@ -115,19 +115,20 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
-    # need to store a half-step buoyancy for advection
+    # need to store a half-step buoyancy for advection (only used if model.evolution.order == 2)
     b_half = interpolate(0, model.fe_data.spaces.B_trial)
     t_last_info = time()  # another timer for ETR
     for i ∈ i_step:n_steps
 
+        @time "full step:" begin
         # Strang split evolution equation
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         if advection
-            evolve_advection!(model, b_half)  # Δt advection
+            @time "adv" evolve_advection!(model, b_half)  # Δt advection
         end
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @time "hdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @time "vdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         if model.forcings.eddy_param.is_on && advection
@@ -148,7 +149,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         v_max = maximum(abs.(v.free_values))
         w_max = maximum(abs.(w.free_values))
         b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, v_max, w_max, b_max]) > 1e3
+        if maximum([u_max, v_max, w_max, b_max]) > 1e3 || any(isnan.([u_max, v_max, w_max, b_max]))
             throw(ErrorException("Blow-up detected, stopping simulation"))
         end
 
@@ -183,6 +184,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         flush(stdout)
         flush(stderr)
+        end
     end
     return model
 end
@@ -202,30 +204,47 @@ function evolve_advection!(model::Model, b_half)
     solver_adv = model.evolution.solver_adv
     arch = architecture(solver_adv.y)
     b_diri = model.fe_data.spaces.b_diri
+    order = model.evolution.order
 
-    # sync up flow with current buoyancy state
-    invert!(model)
+    if order == 1 # Forware Euler
+        # sync up flow with current buoyancy state
+        @time "  invert" invert!(model)
 
-    # compute b_half
-    l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
-    iterative_solve!(solver_adv)
-    b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
+        # compute b
+        δb = b - b_diri
+        l(d) = ∫( δb*d - Δt*(u*∂x(δb) + v*∂y(δb) + w*(N² + ∂z(δb)))*d )dΩ
+        @time "  build adv_rhs" solver_adv.y .=  on_architecture(arch, assemble_vector(l, B_test)[p_b])
+        @time "  adv" iterative_solve!(solver_adv)
 
-    # compute u_half, v_half, w_half, p_half
-    invert!(model, b_half)
+        # sync buoyancy to state
+        b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
+    elseif order == 2 # RK2
+        # sync up flow with current buoyancy state
+        @time "  invert1" invert!(model)
 
-    # full step
-    l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-    l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
-    iterative_solve!(solver_adv)
+        # compute b_half
+        l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
+        l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
+        @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
+        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b])
+        @time "  adv1" iterative_solve!(solver_adv)
+        b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
-    # sync buoyancy to state
-    b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
+        # compute u_half, v_half, w_half, p_half
+        @time "  invert2" invert!(model, b_half)
+
+        # full step
+        l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
+        l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
+        @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
+        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
+        @time "  adv2" iterative_solve!(solver_adv)
+
+        # sync buoyancy to state
+        b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
+    else
+        throw(ArgumentError("order must be 1 or 2"))
+    end
 
     return model
 end
@@ -235,9 +254,10 @@ function evolve_vdiffusion!(model::Model)
         α = model.params.α
         N² = model.params.N²
         b = model.state.b
+        order = model.evolution.order
         αbz = α*N² + α*∂z(b)
         κᵥ = κᵥ_convection(model.forcings, αbz)
-        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ)
+        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ; order)
         perm = model.fe_data.dofs.p_b
         A_vdiff = A_vdiff[perm, perm]
         B_vdiff = B_vdiff[perm, :]

@@ -157,10 +157,10 @@ A_vdiff b^{n+1} = B_vdiff b^n + b_vdiff
 
 See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`build_vdiffusion_system`](@ref).
 """
-function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
+function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings; order)
     @time "build advection system" A_adv = build_advection_matrix(fe_data)
-    @time "build hdiffusion system" A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ)
-    @time "build vdiffusion system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ)
+    @time "build hdiffusion system" A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ; order)
+    @time "build vdiffusion system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ; order)
     return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
 end
 
@@ -182,44 +182,48 @@ function build_advection_matrix(fe_data::FEData)
 end
 
 """
-    A, B, b = build_hdiffusion_system(fe_data::FEData, params::Parameters, κₕ)
+    A, B, b = build_hdiffusion_system(fe_data::FEData, params::Parameters, κₕ; order)
 
 Assemble the matrices for the horizontal diffusion part of the evolution problem.
 
 See also [`build_diffusion_system`](@ref).
 """
-function build_hdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κₕ)
-    return build_diffusion_system(fe_data, params, forcings::Forcings, κₕ, :horizontal)
+function build_hdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κₕ; order)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κₕ, :horizontal; order)
 end
 
 """
-    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
+    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ; order)
 
 Assemble the matrices for the vertical diffusion part of the evolution problem.
 
 See also [`build_diffusion_system`](@ref).
 """
-function build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ)
-    return build_diffusion_system(fe_data, params, forcings::Forcings, κᵥ, :vertical)
+function build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ; order)
+    return build_diffusion_system(fe_data, params, forcings::Forcings, κᵥ, :vertical; order)
 end
 
 """
-    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
+    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol; order)
 
 Assemble the matrices for the diffusion part of the evolution problem.
 
-We use the Crank-Nicolson scheme, i.e., 
+The linear system is written as
 ```math
-A b^{n+1} = B b^n + b
+A b^{n+1} = B b^n + b.
 ```
-where ``A = M + θ K`` and ``B = M - θ K`` with ``θ = Δt/4 α² ε² / μϱ`` and `M` and `K` being the mass 
-and stiffness matrices, respectively.
+If `order == 1`, we use backward Euler, so ``A = M + θ K`` and ``B = M`` with ``θ = Δt/2 α²ε²/μϱ`` and `M` and `K` 
+being the mass and stiffness matrices, respectively. For `order == 2`, we use Crank-Nicolson, so ``A = M + θ/2 K`` 
+and ``B = M - θ/2 K``.
 
 `direction` must be either `:horizontal` or `:vertical`.
 """
-function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol)
+function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol; order)
     if direction != :horizontal && direction != :vertical
         throw(ArgumentError("direction must be :horizontal or :vertical"))
+    end
+    if order != 1 && order != 2
+        throw(ArgumentError("order must be 1 or 2"))
     end
 
     B_trial = fe_data.spaces.B_trial
@@ -231,21 +235,37 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
     Δt = params.Δt
     b_diri = fe_data.spaces.b_diri
 
-    # coefficient for diffusion step (Δt/2 for Crank-Nicolson and Δt/2 for Strang splitting makes Δt/4)
-    θ = Δt/4 * α^2 * ε^2 / μϱ
+    # coefficient for diffusion step (Δt/2 for Strang splitting)
+    θ = Δt/2 * α^2 * ε^2 / μϱ
 
     function a_lhs(b, d)
-        if direction == :horizontal
-            return ∫( b*d + θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+        if order == 1
+            # backward Euler
+            if direction == :horizontal
+                return ∫( b*d + θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+            else
+                return ∫( b*d + θ*(κ*∂z(b)*∂z(d)) )dΩ
+            end
         else
-            return ∫( b*d + θ*(κ*∂z(b)*∂z(d)) )dΩ
+            # Crank-Nicolson
+            if direction == :horizontal
+                return ∫( b*d + θ/2*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+            else
+                return ∫( b*d + θ/2*(κ*∂z(b)*∂z(d)) )dΩ
+            end
         end
     end
     function a_rhs(b, d)
-        if direction == :horizontal
-            return ∫( b*d - θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+        if order == 1
+            # backward Euler
+            return ∫( b*d )dΩ
         else
-            return ∫( b*d - θ*(κ*∂z(b)*∂z(d)) )dΩ
+            # Crank-Nicolson
+            if direction == :horizontal
+                return ∫( b*d - θ/2*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
+            else
+                return ∫( b*d - θ/2*(κ*∂z(b)*∂z(d)) )dΩ
+            end
         end
     end
 
@@ -255,9 +275,9 @@ function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::F
     b .-= assemble_vector(d -> a_lhs(b_diri, d), B_test)
 
     if direction == :vertical
-        # vector for nonzero N² (no Δt/2 for Crank-Nicolson here since it's fully on the RHS)
+        # vector for nonzero N²
         N² = params.N²
-        l(d) = ∫( -2*θ*N²*(κ*∂z(d)) )dΩ
+        l(d) = ∫( -θ*N²*(κ*∂z(d)) )dΩ
         b .+= assemble_vector(l, B_test)
 
         # see multiple-dispatched functions below
