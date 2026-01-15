@@ -55,11 +55,11 @@ end
 function bilinear_form((u, p), (v, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
     # since ν is constant, we can just use the Laplacian here
     if friction_only
-        return ∫( 2*α²ε²*(ν*∇(u)⊙∇(v)) )*dΩ
+        return ∫( α²ε²*(ν*∇(u)⊙∇(v)) )*dΩ
     elseif frictionless_only
         return ∫( -(∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
     else
-        return ∫( 2*α²ε²*(ν*∇(u)⊙∇(v)) - (∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
+        return ∫( α²ε²*(ν*∇(u)⊙∇(v)) - (∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
     end
 end
 

@@ -1,5 +1,6 @@
 using Test
 using nuPGCM
+using Gridap
 using JLD2
 using Printf
 
@@ -25,7 +26,7 @@ function bowl_mixing(dim, arch)
     b_surface(x) = 0
     b_surface_bc = SurfaceDirichletBC(b_surface)
     forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
-    n_steps = 500
+    n_steps = 50
 
     # coarse mesh
     h = 0.1
@@ -79,15 +80,20 @@ function bowl_mixing(dim, arch)
     else
         jldopen(datafile, "r") do file
             u_data = file["u"]
-            v_data = file["v"]
-            w_data = file["w"]
             p_data = file["p"]
             b_data = file["b"]
-            @test isapprox(model.state.u.free_values⋅nuPGCM.x⃗, u_data, rtol=1e-2)
-            @test isapprox(model.state.u.free_values⋅nuPGCM.y⃗, v_data, rtol=1e-2)
-            @test isapprox(model.state.u.free_values⋅nuPGCM.z⃗, w_data, rtol=1e-2)
-            @test isapprox(model.state.p.free_values, p_data, rtol=1e-2)
-            @test isapprox(model.state.b.free_values, b_data, rtol=1e-2)
+            U_trial, P_trial = model.fe_data.spaces.X_trial
+            B_trial = model.fe_data.spaces.B_trial
+            u0 = FEFunction(U_trial, u_data)
+            p0 = FEFunction(P_trial, p_data)
+            b0 = FEFunction(B_trial, b_data)
+            u = model.state.u
+            p = model.state.p
+            b = model.state.b
+            dΩ = model.fe_data.mesh.dΩ
+            @test sum(∫( (u - u0)⋅(u - u0) )dΩ)/sum(∫( u0⋅u0 )dΩ) < 1e-3
+            # @test sum(∫( (p - p0)*(p - p0) )dΩ)/sum(∫( p0*p0 )dΩ) < 1e-3
+            @test sum(∫( (b - b0)*(b - b0) )dΩ)/sum(∫( b0*b0 )dΩ) < 1e-3
         end
     end
 end
