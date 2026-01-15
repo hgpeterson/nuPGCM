@@ -19,7 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Optimized how Dirichlet boundary conditions are handled for advection RHS builds
 - Fixed inversion-only `Model` initialization error
+
+### Changed
+
+- Switched representation of velocity from three scalar FE fields to a `VectorValue`d field
 
 ## [0.5.0] - 2025-11-25
 

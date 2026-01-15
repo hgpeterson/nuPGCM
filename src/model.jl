@@ -213,10 +213,9 @@ function evolve_advection!(model::Model, b_half)
         @time "  invert1" invert!(model)
 
         # compute b_half
-        l_half(d) = ∫( b*d - Δt/2*(u⋅∇(b) + w*N²)*d )dΩ
-        l_half_diri(d) = ∫( b_diri*d - Δt/2*(u⋅∇(b_diri))*d )dΩ
+        δb = b - b_diri
+        l_half(d) = ∫( δb*d - Δt/2*(u⋅∇(δb) + w*N²)*d )dΩ
         @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b])
         @time "  adv1" iterative_solve!(solver_adv)
         b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -224,10 +223,9 @@ function evolve_advection!(model::Model, b_half)
         @time "  invert2" invert!(model, b_half)
 
         # full step
-        l_full(d) = ∫( b*d - Δt*(u⋅∇(b_half) + w*N²)*d )dΩ
-        l_full_diri(d) = ∫( b_diri*d - Δt*(u⋅∇(b_diri))*d )dΩ
-        @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
+        δb_half = b_half - b_diri
+        l_full(d) = ∫( δb*d - Δt*(u⋅∇(δb_half) + w*N²)*d )dΩ
+        @time "  build adv_rhs2" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
         @time "  adv2" iterative_solve!(solver_adv)
 
         # sync buoyancy to state
