@@ -9,7 +9,7 @@ include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "../sims/sim020"))
+set_out_dir!(joinpath(@__DIR__, ""))
 
 # architecture
 arch = GPU()
@@ -141,24 +141,10 @@ display(forcings)
 display(forcings.conv_param)
 display(forcings.eddy_param)
 
-# # idea:
-# bottom_no_slip = DirichletBC(["bottom", "coastline", "basin bottom"], 0)
-# basin_no_normal = DirichletBC(["basin", "basin top"], 0)
-# top_no_normal = DirichletBC(["surface", "basin top"], 0)
-# wind_stress_x = FluxBC(["surface", "basin top"], τˣ)
-# wind_stress_y = FluxBC(["surface", "basin top"], τʸ)
-# basin_value = DirichletBC(["surface", "basin top"], 0)
-# bottom_flux = FluxBC(["surface", "basin top"], 0)
-# top_flux = FluxBC(["surface", "basin top"], b_flux_surface)
-# bcs = BoundaryConditions(; u=[bottom_no_slip, wind_stress_x], 
-#                            v=[bottom_no_slip, basin_no_normal, wind_stress_y],
-#                            w=[bottom_no_slip, top_no_normal],
-#                            b=[top_flux, bottom_flux, basin_value])
-
 function setup_model()
     # mesh
     # h = √2*α*ε
-    h = 3.45e-2
+    h = 0.1
     # if curved_southern_bdy
     #     mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
     # else
@@ -172,17 +158,14 @@ function setup_model()
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
-    # make_bc_dicts() ??
-    u_diri = Dict("bottom"=>0, "coastline"=>0)
-    v_diri = Dict("bottom"=>0, "coastline"=>0)
-    w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
-    # SurfaceDirichletBC:
-    b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface)
-    # SurfaceFluxBC:
-    # b_diri = Dict()
-    spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri; b_order=1) 
+    u_diri_tags = ["bottom", "coastline", "surface"]
+    u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+    u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
+    b_diri_tags = ["coastline", "surface"]
+    b_diri_vals = [b_surface, b_surface]
+    spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals, b_order=1) 
     fe_data = FEData(mesh, spaces)
-    @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
+    display(fe_data.dofs)
 
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=10_000, atol=1e-6, rtol=1e-6)

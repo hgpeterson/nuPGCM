@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-15
+
 ### Added
 
+- A new test with non-trivial dirichlet boundary conditions
 - Optional separate order for buoyancy
 - Optional order-1 timestepping scheme
 - Optimization for inversion matrix rebuild when `EddyParameterization` is used
 - Some more time printing
-- Support for Julia v1.11 and v1.12
 - Improvements to `estimated time remaining` info
 - `Base.show()` and `Base.summary()` implementations for more types
 
 ### Fixed
 
+- Optimized how Dirichlet boundary conditions are handled for advection RHS builds
 - Fixed inversion-only `Model` initialization error
+
+### Changed
+
+- Switched representation of velocity from three scalar FE fields to a `VectorValue`d field
 
 ## [0.5.0] - 2025-11-25
 

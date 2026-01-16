@@ -102,14 +102,17 @@ mesh = Mesh(mesh_file)
 # In Gmsh, one can assign labels to parts of the mesh by defining "physical groups."
 # For the mesh we're using here, there are three physical groups defined: the `"bottom"`,
 # `"coastline"`, and `"surface"`. To tell the $\nu$PGCM where to apply Dirichlet boundary
-# conditions, we define dictionaries for $u$, $v$, $w$, and $b$ using these labels.
+# conditions, we define tags and values for $\vec{u} = (u, v, w)$ and $b$ using these 
+# labels. 
 
-u_diri = Dict("bottom"=>0, "coastline"=>0)
-v_diri = Dict("bottom"=>0, "coastline"=>0)
-w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
-b_diri = Dict("surface"=>b_surface, "coastline"=>b_surface) 
-## b_diri = Dict()  # use this if b_surface_bc is a SurfaceFluxBC
-spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
+u_diri_tags = ["bottom", "coastline", "surface"]
+u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
+b_diri_tags = ["coastline", "surface"]
+b_diri_vals = [b_surface, b_surface]
+## b_diri_tags = []  # use this if b_surface_bc is a SurfaceFluxBC
+## b_diri_vals = []  # use this if b_surface_bc is a SurfaceFluxBC
+spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals) 
 
 # We have enforced the $u = v = w = 0$ on the `"bottom"` and `"coastline"`, $w = 0$ at 
 # the `"surface"`, and $b = 0$ at the `"surface"` and on the `"coastline"`. All other 
@@ -128,10 +131,10 @@ spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri)
 
 fe_data = FEData(mesh, spaces)
 
-# Behind the scenes, this created a `DoFHandler`, which you can use to print
-# out how many degrees of freedom the inversion system will have.
+# Behind the scenes, this created a `DoFHandler`, which you can use to see
+# how many degrees of freedom the problem has.
 
-@info "Inversion DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
+fe_data.dofs
 
 # # Build linear systems
 

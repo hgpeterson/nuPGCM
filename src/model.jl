@@ -1,7 +1,5 @@
 mutable struct State{U, P, B}
-    u::U     # flow in x direction
-    v::U     # flow in y direction
-    w::U     # flow in z direction
+    u::U     # flow
     p::P     # pressure
     b::B     # buoyancy
     t::Real  # time
@@ -14,8 +12,6 @@ end
 function Base.show(io::IO, state::State)
     println(io, summary(state), ":")
     println(io, "├── u: ", state.u, " with ", length(state.u.free_values), " DOFs")
-    println(io, "├── v: ", state.v, " with ", length(state.v.free_values), " DOFs")
-    println(io, "├── w: ", state.w, " with ", length(state.w.free_values), " DOFs")
     println(io, "├── p: ", state.p, " with ", length(state.p.free_values), " DOFs")
     println(io, "├── b: ", state.b, " with ", length(state.b.free_values), " DOFs")
       print(io, "└── t: ", state.t)
@@ -64,17 +60,15 @@ end
 
 function rest_state(spaces::Spaces; t=0.)
     # unpack
-    U, V, W, P = spaces.X_trial
+    U, P = spaces.X_trial
     B = spaces.B_trial
 
     # define FE functions
-    u = interpolate(0, U)
-    v = interpolate(0, V)
-    w = interpolate(0, W)
+    u = interpolate(VectorValue(0, 0, 0), U)
     p = interpolate(0, P) 
     b = interpolate(0, B)
 
-    return State(u, v, w, p, b, t)
+    return State(u, p, b, t)
 end
 
 function set_b!(model::Model, b::Function)
@@ -94,8 +88,6 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     # unpack
     Δt = model.params.Δt
     u = model.state.u
-    v = model.state.v
-    w = model.state.w
     b = model.state.b
 
     # save initial condition for comparison
@@ -146,10 +138,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         # blow-up -> stop
         u_max = maximum(abs.(u.free_values))
-        v_max = maximum(abs.(v.free_values))
-        w_max = maximum(abs.(w.free_values))
         b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, v_max, w_max, b_max]) > 1e3 || any(isnan.([u_max, v_max, w_max, b_max]))
+        if maximum([u_max, b_max]) > 1e3 || any(isnan.([u_max, b_max]))
             throw(ErrorException("Blow-up detected, stopping simulation"))
         end
 
@@ -163,7 +153,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
                 msg *= @sprintf("timestep duration ~ %.1e s\n", t_step)
                 msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
             end
-            msg *= @sprintf("|u|ₘₐₓ = %.1e, |v|ₘₐₓ = %.1e, |w|ₘₐₓ = %.1e\n", u_max, v_max, w_max)
+            msg *= @sprintf("|u|ₘₐₓ = %.1e\n", u_max)
             msg *= @sprintf("%.1e ≤ b ≤ %.1e\n", minimum([b.free_values; 0]), maximum([b.free_values; 0]))
             # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
             msg
@@ -198,13 +188,13 @@ function evolve_advection!(model::Model, b_half)
     N² = model.params.N²
     Δt = model.params.Δt
     u = model.state.u
-    v = model.state.v
-    w = model.state.w
     b = model.state.b
     solver_adv = model.evolution.solver_adv
     arch = architecture(solver_adv.y)
     b_diri = model.fe_data.spaces.b_diri
     order = model.evolution.order
+
+    w = u⋅z⃗
 
     if order == 1 # Forware Euler
         # sync up flow with current buoyancy state
@@ -212,7 +202,7 @@ function evolve_advection!(model::Model, b_half)
 
         # compute b
         δb = b - b_diri
-        l(d) = ∫( δb*d - Δt*(u*∂x(δb) + v*∂y(δb) + w*(N² + ∂z(δb)))*d )dΩ
+        l(d) = ∫( δb*d - Δt*(u⋅∇(δb) + w*N²)*d )dΩ
         @time "  build adv_rhs" solver_adv.y .=  on_architecture(arch, assemble_vector(l, B_test)[p_b])
         @time "  adv" iterative_solve!(solver_adv)
 
@@ -223,10 +213,9 @@ function evolve_advection!(model::Model, b_half)
         @time "  invert1" invert!(model)
 
         # compute b_half
-        l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-        l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
+        δb = b - b_diri
+        l_half(d) = ∫( δb*d - Δt/2*(u⋅∇(δb) + w*N²)*d )dΩ
         @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b])
         @time "  adv1" iterative_solve!(solver_adv)
         b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
@@ -234,10 +223,9 @@ function evolve_advection!(model::Model, b_half)
         @time "  invert2" invert!(model, b_half)
 
         # full step
-        l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-        l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-        @time "  build adv_rhs1" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-        @time "  build adv_rhs2" solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
+        δb_half = b_half - b_diri
+        l_full(d) = ∫( δb*d - Δt*(u⋅∇(δb_half) + w*N²)*d )dΩ
+        @time "  build adv_rhs2" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
         @time "  adv2" iterative_solve!(solver_adv)
 
         # sync buoyancy to state
@@ -310,11 +298,7 @@ end
 function sync_flow!(model::Model)
     x = on_architecture(CPU(), model.inversion.solver.x[model.fe_data.dofs.inv_p_inversion])
     nu = model.fe_data.dofs.nu
-    nv = model.fe_data.dofs.nv
-    nw = model.fe_data.dofs.nw
     model.state.u.free_values .= x[1:nu]
-    model.state.v.free_values .= x[nu+1:nu+nv]
-    model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
-    model.state.p.free_values.args[1] .= x[nu+nv+nw+1:end]
+    model.state.p.free_values.args[1] .= x[nu+1:end]
     return model
 end
