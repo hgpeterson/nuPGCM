@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-01-15
+
 ### Added
 
+- A new test with non-trivial dirichlet boundary conditions
 - Optional separate order for buoyancy
 - Optional order-1 timestepping scheme
 - Optimization for inversion matrix rebuild when `EddyParameterization` is used

@@ -1,6 +1,6 @@
 name = "nuPGCM"
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["hgpeterson <hgpeterson@caltech.edu>"]
 
 [deps]
