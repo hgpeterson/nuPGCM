@@ -13,7 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional order-1 timestepping scheme
 - Optimization for inversion matrix rebuild when `EddyParameterization` is used
 - Some more time printing
-- Support for Julia v1.11 and v1.12
 - Improvements to `estimated time remaining` info
 - `Base.show()` and `Base.summary()` implementations for more types
 
