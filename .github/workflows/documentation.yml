@@ -6,6 +6,7 @@ on:
       - main
     paths: 
       - 'docs/**'
+      - 'examples/**'
       - '.github/workflows/documentation.yml'
 
 jobs:
