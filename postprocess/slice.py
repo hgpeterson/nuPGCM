@@ -1,8 +1,9 @@
 import numpy as np
 import pyvista as pv
 from pathlib import Path
-from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
+from scipy.integrate import trapezoid, cumulative_trapezoid
+import utils
 
 wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
@@ -15,6 +16,7 @@ class SlicePlotter:
 
     def set_slice(self, direction, location):
         self.direction = direction.lower()
+        self.location = location
         if self.direction == "x":
             self.normal = [0, 1, 0]
             self.origin = [location, 0, 0]
@@ -33,64 +35,123 @@ class SlicePlotter:
         else:
             ValueError("'direction' must be one of 'x', 'y', or 'z'")
 
-    def plot(self, field_name, label=None, n=2**8, interactive=False, output_file="image.png"):
-        # # slice with plane
-        # ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
-        # coords = ds_slice.points
-        # values = ds_slice.point_data[field_name]
-        # if self.direction == "x":
-        #     x1 = coords[:, 1]
-        #     x2 = coords[:, 2]
-        # elif self.direction == "y":
-        #     x1 = coords[:, 0]
-        #     x2 = coords[:, 2]
-        # elif self.direction == "z":
-        #     x1 = coords[:, 0]
-        #     x2 = coords[:, 1]
+    def plot(self, field_name, label=None, n=2**8, output_file="image.png"):
+        # slice with plane
+        ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
+        p = ds_slice.points
+        if self.direction == "x":
+            x1 = p[:, 1]
+            x2 = p[:, 2]
+        elif self.direction == "y":
+            x1 = p[:, 0]
+            x2 = p[:, 2]
+        elif self.direction == "z":
+            x1 = p[:, 0]
+            x2 = p[:, 1]
             
-        # # regular grid
-        # x1_grid = np.linspace(x1.min(), x1.max(), n)
-        # x2_grid = np.linspace(x2.min(), x2.max(), n)
-        # X1, X2 = np.meshgrid(x1_grid, x2_grid)
-            
-        # # interpolate onto regular grid
-        # field = griddata((x1, x2), values, (X1, X2), method='linear', fill_value=np.nan)
-        plane = pv.Plane(center=self.origin, direction=self.normal, i_resolution=n, j_resolution=n)
-        x = plane.points[:, 0]
-        y = plane.points[:, 1]
-        z = plane.points[:, 2]
-        samples = plane.sample(self.dataset)
-        field = samples[field_name]
-            
+        field = ds_slice[field_name]
         vmax = np.max(np.abs(field))
+        # u = ds_slice['u']
+        # v = ds_slice['v']
+        # u[np.where(x2 < -0.5)] = np.nan
+        # v[np.where(x2 < -0.5)] = np.nan
 
         # plot
-        fig, ax = plt.subplots(1)
-        im = ax.pcolormesh(x, y, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
+        aspect_ratio = (x2.max() - x2.min())/(x1.max() - x1.min())
+        width = 19/6
+        fig, ax = plt.subplots(1, figsize=(width, width*aspect_ratio))
+        im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
         if label is None: 
             label = field_name
-        plt.colorbar(im, ax=ax, label=label)
+        plt.colorbar(im, ax=ax, label=label, shrink=0.5)
+        # ax.tripcolor(x1, x2, np.sqrt(u**2 + v**2), shading="gouraud")
+        # ax.quiver(x1, x2, u, v)
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
+        ax.axis('equal')
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.set_title(rf"$z = {self.location:0.2f}$")
         plt.savefig(output_file) 
         print(output_file)
         plt.close()
 
-        # if interactive:
-        #     plotter = pv.Plotter()
-        #     vmax = np.max(np.abs(values))
-        #     plotter.add_mesh(slice_mesh, scalars=field_name, cmap='RdBu_r', clim=[-vmax, vmax])
-        #     plotter.add_axes()
-        #     plotter.show_bounds()
-        #     plotter.show()
+def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.png"):
+    dataset = pv.read(vtu_file)
+    p = dataset.points
+    x_min, x_max = p[:, 0].min(), p[:, 0].max()
+    y_min, y_max = p[:, 1].min(), p[:, 1].max()
+    z_min, z_max = p[:, 2].min(), p[:, 2].max()
+    x = np.linspace(x_min, x_max, n)
+    y = np.linspace(y_min, y_max, n)
+    z = np.linspace(z_min, z_max, n)
+    if direction == "x":
+        x = location
+        x1 = y
+        x2 = z
+        flow_comp = 'w'
+        xlabel = r"$y$"
+        ylabel = r"$z$"
+    elif direction == "y":
+        y = location
+        x1 = x
+        x2 = z
+        flow_comp = 'w'
+        xlabel = r"$x$"
+        ylabel = r"$z$"
+    elif direction == "z":
+        z = location
+        x1 = x
+        x2 = y
+        flow_comp = 'v'
+        xlabel = r"$x$"
+        ylabel = r"$y$"
+    else:
+        ValueError("'direction' must be one of 'x', 'y', or 'z'")
+
+    xx, yy, zz = np.meshgrid(x, y, z, indexing="ij")
+    points = pv.PointSet(np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()]))
+    samples = points.sample(dataset)
+    flow = samples[flow_comp].reshape(n, n)
+
+    # compute circulation as \phi = \int_{x_E}^x v dx = \int_{x_W}^x v dx - \int_{x_W}^{x_E} v dx
+    circ = np.zeros_like(flow)
+    for i in range(n):
+        circ[:, i] = cumulative_trapezoid(flow[:, i], x1, initial=0) - trapezoid(flow[:, i], x1)
+    circ[:, np.where(x2 < -0.5)] = 0
+
+    # plot
+    aspect_ratio = (x2.max() - x2.min())/(x1.max() - x1.min())
+    width = 19/6
+    vmax = np.nanmax(np.abs(circ))
+    fig, ax = plt.subplots(1, figsize=(width, width*aspect_ratio))
+    im = ax.pcolormesh(x1, x2, circ.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
+    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9*vmax, 0.9*vmax, 10), colors="k", linestyles="-")
+    plt.colorbar(im, ax=ax, label=r"$\phi$", shrink=0.5)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.axis('equal')
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.set_title(rf"$z = {z:0.2f}$")
+    plt.savefig(output_file) 
+    print(output_file)
+    plt.close()
+
 
 if __name__ == "__main__":
-    file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state.vtu"
+    # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state.vtu"
     # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state_{25:016d}.vtu"
-    # sp = SlicePlotter(file_name)
-    # sp.set_slice("x", 0)
-    # sp.plot("v", label=r"$v$")
+    i = 8300
+    vtu_file = f"/home/hpeter/Downloads/states/state_{i:016d}.vtu"
+    sp = SlicePlotter(vtu_file)
+    zs = np.linspace(-1/4, 0, 20)
+    for j in range(1, len(zs)-1):
+        sp.set_slice("z", zs[j])
+        sp.plot("v", label=r"$v$", output_file=f"v{j:02d}.png")
+        circulation_plot(vtu_file, "z", zs[j], output_file=f"circ{j:02d}.png")
 
+    ################################################################################
 
     # mesh = pv.read(file_name)
     # sliced_mesh = mesh.slice(normal='y', origin=mesh.center)
@@ -115,71 +176,73 @@ if __name__ == "__main__":
     # plotter.show(cpos="xz")
     # plotter.screenshot("v.png")
 
-    mesh = pv.read(file_name)
-    origin = mesh.center
-    normal = [0, 1, 0]
-    # slice_plane = pv.Plane(center=origin, normal=normal, i_size=mesh.bounds[1]-mesh.bounds[0], j_size=mesh.bounds[5]-mesh.bounds[4])
-    sliced_polydata = mesh.slice(normal=normal, origin=origin)
+    ################################################################################
 
-    x_unstructured = sliced_polydata.points[:, 0]
-    z_unstructured = sliced_polydata.points[:, 2]
-    v_unstructured = sliced_polydata['v']
+    # mesh = pv.read(file_name)
+    # origin = mesh.center
+    # normal = [0, 1, 0]
+    # # slice_plane = pv.Plane(center=origin, normal=normal, i_size=mesh.bounds[1]-mesh.bounds[0], j_size=mesh.bounds[5]-mesh.bounds[4])
+    # sliced_polydata = mesh.slice(normal=normal, origin=origin)
 
-    bounds = sliced_polydata.bounds
-    n = 2**8
-    spacing = (bounds[1] - bounds[0]) / (n-1), 0, (bounds[5] - bounds[4]) / (n-1)
-    grid_2d = pv.ImageData(dimensions=(n, 1, n), spacing=spacing, origin=(bounds[0], 0, bounds[4]))
+    # x_unstructured = sliced_polydata.points[:, 0]
+    # z_unstructured = sliced_polydata.points[:, 2]
+    # v_unstructured = sliced_polydata['v']
 
-    # gridded_data = grid_2d.sample(sliced_polydata)
-    gridded_data = grid_2d.sample(mesh)
+    # bounds = sliced_polydata.bounds
+    # n = 2**8
+    # spacing = (bounds[1] - bounds[0]) / (n-1), 0, (bounds[5] - bounds[4]) / (n-1)
+    # grid_2d = pv.ImageData(dimensions=(n, 1, n), spacing=spacing, origin=(bounds[0], 0, bounds[4]))
 
-    # nan mask
-    nan_mask = gridded_data['vtkValidPointMask'] == 0
-    u = gridded_data['u']
-    v = gridded_data['v']
-    w = gridded_data['w']
-    b = gridded_data['b']
-    u[nan_mask] = np.nan
-    v[nan_mask] = np.nan
-    w[nan_mask] = np.nan
-    b[nan_mask] = np.nan
+    # # gridded_data = grid_2d.sample(sliced_polydata)
+    # gridded_data = grid_2d.sample(mesh)
 
-    # maxima
-    umax = np.nanmax(np.abs(u))
-    vmax = np.nanmax(np.abs(v))
-    wmax = np.nanmax(np.abs(w))
+    # # nan mask
+    # nan_mask = gridded_data['vtkValidPointMask'] == 0
+    # u = gridded_data['u']
+    # v = gridded_data['v']
+    # w = gridded_data['w']
+    # b = gridded_data['b']
+    # u[nan_mask] = np.nan
+    # v[nan_mask] = np.nan
+    # w[nan_mask] = np.nan
+    # b[nan_mask] = np.nan
 
-    x_2d = gridded_data.points[:, 0].reshape((n, n))
-    z_2d = gridded_data.points[:, 2].reshape((n, n))
-    u_2d = u.reshape((n, n))
-    v_2d = v.reshape((n, n))
-    w_2d = w.reshape((n, n))
-    b_2d = b.reshape((n, n))
+    # # maxima
+    # umax = np.nanmax(np.abs(u))
+    # vmax = np.nanmax(np.abs(v))
+    # wmax = np.nanmax(np.abs(w))
 
-    fig, ax = plt.subplots(3, 1, figsize=(3.2, 3*1.1))
-    c = ax[0].pcolormesh(x_2d, z_2d, u_2d, cmap='RdBu_r', vmin=-umax, vmax=umax, shading='gouraud')
-    cbar = fig.colorbar(c, ax=ax[0], label=r'$u$', shrink=0.8)
-    cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    ax[0].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-              colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    c = ax[1].pcolormesh(x_2d, z_2d, v_2d, cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='gouraud')
-    cbar = fig.colorbar(c, ax=ax[1], label=r'$v$', shrink=0.8)
-    cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    ax[1].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-              colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    c = ax[2].pcolormesh(x_2d, z_2d, w_2d, cmap='RdBu_r', vmin=-wmax, vmax=wmax, shading='gouraud')
-    cbar = fig.colorbar(c, ax=ax[2], label=r'$w$', shrink=0.8)
-    cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    ax[2].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-              colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    for a in ax:
-        a.axis('equal')
-        a.set_xticks([])
-        a.set_yticks([-0.5, 0])
-        a.spines['bottom'].set_visible(False)
-        a.spines['left'].set_visible(False)
-        a.set_ylabel(r'$z$')
-    ax[2].set_xticks(np.arange(-1, 1.1, 0.5))
-    ax[2].set_xlabel(r'$x$')
-    plt.savefig('example1a.png')
-    plt.close()
+    # x_2d = gridded_data.points[:, 0].reshape((n, n))
+    # z_2d = gridded_data.points[:, 2].reshape((n, n))
+    # u_2d = u.reshape((n, n))
+    # v_2d = v.reshape((n, n))
+    # w_2d = w.reshape((n, n))
+    # b_2d = b.reshape((n, n))
+
+    # fig, ax = plt.subplots(3, 1, figsize=(3.2, 3*1.1))
+    # c = ax[0].pcolormesh(x_2d, z_2d, u_2d, cmap='RdBu_r', vmin=-umax, vmax=umax, shading='gouraud')
+    # cbar = fig.colorbar(c, ax=ax[0], label=r'$u$', shrink=0.8)
+    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
+    # ax[0].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
+    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
+    # c = ax[1].pcolormesh(x_2d, z_2d, v_2d, cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='gouraud')
+    # cbar = fig.colorbar(c, ax=ax[1], label=r'$v$', shrink=0.8)
+    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
+    # ax[1].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
+    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
+    # c = ax[2].pcolormesh(x_2d, z_2d, w_2d, cmap='RdBu_r', vmin=-wmax, vmax=wmax, shading='gouraud')
+    # cbar = fig.colorbar(c, ax=ax[2], label=r'$w$', shrink=0.8)
+    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
+    # ax[2].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
+    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
+    # for a in ax:
+    #     a.axis('equal')
+    #     a.set_xticks([])
+    #     a.set_yticks([-0.5, 0])
+    #     a.spines['bottom'].set_visible(False)
+    #     a.spines['left'].set_visible(False)
+    #     a.set_ylabel(r'$z$')
+    # ax[2].set_xticks(np.arange(-1, 1.1, 0.5))
+    # ax[2].set_xlabel(r'$x$')
+    # plt.savefig('example1a.png')
+    # plt.close()
