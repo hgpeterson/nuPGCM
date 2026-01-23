@@ -45,6 +45,24 @@ function set_out_dir!(dir)
     end
 end
 
+# bool to turn on/off printing timings (default off)
+const ENABLE_TIMING = Ref(false)
+
+"""
+    @ctime "description" expr
+
+Conditionally run `@time` if `ENABLE_TIMING` is `true`.
+"""
+macro ctime(label, expr)
+    quote
+        if $ENABLE_TIMING[]
+            @time $label $(esc(expr))
+        else
+            $(esc(expr))
+        end
+    end
+end
+
 # include all the module code
 include("architectures.jl")
 include("utils.jl")
@@ -63,6 +81,7 @@ include("plotting.jl")
 export 
 out_dir,
 set_out_dir!,
+ENABLE_TIMING,
 # architectures.jl
 AbstractArchitecture,
 CPU,

@@ -112,15 +112,15 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     t_last_info = time()  # another timer for ETR
     for i ∈ i_step:n_steps
 
-        @time "full step:" begin
+        @ctime "full step:" begin
         # Strang split evolution equation
-        @time "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        @time "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @ctime "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @ctime "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
         if advection
-            @time "adv" evolve_advection!(model, b_half)  # Δt advection
+            @ctime "adv" evolve_advection!(model, b_half)  # Δt advection
         end
-        @time "hdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        @time "vdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+        @ctime "hdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
+        @ctime "vdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
         model.state.t += Δt
 
         if model.forcings.eddy_param.is_on && advection
@@ -196,37 +196,37 @@ function evolve_advection!(model::Model, b_half)
 
     w = u⋅z⃗
 
-    if order == 1 # Forware Euler
+    if order == 1 # Forward Euler
         # sync up flow with current buoyancy state
-        @time "  invert" invert!(model)
+        @ctime "  invert" invert!(model)
 
         # compute b
         δb = b - b_diri
         l(d) = ∫( δb*d - Δt*(u⋅∇(δb) + w*N²)*d )dΩ
-        @time "  build adv_rhs" solver_adv.y .=  on_architecture(arch, assemble_vector(l, B_test)[p_b])
-        @time "  adv" iterative_solve!(solver_adv)
+        @ctime "  build adv_rhs" solver_adv.y .=  on_architecture(arch, assemble_vector(l, B_test)[p_b])
+        @ctime "  adv" iterative_solve!(solver_adv)
 
         # sync buoyancy to state
         b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
     elseif order == 2 # RK2
         # sync up flow with current buoyancy state
-        @time "  invert1" invert!(model)
+        @ctime "  invert1" invert!(model)
 
         # compute b_half
         δb = b - b_diri
         l_half(d) = ∫( δb*d - Δt/2*(u⋅∇(δb) + w*N²)*d )dΩ
-        @time "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-        @time "  adv1" iterative_solve!(solver_adv)
+        @ctime "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
+        @ctime "  adv1" iterative_solve!(solver_adv)
         b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
 
         # compute u_half, v_half, w_half, p_half
-        @time "  invert2" invert!(model, b_half)
+        @ctime "  invert2" invert!(model, b_half)
 
         # full step
         δb_half = b_half - b_diri
         l_full(d) = ∫( δb*d - Δt*(u⋅∇(δb_half) + w*N²)*d )dΩ
-        @time "  build adv_rhs2" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-        @time "  adv2" iterative_solve!(solver_adv)
+        @ctime "  build adv_rhs2" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
+        @ctime "  adv2" iterative_solve!(solver_adv)
 
         # sync buoyancy to state
         b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
