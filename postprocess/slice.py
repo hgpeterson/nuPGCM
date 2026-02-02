@@ -18,12 +18,12 @@ class SlicePlotter:
         self.direction = direction.lower()
         self.location = location
         if self.direction == "x":
-            self.normal = [0, 1, 0]
+            self.normal = [1, 0, 0]
             self.origin = [location, 0, 0]
             self.xlabel = r"$y$"
             self.ylabel = r"$z$"
         elif self.direction == "y":
-            self.normal = [1, 0, 0]
+            self.normal = [0, 1, 0]
             self.origin = [0, location, 0]
             self.xlabel = r"$x$"
             self.ylabel = r"$z$"
@@ -49,29 +49,31 @@ class SlicePlotter:
             x1 = p[:, 0]
             x2 = p[:, 1]
             
-        field = ds_slice[field_name]
+        if field_name == "u":
+            field = ds_slice["u"][:, 0]
+        elif field_name == "v":
+            field = ds_slice["u"][:, 1]
+        elif field_name == "w":
+            field = ds_slice["u"][:, 2]
+        else:
+            field = ds_slice[field_name]
         vmax = np.max(np.abs(field))
-        # u = ds_slice['u']
-        # v = ds_slice['v']
-        # u[np.where(x2 < -0.5)] = np.nan
-        # v[np.where(x2 < -0.5)] = np.nan
+        b = ds_slice["b"]
+        bmin = b.min()
+        bmax = b.max()
 
         # plot
-        aspect_ratio = (x2.max() - x2.min())/(x1.max() - x1.min())
-        width = 19/6
-        fig, ax = plt.subplots(1, figsize=(width, width*aspect_ratio))
+        fig, ax = plt.subplots(1)
         im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
         if label is None: 
             label = field_name
-        plt.colorbar(im, ax=ax, label=label, shrink=0.5)
-        # ax.tripcolor(x1, x2, np.sqrt(u**2 + v**2), shading="gouraud")
-        # ax.quiver(x1, x2, u, v)
+        plt.colorbar(im, ax=ax, label=label, shrink=0.8)
+        ax.tricontour(x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
-        ax.axis('equal')
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
-        ax.set_title(rf"$z = {self.location:0.2f}$")
+        ax.set_title(rf"${self.direction} = {self.location:0.2f}$")
         plt.savefig(output_file) 
         print(output_file)
         plt.close()
@@ -142,14 +144,20 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
 if __name__ == "__main__":
     # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state.vtu"
     # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state_{25:016d}.vtu"
-    i = 8300
-    vtu_file = f"/home/hpeter/Downloads/states/state_{i:016d}.vtu"
+    # i = 8300
+    # vtu_file = f"/home/hpeter/Downloads/states/state_{i:016d}.vtu"
+    i = 2000
+    vtu_file = f"../scratch/test/data/state_{i:016d}.vtu"
     sp = SlicePlotter(vtu_file)
-    zs = np.linspace(-1/4, 0, 20)
-    for j in range(1, len(zs)-1):
-        sp.set_slice("z", zs[j])
-        sp.plot("v", label=r"$v$", output_file=f"v{j:02d}.png")
-        circulation_plot(vtu_file, "z", zs[j], output_file=f"circ{j:02d}.png")
+    # zs = np.linspace(-1/4, 0, 20)
+    # for j in range(1, len(zs)-1):
+    #     sp.set_slice("z", zs[j])
+    #     sp.plot("v", label=r"$v$", output_file=f"v{j:02d}.png")
+    #     circulation_plot(vtu_file, "z", zs[j], output_file=f"circ{j:02d}.png")
+    sp.set_slice("x", 0.5)
+    sp.plot("u", label=r"$u$", output_file="../scratch/test/images/u_pv.png")
+    sp.plot("v", label=r"$v$", output_file="../scratch/test/images/v_pv.png")
+    sp.plot("w", label=r"$w$", output_file="../scratch/test/images/w_pv.png")
 
     ################################################################################
 

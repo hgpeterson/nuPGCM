@@ -2,8 +2,10 @@ import matplotlib.pyplot as plt
 import pyvista as pv
 import numpy as np
 from tqdm import tqdm
+from time import time
 from scipy.integrate import trapezoid, cumulative_trapezoid
 from pathlib import Path
+import os
 import utils
 
 wd = Path(__file__).parent.resolve()
@@ -57,14 +59,12 @@ def calculate_barotropic_streamfunction(vtu_file, n_grid=2**6, n_z_samples=2**5)
     return psi_grid, x_grid, y_grid, U_grid
 
 
-def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8):
+def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, printtime=False):
+    if printtime:
+        t0 = time()
+
     # read the VTU file
     dataset = pv.read(vtu_file)
-
-    # for field in ["v", "b", "t"]:
-    for field in ["u", "b", "t"]:
-        if field not in dataset.array_names:
-            raise ValueError(f"Velocity field '{field}' not found. Available: {dataset.array_names}")
 
     # time
     t = dataset["t"][0]
@@ -74,8 +74,8 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8):
 
     # sample
     samples = utils.sample_to_grid(dataset, grid)
-    v = samples["v"].reshape(nx, ny, nz)
-    # v = samples["u"][:, 1].reshape(nx, ny, nz)
+    # v = samples["v"].reshape(nx, ny, nz)
+    v = samples["u"][:, 1].reshape(nx, ny, nz)
     b = samples["b"].reshape(nx, ny, nz)
 
     # zonal means
@@ -88,6 +88,9 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8):
     psi_bar = -cumulative_trapezoid(v_bar_filled, grid.z, axis=1, initial=0)
     nan_mask = np.isnan(v_bar)
     psi_bar[nan_mask] = np.nan
+
+    if printtime:
+        print(f"psi computed in {time()-t0:.3e} s")
 
     return psi_bar, v_bar, b_bar, grid, t
 
@@ -133,7 +136,7 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
         alpha = -np.min(z)
         z = z / alpha / 2
 
-    fig, ax = plt.subplots(1)
+    fig, ax = plt.subplots(1, figsize=(33/6, 33/6/1.62))
     ax.spines["bottom"].set_visible(False)
     ax.spines["left"].set_visible(False)
     vmax = np.nanmax(np.abs(field))
@@ -143,7 +146,7 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
         vmin = np.nanmin(np.abs(field))
     cf = ax.pcolormesh(y, z, field.T, cmap=cmap, vmin=vmin, vmax=vmax)
     plt.colorbar(cf, label=cb_label, shrink=0.5)
-    levels = np.linspace(-10, 10, 40)
+    levels = np.linspace(-15, 15, 40)
     ax.contour(y, z, -b.T, levels=levels, colors="k", linewidths=0.5, linestyles="-", alpha=0.3)
     ax.set_xlabel(r"$y$")
     if rescale_z:
@@ -162,113 +165,87 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
     plt.close()
 
 
-def plot_overturning_streamfunction(psi, v_bar, b_bar, grid, rescale_z=True, t=None, filename="psi.png", bmax=10):
+def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png", bmax=10):
     y = grid.y
     z = grid.z
 
-    fig, axes = plt.subplots(2, 1, figsize=(6.5, 4))
-    ax1, ax2 = axes
+    fig, ax = plt.subplots(1, figsize=(33/6, 33/6/1.62/2))
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
 
-    for a in axes:
-        a.spines["bottom"].set_visible(False)
-        a.spines["left"].set_visible(False)
-
-    if rescale_z:
-        alpha = -np.min(z)
-        z = z / alpha / 2
-
-    # streamfunction
     vmax = np.nanmax(np.abs(psi))
-    cf1 = ax1.pcolormesh(y, z, psi.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+    cf1 = ax.pcolormesh(y, z, psi.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
     levels = np.linspace(-0.9 * vmax, 0.9 * vmax, 8)
-    ax1.contour(y, z, psi.T, levels=levels, colors="k", linestyles="-", linewidths=0.5)
-    plt.colorbar(cf1, label=r"Streamfunction $\Psi$")
+    ax.contour(y, z, psi.T, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    cb = plt.colorbar(cf1, label=r"Streamfunction $\bar{\psi}$")
+    cb.ax.set_yticks([-vmax, 0, vmax])
+    cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
+    ax.text(0.65, 0.02, rf"Max = {utils.to_latex_sci(vmax)}")
     levels = np.linspace(-bmax, bmax, 40)
-    ax1.contour(y, z, -b_bar.T, levels=levels, colors="k", linewidths=0.5, alpha=0.3)
-    ax1.set_xlabel(r"$y$")
-    if rescale_z:
-        ax1.set_ylabel(rf"$z$ (rescaled, $\alpha = {alpha:0.3f}$)")
-    else:
-        ax1.set_ylabel(r"$z$")
-    ax1.set_aspect("equal")
+    ax.contour(y, z, -b_bar.T, levels=levels, colors="k", linewidths=0.5, alpha=0.3)
+    y0 = -0.6875
+    y1 = -0.5
+    y_c = np.linspace(y0, y1, 100)
+    ax.plot(y_c, z.min()*(1 - ((y_c - y0)/(y1 - y0))**2), "k--", lw=0.5, alpha=0.4)
+    # ax.axvline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
+    ax.set_xticks([-1, 0, 1])
+    ax.set_yticks([z.min(), 0])
+    ax.set_xlabel(r"$y$")
+    ax.set_ylabel(r"$z$")
     if t is not None:
-        ax1.set_title(r"$t = $" + utils.to_latex_sci(t))
-
-    # velocity
-    vmax = np.nanmax(np.abs(v_bar))
-    cf2 = ax2.pcolormesh(y, z, v_bar.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    plt.colorbar(cf2, label="Zonal mean\n" + r"meridional flow $\bar{v}$")
-    if b_bar is not None:
-        levels = np.linspace(-bmax, bmax, 40)
-        ax2.contour(y, z, -b_bar.T, levels=levels, colors="k", linewidths=0.5, alpha=0.3)
-    ax2.set_xlabel(r"$y$")
-    if rescale_z:
-        ax2.set_ylabel(rf"$z$ (rescaled, $\alpha = {alpha:0.3f}$)")
-    else:
-        ax2.set_ylabel(r"$z$")
-    ax2.set_aspect("equal")
-
+        ax.set_title(r"$t = $" + utils.to_latex_sci(t))
     plt.savefig(filename)
     print(filename)
     plt.close()
 
 
 if __name__ == "__main__":
-    # for i in range(6000, 6701, 100):
-    #     sim = 20
-    #     vtu_file = f"/home/hpeter/Downloads/states/sim{sim:03d}/data/state_{i:016d}.vtu"
 
-    #     # dataset = pv.read(vtu_file)
-    #     # t = dataset["t"][0]
-    #     # n = 2**8
-    #     # grid = utils.Grid(dataset, n, n, n)
-    #     # samples = utils.sample_to_grid(dataset, grid)
-    #     # nu = samples["nu"].reshape(n, n, n)
-    #     # kappa_v = samples["kappa_v"].reshape(n, n, n)
-    #     # b = samples["b"].reshape(n, n, n)
-    #     # width = utils.zonal_width(samples, grid)
-    #     # b = utils.zonal_mean(b, grid, width)
-    #     # nu = utils.zonal_mean(nu, grid, width)
-    #     # kappa_v = utils.zonal_mean(kappa_v, grid, width)
+    # psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction("../velocity_linear.vtu", printtime=True)
+    # plot_overturning_streamfunction(
+    #     psi_bar, b_bar, grid, t=t, filename=f"../sims/sim024/images/psi{15100:016d}.png", bmax=15
+    # )
 
-    #     # plot_zonal_mean(nu, grid, b, label="nu", cb_label=r"$\nu$", t=t, i=i, cmap="viridis", cb_sym=False)
-    #     # plot_zonal_mean(
-    #     #     kappa_v, grid, b, label="kappa_v", cb_label=r"$\kappa_v$", t=t, i=i, cmap="viridis", cb_sym=False
-    #     # )
+    overwrite = False
+    sim = 24
+    dir = f"../sims/sim{sim:03d}"
+    # dir = "../scratch/h0.10_wind_bim"
+    vtu_files = sorted(Path(f"{dir}/data/").glob("*.vtu"))
 
-    #     # psi, x_grid, y_grid, U = calculate_barotropic_streamfunction(vtu_file)
-    #     # plot_barotropic_streamfunction(psi, x_grid, y_grid, U)
+          
+    for vtu_file in vtu_files:
+        i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
+        img_file = f"{dir}/images/psi{i:016d}.png"
+        if os.path.exists(img_file) and not overwrite:
+            print("Skipping " + img_file)
+            continue
 
-    #     psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(vtu_file)
-    #     # np.savez(
-    #     #     f"images/sim{sim:03d}/psi{i:016d}.npz",
-    #     #     allow_pickle=True,
-    #     #     psi_bar=psi_bar,
-    #     #     v_bar=v_bar,
-    #     #     b_bar=b_bar,
-    #     #     grid=grid,
-    #     #     t=t,
-    #     # )
-    #     # print(f"images/sim{sim:03d}/psi{i:016d}.npz")
-
-    #     # d = np.load(f"images/sim{sim:03d}/psi{i:016d}.npz", allow_pickle=True)
-    #     # psi_bar = d["psi_bar"]
-    #     # v_bar = d["v_bar"]
-    #     # b_bar = d["b_bar"]
-    #     # grid = d["grid"]
-    #     # t = d["t"]
-
-    #     plot_overturning_streamfunction(
-    #         psi_bar, v_bar, b_bar, grid, t=t, filename=f"images/sim{sim:03d}/psi{i:016d}.png"
-    #     )
-
-    #     # grid = pv.StructuredGrid(x, y, z) ??
-
-    for i in range(8400, 9001, 100):
-        vtu_file = f"/home/hpeter/Downloads/states/state_{i:016d}.vtu"
         psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(vtu_file)
-        # np.savez(
-        #     f"images/psi{i:016d}.npz", allow_pickle=True, psi_bar=psi_bar, v_bar=v_bar, b_bar=b_bar, grid=grid, t=t
-        # )
-        # print(f"images/psi{i:016d}.npz")
-        plot_overturning_streamfunction(psi_bar, v_bar, b_bar, grid, t=t, filename=f"images/psi{i:016d}.png", bmax=15)
+        plot_overturning_streamfunction(
+            psi_bar, b_bar, grid, t=t, filename=img_file, bmax=15
+        )
+
+        # dataset = pv.read(vtu_file)
+        # t = dataset["t"][0]
+        # n = 2**8
+        # grid = utils.Grid(dataset, n, n, n)
+        # samples = utils.sample_to_grid(dataset, grid)
+        # b = samples["b"].reshape(n, n, n)
+        # # nu = samples["nu"].reshape(n, n, n)
+        # # kappa_v = samples["kappa_v"].reshape(n, n, n)
+        # # w = samples["w"].reshape(n, n, n)
+        # adv = samples["advection"].reshape(n, n, n)
+
+        # width = utils.zonal_width(samples, grid)
+        # b = utils.zonal_mean(b, grid, width)
+        # # nu = utils.zonal_mean(nu, grid, width)
+        # # kappa_v = utils.zonal_mean(kappa_v, grid, width)
+        # # w = utils.zonal_mean(w, grid, width)
+        # adv = utils.zonal_mean(adv, grid, width)
+
+        # # plot_zonal_mean(nu, grid, b, label="nu", cb_label=r"$\bar \nu$", t=t, i=i, cmap="viridis", cb_sym=False)
+        # # plot_zonal_mean(
+        # #     kappa_v, grid, b, label="kappa_v", cb_label=r"$\bar \kappa_v$", t=t, i=i, cmap="viridis", cb_sym=False
+        # # )
+        # # plot_zonal_mean(w, grid, b, label="w", cb_label=r"$\bar w$", t=t, i=i, cmap="RdBu_r", cb_sym=True)
+        # plot_zonal_mean(adv, grid, b, label="adv", cb_label=r"$\overline{\vec{u} \cdot \nabla b}$", t=t, i=i, cmap="RdBu_r", cb_sym=True)
