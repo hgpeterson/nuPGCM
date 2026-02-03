@@ -99,23 +99,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
-    # need to store a half-step buoyancy for advection (only used if model.evolution.order == 2)
-    b_half = interpolate(0, model.fe_data.spaces.B_trial)
-
-    # save buoyancy from previous timestep to check convergence
-    b_prev = copy(model.state.b.free_values)
-
-    ### DEBUG
-    θ = Δt * model.params.α^2 * model.params.ε^2 / model.params.μϱ
-    κ = model.forcings.κᵥ
-    B_trial = model.fe_data.spaces.B_trial
-    B_test = model.fe_data.spaces.B_test
-    b_diri = model.fe_data.spaces.b_diri
-    dΩ = model.fe_data.mesh.dΩ
-    a(b, d) = ∫( b*d + θ*(κ*(∇(b)⋅∇(d))) )dΩ  # warning: ignoring N²
-    A = assemble_matrix(a, B_trial, B_test)
-    @time "lu(A_evolution)" A = lu(A)
-    rhs_diri = assemble_vector(d->a(b_diri, d), B_test)
+    # buoyancy from previous timestep
+    b_prev = FEFunction(model.fe_data.spaces.B_trial, model.state.b.free_values)
 
     # start timers
     t₀ = t_last_info = time()
@@ -123,28 +108,8 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         @ctime "full step:" begin
 
-        # # Strang split evolution equation
-        # @ctime "hdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        # @ctime "vdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        # if advection
-        #     @ctime "adv" evolve_advection!(model, b_half)  # Δt advection
-        # end
-        # @ctime "hdiff" evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        # @ctime "vdiff" evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-
-        ### DEBUG
+        evolve!(model)
         invert!(model)
-        u = model.state.u
-        w = u⋅z⃗
-        b = model.state.b
-        N² = model.params.N²
-        # rhs  = assemble_vector(d->∫( b*d )dΩ, B_test)
-        rhs  = assemble_vector(d->∫( b*d - Δt*(u⋅∇(b))*d )dΩ, B_test)
-        # rhs  = assemble_vector(d->∫( b*d - Δt*(u⋅∇(b) + w*N²)*d )dΩ, B_test)
-        # rhs  = assemble_vector(d->∫( b*d + Δt*b*(u⋅∇(d)) - Δt*(w*N²)*d )dΩ, B_test)
-        rhs -= rhs_diri
-        model.state.b.free_values .= A\rhs
-
         model.state.t += Δt
 
         if model.forcings.eddy_param.is_on && advection
@@ -178,25 +143,23 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
                 msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
             end
             msg *= @sprintf("|u|ₘₐₓ = %.3e, %.3e ≤ b ≤ %.3e\n", u_max, minimum(b.free_values), maximum(b.free_values))
-            msg *= @sprintf("|db/dt|ₘₐₓ = %.3e\n", maximum(abs.(b.free_values - b_prev)/Δt))
+            msg *= @sprintf("|db/dt|ₘₐₓ = %.3e\n", maximum(abs.(b.free_values - b_prev.free_values)/Δt))
             msg
             end
             t_last_info = t₁
         end
 
         if mod(i, n_save) == 0
-            invert!(model) # sync flow with buoyancy state
             save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
             save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i))
         end
 
         if mod(i, n_plot) == 0
-            invert!(model) # sync flow with buoyancy state
             sim_plots(model, model.state.t)
         end
 
         # set b_prev to current b
-        b_prev .= b.free_values
+        b_prev.free_values .= b.free_values
 
         flush(stdout)
         flush(stderr)
@@ -205,7 +168,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     return model
 end
 
-function evolve_advection!(model::Model, b_half)
+function evolve!(model::Model)
     # unpack
     p_b = model.fe_data.dofs.p_b
     inv_p_b = model.fe_data.dofs.inv_p_b
@@ -215,125 +178,50 @@ function evolve_advection!(model::Model, b_half)
     Δt = model.params.Δt
     u = model.state.u
     b = model.state.b
-    solver_adv = model.evolution.solver_adv
-    arch = architecture(solver_adv.y)
-    b_diri = model.fe_data.spaces.b_diri
+    solver = model.evolution.solver
+    arch = architecture(solver.y)
+    rhs = model.evolution.rhs
     order = model.evolution.order
 
-    w = u⋅z⃗
+    # if model.forcings.conv_param.is_on
+    #     α = model.params.α
+    #     N² = model.params.N²
+    #     b = model.state.b
+    #     order = model.evolution.order
+    #     αbz = α*N² + α*∂z(b)
+    #     κᵥ = κᵥ_convection(model.forcings, αbz)
+    #     A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ; order)
+    #     perm = model.fe_data.dofs.p_b
+    #     A_vdiff = A_vdiff[perm, perm]
+    #     B_vdiff = B_vdiff[perm, :]
+    #     b_vdiff = b_vdiff[perm]
+    #     model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
+    #     model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
+    #     model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
+    #     model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
+    # end
 
-    if order == 1 # Forward Euler
-        # sync up flow with current buoyancy state
-        @ctime "  invert" invert!(model)
+    # # calculate rhs vector
+    # arch = model.arch
+    # solver_vdiff = model.evolution.solver_vdiff
+    # B_vdiff = model.evolution.B_vdiff
+    # b_vdiff = model.evolution.b_vdiff
+    # b = model.state.b
+    # solver_vdiff.y .= B_vdiff*on_architecture(arch, b.free_values) + b_vdiff
 
-        # compute b
-        δb = b - b_diri
-        # l(d) = ∫( δb*d - Δt*(u⋅∇(δb) + w*N²)*d )dΩ
-        l(d) = ∫( δb*d - Δt*(u⋅∇(b) + w*N²)*d )dΩ
-        # l(d) = ∫( -Δt*(u⋅∇(b) + w*N²)*d )dΩ
-        @ctime "  build adv_rhs" solver_adv.y .=  on_architecture(arch, assemble_vector(l, B_test)[p_b])
-        @ctime "  adv" iterative_solve!(solver_adv)
+    w = u⋅z⃗  # vertical component of velocity
 
-        # ### DEBUG
-        # # b_new = model.evolution.solver_adv.x[model.fe_data.dofs.inv_p_b]
-        # b_new = model.state.b.free_values + model.evolution.solver_adv.x[model.fe_data.dofs.inv_p_b]
-        # b_new = FEFunction(model.fe_data.spaces.B_trial, b_new)
-        # dbdt = (b_new - model.state.b)/model.params.Δt
-        # writevtk(model.fe_data.mesh.Ω, "$out_dir/data/adv.vtu", cellfields=["dbdt" => dbdt])
-        # @info "$out_dir/data/adv.vtu"
-
-        # sync buoyancy to state
-        b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
-        # b.free_values .+= on_architecture(CPU(), solver_adv.x[inv_p_b])
-    elseif order == 2 # RK2
-        # sync up flow with current buoyancy state
-        @ctime "  invert1" invert!(model)
-
-        # compute b_half
-        δb = b - b_diri
-        l_half(d) = ∫( δb*d - Δt/2*(u⋅∇(δb) + w*N²)*d )dΩ
-        @ctime "  build adv_rhs1" solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-        @ctime "  adv1" iterative_solve!(solver_adv)
-        b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
-
-        # compute u_half, v_half, w_half, p_half
-        @ctime "  invert2" invert!(model, b_half)
-
-        # full step
-        δb_half = b_half - b_diri
-        l_full(d) = ∫( δb*d - Δt*(u⋅∇(δb_half) + w*N²)*d )dΩ
-        @ctime "  build adv_rhs2" solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-        @ctime "  adv2" iterative_solve!(solver_adv)
-
-        # sync buoyancy to state
-        b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
+    if order == 1 # Forward Euler for advection, Backward Euler for diffusion
+        l(d) = ∫( b*d - Δt*(u⋅∇(b) + w*N²)*d )dΩ
+        @ctime "  build evol_rhs" solver.y .= rhs + on_architecture(arch, assemble_vector(l, B_test)[p_b])
+        @ctime "  solve evol sys" iterative_solve!(solver)
     else
-        throw(ArgumentError("order must be 1 or 2"))
+        throw(ArgumentError("order $order not yet implemented"))
     end
 
-    return model
-end
+    # sync buoyancy to state
+    b.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
 
-function evolve_vdiffusion!(model::Model)
-    if model.forcings.conv_param.is_on
-        α = model.params.α
-        N² = model.params.N²
-        b = model.state.b
-        order = model.evolution.order
-        αbz = α*N² + α*∂z(b)
-        κᵥ = κᵥ_convection(model.forcings, αbz)
-        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ; order)
-        perm = model.fe_data.dofs.p_b
-        A_vdiff = A_vdiff[perm, perm]
-        B_vdiff = B_vdiff[perm, :]
-        b_vdiff = b_vdiff[perm]
-        model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
-        model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
-        model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
-        model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
-    end
-
-    # calculate rhs vector
-    arch = model.arch
-    solver_vdiff = model.evolution.solver_vdiff
-    B_vdiff = model.evolution.B_vdiff
-    b_vdiff = model.evolution.b_vdiff
-    b = model.state.b
-    solver_vdiff.y .= B_vdiff*on_architecture(arch, b.free_values) + b_vdiff
-
-    # solve
-    iterative_solve!(solver_vdiff)
-
-    # ### DEBUG
-    # b_new = model.evolution.solver_vdiff.x[model.fe_data.dofs.inv_p_b]
-    # b_new = FEFunction(model.fe_data.spaces.B_trial, b_new)
-    # dbdt = (b_new - model.state.b)/model.params.Δt
-    # writevtk(model.fe_data.mesh.Ω, "$out_dir/data/vdiff.vtu", cellfields=["dbdt" => dbdt])
-    # @info "$out_dir/data/vdiff.vtu"
-
-    # sync solution to state
-    b.free_values .= on_architecture(CPU(),
-                                solver_vdiff.x[model.fe_data.dofs.inv_p_b]
-                                )
-
-    return model
-end
-
-function evolve_hdiffusion!(model::Model)
-    # solve
-    evolve_hdiffusion!(model.evolution, model.state.b)
-
-    # ### DEBUG
-    # b_new = model.evolution.solver_hdiff.x[model.fe_data.dofs.inv_p_b]
-    # b_new = FEFunction(model.fe_data.spaces.B_trial, b_new)
-    # dbdt = (b_new - model.state.b)/model.params.Δt
-    # writevtk(model.fe_data.mesh.Ω, "$out_dir/data/hdiff.vtu", cellfields=["dbdt" => dbdt])
-    # @info "$out_dir/data/hdiff.vtu"
-
-    # sync solution to state
-    model.state.b.free_values .= on_architecture(CPU(),
-                                    model.evolution.solver_hdiff.x[model.fe_data.dofs.inv_p_b]
-                                 )
     return model
 end
 

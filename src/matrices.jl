@@ -142,148 +142,61 @@ A_vdiff b^{n+1} = B_vdiff b^n + b_vdiff
 See also [`build_advection_matrix`](@ref), [`build_hdiffusion_system`](@ref), [`build_vdiffusion_system`](@ref).
 """
 function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings; order)
-    @time "build advection system" A_adv = build_advection_matrix(fe_data)
-    @time "build hdiffusion system" A_hdiff, B_hdiff, b_hdiff = build_hdiffusion_system(fe_data, params, forcings, forcings.κₕ; order)
-    @time "build vdiffusion system" A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(fe_data, params, forcings, forcings.κᵥ; order)
-    return A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff
-end
-
-"""
-    A = build_advection_matrix(fe_data::FEData)
-
-Assemble the LHS matrix `A` for the advection part of the evolution problem.
-
-It turns out that the advection matrix is just the mass matrix.
-"""
-function build_advection_matrix(fe_data::FEData)
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
-    dΩ = fe_data.mesh.dΩ
-
-    a(b, d) = ∫( b*d )dΩ
-    A = assemble_matrix(a, B_trial, B_test)
-    return A
-end
-
-"""
-    A, B, b = build_hdiffusion_system(fe_data::FEData, params::Parameters, κₕ; order)
-
-Assemble the matrices for the horizontal diffusion part of the evolution problem.
-
-See also [`build_diffusion_system`](@ref).
-"""
-function build_hdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κₕ; order)
-    return build_diffusion_system(fe_data, params, forcings::Forcings, κₕ, :horizontal; order)
-end
-
-"""
-    A, B, b = build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ; order)
-
-Assemble the matrices for the vertical diffusion part of the evolution problem.
-
-See also [`build_diffusion_system`](@ref).
-"""
-function build_vdiffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κᵥ; order)
-    return build_diffusion_system(fe_data, params, forcings::Forcings, κᵥ, :vertical; order)
-end
-
-"""
-    A, B, b = build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol; order)
-
-Assemble the matrices for the diffusion part of the evolution problem.
-
-The linear system is written as
-```math
-A b^{n+1} = B b^n + b.
-```
-If `order == 1`, we use backward Euler, so ``A = M + θ K`` and ``B = M`` with ``θ = Δt/2 α²ε²/μϱ`` and `M` and `K` 
-being the mass and stiffness matrices, respectively. For `order == 2`, we use Crank-Nicolson, so ``A = M + θ/2 K`` 
-and ``B = M - θ/2 K``.
-
-`direction` must be either `:horizontal` or `:vertical`.
-"""
-function build_diffusion_system(fe_data::FEData, params::Parameters, forcings::Forcings, κ, direction::Symbol; order)
-    if direction != :horizontal && direction != :vertical
-        throw(ArgumentError("direction must be :horizontal or :vertical"))
-    end
-    if order != 1 && order != 2
-        throw(ArgumentError("order must be 1 or 2"))
+    if order != 1
+        throw(ArgumentError("order $order not yet implemented"))
     end
 
+    @time "build evolution system" begin
+
+    # unpack
     B_trial = fe_data.spaces.B_trial
     B_test = fe_data.spaces.B_test
-    dΩ = fe_data.mesh.dΩ
-    ε = params.ε
-    α = params.α
-    μϱ = params.μϱ
-    Δt = params.Δt
     b_diri = fe_data.spaces.b_diri
+    dΩ = fe_data.mesh.dΩ
+    κₕ = forcings.κₕ
+    κᵥ = forcings.κᵥ
 
-    # coefficient for diffusion step (Δt/2 for Strang splitting)
-    θ = Δt/2 * α^2 * ε^2 / μϱ
+    # bilinear forms
+    aₘ(b, d) = ∫( b*d )dΩ
+    aₕ(b, d) = ∫( κₕ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d)) )dΩ
+    aᵥ(b, d) = ∫( κᵥ*∂z(b)*∂z(d) )dΩ
 
-    function a_lhs(b, d)
-        if order == 1
-            # backward Euler
-            if direction == :horizontal
-                return ∫( b*d + θ*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
-            else
-                return ∫( b*d + θ*(κ*∂z(b)*∂z(d)) )dΩ
-            end
-        else
-            # Crank-Nicolson
-            if direction == :horizontal
-                return ∫( b*d + θ/2*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
-            else
-                return ∫( b*d + θ/2*(κ*∂z(b)*∂z(d)) )dΩ
-            end
-        end
-    end
-    function a_rhs(b, d)
-        if order == 1
-            # backward Euler
-            return ∫( b*d )dΩ
-        else
-            # Crank-Nicolson
-            if direction == :horizontal
-                return ∫( b*d - θ/2*(κ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d))) )dΩ
-            else
-                return ∫( b*d - θ/2*(κ*∂z(b)*∂z(d)) )dΩ
-            end
-        end
-    end
+    M = assemble_matrix(aₘ, B_trial, B_test)
+    Kₕ = assemble_matrix(aₕ, B_trial, B_test)
+    Kᵥ = assemble_matrix(aᵥ, B_trial, B_test)
 
-    A = assemble_matrix(a_lhs, B_trial, B_test)
-    B = assemble_matrix(a_rhs, B_trial, B_test)
-    b   = assemble_vector(d -> a_rhs(b_diri, d), B_test)
-    b .-= assemble_vector(d -> a_lhs(b_diri, d), B_test)
-
-    if direction == :vertical
-        # vector for nonzero N²
-        N² = params.N²
-        l(d) = ∫( -θ*N²*(κ*∂z(d)) )dΩ
-        b .+= assemble_vector(l, B_test)
-
-        # see multiple-dispatched functions below
-        add_surface_flux!(b, forcings.b_surface_bc, params, κ, fe_data.mesh.dΓ, B_test)
-    end
-
-    return A, B, b
-end
-
-function add_surface_flux!(b, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_test)
+    # rhs vector for nonzero N²
     N² = params.N²
     ε = params.ε
     α = params.α
     μϱ = params.μϱ
     Δt = params.Δt
-    # b.c. is α²ε²/μϱ κ ∂z(b) = α*F (Δt/2 because of Strang split)
-    l(d) = ∫( Δt/2 * (α*(bc.flux*d) - α^2*ε^2/μϱ*N²*(κ*d)) )dΓ  
-    b .+= assemble_vector(l, B_test)
-    return b
+    l(d) = ∫( -Δt * α^2*ε^2/μϱ * N² * (κᵥ*∂z(d)) )dΩ
+    rhs = assemble_vector(l, B_test)
+
+    # rhs vector for surface flux (see multiple-dispatched functions below)
+    add_surface_flux!(rhs, forcings.b_surface_bc, params, κᵥ, fe_data.mesh.dΓ, B_test)
+
+    # correction due to Dirichlet b.c.
+    rhs .+= assemble_vector(d -> aₘ(b_diri, d), B_test)
+
+    end
+    return M, Kₕ, Kᵥ, rhs
 end
 
-function add_surface_flux!(b, bc::SurfaceDirichletBC, args...)
+function add_surface_flux!(rhs, bc::SurfaceFluxBC, params::Parameters, κ, dΓ, B_test)
+    N² = params.N²
+    ε = params.ε
+    α = params.α
+    μϱ = params.μϱ
+    Δt = params.Δt
+    # b.c. is α²ε²/μϱ κ ∂z(b) = α*F
+    l(d) = ∫( Δt * (α*(bc.flux*d) - α^2*ε^2/μϱ * N² * (κ*d)) )dΓ  
+    rhs .+= assemble_vector(l, B_test)
+    return rhs
+end
+
+function add_surface_flux!(rhs, bc::SurfaceDirichletBC, args...)
     # `bc` is not a flux condition, continue
-    return b
+    return rhs
 end
