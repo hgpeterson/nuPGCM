@@ -14,6 +14,16 @@ using Krylov
 using PyPlot
 using Printf
 
+# unit vectors
+x⃗ = VectorValue(1.0, 0.0, 0.0)
+y⃗ = VectorValue(0.0, 1.0, 0.0)
+z⃗ = VectorValue(0.0, 0.0, 1.0)
+
+# gradients 
+∂x(u) = x⃗⋅∇(u)
+∂y(u) = y⃗⋅∇(u)
+∂z(u) = z⃗⋅∇(u)
+
 # directory where the output files will be saved
 global out_dir = "."
 
@@ -70,7 +80,6 @@ include("inputs.jl")
 include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
-include("matrices.jl")
 include("iterative_solvers.jl")
 include("inversion.jl")
 include("evolution.jl")
@@ -79,6 +88,12 @@ include("IO.jl")
 include("plotting.jl")
 
 export 
+x⃗,
+y⃗,
+z⃗,
+∂x,
+∂y,
+∂z,
 out_dir,
 set_out_dir!,
 ENABLE_TIMING,
@@ -88,14 +103,6 @@ CPU,
 GPU,
 on_architecture,
 architecture,
-# utils.jl
-chebyshev_nodes,
-hrs_mins_secs,
-sci_notation,
-trapz,
-cumtrapz,
-nan_max,
-nan_min,
 # inputs.jl
 Parameters,
 SurfaceDirichletBC,
@@ -105,22 +112,10 @@ SurfaceFluxBC,
 Forcings,
 # meshes.jl
 Mesh,
-get_p_t,
-get_p_to_t,
 # spaces.jl
 Spaces,
 # dofs.jl
-get_n_dof,
 FEData,
-# matrices.jl
-∂x,
-∂y,
-∂z,
-build_matrices,
-build_inversion_matrices,
-build_evolution_system,
-# preconditioners.jl
-mul!,
 # inversion.jl
 InversionToolkit,
 invert!,
@@ -130,9 +125,6 @@ EvolutionToolkit,
 State,
 Model,
 set_b!,
-inversion_model,
-rest_state,
-rest_state_model,
 set_state_from_file!,
 run!,
 # IO.jl

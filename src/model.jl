@@ -100,7 +100,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # buoyancy from previous timestep
-    b_prev = FEFunction(model.fe_data.spaces.B_trial, model.state.b.free_values)
+    b_prev = FEFunction(model.fe_data.spaces.B_trial, copy(model.state.b.free_values))
 
     # start timers
     t₀ = t_last_info = time()
@@ -170,57 +170,71 @@ end
 
 function evolve!(model::Model)
     # unpack
-    p_b = model.fe_data.dofs.p_b
-    inv_p_b = model.fe_data.dofs.inv_p_b
+    perm = model.fe_data.dofs.p_b
+    inv_perm = model.fe_data.dofs.inv_p_b
     B_test = model.fe_data.spaces.B_test
     dΩ = model.fe_data.mesh.dΩ
+    ε = model.params.ε
+    α = model.params.α
+    μϱ = model.params.μϱ
     N² = model.params.N²
     Δt = model.params.Δt
     u = model.state.u
     b = model.state.b
     solver = model.evolution.solver
     arch = architecture(solver.y)
-    rhs = model.evolution.rhs
+    rhs_diff = model.evolution.rhs_diff
+    rhsₘ = model.evolution.rhsₘ
+    rhsₕ = model.evolution.rhsₕ
+    rhsᵥ = model.evolution.rhsᵥ
     order = model.evolution.order
 
-    # if model.forcings.conv_param.is_on
-    #     α = model.params.α
-    #     N² = model.params.N²
-    #     b = model.state.b
-    #     order = model.evolution.order
-    #     αbz = α*N² + α*∂z(b)
-    #     κᵥ = κᵥ_convection(model.forcings, αbz)
-    #     A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ; order)
-    #     perm = model.fe_data.dofs.p_b
-    #     A_vdiff = A_vdiff[perm, perm]
-    #     B_vdiff = B_vdiff[perm, :]
-    #     b_vdiff = b_vdiff[perm]
-    #     model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
-    #     model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
-    #     model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
-    #     model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
-    # end
+    # coefficient
+    θ = Δt * α^2 * ε^2 / μϱ
 
-    # # calculate rhs vector
-    # arch = model.arch
-    # solver_vdiff = model.evolution.solver_vdiff
-    # B_vdiff = model.evolution.B_vdiff
-    # b_vdiff = model.evolution.b_vdiff
-    # b = model.state.b
-    # solver_vdiff.y .= B_vdiff*on_architecture(arch, b.free_values) + b_vdiff
+    if model.forcings.conv_param.is_on
+        # recompute κᵥ for convection
+        α = model.params.α
+        N² = model.params.N²
+        b = model.state.b
+        αbz = α*N² + α*∂z(b)
+        κᵥ = κᵥ_convection(model.forcings, αbz)
+
+        # rebuild vertical diffusion components
+        Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)
+        rhs_diff = build_rhs_diff(model.params, model.forcings, model.fe_data, κᵥ)
+        Kᵥ = Kᵥ[perm, perm]
+        rhsᵥ = rhsᵥ[perm]
+        rhs_diff = rhs_diff[perm]
+        model.evolution.rhsᵥ .= rhsᵥ
+        model.evolution.rhs_diff .= rhs_diff
+
+        # re-assemble matrix and preconditioner
+        M = model.evolution.M
+        Kₕ = model.evolution.Kₕ
+        A = M + θ*(Kₕ + Kᵥ) 
+        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+
+        # update model.evolution
+        model.evolution.solver.A = on_architecture(arch, A)
+        model.evolution.solver.P = P
+    end
 
     w = u⋅z⃗  # vertical component of velocity
 
     if order == 1 # Forward Euler for advection, Backward Euler for diffusion
         l(d) = ∫( b*d - Δt*(u⋅∇(b) + w*N²)*d )dΩ
-        @ctime "  build evol_rhs" solver.y .= rhs + on_architecture(arch, assemble_vector(l, B_test)[p_b])
+        rhs_adv = assemble_vector(l, B_test)[perm]
+        @ctime "  build evol_rhs" solver.y .= on_architecture(arch,
+            rhs_adv + rhs_diff - (rhsₘ + θ*(rhsₕ + rhsᵥ))
+        )
         @ctime "  solve evol sys" iterative_solve!(solver)
     else
         throw(ArgumentError("order $order not yet implemented"))
     end
 
     # sync buoyancy to state
-    b.free_values .= on_architecture(CPU(), solver.x[inv_p_b])
+    b.free_values .= on_architecture(CPU(), solver.x[inv_perm])
 
     return model
 end
