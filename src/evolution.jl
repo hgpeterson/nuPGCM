@@ -46,13 +46,13 @@ function EvolutionToolkit(arch::AbstractArchitecture,
                           itmax=0, 
                           history=true, 
                           verbose=false)
-    if order != 1
+    if order != 1 && order != 2
         throw(ArgumentError("order $order not yet implemented"))
     end
 
     # build
     @info "Building evolution system..."
-    M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = build_evolution_system(fe_data, params, forcings; order)
+    @time "build evolution system" M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = build_evolution_system(fe_data, params, forcings)
 
     # re-order dofs
     perm = fe_data.dofs.p_b
@@ -69,7 +69,13 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     α = params.α
     μϱ = params.μϱ
     Δt = params.Δt
-    θ = Δt * α^2 * ε^2 / μϱ
+    if order == 1
+        # BDF1
+        θ = Δt * α^2 * ε^2 / μϱ
+    elseif order == 2
+        # BDF2
+        θ = 2/3 * Δt * α^2 * ε^2 / μϱ
+    end
     A = M + θ*(Kₕ + Kᵥ) 
     N = size(A, 1)
 
@@ -102,8 +108,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
 end
 
 """
-    A_adv, A_hdiff, B_hdiff, b_hdiff, A_vdiff, B_vdiff, b_vdiff = 
-        build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
+    M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = 
+build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
 
 Build the matrices for the evolution problem of the PG equations.
 
@@ -114,13 +120,7 @@ The evolution equation is written as
 
 See also [`build_M`](@ref), [`build_Kₕ`](@ref), [`build_Kᵥ`](@ref).
 """
-function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings; order)
-    if order != 1
-        throw(ArgumentError("order $order not yet implemented"))
-    end
-
-    @time "build evolution system" begin
-
+function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
     # unpack
     B_trial = fe_data.spaces.B_trial
     B_test = fe_data.spaces.B_test
@@ -134,8 +134,6 @@ function build_evolution_system(fe_data::FEData, params::Parameters, forcings::F
     Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
     Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
     rhs_diff = build_rhs_diff(params, forcings, fe_data, κᵥ)
-
-    end
     return M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ
 end
 
@@ -221,7 +219,7 @@ function build_rhs_diff(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC, 
 
     # rhs vector for nonzero N² and surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
     θ = Δt * α^2 * ε^2 / μϱ
-    l(d) = ∫( -θ * N² * κᵥ * ∂z(d) )dΩ + ∫( Δt*α*(bc.flux*d) )dΓ  
+    l(d) = ∫( -θ * N² * (κᵥ * ∂z(d)) )dΩ + ∫( Δt * α * (bc.flux * d) )dΓ  
     return assemble_vector(l, B_test)
 end
 function build_rhs_diff(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC, κᵥ)
@@ -236,6 +234,6 @@ function build_rhs_diff(params::Parameters, fe_data::FEData, bc::SurfaceDirichle
 
     # rhs vector for nonzero N² (no surface buoyancy flux)
     θ = Δt * α^2 * ε^2 / μϱ
-    l(d) = ∫( -θ * N² * κᵥ * ∂z(d) )dΩ
+    l(d) = ∫( -θ * N² * (κᵥ * ∂z(d)) )dΩ
     return assemble_vector(l, B_test)
 end
