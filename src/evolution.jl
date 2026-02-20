@@ -2,7 +2,9 @@ struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit
     arch::A      # architecture (CPU or GPU)
     M::M         # Mass matrix
     Kₕ::M        # Horiz. stiffness matrix
+    Kᵥ::M        # Vert. stiffness matrix
     rhs_diff::V  # rhs vector from diffusion
+    rhs_flux::V  # rhs vector from surface b flux
     rhsₘ::V      # correction vector to add to rhs due to Dirichlet b.c. in M
     rhsₕ::V      # correction vector to add to rhs due to Dirichlet b.c. in Kₕ
     rhsᵥ::V      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
@@ -19,7 +21,9 @@ function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, "├── arch: ", evolution.arch)
     println(io, "├── M: ", summary(evolution.M))
     println(io, "├── Kₕ: ", summary(evolution.Kₕ))
+    println(io, "├── Kᵥ: ", summary(evolution.Kᵥ))
     println(io, "├── rhs_diff: ", summary(evolution.rhs_diff))
+    println(io, "├── rhs_flux: ", summary(evolution.rhs_flux))
     println(io, "├── rhsₘ: ", summary(evolution.rhsₘ))
     println(io, "├── rhsₕ: ", summary(evolution.rhsₕ))
     println(io, "├── rhsᵥ: ", summary(evolution.rhsᵥ))
@@ -52,7 +56,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
 
     # build
     @info "Building evolution system..."
-    @time "build evolution system" M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = build_evolution_system(fe_data, params, forcings)
+    @time "build evolution system" M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ = 
+                                        build_evolution_system(fe_data, params, forcings)
 
     # re-order dofs
     perm = fe_data.dofs.p_b
@@ -60,37 +65,16 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     Kₕ = Kₕ[perm, perm]
     Kᵥ = Kᵥ[perm, perm]
     rhs_diff = rhs_diff[perm]
+    rhs_flux = rhs_flux[perm]
     rhsₘ = rhsₘ[perm]
     rhsₕ = rhsₕ[perm]
     rhsᵥ = rhsᵥ[perm]
 
     # combine to make evolution LHS
-    ε = params.ε
-    α = params.α
-    μϱ = params.μϱ
-    Δt = params.Δt
-    if order == 1
-        # BDF1
-        θ = Δt * α^2 * ε^2 / μϱ
-    elseif order == 2
-        # BDF2
-        θ = 2/3 * Δt * α^2 * ε^2 / μϱ
-    end
-    A = M + θ*(Kₕ + Kᵥ) 
-    N = size(A, 1)
-
-    # preconditioner
-    if typeof(arch) == GPU || forcings.conv_param.is_on
-        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
-    else
-        @warn "LU-factoring evolution matrix with $N DOFs..."
-        @time "lu(A_evol)" P = lu(A)
-    end
-
-    # move to arch
-    A = on_architecture(arch, A)
+    A, P = collect_evolution_LHS(arch, params, forcings, M, Kₕ, Kᵥ, order)
 
     # rhs vector for solver
+    N = size(A, 1)
     T = eltype(A)
     y = on_architecture(arch, zeros(T, N))
 
@@ -104,8 +88,66 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
     solver = IterativeSolverToolkit(A, P, y, solver, kwargs, "Evolution")
 
-    return EvolutionToolkit(arch, M, Kₕ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ, solver, order)
+    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
 end
+
+function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings)
+    arch = evolution.arch
+    M = evolution.M
+    Kₕ = evolution.Kₕ
+    Kᵥ = evolution.Kᵥ
+    order = evolution.order
+    A, P = collect_evolution_LHS(arch, params, forcings::Forcings, M, Kₕ, Kᵥ, order)
+    evolution.solver.A = on_architecture(arch, A)
+    evolution.solver.P = P
+    return evolution
+end
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, M, Kₕ, Kᵥ, order)
+    θ = evolution_parameter(params, Val(order))
+    A = M + θ*(Kₕ + Kᵥ) 
+
+    # preconditioner
+    if typeof(arch) == GPU || forcings.conv_param.is_on
+        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+    else
+        @warn "LU-factoring evolution matrix with $(size(A, 1)) DOFs..."
+        @time "lu(A_evol)" P = lu(A)
+    end
+
+    # move to arch
+    A = on_architecture(arch, A)
+
+    return A, P
+end
+
+"""
+    θ = evolution_parameter(p::Parameters, order::Val)
+
+Returns the coefficient needed to build the LHS matrix in the evolution problem of the form
+```math
+A = M + θ*(Kₕ + Kᵥ)
+```
+For `order` = 1, we use Backwards Euler (BDF1), so 
+```math
+θ = Δt α² ε² / μϱ.
+```
+For `order` = 2, we use BDF2:
+```math
+θ = 2/3 Δt α² ε² / μϱ.
+```
+"""
+function evolution_parameter(p::Parameters, ::Val{1})
+    # BDF1
+    return p.Δt * p.α^2 * p.ε^2 / p.μϱ
+end
+function evolution_parameter(p::Parameters, ::Val{2})
+    # BDF2
+    return 2/3 * p.Δt * p.α^2 * p.ε^2 / p.μϱ
+end
+
+####
+#### Matrix-building functions
+####
 
 """
     M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = 
@@ -133,8 +175,9 @@ function build_evolution_system(fe_data::FEData, params::Parameters, forcings::F
     M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
     Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
     Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
-    rhs_diff = build_rhs_diff(params, forcings, fe_data, κᵥ)
-    return M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ
+    rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
+    rhs_flux = build_rhs_flux(params, forcings, fe_data)
+    return M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ
 end
 
 """
@@ -200,40 +243,35 @@ function build_matrix_vector(a, B, D, b_diri)
     return A, rhs
 end
 
-function build_rhs_diff(params::Parameters, forcings::Forcings, fe_data::FEData, κᵥ)
-    return build_rhs_diff(params, fe_data, forcings.b_surface_bc, κᵥ)
-end
-function build_rhs_diff(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC, κᵥ)
+# RHS: ∫( ∂z( κᵥ [N² + ∂z(b)] ) d )dΩ
+# IBP: ∫( κᵥ [N² + ∂z(b)] d )dΓ - ∫( κᵥ N² ∂z(d) )dΩ - ∫( κᵥ ∂z(b) ∂z(d) )dΩ
+
+function build_rhs_diff(params::Parameters, fe_data::FEData, κᵥ)
     # unpack
     N² = params.N²
-    ε = params.ε
-    α = params.α
-    μϱ = params.μϱ
-    Δt = params.Δt
     dΩ = fe_data.mesh.dΩ
+    B_test = fe_data.spaces.B_test
+
+    # rhs vector for nonzero N²
+    l(d) = ∫( -N² * (κᵥ * ∂z(d)) )dΩ
+    return assemble_vector(l, B_test)
+end
+
+function build_rhs_flux(params::Parameters, forcings::Forcings, fe_data::FEData)
+    return build_rhs_flux(params, fe_data, forcings.b_surface_bc)
+end
+function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC)
+    # unpack
+    α = params.α
+    Δt = params.Δt
     dΓ = fe_data.mesh.dΓ
     B_test = fe_data.spaces.B_test
 
-    # RHS: ∫( ∂z( κᵥ [N² + ∂z(b)] ) d )dΩ
-    # IBP: ∫( κᵥ [N² + ∂z(b)] d )dΓ - ∫( κᵥ N² ∂z(d) )dΩ - ∫( κᵥ ∂z(b) ∂z(d) )dΩ
-
-    # rhs vector for nonzero N² and surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
-    θ = Δt * α^2 * ε^2 / μϱ
-    l(d) = ∫( -θ * N² * (κᵥ * ∂z(d)) )dΩ + ∫( Δt * α * (bc.flux * d) )dΓ  
+    # rhs vector surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
+    l(d) = ∫( Δt * α * (bc.flux * d) )dΓ  
     return assemble_vector(l, B_test)
 end
-function build_rhs_diff(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC, κᵥ)
-    # unpack
-    N² = params.N²
-    ε = params.ε
-    α = params.α
-    μϱ = params.μϱ
-    Δt = params.Δt
-    dΩ = fe_data.mesh.dΩ
-    B_test = fe_data.spaces.B_test
-
-    # rhs vector for nonzero N² (no surface buoyancy flux)
-    θ = Δt * α^2 * ε^2 / μϱ
-    l(d) = ∫( -θ * N² * (κᵥ * ∂z(d)) )dΩ
-    return assemble_vector(l, B_test)
+function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC)
+    # no flux (Dirichlet b.c.)
+    return zeros(fe_data.dofs.nb)
 end

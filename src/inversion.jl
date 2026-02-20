@@ -111,6 +111,10 @@ function invert!(inversion::InversionToolkit, b)
     return inversion
 end
 
+####
+#### Matrix-building functions
+####
+
 """
     A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
 
