@@ -34,7 +34,7 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         κᵥ = m.forcings.κᵥ
     end
     # IMPORTANT: must have order = 2 for quadratic velocities!
-    writevtk(m.fe_data.mesh.Ω, "velocity.vtu", order=2, cellfields=[
+    writevtk(m.fe_data.mesh.Ω, ofile, order=2, cellfields=[
         "u" => s.u, 
         "p" => s.p, 
         "b" => b_full,
