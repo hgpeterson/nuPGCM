@@ -1,8 +1,8 @@
 # $\nu$PGCM
 
 Interested in simulating the large-scale ocean circulation over long timescales? 
-Then the planetary geostrophic circulation model ($\nu$PGCM) might be for you! 
-Some highlights:
+Then look no further!
+Some highlights of the planetary geostrophic circulation model ($\nu$PGCM):
 - Capable of simulating arbitrary domains thanks to the finite elements formulation
 - Written in [Julia](https://julialang.org/) 
 - Runs on a GPU
