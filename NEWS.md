@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - VTU files are now saved with the `order = 2` flag, ensuring that quadratic velocities are properly represented
 
+### Changed
+
+- Switched timestepping scheme to BDF1/BDF2
+
 ## [0.6.0] - 2026-01-15
 
 ### Added
