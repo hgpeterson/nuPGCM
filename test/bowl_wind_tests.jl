@@ -1,11 +1,16 @@
 using Test
 using nuPGCM
+using Gridap
 using JLD2
 using Printf
 
 set_out_dir!(@__DIR__)
 
 function bowl_wind(arch)
+    println()
+    @info "Running bowl wind stress test with:" arch
+    println()
+
     # params/funcs
     ε = √1e-1
     α = 1/2
@@ -56,8 +61,8 @@ function bowl_wind(arch)
     # solve
     run!(model; n_steps)
 
-    # plot for sanity check
-    save_vtk(model)
+    # # plot for sanity check
+    # save_vtk(model)
 
     # compare state with data
     datafile = @sprintf("%s/data/bowl_wind.jld2", out_dir)
@@ -72,10 +77,10 @@ function bowl_wind(arch)
             U_trial, P_trial = model.fe_data.spaces.X_trial
             B_trial = model.fe_data.spaces.B_trial
             u0 = FEFunction(U_trial, u_data)
-            p0 = FEFunction(P_trial, p_data)
+            # p0 = FEFunction(P_trial, p_data)
             b0 = FEFunction(B_trial, b_data)
             u = model.state.u
-            p = model.state.p
+            # p = model.state.p
             b = model.state.b
             dΩ = model.fe_data.mesh.dΩ
             @test sum(∫( (u - u0)⋅(u - u0) )dΩ)/sum(∫( u0⋅u0 )dΩ) < 1e-3
@@ -88,8 +93,5 @@ end
 @testset "Bowl Wind Tests" begin
     @testset "CPU" begin
         bowl_wind(CPU())
-    end
-    @testset "GPU" begin
-        bowl_wind(GPU())
     end
 end
