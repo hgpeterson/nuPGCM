@@ -40,8 +40,3 @@ function generate_channel_mesh_2D(h, α)
     gmsh.write(joinpath(@__DIR__, @sprintf("channel2D_h%.2e_a%.2e.msh", h, α)))
     gmsh.finalize()
 end
-
-# h = 2e-2
-# α = 1/8
-# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
-# generate_channel_mesh_2D(h, α)
