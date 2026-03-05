@@ -139,8 +139,3 @@ function mesh_channel_basin_flat(h, α)
     gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_flat_h%.2e_a%.2e.msh", h, α)))
     gmsh.finalize()
 end
-
-# h = 0.02
-# α = 1/8 # H/W
-# mesh_channel_basin_flat(h, α)
-# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
