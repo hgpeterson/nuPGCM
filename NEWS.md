@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-05
+
 ### Added
 
 - Conditionally turn on timings by setting `ENABLE_TIMING[] = true` (defualt `false`)
@@ -14,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - VTU files are now saved with the `order = 2` flag, ensuring that quadratic velocities are properly represented
+
+### Changed
+
+- Switched timestepping scheme to BDF1/BDF2
 
 ## [0.6.0] - 2026-01-15
 

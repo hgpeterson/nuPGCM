@@ -124,9 +124,6 @@ Next, we will couple the inversion to the evolution equation to simulate time-de
 
 ## Timestepping
 
-![Flow chart of a single Strang-split timestep](assets/timestep.png)
-*Flow chart of a single Strang-split timestep from $t^n$ to $t^{n+1} = t^n + \Delta t$ in a simulation. "Invert" refers to solving the matrix equation for the PG inversion above. The half- and forward advection steps and the $\Delta t /2$ diffusion steps are described below.*
-
 Once the solution is projected onto the discrete finite element space described above, the weak form of the buoyancy evolution becomes
 ```math
 \mathbf{M} \pder{\mathbf{b}}{t} + F(\mathbf{u}, \mathbf{b}) + \theta \mathbf{K} \mathbf{b} = \mathbf{f},
@@ -142,27 +139,9 @@ F(\mathbf{u}, \mathbf{b})_i = \mathbf{u}_k \mathbf{b}_j \int_\mathcal{D} (\vec{\
 ```
 which must be explicitly re-computed as the solution evolves. 
 
-To simplify the treatment of both advection and diffusion, we employ [Strang splitting](https://en.wikipedia.org/wiki/Strang_splitting) to handle each separately.
-Specifically, we split each timestep into (1) a half-step of diffusion, (2) a full-step of advection, and (3) a final half-step of diffusion (see schematic below).
-For advection, we use a second-order explicit Runge--Kutta step (also known as the midpoint method):
-```math
-\begin{aligned}
-    \text{Step 1:} &\quad \text{Solve inversion system for} \; \mathbf{u}^n \; \text{given} \; \mathbf{b}^n,\\
-    \text{Step 2:} &\quad \mathbf{b}^{n + \frac12}_* = \mathbf{b}^n - \frac{\Delta t}{2} \mathbf{M}^{-1} F(\mathbf{u}_i^n, \mathbf{b}^n),\\
-    \text{Step 3:} &\quad \text{Solve inversion system for} \; (\mathbf{u}_i)^{n+\frac12}_* \; \text{given} \; \mathbf{b}^{n+\frac12}_*,\\
-    \text{Step 4:} &\quad\, \mathbf{b}^{n+1}_* = \mathbf{b}^n - \Delta t \mathbf{M}^{-1} F\left( (\mathbf{u}_i)^{n + \frac12}_*, \mathbf{b}^{n+\frac12}_*\right),
-\end{aligned}
-```
-where $\Delta t$ is the step size.
-The superscripts are a short-hand for $\mathbf{b}^n = \mathbf{b}(t^n)$ where $t^n = n\Delta t$ with $n = 0, 1, 2, \ldots$ and the the subscript $_*$ indicates that only an advection step has been performed.
-The matrix $\mathbf{M}^{-1}$ is not computed explicitly, but instead the linear system is iteratively solved on a GPU using the conjugate gradient (CG) method.
-Using a left preconditioner of $(\text{diag } \mathbf{M})^{-1}$, this approach is extremely efficient, typically converging to a reasonable tolerance in less than 10 iterations.
-Note that this second-order method requires two updates of the velocity field (steps 1 and 3).
-For the diffusion half-steps, we use the second-order accurate, semi-implicit Crank--Nicolson method:
-```math
-\left(\mathbf{M} + \theta \frac{\Delta t}{4} \mathbf{K} \right) \mathbf{b}^{n+1} = \left(\mathbf{M} - \theta \frac{\Delta t}{4} \mathbf{K} \right) \mathbf{b}^{n+1}_* + \Delta t \mathbf{f},
-```
-We again solve this linear system using the CG method preconditioned by the inverse of the diagonal of the matrix on the left-hand side.
+In previous versions of the model, we employed a timestepping scheme based on Strang splitting.
+Currently, we have moved to a BDF scheme similar to that in [this deal.II tutorial](https://dealii.org/developer/doxygen/deal.II/step_31.html).
+Hopefully more documentation to come. 
 
 A key advantage of solving the PG equations as opposed to the full Boussinesq system is that they filter out fast-timescale dynamics, allowing for large timesteps.
 For a typical global-scale simulation, a dimensional timestep of $\Delta t / (f_0 \varrho) \sim O(10 \text{ days})$ is possible. 
