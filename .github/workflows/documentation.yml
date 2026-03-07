@@ -34,6 +34,8 @@ jobs:
           Pkg.build("Conda")
           Pkg.build("PyCall")
           Pkg.build("PyPlot")
+          Pkg.build("Gmsh")
+          Pkg.build("GridapGmsh")
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - name: Build and deploy
