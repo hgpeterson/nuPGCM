@@ -85,13 +85,15 @@ save_vtk(model, ofile=&quot;$out_dir/data/state.vtu&quot;)</code></pre><pre><cod
 [ Info: VTK state saved to &#39;/home/runner/work/nuPGCM/nuPGCM/docs/src/literated//data/state.vtu&#39;
 </code></pre><p>Here we want to see how the flow and buoyancy evolve in time, however, so we need to build the evolution system.</p><pre><code class="language-julia hljs">evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings)</code></pre><pre><code class="nohighlight hljs">nuPGCM.EvolutionToolkit:
 ├── arch: nuPGCM.CPU()
-├── B_hdiff: 11211×11211 SparseArrays.SparseMatrixCSC{Float64, Int64} with 267151 stored entries
-├── b_hdiff: 11211-element Vector{Float64}
-├── B_vdiff: 11211×11211 SparseArrays.SparseMatrixCSC{Float64, Int64} with 267151 stored entries
-├── b_vdiff: 11211-element Vector{Float64}
-├── solver_adv: nuPGCM.IterativeSolverToolkit
-├── solver_hdiff: nuPGCM.IterativeSolverToolkit
-├── solver_vdiff: nuPGCM.IterativeSolverToolkit
+├── M: 11211×11211 SparseArrays.SparseMatrixCSC{Float64, Int64} with 267151 stored entries
+├── Kₕ: 11211×11211 SparseArrays.SparseMatrixCSC{Float64, Int64} with 267151 stored entries
+├── Kᵥ: 11211×11211 SparseArrays.SparseMatrixCSC{Float64, Int64} with 267151 stored entries
+├── rhs_diff: 11211-element Vector{Float64}
+├── rhs_flux: 11211-element Vector{Float64}
+├── rhsₘ: 11211-element Vector{Float64}
+├── rhsₕ: 11211-element Vector{Float64}
+├── rhsᵥ: 11211-element Vector{Float64}
+├── solver: nuPGCM.IterativeSolverToolkit
 └── order: 2</code></pre><h1 id="Construct-Model"><a class="docs-heading-anchor" href="#Construct-Model">Construct <code>Model</code></a><a id="Construct-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Construct-Model" title="Permalink"></a></h1><p>Now we put everything together in the <code>Model</code> type.</p><pre><code class="language-julia hljs">model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)</code></pre><pre><code class="nohighlight hljs">nuPGCM.Model:
 ├── arch: nuPGCM.CPU()
 ├── params: nuPGCM.Parameters{Float64}
@@ -111,4 +113,4 @@ run!(model; n_steps, n_save)</code></pre><pre><code class="nohighlight hljs">nuP
 ├── fe_data: nuPGCM.FEData
 ├── inversion: nuPGCM.InversionToolkit
 ├── evolution: nuPGCM.EvolutionToolkit
-└── state: nuPGCM.State</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../model_formulation/numerical_approach/">« Numerical Approach</a><a class="docs-footer-nextpage" href="../../references/">References »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 16 January 2026 01:05">Friday 16 January 2026</span>. Using Julia version 1.12.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+└── state: nuPGCM.State</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../model_formulation/numerical_approach/">« Numerical Approach</a><a class="docs-footer-nextpage" href="../../references/">References »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Saturday 7 March 2026 23:09">Saturday 7 March 2026</span>. Using Julia version 1.12.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
