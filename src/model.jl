@@ -1,7 +1,5 @@
 mutable struct State{U, P, B}
-    u::U     # flow in x direction
-    v::U     # flow in y direction
-    w::U     # flow in z direction
+    u::U     # flow
     p::P     # pressure
     b::B     # buoyancy
     t::Real  # time
@@ -14,8 +12,6 @@ end
 function Base.show(io::IO, state::State)
     println(io, summary(state), ":")
     println(io, "├── u: ", state.u, " with ", length(state.u.free_values), " DOFs")
-    println(io, "├── v: ", state.v, " with ", length(state.v.free_values), " DOFs")
-    println(io, "├── w: ", state.w, " with ", length(state.w.free_values), " DOFs")
     println(io, "├── p: ", state.p, " with ", length(state.p.free_values), " DOFs")
     println(io, "├── b: ", state.b, " with ", length(state.b.free_values), " DOFs")
       print(io, "└── t: ", state.t)
@@ -64,17 +60,15 @@ end
 
 function rest_state(spaces::Spaces; t=0.)
     # unpack
-    U, V, W, P = spaces.X_trial
+    U, P = spaces.X_trial
     B = spaces.B_trial
 
     # define FE functions
-    u = interpolate(0, U)
-    v = interpolate(0, V)
-    w = interpolate(0, W)
+    u = interpolate(VectorValue(0, 0, 0), U)
     p = interpolate(0, P) 
     b = interpolate(0, B)
 
-    return State(u, v, w, p, b, t)
+    return State(u, p, b, t)
 end
 
 function set_b!(model::Model, b::Function)
@@ -94,43 +88,58 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     # unpack
     Δt = model.params.Δt
     u = model.state.u
-    v = model.state.v
-    w = model.state.w
     b = model.state.b
 
-    # save initial condition for comparison
-    b0 = interpolate(0, model.fe_data.spaces.B_trial)
-    b0.free_values .= b.free_values
-    # volume = sum(∫( 1 )*model.fe_data.mesh.dΩ) # volume of the domain
+    # get resolution for CFL
+    p, t = get_p_t(model.fe_data.mesh.model)
+    edges, _, _ = all_edges(t)
+    h_min = minimum([norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)])
 
     if model.forcings.eddy_param.is_on
         # store inversion matrix without friction to speed up re-builds
         A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
     end
 
-    # start timer
-    t0 = time()
-
     # number of steps between info print
     n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
     @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
-    # need to store a half-step buoyancy for advection
-    b_half = interpolate(0, model.fe_data.spaces.B_trial)
-    t_last_info = time()  # another timer for ETR
-    for i ∈ i_step:n_steps
+    # store copies of previous and current u, b
+    u_prev = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
+    u_curr = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
+    b_prev = FEFunction(model.fe_data.spaces.B_trial, copy(b.free_values))
+    b_curr = FEFunction(model.fe_data.spaces.B_trial, copy(b.free_values))
 
-        # Strang split evolution equation
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        if advection
-            evolve_advection!(model, b_half)  # Δt advection
+    # start timers
+    t₀ = t_last_info = time()
+    for i ∈ i_step:n_steps
+        @ctime "full step:" begin
+
+        if i == i_step
+            # first-order timestep at first
+            order = 1
+        else
+            # can be second-order later
+            order = model.evolution.order
+            if order == 2 && i == i_step+1
+                collect_evolution_LHS!(model.evolution, model.params, model.forcings)
+            end
         end
-        evolve_vdiffusion!(model)             # Δt/2 vertical diffusion
-        evolve_hdiffusion!(model)             # Δt/2 horizontal diffusion
+
+        # sync current u, b before they update
+        u_curr.free_values .= u.free_values
+        b_curr.free_values .= b.free_values
+
+        # do step
+        evolve!(model, u_prev, b_prev, order)
+        invert!(model)
         model.state.t += Δt
 
-        if model.forcings.eddy_param.is_on && advection
+        # set previous u, b to state before the update
+        u_prev.free_values .= u_curr.free_values
+        b_prev.free_values .= b_curr.free_values
+
+        if model.forcings.eddy_param.is_on && advection && mod(i, 10) == 0
             α = model.params.α
             N² = model.params.N²
             b = model.state.b
@@ -145,137 +154,119 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
         # blow-up -> stop
         u_max = maximum(abs.(u.free_values))
-        v_max = maximum(abs.(v.free_values))
-        w_max = maximum(abs.(w.free_values))
         b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, v_max, w_max, b_max]) > 1e3
+        if maximum([u_max, b_max]) > 1e3 || any(isnan.([u_max, b_max]))
             throw(ErrorException("Blow-up detected, stopping simulation"))
         end
 
         if mod(i, n_info) == 0
-            t1 = time()
-            t_step = (t1 - t_last_info)/n_info
+            t₁ = time()
+            t_step = (t₁ - t_last_info)/n_info
             @info begin
-            msg  = @sprintf("t = %f (i = %d/%d, Δt = %f)\n", model.state.t, i, n_steps, Δt)
-            msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t1-t0)...)
+            msg  = @sprintf("t = %f (i = %d/%d, Δt = %.3e)\n", model.state.t, i, n_steps, Δt)
+            msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t₁-t₀)...)
             if i > n_info  # skip ETR the first time since it will contain compilation time
-                msg *= @sprintf("timestep duration ~ %.1e s\n", t_step)
+                msg *= @sprintf("timestep duration ~ %.3e s\n", t_step)
                 msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
             end
-            msg *= @sprintf("|u|ₘₐₓ = %.1e, |v|ₘₐₓ = %.1e, |w|ₘₐₓ = %.1e\n", u_max, v_max, w_max)
-            msg *= @sprintf("%.1e ≤ b ≤ %.1e\n", minimum([b.free_values; 0]), maximum([b.free_values; 0]))
-            # msg *= @sprintf("V⁻¹ ∫ (b - b0) dx = %.16f\n", sum(∫(b - b0)*model.fe_data.mesh.dΩ)/volume)
+            msg *= @sprintf("|u|ₘₐₓ = %.3e, CFL Δt ≳ %.3e\n", u_max, h_min/u_max)
+            msg *= @sprintf("%.3e ≤ b_free ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n", 
+                            minimum(b.free_values), maximum(b.free_values), 
+                            maximum(abs.(b.free_values - b_prev.free_values)/Δt))
             msg
             end
-            t_last_info = t1
+            t_last_info = t₁
         end
 
         if mod(i, n_save) == 0
-            invert!(model) # sync flow with buoyancy state
             save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
             save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i))
         end
 
         if mod(i, n_plot) == 0
-            invert!(model) # sync flow with buoyancy state
             sim_plots(model, model.state.t)
         end
 
         flush(stdout)
         flush(stderr)
+        end
     end
     return model
 end
 
-function evolve_advection!(model::Model, b_half)
+function evolve!(model::Model, u_prev, b_prev, order)
     # unpack
-    p_b = model.fe_data.dofs.p_b
-    inv_p_b = model.fe_data.dofs.inv_p_b
+    perm = model.fe_data.dofs.p_b
+    inv_perm = model.fe_data.dofs.inv_p_b
     B_test = model.fe_data.spaces.B_test
     dΩ = model.fe_data.mesh.dΩ
+    α = model.params.α
     N² = model.params.N²
     Δt = model.params.Δt
     u = model.state.u
-    v = model.state.v
-    w = model.state.w
     b = model.state.b
-    solver_adv = model.evolution.solver_adv
-    arch = architecture(solver_adv.y)
-    b_diri = model.fe_data.spaces.b_diri
+    solver = model.evolution.solver
+    arch = architecture(solver.y)
+    rhs_diff = model.evolution.rhs_diff
+    rhs_flux = model.evolution.rhs_flux
+    rhsₘ = model.evolution.rhsₘ
+    rhsₕ = model.evolution.rhsₕ
+    rhsᵥ = model.evolution.rhsᵥ
 
-    # sync up flow with current buoyancy state
-    invert!(model)
+    # coefficient
+    θ = evolution_parameter(model.params, Val(order))
 
-    # compute b_half
-    l_half(d) = ∫( b*d - Δt/2*(u*∂x(b) + v*∂y(b) + w*(N² + ∂z(b)))*d )dΩ
-    l_half_diri(d) = ∫( b_diri*d - Δt/2*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .=  on_architecture(arch, assemble_vector(l_half, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_half_diri, B_test)[p_b]) #TODO: for performance, would be nice to find a better way to handle dirichlet correction
-    iterative_solve!(solver_adv)
-    b_half.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
-
-    # compute u_half, v_half, w_half, p_half
-    invert!(model, b_half)
-
-    # full step
-    l_full(d) = ∫( b*d - Δt*(u*∂x(b_half) + v*∂y(b_half) + w*(N² + ∂z(b_half)))*d )dΩ
-    l_full_diri(d) = ∫( b_diri*d - Δt*(u*∂x(b_diri) + v*∂y(b_diri) + w*∂z(b_diri))*d )dΩ
-    solver_adv.y .= on_architecture(arch, assemble_vector(l_full, B_test)[p_b])
-    solver_adv.y .-= on_architecture(arch, assemble_vector(l_full_diri, B_test)[p_b])
-    iterative_solve!(solver_adv)
-
-    # sync buoyancy to state
-    b.free_values .= on_architecture(CPU(), solver_adv.x[inv_p_b])
-
-    return model
-end
-
-function evolve_vdiffusion!(model::Model)
     if model.forcings.conv_param.is_on
+        # recompute κᵥ for convection
         α = model.params.α
         N² = model.params.N²
         b = model.state.b
         αbz = α*N² + α*∂z(b)
         κᵥ = κᵥ_convection(model.forcings, αbz)
-        A_vdiff, B_vdiff, b_vdiff = build_vdiffusion_system(model.fe_data, model.params, model.forcings, κᵥ)
-        perm = model.fe_data.dofs.p_b
-        A_vdiff = A_vdiff[perm, perm]
-        B_vdiff = B_vdiff[perm, :]
-        b_vdiff = b_vdiff[perm]
-        model.evolution.solver_vdiff.A = on_architecture(model.arch, A_vdiff)
-        model.evolution.solver_vdiff.P = Diagonal(on_architecture(model.arch, Vector(1 ./ diag(A_vdiff))))
-        model.evolution.B_vdiff = on_architecture(model.arch, B_vdiff)
-        model.evolution.b_vdiff = on_architecture(model.arch, b_vdiff)
+
+        # rebuild vertical diffusion components
+        Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)
+        rhs_diff = build_rhs_diff(model.params, model.fe_data, κᵥ)
+        Kᵥ = Kᵥ[perm, perm]
+        rhsᵥ = rhsᵥ[perm]
+        rhs_diff = rhs_diff[perm]
+        model.evolution.rhsᵥ .= rhsᵥ
+        model.evolution.rhs_diff .= rhs_diff
+
+        # re-assemble matrix and preconditioner
+        M = model.evolution.M
+        Kₕ = model.evolution.Kₕ
+        A = M + θ*(Kₕ + Kᵥ) 
+        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+
+        # update model.evolution
+        model.evolution.solver.A = on_architecture(arch, A)
+        model.evolution.solver.P = P
     end
 
-    # calculate rhs vector
-    arch = model.arch
-    solver_vdiff = model.evolution.solver_vdiff
-    B_vdiff = model.evolution.B_vdiff
-    b_vdiff = model.evolution.b_vdiff
-    b = model.state.b
-    solver_vdiff.y .= B_vdiff*on_architecture(arch, b.free_values) + b_vdiff
+    # put together rhs and solve
+    w = u⋅z⃗
+    w_prev = u_prev⋅z⃗
+    rhs_adv = assemble_vector(d -> advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, Val(order)), B_test)
+    rhs_adv = rhs_adv[perm]
+    @ctime "  build evol_rhs" solver.y .= on_architecture(arch,
+        rhs_adv + θ*rhs_diff + rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
+    )
+    @ctime "  solve evol sys" iterative_solve!(solver)
 
-    # solve
-    iterative_solve!(solver_vdiff)
-
-    # sync solution to state
-    b.free_values .= on_architecture(CPU(),
-                                solver_vdiff.x[model.fe_data.dofs.inv_p_b]
-                                )
+    # sync buoyancy to state
+    b.free_values .= on_architecture(CPU(), solver.x[inv_perm])
 
     return model
 end
 
-function evolve_hdiffusion!(model::Model)
-    # solve
-    evolve_hdiffusion!(model.evolution, model.state.b)
-
-    # sync solution to state
-    model.state.b.free_values .= on_architecture(CPU(),
-                                    model.evolution.solver_hdiff.x[model.fe_data.dofs.inv_p_b]
-                                 )
-    return model
+function advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, ::Val{1})
+    # BDF1
+    return ∫( ( b - Δt*( u⋅∇(b) + w*N² ) )*d )dΩ
+end
+function advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, ::Val{2})
+    # BDF2
+    return ∫( ( 4/3*b - 1/3*b_prev - 2/3*Δt*( (2*u - u_prev)⋅∇(2*b - b_prev) + (2*w - w_prev)*N² ) )*d )dΩ
 end
 
 function invert!(model::Model)
@@ -290,11 +281,7 @@ end
 function sync_flow!(model::Model)
     x = on_architecture(CPU(), model.inversion.solver.x[model.fe_data.dofs.inv_p_inversion])
     nu = model.fe_data.dofs.nu
-    nv = model.fe_data.dofs.nv
-    nw = model.fe_data.dofs.nw
     model.state.u.free_values .= x[1:nu]
-    model.state.v.free_values .= x[nu+1:nu+nv]
-    model.state.w.free_values .= x[nu+nv+1:nu+nv+nw]
-    model.state.p.free_values.args[1] .= x[nu+nv+nw+1:end]
+    model.state.p.free_values.args[1] .= x[nu+1:end]
     return model
 end

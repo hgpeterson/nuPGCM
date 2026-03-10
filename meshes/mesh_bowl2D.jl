@@ -25,8 +25,3 @@ function generate_bowl_mesh_2D(h, α)
     gmsh.write(joinpath(@__DIR__, @sprintf("bowl2D_%e_%e.msh", h, α)))
     gmsh.finalize()
 end
-
-# h = 1e-1
-# α = 1/2
-# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))
-# generate_bowl_mesh_2D(h, α)

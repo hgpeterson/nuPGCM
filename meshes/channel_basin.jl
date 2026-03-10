@@ -1,7 +1,7 @@
 using Gmsh: gmsh
 using Printf
 
-function mesh_channel_basin(h, α)
+function mesh_channel_basin(h, α; refinement_factor=nothing)
     # params
     L = 2
     W = 1
@@ -21,12 +21,11 @@ function mesh_channel_basin(h, α)
 
     # channel
     p1 = gmsh.model.occ.addPoint(0, -L/2,                                        0)
-    p2 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel,                     -H)
+    p2 = gmsh.model.occ.addPoint(0, -L/2,                                       -H)
     p3 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel + L_flat_channel,    -H)
     p4 = gmsh.model.occ.addPoint(0, -L/2 + L_channel,                            0)
-    p5 = gmsh.model.occ.addPoint(0, -L/2 + L_curve_channel/2,                   -H) # control point
     p6 = gmsh.model.occ.addPoint(0, -L/2 + 3L_curve_channel/2 + L_flat_channel, -H) # control point
-    l1 = gmsh.model.occ.addBezier([p1, p5, p2])
+    l1 = gmsh.model.occ.addLine(p1, p2)
     l2 = gmsh.model.occ.addLine(p2, p3)
     l3 = gmsh.model.occ.addBezier([p3, p6, p4])
     l4 = gmsh.model.occ.addLine(p4, p1)
@@ -109,8 +108,10 @@ function mesh_channel_basin(h, α)
     gmsh.model.occ.synchronize()
 
     # define bottom, surface, coastline, and interior
-    gmsh.model.addPhysicalGroup(0, [68, 69, 76, 77, 78, 79, 80, 81], 1, "bottom")
-    gmsh.model.addPhysicalGroup(0, [66, 67, 70, 71, 72, 73, 74, 75], 3, "coastline")
+    bottom_pts = [67, 68, 75, 76, 77, 78, 79, 80]
+    coastline_pts = [65, 66, 69, 70, 71, 72, 73, 74]
+    gmsh.model.addPhysicalGroup(0, bottom_pts, 1, "bottom")
+    gmsh.model.addPhysicalGroup(0, coastline_pts, 3, "coastline")
     gmsh.model.addPhysicalGroup(1, vcat([2, 3, 4], 12:28), 1, "bottom")
     gmsh.model.addPhysicalGroup(1, [5, 11], 2, "surface")
     gmsh.model.addPhysicalGroup(1, [1, 6, 7, 8, 9, 10], 3, "coastline")
@@ -119,15 +120,56 @@ function mesh_channel_basin(h, α)
     gmsh.model.addPhysicalGroup(2, [4, 5], 4, "interior")
     gmsh.model.addPhysicalGroup(3, [1], 4, "interior")
 
-    # set resolution
-    gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
+    if refinement_factor === nothing
+        # set resolution
+        gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
+    else
+        # refine near all boundary surfaces
+        boundary_surfs = gmsh.model.getBoundary([(3, 1)], false, false)
+        surf_tags = [abs(s[2]) for s in boundary_surfs]
 
+        # distance field from all boundary surfaces
+        dist_field = gmsh.model.mesh.field.add("Distance")
+        gmsh.model.mesh.field.setNumbers(dist_field, "SurfacesList", surf_tags)
+        gmsh.model.mesh.field.setNumber(dist_field, "Sampling", 100)
+
+        # threshold field: size goes from h_min (at boundary) to h (far away)
+        h_min = h/refinement_factor # mesh size right at the boundary
+        h_max = h                   # mesh size far from the boundary
+        dist_min = 0.0              # start refining at distance 0
+        dist_max = h                # reach coarse size by h
+        thresh_field = gmsh.model.mesh.field.add("Threshold")
+        gmsh.model.mesh.field.setNumber(thresh_field, "InField",   dist_field)
+        gmsh.model.mesh.field.setNumber(thresh_field, "SizeMin",   h_min)
+        gmsh.model.mesh.field.setNumber(thresh_field, "SizeMax",   h_max)
+        gmsh.model.mesh.field.setNumber(thresh_field, "DistMin",   dist_min)
+        gmsh.model.mesh.field.setNumber(thresh_field, "DistMax",   dist_max)
+        gmsh.model.mesh.field.setAsBackgroundMesh(thresh_field)
+
+        # tell Gmsh not to override field sizes with point sizes
+        gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
+        gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
+        gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
+        # allow Gmsh to subdivide elements to resolve size transitions
+        gmsh.option.setNumber("Mesh.Algorithm3D", 4)        # Frontal-Delaunay (handles grading better than default)
+        gmsh.option.setNumber("Mesh.Smoothing", 10)         # smoothing iterations (default is 1)
+        gmsh.option.setNumber("Mesh.SmoothRatio", 1.8)      # max size ratio between adjacent elements (default is 1.8)
+        gmsh.option.setNumber("Mesh.AnisoMax", 1.0)         # 1.0 = isotropic; increase for anisotropic BL elements
+    end
+
+    # generate
     gmsh.model.mesh.generate(3)
-    gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e.msh", h, α)))
+
+    # optimize
+    gmsh.model.mesh.optimize("Gmsh")          # built-in smoother
+    gmsh.model.mesh.optimize("Netgen")        # Netgen
+    gmsh.model.mesh.optimize("Relocate3D")    # node relocation
+
+    # save
+    if refinement_factor === nothing
+        gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e.msh", h, α)))
+    else
+        gmsh.write(joinpath(@__DIR__, @sprintf("channel_basin_h%.2e_a%.2e_r%d.msh", h, α, refinement_factor)))
+    end
     gmsh.finalize()
 end
-
-# h = 0.08
-# α = 1/2
-# mesh_channel_basin(h, α)
-# @info @sprintf("2εₘᵢₙ = 2h/(α√2) = %1.1e\n", 2h/(α√2))

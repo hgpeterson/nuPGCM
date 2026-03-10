@@ -2,25 +2,61 @@ using nuPGCM
 using JLD2
 using Printf
 
-include(joinpath(@__DIR__, "../meshes/channel_basin.jl"))  # for making channel_basin mesh
+# for making mesh
+include(joinpath(@__DIR__, "../meshes/channel_basin.jl"))  
+# include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__))
+set_out_dir!(joinpath(@__DIR__, "../sims/sim024"))
 
 # architecture
 arch = GPU()
 
 # params
-ε = sqrt(1e-1)
-α = 1/8
-μϱ = 1.
-N² = 0.
-Δt = 5e-3
-f₀ = 0.0
-β = 1.0
-f(x) = f₀ + β*x[2]
+
+Ω = 2π/86400  # s⁻¹
+a = 6.371e6  # m
+β = 2Ω/a  # m⁻¹ s⁻¹
+L = 2π*a*60/360  # m
+f₀ = β*L  # s⁻¹
+H₀ = 4e3  # m
+κ₀ = 1e-5  # m² s⁻¹
+Kₑ = 1000  # m² s⁻¹
+N₀ = 1e-3  # s⁻¹
+ρ₀ = 1035  # kg m⁻³
+α_T = 2e-4  # °C⁻¹
+g = 9.81  # m s⁻²
+ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
+τ₀ = ρ₀*N₀^2*H₀^3/L  # N m⁻²
+b₀ = g*α_T*30/(N₀^2*H₀)
+
+# ν₀ = 10  # m² s⁻¹
+# κ₀ = 1e-3  # m² s⁻¹
+# f₀ = 1e-4  # s⁻¹
+# N₀ = 1e-3  # s⁻¹
+# H₀ = 1e3  # m
+# L = 1e6  # m
+# τ₀ = 1  # N m⁻²
+# b₀ = 10
+
+ε = sqrt(ν₀/f₀/H₀^2)
+# ε = 9.8e-2
+μ = ν₀/κ₀
+ϱ = (N₀*H₀/f₀/L)^2
+
+t₀ = 1/f₀/ϱ  # s
+@info "scales" b₀ ν₀ τ₀ t₀
+
+μϱ = μ*ϱ
+α = 1/4
+N² = 0
+Δt = 10*86400/t₀
+# Δt = 2e-3
+f(x) = x[2]
+H(x) = α
+curved_southern_bdy = false
 function H(xyz)
     x = xyz[1]
     y = xyz[2]
@@ -51,7 +87,11 @@ function H(xyz)
     end
 
     if -L/2 ≤ y ≤ -L/2 + L_curve_channel
-        return parabola(y, -L/2 + L_curve_channel, -L/2)
+        if curved_southern_bdy
+            return parabola(y, -L/2 + L_curve_channel, -L/2)
+        else
+            return H
+        end
     elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
         return H
     elseif y ≤ -L/2 + L_channel
@@ -85,74 +125,54 @@ display(params)
 
 # forcings
 ν(x) = 1
-κₕ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-κᵥ(x) = 1e-2 + exp(-(x[3] + H(x))/(0.1*α))
-τ₀ = 1e-1
-τˣ(x) = x[2] > -0.5 ? 0.0 : -τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
+κₕ(x) = 1 + (1e2 - 1)*exp(-(x[3] + H(x))/(500/4000*α))
+κᵥ(x) = 1 + (1e2 - 1)*exp(-(x[3] + H(x))/(500/4000*α))
+# τˣ(x) = x[2] > -0.5 ? 0.0 : -0.1/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
+τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
-b₀ = 10  # maybe try 30 based on F18?
-# b_surface(x) = 0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
-# b_surface(x) = x[2] > 0 ? 0.0 : -b₀*(x[2] + 0.5)^2/0.5^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
 # F₀ = 1
 # b_flux_surface(x) = x[2] > -0.5 ? 0.0 : -F₀*sin(2π*(x[2] + 1)/0.5)
 # b_surface_bc = SurfaceFluxBC(b_flux_surface)
-conv_param = ConvectionParameterization(κᶜ=1e3, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=1e-2)
+conv_param = ConvectionParameterization(κᶜ=5e4, N²min=1e-3)
+eddy_param = EddyParameterization(f=f, N²min=1e-3)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
-# forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)  # turn off conv/eddy params
 display(forcings)
 display(forcings.conv_param)
 display(forcings.eddy_param)
 
-# # idea:
-# bottom_no_slip = DirichletBC(["bottom", "coastline", "basin bottom"], 0)
-# basin_no_normal = DirichletBC(["basin", "basin top"], 0)
-# top_no_normal = DirichletBC(["surface", "basin top"], 0)
-# wind_stress_x = FluxBC(["surface", "basin top"], τˣ)
-# wind_stress_y = FluxBC(["surface", "basin top"], τʸ)
-# basin_value = DirichletBC(["surface", "basin top"], 0)
-# bottom_flux = FluxBC(["surface", "basin top"], 0)
-# top_flux = FluxBC(["surface", "basin top"], b_flux_surface)
-# bcs = BoundaryConditions(; u=[bottom_no_slip, wind_stress_x], 
-#                            v=[bottom_no_slip, basin_no_normal, wind_stress_y],
-#                            w=[bottom_no_slip, top_no_normal],
-#                            b=[top_flux, bottom_flux, basin_value])
-
 function setup_model()
     # mesh
-    # h = √2*α*ε
-    h = √2*α*ε/2
-    # h = √2*α*ε/5
-    # h = √2*α*ε/10
-    # mesh_name = @sprintf("channel2D_h%.2e_a%.2e", h, α)
-    # mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
-    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
-    # if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-    #     mesh_channel_basin(h, α)
-    # end
+    h = √2*α*ε
+    # h = 3.45e-2
+    if curved_southern_bdy
+        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
+    else
+        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e_vert_sb", h, α)
+    end   
+    # mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+    if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+        mesh_channel_basin(h, α; curved_southern_bdy)
+        # mesh_channel_basin_flat(h, α)
+    end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # FE data
-    # make_bc_dicts() ??
-    u_diri = Dict("bottom"=>0, "coastline"=>0)
-    v_diri = Dict("bottom"=>0, "coastline"=>0)
-    w_diri = Dict("bottom"=>0, "coastline"=>0, "surface"=>0)
-    # SurfaceDirichletBC:
-    b_diri = Dict("coastline"=>b_surface, "surface"=>b_surface)
-    # SurfaceFluxBC:
-    # b_diri = Dict()
-    spaces = Spaces(mesh, u_diri, v_diri, w_diri, b_diri) 
+    u_diri_tags = ["bottom", "coastline", "surface"]
+    u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+    u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
+    b_diri_tags = ["coastline", "surface"]
+    b_diri_vals = [b_surface, b_surface]
+    spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals, b_order=1) 
     fe_data = FEData(mesh, spaces)
-    @info "DOFs: $(fe_data.dofs.nu + fe_data.dofs.nv + fe_data.dofs.nw + fe_data.dofs.np)" 
+    display(fe_data.dofs)
 
     # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; atol=1e-6, rtol=1e-6)
-    return Model(arch, params, forcings, fe_data, inversion_toolkit)
+    inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=10_000, atol=1e-6, rtol=1e-6)
 
     # build evolution system
-    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
+    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings; order=1) 
 
     # put it all together in the `model` struct
     model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
@@ -164,69 +184,23 @@ end
 model = setup_model()
 display(model)
 
-# set initial buoyancy
-# set_b!(model, x -> 0)  # when N² is set
-# set_b!(model, x -> b₀*x[3]/α)  # when N² = 0 
-set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
-invert!(model)  # sync flow with buoyancy state
-save_state(model, @sprintf("%s/data/state_0_0_1e-6.jld2", out_dir))
-save_vtk(model, ofile=@sprintf("%s/data/state_0_0_1e-6.vtu", out_dir))
-# i_step = 1400
-# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
-# set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", joinpath(@__DIR__, "channel_2D/sim008"), i_step))
-
-# "true" solution
-d = jldopen("$out_dir/data/state_1e-8.jld2", "r")
-u = d["u"]
-v = d["v"]
-w = d["w"]
-p = d["p"]
-close(d)
-
-u0 = model.state.u.free_values
-v0 = model.state.v.free_values
-w0 = model.state.w.free_values
-p0 = model.state.p.free_values.args[1]
-@info "Errors" maximum(abs.(u - u0)) maximum(abs.(v - v0)) maximum(abs.(w - w0)) maximum(abs.(p - p0))
-
-# # errors
-# for tol in ["1e-4", "1e-5", "1e-6", "1e-7"]
-#     d = jldopen("$out_dir/data/state_$tol.jld2", "r")
-#     u0 = d["u"]
-#     v0 = d["v"]
-#     w0 = d["w"]
-#     p0 = d["p"]
-#     close(d)
-#     @info "$tol Errors" maximum(abs.(u - u0)) maximum(abs.(v - v0)) maximum(abs.(w - w0)) maximum(abs.(p - p0))
-# end
+# # set initial buoyancy
+# # set_b!(model, x -> 0)  # when N² is set
+# # set_b!(model, x -> b₀*x[3]/α)  # when N² = 0 
+# set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))  # when N² = 0 and SurfaceDirichletBC
+# # set_b!(model, x -> b₀*x[3]/α + b_surface(x))  # when N² = 0 and SurfaceDirichletBC
+# invert!(model)  # sync flow with buoyancy state
+# save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+# # i_step = 660
+# # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", out_dir, i_step))
+# # set_state_from_file!(model.state, @sprintf("%s/data/state_%016d.jld2", joinpath(@__DIR__, "channel_2D/sim008"), i_step))
 
 # # solve
-# T = 10*μϱ/ε^2
+# T = 2*μϱ/ε^2
 # n_steps = Int(round(T / Δt))
-# n_save = 10
+# n_save = 100
 # n_plot = Inf
 # run!(model; n_steps, n_save, n_plot)
 # # run!(model; n_steps, n_save, n_plot, i_step)
 
-println("Done.")
-
-# ┌ Info: 1e-4 Errors
-# │   maximum(abs.(u - u0)) = 0.2852682526937367
-# │   maximum(abs.(v - v0)) = 0.20160124152529424
-# │   maximum(abs.(w - w0)) = 0.31479727623627346
-# └   maximum(abs.(p - p0)) = 0.3897494835100044
-# ┌ Info: 1e-5 Errors
-# │   maximum(abs.(u - u0)) = 0.02850210800041736
-# │   maximum(abs.(v - v0)) = 0.02014147415951728
-# │   maximum(abs.(w - w0)) = 0.03144865254251186
-# └   maximum(abs.(p - p0)) = 0.03893567785287666
-# ┌ Info: 1e-6 Errors
-# │   maximum(abs.(u - u0)) = 0.0028245878576159122
-# │   maximum(abs.(v - v0)) = 0.0019961107961697366
-# │   maximum(abs.(w - w0)) = 0.003116614647678744
-# └   maximum(abs.(p - p0)) = 0.0038587561377272372
-# ┌ Info: 1e-7 Errors
-# │   maximum(abs.(u - u0)) = 0.000256809226098359
-# │   maximum(abs.(v - v0)) = 0.00018147802332157958
-# │   maximum(abs.(w - w0)) = 0.00028335919738884004
-# └   maximum(abs.(p - p0)) = 0.00035081549714299776
+# println("Done.")

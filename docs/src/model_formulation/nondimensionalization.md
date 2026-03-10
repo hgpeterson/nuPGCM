@@ -26,9 +26,7 @@ Applying these scales yields the following nondimensional PG equations:
 ```
 where ``\alpha = H_0 / L`` is the aspect ratio, ``\varepsilon^2 = \nu_0 / f_0 H_0^2`` is the Ekman number, ``\varrho = N^2 H_0^2 / f_0^2 L^2`` is the Burger number, and ``\mu = \nu_0/\kappa_0`` is the turbulent Prandtl number.
 
-*Figure here?*
-
-With all three spatial coordinates scaled by $L$, the effect of the aspect ratio $\alpha$ on the dynamics is made explicit and the domain $\mathcal{D}$ itself must have an aspect ratio of $\alpha$, i.e., $-\alpha \le z \le 0$ (figure?).
+With all three spatial coordinates scaled by $L$, the effect of the aspect ratio $\alpha$ on the dynamics is made explicit and the domain $\mathcal{D}$ itself must have an aspect ratio of $\alpha$, i.e., $-\alpha \le z \le 0$.
 This scaling guarantees that the viscous friction term in the momentum equation is spatially isotropic, a desirable property for computing numerical solutions.
 More importantly, for $\alpha > 0$ hydrostatic balance is not exactly required, as can be seen by dotting the momentum equation with $\vec{z}$:
 ```math

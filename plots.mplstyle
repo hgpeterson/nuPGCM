@@ -17,7 +17,7 @@ axes.grid:             False
 axes.labelpad:         4.0
 axes.axisbelow:        False
 axes.xmargin:          0.02
-axes.ymargin:          0.0
+axes.ymargin:          0.02
 axes.spines.right:     False
 axes.spines.top:       False
 
