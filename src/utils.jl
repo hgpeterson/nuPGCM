@@ -1,13 +1,4 @@
 """
-    x = chebyshev_nodes(n)
-
-Return `n` Chebyshev nodes in the interval `[-1, 0]`.
-"""
-function chebyshev_nodes(n)
-    return ([-cos((i - 1)*π/(n - 1)) for i ∈ 1:n] .- 1)/2
-end
-
-"""
     F = trapz(f, z)
 
 Integrate the function `f` over the grid `z` using the trapezoidal rule.

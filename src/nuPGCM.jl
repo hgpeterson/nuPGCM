@@ -87,6 +87,10 @@ include("model.jl")
 include("IO.jl")
 include("plotting.jl")
 
+# include all the submodules
+include("Numerics/Numerics.jl")
+include("OneDModel/OneDModel.jl")
+
 export 
 x⃗,
 y⃗,
