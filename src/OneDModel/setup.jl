@@ -25,18 +25,18 @@ function assemble_LHS_evolution(K, a)
 end
 
 """
-    K, v = build_diffusion_system(z, κ, N²)
+    K, v = build_diffusion_system(z, κ, N², θ)
 
 Build matrix/vector representation of 
-    dz(κ*(N² + dz(b))) 
-        = dz(κ*dz(b)) + N²dz(κ) 
+    dz(κ*(N² + sec²θ dz(b))) 
+        = sec²θ dz(κ*dz(b)) + N²dz(κ) 
         = K*b + rhs_diff
 The matrix K also contains the boundary conditions 
     b = 0 at z = 0
-    N² + dz(b) = 0 at z = -H
+    N² + sec²θ dz(b) = 0 at z = -H
 for the first and last rows, respectively.
 """
-function build_diffusion_system(z, κ, N²)
+function build_diffusion_system(z, κ, N², θ)
     # initialize
     nz = length(z)
     K = Tuple{Int64,Int64,Float64}[] 
@@ -54,15 +54,15 @@ function build_diffusion_system(z, κ, N²)
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
 
         # product rule: dz(κ*dz(b)) = dz(κ)*dz(b) + κ*dzz(b)
-        push!(K, (j, j-1, (κ_z*fd_z[1] + κ[j]*fd_zz[1])))
-        push!(K, (j, j,   (κ_z*fd_z[2] + κ[j]*fd_zz[2])))
-        push!(K, (j, j+1, (κ_z*fd_z[3] + κ[j]*fd_zz[3])))
+        push!(K, (j, j-1, sec(θ)^2*(κ_z*fd_z[1] + κ[j]*fd_zz[1])))
+        push!(K, (j, j,   sec(θ)^2*(κ_z*fd_z[2] + κ[j]*fd_zz[2])))
+        push!(K, (j, j+1, sec(θ)^2*(κ_z*fd_z[3] + κ[j]*fd_zz[3])))
 
         # N²*dz(κ) has no dependence on b -> vector
         v[j] += N²*κ_z
     end
 
-    # z = -H: N² + dz(b) = 0 -> dz(b) = -N²
+    # z = -H: N² + sec²θ dz(b) = 0 -> dz(b) = -N²cos²θ
     fd_z = mkfdstencil(z[1:3], z[1], 1)
     push!(K, (1, 1, fd_z[1]))
     push!(K, (1, 2, fd_z[2]))

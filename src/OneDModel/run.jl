@@ -1,4 +1,4 @@
-function solve(params)
+function solve(params; eddy_param=false)
     # unpack
     f = params.f
     N² = params.N²
@@ -24,10 +24,10 @@ function solve(params)
     rhs_inversion = zeros(2nz+2)
 
     # build evolution matrices
-    K, rhs_diff = build_diffusion_system(z, κ, N²)
+    K, rhs_diff = build_diffusion_system(z, κ, N², θ)
     rhs_evolution = zeros(nz)
-    rhs_evolution[1] = -N² # dz(b) at z = -H
-    rhs_evolution[nz] = 0 # b at z = 0
+    rhs_evolution[1] = -N²*cos(θ)^2 # N² + sec²θ dz(b) = 0 -> dz(b) = -N²cos²θ at z = -H
+    rhs_evolution[nz] = 0 # b = 0 at z = 0
 
     # BDF1 and BDF2 LHSs
     θ1 = Δt * sec(θ)^2 * α^2 * ε^2 / μϱ
@@ -75,9 +75,11 @@ function solve(params)
         t += Δt
 
         # invert
-        ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
-        ν[ν .> 1e2 ] .= 1e2
-        LHS_inversion = build_LHS_inversion(z, ν, params)
+        if eddy_param
+            ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
+            ν[ν .> 1e2 ] .= 1e2
+            LHS_inversion = build_LHS_inversion(z, ν, params)
+        end
         update_rhs_inversion!(rhs_inversion, b, params)
         uvp .= LHS_inversion\rhs_inversion
         # ldiv!(uvp, LHS_inversion, rhs_inversion)
