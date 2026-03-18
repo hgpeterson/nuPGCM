@@ -3,6 +3,7 @@ module OneDModel
 using ..Numerics
 using SparseArrays
 using LinearAlgebra
+using ProgressMeter
    
 include("setup.jl")
 include("run.jl")

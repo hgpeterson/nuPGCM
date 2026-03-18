@@ -143,10 +143,12 @@ We allow for barotropic pressure gradients so that $\partial_\xi p \to P_x$ and 
 [Peterson2022,Peterson2026](@cite).
 Putting all of this together, our 1D $\xi$- and $\eta$-momentum equations are
 ```math
+\boxed{
 \begin{aligned}
 -f u^\eta &= -P_x + \alpha^{-1} b' \tan\theta + \alpha^2 \varepsilon^2 \sec^2\theta \partial_\zeta ( \nu \partial_\zeta u^\xi),\\
- f u^\xi  &= -P_y +                            \alpha^2 \varepsilon^2 \sec^2\theta \partial_\zeta ( \nu \partial_\zeta u^\eta).
+ f u^\xi  &= -P_y + \hphantom{aaaaaaaaaaa}      \alpha^2 \varepsilon^2 \sec^2\theta \partial_\zeta ( \nu \partial_\zeta u^\eta).
 \end{aligned}
+}
 ```
 Here the buoyancy has been split into a background and perturbation (note that this is the *nondimensional* $N^2$):
 ```math
@@ -181,23 +183,44 @@ n_i \partial^i b = \cos\theta (N^2 + \sec^2\theta \partial_\zeta b') = 0 \quad \
 since the bottom-normal vector $n^i$ is simply $(0, 0, \cos\theta)^T$ in the slope-aligned coordinates.
 In summary, the 1D buoyancy equation reads:
 ```math
-\mu\varrho ( \partial_t b + u^\xi N^2 \tan\theta ) = \alpha^2 \varepsilon^2 \partial_\zeta [ \kappa (N^2 + \sec^2\theta \partial_\zeta b') ],
+\boxed{\mu\varrho ( \partial_t b + u^\xi N^2 \tan\theta ) = \alpha^2 \varepsilon^2 \partial_\zeta [ \kappa (N^2 + \sec^2\theta \partial_\zeta b') ]}
 ```
 
 ## Boundary layer scale
-Streamfunction $\partial_z \chi = u$ implies $f (\chi - U) = \alpha^2 \varepsilon^2 \Gamma \partial_z v$ by $y$-momentum.
-Set $U = 0$.
-Inversion:
-$$ \alpha^2\varepsilon^2\Gamma^2 \partial^4_z \chi + \frac{f^2}{\alpha^2\varepsilon^2\Gamma} \chi = -\alpha^{-1} \partial_z b' \tan\theta $$
 
-BL: 
-$$ \mu\varrho \partial_z \chi_B N^2 \tan\theta = \alpha^2\varepsilon^2\Gamma \partial^2_z b'_B \to \partial_z b'_B = \frac{\mu\varrho N^2\tan\theta}{\alpha^2\varepsilon^2\Gamma} \chi_B $$
-Substitute:
-$$ \partial^4_z \chi_B + \left(\frac{f^2}{\alpha^4\varepsilon^4\Gamma^3} + \frac{\mu\varrho N^2 \tan^2\theta}{\alpha\alpha^4\varepsilon^4\Gamma^3} \right) \chi_B = 0$$
-So
-$$ (\delta q)^4 = 1 + \frac{\mu\varrho}{\alpha} \frac{N^2 \tan^2 \theta}{f^2}$$
+We define a streamfunction such that $\partial_z \chi = u$.
+Then the $y$-momentum equation becomes
+```math
+f \partial_z \chi = -P_y + c^2 \partial_z ( \nu \partial_z v),
+```
+where $c = \alpha \varepsilon \sec\theta$.
+Integrating from the top $z = 0$ down to some level $z$, this implies
+```math
+f \chi = -P_y z + c^2 \nu \partial_z v.
+```
+Differentiating the $x$-momentum equation and substituting this in, we get
+```math
+c^2 \partial^2_z ( \nu \partial^2_z \chi) + \frac{f^2 \chi + f P_y z}{c^2 \nu} = -\alpha^{-1} \partial_z b' \tan\theta.
+```
+In the boundary layer (BL), we have
+```math
+\begin{aligned}
+c^2 \nu_B \partial^4_z \chi_B + \frac{f^2 \chi_B}{c^2 \nu_B} &= -\alpha^{-1} \partial_z b'_B \tan\theta,\\
+\mu\varrho \chi_B N^2 \tan\theta &= c^2 \kappa_B \partial_z b'_B,
+\end{aligned}
+```
+where the second equation comes from assuming a steady flow in the BL and integrating.
+Substituting $\partial_z b'_B$ from the buoyancy equation into the inversion, we get
+```math
+\partial^4_z \chi_B + 4q^4 \chi_B = 0,\\
+```
 where
-$$ \delta = \alpha\varepsilon\Gamma^{3/4}\sqrt{\frac{2}{f}} $$
-
-
-## other stuff
+```math
+\boxed{(\delta q)^4 = 1 + \frac{1}{\alpha} \frac{\nu_B}{\kappa_B} \mu \frac{N^2 \tan^2\theta}{f^2} \varrho }
+```
+where
+```math
+\delta = \alpha \varepsilon \sec\theta \sqrt{\frac{2\nu_B}{f}}
+```
+is the typical Ekman BL scale.
+The BL thickness is then $q^{-1}$.

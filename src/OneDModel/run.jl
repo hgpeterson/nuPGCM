@@ -20,7 +20,11 @@ function solve(params; eddy_param=false)
 
     # build inversion matrices
     LHS_inversion = build_LHS_inversion(z, ν, params)
-    LHS_inversion = lu(LHS_inversion)
+    if eddy_param
+        # fd_z, fd_zz = make_fd_stencils(z)
+    else
+        LHS_inversion = lu(LHS_inversion)
+    end
     rhs_inversion = zeros(2nz+2)
 
     # build evolution matrices
@@ -54,10 +58,7 @@ function solve(params; eddy_param=false)
 
     # run
     n_steps = Int64(T ÷ Δt)
-    for i in 1:n_steps
-        if mod(i, 100) == 0
-            @info "$i/$n_steps"
-        end
+    @showprogress for i in 1:n_steps
         # sync before update
         b_old .= b
         uvp_old .= uvp
@@ -79,6 +80,7 @@ function solve(params; eddy_param=false)
             ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
             ν[ν .> 1e2 ] .= 1e2
             LHS_inversion = build_LHS_inversion(z, ν, params)
+            # LHS_inversion = build_LHS_inversion!(LHS_inversion, fd_z, fd_zz, z, ν, params)
         end
         update_rhs_inversion!(rhs_inversion, b, params)
         uvp .= LHS_inversion\rhs_inversion
