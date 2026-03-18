@@ -7,7 +7,8 @@ const OUTPUT_DIR = joinpath(@__DIR__, "src/", "literated")
 
 withenv("JULIA_DEBUG" => "Literate") do
     Literate.markdown(joinpath(EXAMPLES_DIR, "bowl_mixing.jl"), OUTPUT_DIR; 
-                      execute=true, 
+                    #   execute=true, 
+                      execute=false, 
                       documenter=true)
 end
 
@@ -17,6 +18,7 @@ model_formulation = [
     "The PG Equations" => "model_formulation/pg_equations.md"
     "Nondimensionalization" => "model_formulation/nondimensionalization.md"
     "Numerical Approach" => "model_formulation/numerical_approach.md"
+    "1D Model" => "model_formulation/onedim_model.md"
 ]
 
 example_pages = [
@@ -51,7 +53,10 @@ format = Documenter.HTML(; collapselevel=1,
 makedocs(; sitename="νPGCM",
          plugins=[bib],
          pages,
-         remotes=nothing,  # nuPGCM is dev dependency using local path ".."
-         format)
+         repo="https://github.com/hgpeterson/nuPGCM",
+        #  remotes=nothing,  # nuPGCM is dev dependency using local path ".."
+         format,
+         draft=true
+         )
 
 deploydocs(repo="github.com/hgpeterson/nuPGCM.git")

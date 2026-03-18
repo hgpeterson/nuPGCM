@@ -8,14 +8,14 @@ function chebyshev_nodes(n)
 end
 
 """
-    LHS = assemble_LHS_evolution(K, θ)
+    LHS = assemble_LHS_evolution(K, a)
 
 Assemble the LHS of evolution system given diffusion matrix `K` (which holds b.c. information on first and last rows)
-and BDF parameter `θ`.
+and BDF parameter `a`.
 """
-function assemble_LHS_evolution(K, θ)
+function assemble_LHS_evolution(K, a)
     # BDF scheme
-    LHS = I - θ*K
+    LHS = I - a*K
 
     # reset boundary conditions
     LHS[1, :] = K[1, :]
@@ -25,26 +25,25 @@ function assemble_LHS_evolution(K, θ)
 end
 
 """
-    K, v = build_diffusion_system(z, κ, Γ)
+    K, v = build_diffusion_system(z, κ, N²)
 
 Build matrix/vector representation of 
-    dz(κ*(1 + Γ*dz(b))) 
-        = dz(κ + Γ*κ*dz(b))
-        = Γ*dz(κ*dz(b)) + dz(κ) 
+    dz(κ*(N² + dz(b))) 
+        = dz(κ*dz(b)) + N²dz(κ) 
         = K*b + rhs_diff
-where Γ = 1 + α^2*tan(θ)^2. The matrix K also contains the boundary conditions 
+The matrix K also contains the boundary conditions 
     b = 0 at z = 0
-    1 + Γ*dz(b) = 0 at z = -H
+    N² + dz(b) = 0 at z = -H
 for the first and last rows, respectively.
 """
-function build_diffusion_system(z, κ, Γ)
+function build_diffusion_system(z, κ, N²)
     # initialize
-    N = length(z)
+    nz = length(z)
     K = Tuple{Int64,Int64,Float64}[] 
-    v = zeros(N)
+    v = zeros(nz)
 
     # interior nodes 
-    for j=2:N-1
+    for j=2:nz-1
         # dz stencil
         fd_z = mkfdstencil(z[j-1:j+1], z[j], 1)
 
@@ -54,35 +53,34 @@ function build_diffusion_system(z, κ, Γ)
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
 
-        # product rule: Γ*dz(κ*dz(b)) = Γ*dz(κ)*dz(b) + Γ*κ*dzz(b)
-        push!(K, (j, j-1, (Γ*κ_z*fd_z[1] + Γ*κ[j]*fd_zz[1])))
-        push!(K, (j, j,   (Γ*κ_z*fd_z[2] + Γ*κ[j]*fd_zz[2])))
-        push!(K, (j, j+1, (Γ*κ_z*fd_z[3] + Γ*κ[j]*fd_zz[3])))
+        # product rule: dz(κ*dz(b)) = dz(κ)*dz(b) + κ*dzz(b)
+        push!(K, (j, j-1, (κ_z*fd_z[1] + κ[j]*fd_zz[1])))
+        push!(K, (j, j,   (κ_z*fd_z[2] + κ[j]*fd_zz[2])))
+        push!(K, (j, j+1, (κ_z*fd_z[3] + κ[j]*fd_zz[3])))
 
-        # dz(κ) has no dependence on b -> vector
-        v[j] += κ_z
+        # N²*dz(κ) has no dependence on b -> vector
+        v[j] += N²*κ_z
     end
 
-    # z = -H: 1 + Γ*dz(b) = 0 -> dz(b) = -1/Γ
+    # z = -H: N² + dz(b) = 0 -> dz(b) = -N²
     fd_z = mkfdstencil(z[1:3], z[1], 1)
     push!(K, (1, 1, fd_z[1]))
     push!(K, (1, 2, fd_z[2]))
     push!(K, (1, 3, fd_z[3]))
 
     # z = 0: b = 0
-    push!(K, (N, N, 1))
+    push!(K, (nz, nz, 1))
 
     # Create CSC sparse matrices
-    K = sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), N, N)
+    K = sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nz, nz)
 
     return K, v
 end
 
 """
 Build matrix representation of
-   -ε²Γ²*dz(ν*dz(u)) - f*v + Px = b*tan(θ)
-   -ε²Γ *dz(ν*dz(v)) + f*u + Py = 0
-where Γ = 1 + α^2*tan(θ)^2.
+   -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
+   -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
 Boundary conditions:
     dz(u) = dz(v) = 0 at z = 0
     u = v = 0 at z = -H
@@ -91,9 +89,9 @@ Boundary conditions:
 """
 function build_LHS_inversion(z, ν, params)
     # unpack
+    α = params.α
     ε = params.ε
     θ = params.θ
-    α = params.α
     f = params.f
 
     # setup
@@ -102,7 +100,6 @@ function build_LHS_inversion(z, ν, params)
     vmap = nz+1:2nz
     iPx = 2nz + 1
     iPy = 2nz + 2
-    Γ = 1 + α^2*tan(θ)^2
     LHS = Tuple{Int64,Int64,Float64}[]  
 
     # interior nodes
@@ -114,9 +111,9 @@ function build_LHS_inversion(z, ν, params)
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
         
-        # eq 1: -ε²Γ²*dz(ν*dz(u)) - f*v + Px = b*tan(θ)
-        # term 1 = -ε²Γ²*[dz(ν)*dz(u) + ν*dzz(u)] 
-        c = ε^2*Γ^2
+        # eq 1: -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
+        # term 1 = -α²ε²sec²θ [dz(ν)*dz(u) + ν*dzz(u)] 
+        c = α^2*ε^2*sec(θ)^2
         push!(LHS, (umap[j], umap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
         push!(LHS, (umap[j], umap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
         push!(LHS, (umap[j], umap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
@@ -125,9 +122,8 @@ function build_LHS_inversion(z, ν, params)
         # term 3 = Px
         push!(LHS, (umap[j], iPx, 1))
 
-        # eq 2: -ε²Γ *dz(ν*dz(v)) + f*u + Py = 0
-        # term 1 = -ε²Γ*[dz(ν)*dz(v) + ν*dzz(v)]
-        c = ε^2*Γ
+        # eq 2: -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
+        # term 1 = -α²ε²sec²θ [dz(ν)*dz(v) + ν*dzz(v)]
         push!(LHS, (vmap[j], vmap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
         push!(LHS, (vmap[j], vmap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
         push!(LHS, (vmap[j], vmap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
@@ -182,10 +178,10 @@ end
 
 """
 Update vector for RHS of inversion 
-   -ε²Γ²*dz(ν*dz(u)) - f*v + Px = b*tan(θ)
-   -ε²Γ *dz(ν*dz(v)) + f*u + Py = 0
+   -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
+   -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
 """
 function update_rhs_inversion!(rhs, b, params)
-    rhs[2:params.nz-1] .= b[2:params.nz-1]*tan(params.θ)
+    rhs[2:params.nz-1] .= b[2:params.nz-1]*tan(params.θ)/params.α
     return rhs
 end

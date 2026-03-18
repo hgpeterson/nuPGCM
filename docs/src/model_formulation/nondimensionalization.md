@@ -19,8 +19,8 @@ p \sim f U L, \quad b \sim \frac{f U L}{H_0} = N^2 H_0, \quad t \sim \frac{L}{U}
 Applying these scales yields the following nondimensional PG equations:
 ```math
 \begin{aligned}
-    \nd{f} \vec{z} \times \nd{\vec{u}} &= -\nd{\nabla} \nd{p} + \alpha^{-1} \nd{b} \vec{z} + \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( 2 \nd{\nu} \nd{\sigma}(\nd{\vec{u}}) \right), \hphantom{\frac12}\\
-    \nd{\nabla} \cdot \nd{\vec{u}} &= 0, \hphantom{\frac12}\\
+    \nd{f} \vec{z} \times \nd{\vec{u}} &= -\nd{\nabla} \nd{p} + \alpha^{-1} \nd{b} \vec{z} + \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( 2 \nd{\nu} \nd{\sigma}(\nd{\vec{u}}) \right), \vphantom{\frac12}\\
+    \nd{\nabla} \cdot \nd{\vec{u}} &= 0, \vphantom{\frac12}\\
     \mu\varrho \left( \pder{\nd{b}}{\nd{t}} + \nd{\vec{u}} \cdot \nd{\nabla}\nd{b} \right) &= \alpha^2 \varepsilon^2 \nd{\nabla} \cdot \left( \nd{\kappa} \nd{\nabla} \nd{b} \right),
 \end{aligned}
 ```
