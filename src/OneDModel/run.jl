@@ -6,17 +6,14 @@ function solve(params; eddy_param=false)
     ε = params.ε
     μϱ = params.μϱ
     θ = params.θ
-    nz = params.nz
-    H = params.H
     Δt = params.Δt
     T = params.T
+    z = params.z
+    nz = params.nz
+    κ = params.κ
 
-    # grid
-    z = params.H*chebyshev_nodes(nz)
-
-    # forcing
+    # initialize ν
     ν = ones(nz)
-    κ = @. 1 + (1e2 - 1)*exp(-(z + H)/(α/8))
 
     # build inversion matrices
     LHS_inversion = build_LHS_inversion(z, ν, params)

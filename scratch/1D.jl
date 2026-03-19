@@ -35,23 +35,41 @@ H₀ = 4e3  # m
 Kₑ = 1000  # m² s⁻¹
 N₀ = 1e-3  # s⁻¹
 ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
+ν₀ /= 4
 ε = sqrt(ν₀/f₀/H₀^2)
 μ = ν₀/κ₀
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
 α = 1/4
+N² = 1/α
 θ = atan(2α)
 no_Px = false
 no_Py = false
 f = 0.5
 H = α
-T = μϱ/ε^2
-# Δt = 100*86400/t₀
-Δt = T/100000
+nz = 2^8
 eddy_param = true
 
-params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, no_Px=no_Px, no_Py=no_Py, H=H, f=f, nz=nz, T=T)
+z = H*OneDModel.chebyshev_nodes(nz)
+d = H/2
+κ_B = 1e2
+κ_I = 1
+κ = @. κ_I + (κ_B - κ_I)exp(-(z + H)/d)
+
+T = μϱ/ε^2/κ_B
+Δt = min(100*86400/t₀, T/100000)
+
+params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, no_Px=no_Px, no_Py=no_Py, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
+
+dirname = "1d_model/4x_decay_0.25x_nu"
+if eddy_param
+    dirname *= "_eddy"
+end
+if !isfile(joinpath(@__DIR__, dirname))
+    mkdir(joinpath(@__DIR__, dirname))
+end
+@info "Saving in $(joinpath(@__DIR__, dirname))"
 
 # solve
 u, v, Px, Py, b, t, z = OneDModel.solve(params; eddy_param)
@@ -63,12 +81,12 @@ else
     ν_B = 1
 end
 κ_B = 1e2
-δ = α*ε*sec(θ)*sqrt(2*ν[1]/f)
+δ = α*ε*sec(θ)*sqrt(2*ν_B/f)
 q = 1/δ * (1 + 1/α * ν_B/κ_B * μ * N²*tan(θ) / f^2 * ϱ)^(1/4)
 @sprintf("BL scale q⁻¹ = %.3e", q^-1)
 
 # plot
-filename = joinpath(@__DIR__, "images/1d.png")
+filename = joinpath(@__DIR__, "$dirname/1d.png")
 fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
 ax[1].set_ylabel(L"Vertical coordinate $z$")
 ax[1].set_xlabel("Flow")
@@ -76,6 +94,7 @@ ax[2].set_xlabel(L"Stratification $\alpha \partial_z b$")
 for a ∈ ax
     a.set_ylim(-H, 0)
     a.spines["left"].set_visible(false)
+    a.spines["top"].set_visible(true)
     a.axvline(0, color="k", lw=0.5)
     a.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
 end
@@ -83,11 +102,11 @@ ax[2].set_yticks([])
 bz = differentiate(b, z)
 ax[1].plot(u,       z, "C0-", label=L"$u$")
 ax[1].plot(v,       z, "C1-", label=L"$v$")
+ax[1].axvline(-Py/f, c="C0", ls="--", lw=0.5, label=L"$-P_y/f$")
+ax[1].axvline(+Px/f, c="C1", ls="--", lw=0.5, label=L"$P_x/f$")
 uvmax = maximum(abs.([u; v]))
 ax[1].plot([-0.05*uvmax, 0.05*uvmax], [-H + q^-1, -H + q^-1], "C3-", lw=0.5)
 ax[1].set_xlim(-1.1*uvmax, 1.1*uvmax)
-# ax[1].axvline(-Py/f, c="C0", ls="--", lw=0.5, label=L"$-P_y/f$")
-# ax[1].axvline(+Px/f, c="C1", ls="--", lw=0.5, label=L"$P_x/f$")
 ax[1].legend()
 ax[2].plot(α*(N² .+ bz), z, "k-")
 if t !== nothing
@@ -99,7 +118,7 @@ plt.close()
 
 ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
 ν[ν .> 1e2 ] .= 1e2
-filename = joinpath(@__DIR__, "images/nu.png")
+filename = joinpath(@__DIR__, "$dirname/nu.png")
 fig, ax = plt.subplots(1, figsize=(2, 3.2))
 ax.set_ylabel(L"Vertical coordinate $z$")
 ax.set_xlabel(L"Turbulent viscosity $\nu$")
@@ -113,7 +132,7 @@ savefig(filename)
 @info "Saved '$filename'"
 plt.close()
 
-filename = joinpath(@__DIR__, "images/slope.png")
+filename = joinpath(@__DIR__, "$dirname/slope.png")
 x = range(0, 0.5, nz)
 xx = repeat(x, 1, nz)
 zz = xx*tan(θ) + repeat(z, 1, nz)'
