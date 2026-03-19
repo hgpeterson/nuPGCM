@@ -71,7 +71,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     rhsᵥ = rhsᵥ[perm]
 
     # combine to make evolution LHS
-    A, P = collect_evolution_LHS(arch, params, forcings, M, Kₕ, Kᵥ, order)
+    A, P = collect_evolution_LHS(arch, params, params.Δt, forcings, M, Kₕ, Kᵥ, order)
 
     # rhs vector for solver
     N = size(A, 1)
@@ -91,19 +91,19 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
 end
 
-function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings)
+function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, Δt, forcings::Forcings)
     arch = evolution.arch
     M = evolution.M
     Kₕ = evolution.Kₕ
     Kᵥ = evolution.Kᵥ
     order = evolution.order
-    A, P = collect_evolution_LHS(arch, params, forcings::Forcings, M, Kₕ, Kᵥ, order)
+    A, P = collect_evolution_LHS(arch, params, Δt, forcings, M, Kₕ, Kᵥ, order)
     evolution.solver.A = on_architecture(arch, A)
     evolution.solver.P = P
     return evolution
 end
-function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, M, Kₕ, Kᵥ, order)
-    θ = evolution_parameter(params, Val(order))
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, Δt, forcings::Forcings, M, Kₕ, Kᵥ, order)
+    θ = evolution_parameter(params, Δt, Val(order))
     A = M + θ*(Kₕ + Kᵥ) 
 
     # preconditioner
@@ -121,7 +121,7 @@ function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, f
 end
 
 """
-    θ = evolution_parameter(p::Parameters, order::Val)
+    θ = evolution_parameter(p::Parameters, Δt, order::Val)
 
 Returns the coefficient needed to build the LHS matrix in the evolution problem of the form
 ```math
@@ -136,13 +136,13 @@ For `order` = 2, we use BDF2:
 θ = 2/3 Δt α² ε² / μϱ.
 ```
 """
-function evolution_parameter(p::Parameters, ::Val{1})
+function evolution_parameter(p::Parameters, Δt, ::Val{1})
     # BDF1
-    return p.Δt * p.α^2 * p.ε^2 / p.μϱ
+    return Δt * p.α^2 * p.ε^2 / p.μϱ
 end
-function evolution_parameter(p::Parameters, ::Val{2})
+function evolution_parameter(p::Parameters, Δt, ::Val{2})
     # BDF2
-    return 2/3 * p.Δt * p.α^2 * p.ε^2 / p.μϱ
+    return 2/3 * Δt * p.α^2 * p.ε^2 / p.μϱ
 end
 
 ####
@@ -263,12 +263,11 @@ end
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC)
     # unpack
     α = params.α
-    Δt = params.Δt
     dΓ = fe_data.mesh.dΓ
     B_test = fe_data.spaces.B_test
 
     # rhs vector surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
-    l(d) = ∫( Δt * α * (bc.flux * d) )dΓ  
+    l(d) = ∫( α * (bc.flux * d) )dΓ  
     return assemble_vector(l, B_test)
 end
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC)

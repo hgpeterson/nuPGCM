@@ -84,25 +84,24 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection=true)
+function run!(model::Model; t_stop, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
     # unpack
     Δt = model.params.Δt
+    t = model.state.t
     u = model.state.u
     b = model.state.b
 
+    @info "Beginning integration with" t_stop t n_save n_plot n_info
+
     # get resolution for CFL
-    p, t = get_p_t(model.fe_data.mesh.model)
-    edges, _, _ = all_edges(t)
-    h_min = minimum([norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)])
+    points, elements = get_p_t(model.fe_data.mesh.model)
+    edges, _, _ = all_edges(elements)
+    h_min = minimum([norm(points[edges[i, 1], :] - points[edges[i, 2], :]) for i ∈ axes(edges, 1)])
 
     if model.forcings.eddy_param.is_on
         # store inversion matrix without friction to speed up re-builds
         A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
     end
-
-    # number of steps between info print
-    n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
-    @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # store copies of previous and current u, b
     u_prev = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
@@ -112,17 +111,18 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
 
     # start timers
     t₀ = t_last_info = time()
-    for i ∈ i_step:n_steps
+    i = 1
+    while model.state.t < t_stop
         @ctime "full step:" begin
 
-        if i == i_step
+        if i == 1
             # first-order timestep at first
             order = 1
         else
             # can be second-order later
             order = model.evolution.order
             if order == 2 && i == i_step+1
-                collect_evolution_LHS!(model.evolution, model.params, model.forcings)
+                collect_evolution_LHS!(model.evolution, model.params, Δt, model.forcings)
             end
         end
 
@@ -131,14 +131,22 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         b_curr.free_values .= b.free_values
 
         # do step
-        evolve!(model, u_prev, b_prev, order)
+        evolve!(model, u_prev, b_prev, order, Δt)
         invert!(model)
         model.state.t += Δt
+
+        # blow-up -> stop
+        u_max = maximum(abs.(u.free_values))
+        b_max = maximum(abs.(b.free_values))
+        if maximum([u_max, b_max]) > 1e3 || any(isnan.([u_max, b_max]))
+            throw(ErrorException("Blow-up detected, stopping simulation"))
+        end
 
         # set previous u, b to state before the update
         u_prev.free_values .= u_curr.free_values
         b_prev.free_values .= b_curr.free_values
 
+        # update ν
         if model.forcings.eddy_param.is_on && advection && mod(i, 10) == 0
             α = model.params.α
             N² = model.params.N²
@@ -152,27 +160,26 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             # note: keeping same preconditioner (1/h^dim)
         end
 
-        # blow-up -> stop
-        u_max = maximum(abs.(u.free_values))
-        b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, b_max]) > 1e3 || any(isnan.([u_max, b_max]))
-            throw(ErrorException("Blow-up detected, stopping simulation"))
-        end
+        # adaptively change Δt
+        CFL_factor = 0.8
+        Δt = CFL_factor*h_min/u_max
 
         if mod(i, n_info) == 0
             t₁ = time()
             t_step = (t₁ - t_last_info)/n_info
             @info begin
-            msg  = @sprintf("t = %f (i = %d/%d, Δt = %.3e)\n", model.state.t, i, n_steps, Δt)
+            msg  = @sprintf("t = %.3e/%.3e (i = %d, Δt = %.3e)\n", model.state.t, t_stop, i, Δt)
             msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t₁-t₀)...)
             if i > n_info  # skip ETR the first time since it will contain compilation time
                 msg *= @sprintf("timestep duration ~ %.3e s\n", t_step)
-                msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", hrs_mins_secs(t_step*(n_steps - i))...)
+                msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", 
+                                hrs_mins_secs(t_step*Int64((t_stop - model.state.t) ÷ Δt))...)
             end
             msg *= @sprintf("|u|ₘₐₓ = %.3e, CFL Δt ≳ %.3e\n", u_max, h_min/u_max)
             msg *= @sprintf("%.3e ≤ b_free ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n", 
                             minimum(b.free_values), maximum(b.free_values), 
                             maximum(abs.(b.free_values - b_prev.free_values)/Δt))
+            msg *= @sprintf("Memory usage: %.3e/%.3e GB\n", (Sys.total_memory() - Sys.free_memory())/1e9, Sys.total_memory()/1e9) 
             msg
             end
             t_last_info = t₁
@@ -187,6 +194,9 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
             sim_plots(model, model.state.t)
         end
 
+        # increment
+        i += 1
+
         flush(stdout)
         flush(stderr)
         end
@@ -194,7 +204,7 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     return model
 end
 
-function evolve!(model::Model, u_prev, b_prev, order)
+function evolve!(model::Model, u_prev, b_prev, order, Δt)
     # unpack
     perm = model.fe_data.dofs.p_b
     inv_perm = model.fe_data.dofs.inv_p_b
@@ -202,19 +212,13 @@ function evolve!(model::Model, u_prev, b_prev, order)
     dΩ = model.fe_data.mesh.dΩ
     α = model.params.α
     N² = model.params.N²
-    Δt = model.params.Δt
     u = model.state.u
     b = model.state.b
     solver = model.evolution.solver
     arch = architecture(solver.y)
-    rhs_diff = model.evolution.rhs_diff
-    rhs_flux = model.evolution.rhs_flux
-    rhsₘ = model.evolution.rhsₘ
-    rhsₕ = model.evolution.rhsₕ
-    rhsᵥ = model.evolution.rhsᵥ
 
     # coefficient
-    θ = evolution_parameter(model.params, Val(order))
+    θ = evolution_parameter(model.params, Δt, Val(order))
 
     if model.forcings.conv_param.is_on
         # recompute κᵥ for convection
@@ -232,25 +236,32 @@ function evolve!(model::Model, u_prev, b_prev, order)
         rhs_diff = rhs_diff[perm]
         model.evolution.rhsᵥ .= rhsᵥ
         model.evolution.rhs_diff .= rhs_diff
-
-        # re-assemble matrix and preconditioner
-        M = model.evolution.M
-        Kₕ = model.evolution.Kₕ
-        A = M + θ*(Kₕ + Kᵥ) 
-        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
-
-        # update model.evolution
-        model.evolution.solver.A = on_architecture(arch, A)
-        model.evolution.solver.P = P
+    else
+        Kᵥ = model.evolution.Kᵥ
     end
 
+    # re-assemble matrix and preconditioner
+    M = model.evolution.M
+    Kₕ = model.evolution.Kₕ
+    A = M + θ*(Kₕ + Kᵥ) 
+    P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+
+    # update model.evolution
+    model.evolution.solver.A = on_architecture(arch, A)
+    model.evolution.solver.P = P
+
     # put together rhs and solve
+    rhs_diff = model.evolution.rhs_diff
+    rhs_flux = model.evolution.rhs_flux
+    rhsₘ = model.evolution.rhsₘ
+    rhsₕ = model.evolution.rhsₕ
+    rhsᵥ = model.evolution.rhsᵥ
     w = u⋅z⃗
     w_prev = u_prev⋅z⃗
     rhs_adv = assemble_vector(d -> advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, Val(order)), B_test)
     rhs_adv = rhs_adv[perm]
     @ctime "  build evol_rhs" solver.y .= on_architecture(arch,
-        rhs_adv + θ*rhs_diff + rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
+        rhs_adv + θ*rhs_diff + Δt*rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
     )
     @ctime "  solve evol sys" iterative_solve!(solver)
 
