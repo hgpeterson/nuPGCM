@@ -6,9 +6,9 @@ The governing equations for the cross-slope flow $u$, along-slope flow $v$, and 
 (nondimensional) stratification $N^2$ are
 ```math
 \begin{aligned}
--f v &= -P_x + \alpha^{-1} b \tan\theta + \alpha^2 \varepsilon^2 \sec^2\theta \partial_z ( \nu \partial_z u),\\
- f u &= -P_y + \hphantom{aaaaaaaaaa,}     \alpha^2 \varepsilon^2 \sec^2\theta \partial_z ( \nu \partial_z v),\\
- \mu\varrho ( \partial_t b + u N^2 \tan\theta ) &= \alpha^2 \varepsilon^2 \partial_z [ \kappa (N^2 + \sec^2\theta\partial_z b) ],
+-f v &= -P_x + \alpha^{-1} b \tan\theta + \alpha^2 \varepsilon^2 \sec^2\theta \pder{}{z} \left( \nu \pder{u}{z} \right),\\
+ f u &= -P_y + \hphantom{aaaaaaaaaa,}     \alpha^2 \varepsilon^2 \sec^2\theta \pder{}{z} \left( \nu \pder{v}{z} \right),\\
+ \mu\varrho \left( \pder{b}{t} + u N^2 \tan\theta \right) &= \alpha^2 \varepsilon^2 \pder{}{z} \left[ \kappa \left( N^2 + \sec^2\theta \pder{b}{z} \right) \right],
 \end{aligned}
 ```
 where $P_x$ and $P_y$ are barotropic pressure gradients [Peterson2022,Peterson2026](@cite).
@@ -16,16 +16,16 @@ The boundary conditions on the flow are no slip at the bottom, no stress at the 
 transport:
 ```math
 \begin{aligned}
-u = v = 0 \quad &\text{at} \quad z = -H,\\
-\partial_z u = \partial_z v = 0 \quad &\text{at} \quad z = 0,\\
+u = v = 0 \quad &\text{at} \quad z = -H, \vphantom{\frac12}\\
+\pder{u}{z} = \pder{v}{z} = 0 \quad &\text{at} \quad z = 0,\\
 \int_{-H}^0 u \; \text{d}z = \int_{-H}^0 v \; \text{d}z &= 0
 \end{aligned}
 ```
 The buoyancy perturbation satisfies
 ```math
 \begin{aligned}
-N^2 + \sec^2\theta \partial_z b = 0 \quad &\text{at} \quad z = -H,\\
-b = 0 \quad &\text{at} \quad z = 0.
+N^2 + \sec^2\theta \pder{b}{z} = 0 \quad &\text{at} \quad z = -H,\\
+b = 0 \quad &\text{at} \quad z = 0. \vphantom{\frac12}
 \end{aligned}
 ```
 
@@ -94,7 +94,7 @@ u^\xi = u^x, \quad u^\eta = u^y, \quad u^\zeta = u^z - u^x\tan\theta.
 ```
 Continuity then implies that 
 ```math
-\partial_i u^i \to \partial_\zeta u^\zeta \implies \boxed{u^\zeta = 0}
+\partial_i u^i = 0 \to \partial_\zeta u^\zeta = 0 \implies \boxed{u^\zeta = 0}
 ```
 and therefore $u^z = u^x \tan\theta = u^\xi \tan\theta$.
 
@@ -206,7 +206,7 @@ In the boundary layer (BL), we have
 ```math
 \begin{aligned}
 c^2 \nu_B \partial^4_z \chi_B + \frac{f^2 \chi_B}{c^2 \nu_B} &= -\alpha^{-1} \partial_z b'_B \tan\theta,\\
-\mu\varrho \chi_B N^2 \tan\theta &= c^2 \kappa_B \partial_z b'_B,
+\mu\varrho \chi_B N^2 \tan\theta &= c^2 \kappa_B \partial_z b'_B, \vphantom{\frac12}
 \end{aligned}
 ```
 where the second equation comes from assuming a steady flow in the BL and integrating.
@@ -216,7 +216,7 @@ Substituting $\partial_z b'_B$ from the buoyancy equation into the inversion, we
 ```
 where
 ```math
-\boxed{(\delta q)^4 = 1 + \frac{1}{\alpha} \frac{\nu_B}{\kappa_B} \mu \frac{N^2 \tan^2\theta}{f^2} \varrho }
+\boxed{(\delta q)^4 = 1 + \frac{\mu\varrho}{\alpha} \frac{\nu_B}{\kappa_B} \frac{N^2 \tan^2\theta}{f^2} }
 ```
 where
 ```math
