@@ -27,13 +27,13 @@ function solve(params; eddy_param=false)
     # build evolution matrices
     K, rhs_diff = build_diffusion_system(z, κ, N², θ)
     rhs_evolution = zeros(nz)
-    rhs_evolution[1] = -N²*cos(θ)^2 # N² + sec²θ dz(b) = 0 -> dz(b) = -N²cos²θ at z = -H
+    rhs_evolution[1] = -N²*cos(θ) # N²cos(θ) + dz(b) = 0 -> dz(b) = -N²cos(θ) at z = -H
     rhs_evolution[nz] = 0 # b = 0 at z = 0
 
     # BDF1 and BDF2 LHSs
-    θ1 = Δt * sec(θ)^2 * α^2 * ε^2 / μϱ
+    θ1 = Δt * α^2 * ε^2 / μϱ
     LHS1 = lu(assemble_LHS_evolution(K, θ1))
-    θ2 = 2/3 * Δt * sec(θ)^2 * α^2 * ε^2 / μϱ
+    θ2 = 2/3 * Δt * α^2 * ε^2 / μϱ
     LHS2 = lu(assemble_LHS_evolution(K, θ2))
 
     # initial condition
@@ -63,18 +63,18 @@ function solve(params; eddy_param=false)
         # step forward
         if i == 1
             # BDF1
-            rhs_evolution[2:end-1] .= (b_old + θ1*rhs_diff - Δt*u_old*N²*tan(θ))[2:end-1]
+            rhs_evolution[2:end-1] .= (b_old + θ1*rhs_diff - Δt*u_old*N²*sin(θ))[2:end-1]
             ldiv!(b, LHS1, rhs_evolution)
         else
             # BDF2
-            rhs_evolution[2:end-1] .= (4/3*b_old - 1/3*b_old_old + θ2*rhs_diff - 2/3*Δt*(2*u_old - u_old_old)*N²*tan(θ))[2:end-1]
+            rhs_evolution[2:end-1] .= (4/3*b_old - 1/3*b_old_old + θ2*rhs_diff - 2/3*Δt*(2*u_old - u_old_old)*N²*sin(θ))[2:end-1]
             ldiv!(b, LHS2, rhs_evolution)
         end
         t += Δt
 
         # invert
         if eddy_param
-            ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
+            ν = abs.(f^2 * cos(θ)^2 ./ ( α * (N² .+ cos(θ)*differentiate(b, z)) ))
             ν[ν .> 1e2 ] .= 1e2
             LHS_inversion = build_LHS_inversion(z, ν, params)
             # LHS_inversion = build_LHS_inversion!(LHS_inversion, fd_z, fd_zz, z, ν, params)

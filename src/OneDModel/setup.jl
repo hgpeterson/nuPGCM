@@ -28,12 +28,12 @@ end
     K, v = build_diffusion_system(z, κ, N², θ)
 
 Build matrix/vector representation of 
-    dz(κ*(N² + sec²θ dz(b))) 
-        = sec²θ dz(κ*dz(b)) + N²dz(κ) 
+    dz(κ*(N²cos(θ) + dz(b))) 
+        = dz(κ*dz(b)) + N²dz(κ)cos(θ)
         = K*b + rhs_diff
 The matrix K also contains the boundary conditions 
     b = 0 at z = 0
-    N² + sec²θ dz(b) = 0 at z = -H
+    N²cos(θ) + dz(b) = 0 at z = -H
 for the first and last rows, respectively.
 """
 function build_diffusion_system(z, κ, N², θ)
@@ -54,15 +54,15 @@ function build_diffusion_system(z, κ, N², θ)
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
 
         # product rule: dz(κ*dz(b)) = dz(κ)*dz(b) + κ*dzz(b)
-        push!(K, (j, j-1, sec(θ)^2*(κ_z*fd_z[1] + κ[j]*fd_zz[1])))
-        push!(K, (j, j,   sec(θ)^2*(κ_z*fd_z[2] + κ[j]*fd_zz[2])))
-        push!(K, (j, j+1, sec(θ)^2*(κ_z*fd_z[3] + κ[j]*fd_zz[3])))
+        push!(K, (j, j-1, κ_z*fd_z[1] + κ[j]*fd_zz[1]))
+        push!(K, (j, j,   κ_z*fd_z[2] + κ[j]*fd_zz[2]))
+        push!(K, (j, j+1, κ_z*fd_z[3] + κ[j]*fd_zz[3]))
 
-        # N²*dz(κ) has no dependence on b -> vector
-        v[j] += N²*κ_z
+        # N²*dz(κ)*cos(θ) has no dependence on b -> vector
+        v[j] += N²*κ_z*cos(θ)
     end
 
-    # z = -H: N² + sec²θ dz(b) = 0 -> dz(b) = -N²cos²θ
+    # z = -H: N²cos(θ) + dz(b) = 0 -> dz(b) = -N²cosθ
     fd_z = mkfdstencil(z[1:3], z[1], 1)
     push!(K, (1, 1, fd_z[1]))
     push!(K, (1, 2, fd_z[2]))
@@ -79,8 +79,8 @@ end
 
 """
 Build matrix representation of
-   -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
-   -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
+   -α²ε²dz(ν*dz(u)) - f*v*cos(θ) + Px = b*sin(θ)/α
+   -α²ε²dz(ν*dz(v)) + f*u*cos(θ) + Py = 0
 Boundary conditions:
     dz(u) = dz(v) = 0 at z = 0
     u = v = 0 at z = -H
@@ -111,24 +111,23 @@ function build_LHS_inversion(z, ν, params)
         # dzz stencil
         fd_zz = mkfdstencil(z[j-1:j+1], z[j], 2)
         
-        # eq 1: -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
-        # term 1 = -α²ε²sec²θ [dz(ν)*dz(u) + ν*dzz(u)] 
-        c = α^2*ε^2*sec(θ)^2
-        push!(LHS, (umap[j], umap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
-        push!(LHS, (umap[j], umap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
-        push!(LHS, (umap[j], umap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
-        # term 2 = -f*v
-        push!(LHS, (umap[j], vmap[j], -f))
+        # eq 1: -α²ε²dz(ν*dz(u)) - f*v*cos(θ) + Px = b*sin(θ)/α
+        # term 1 = -α²ε²[dz(ν)*dz(u) + ν*dzz(u)] 
+        push!(LHS, (umap[j], umap[j-1], -α^2*ε^2*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
+        push!(LHS, (umap[j], umap[j],   -α^2*ε^2*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
+        push!(LHS, (umap[j], umap[j+1], -α^2*ε^2*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
+        # term 2 = -f*v*cos(θ)
+        push!(LHS, (umap[j], vmap[j], -f*cos(θ)))
         # term 3 = Px
         push!(LHS, (umap[j], iPx, 1))
 
-        # eq 2: -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
-        # term 1 = -α²ε²sec²θ [dz(ν)*dz(v) + ν*dzz(v)]
-        push!(LHS, (vmap[j], vmap[j-1], -c*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
-        push!(LHS, (vmap[j], vmap[j],   -c*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
-        push!(LHS, (vmap[j], vmap[j+1], -c*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
-        # term 2 = f*u
-        push!(LHS, (vmap[j], umap[j], f))
+        # eq 2: -α²ε²dz(ν*dz(v)) + f*u*cos(θ) + Py = 0
+        # term 1 = -α²ε²[dz(ν)*dz(v) + ν*dzz(v)]
+        push!(LHS, (vmap[j], vmap[j-1], -α^2*ε^2*(ν_z*fd_z[1] + ν[j]*fd_zz[1])))
+        push!(LHS, (vmap[j], vmap[j],   -α^2*ε^2*(ν_z*fd_z[2] + ν[j]*fd_zz[2])))
+        push!(LHS, (vmap[j], vmap[j+1], -α^2*ε^2*(ν_z*fd_z[3] + ν[j]*fd_zz[3])))
+        # term 2 = f*u*cos(θ)
+        push!(LHS, (vmap[j], umap[j], f*cos(θ)))
         # term 3 = Py
         push!(LHS, (vmap[j], iPy, 1))
     end
@@ -282,10 +281,10 @@ end
 
 """
 Update vector for RHS of inversion 
-   -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
-   -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
+   -α²ε²dz(ν*dz(u)) - f*v*cos(θ) + Px = b*sin(θ)/α
+   -α²ε²dz(ν*dz(v)) + f*u*cos(θ) + Py = 0
 """
 function update_rhs_inversion!(rhs, b, params)
-    rhs[2:params.nz-1] .= b[2:params.nz-1]*tan(params.θ)/params.α
+    rhs[2:params.nz-1] .= b[2:params.nz-1]*sin(params.θ)/params.α
     return rhs
 end

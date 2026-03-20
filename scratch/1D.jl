@@ -35,7 +35,6 @@ H₀ = 4e3  # m
 Kₑ = 1000  # m² s⁻¹
 N₀ = 1e-3  # s⁻¹
 ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
-ν₀ /= 4
 ε = sqrt(ν₀/f₀/H₀^2)
 μ = ν₀/κ₀
 ϱ = (N₀*H₀/f₀/L)^2
@@ -47,9 +46,9 @@ N² = 1/α
 no_Px = false
 no_Py = false
 f = 0.5
-H = α
+H = α*cos(θ)
 nz = 2^8
-eddy_param = true
+eddy_param = false
 
 z = H*OneDModel.chebyshev_nodes(nz)
 d = H/2
@@ -62,11 +61,11 @@ T = μϱ/ε^2/κ_B
 
 params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, no_Px=no_Px, no_Py=no_Py, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
 
-dirname = "1d_model/4x_decay_0.25x_nu"
+dirname = "1d_model/control"
 if eddy_param
     dirname *= "_eddy"
 end
-if !isfile(joinpath(@__DIR__, dirname))
+if !isdir(joinpath(@__DIR__, dirname))
     mkdir(joinpath(@__DIR__, dirname))
 end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
@@ -81,7 +80,7 @@ else
     ν_B = 1
 end
 κ_B = 1e2
-δ = α*ε*sec(θ)*sqrt(2*ν_B/f)
+δ = α*ε*sqrt(2*ν_B/f)
 q = 1/δ * (1 + 1/α * ν_B/κ_B * μ * N²*tan(θ) / f^2 * ϱ)^(1/4)
 @sprintf("BL scale q⁻¹ = %.3e", q^-1)
 
@@ -90,7 +89,7 @@ filename = joinpath(@__DIR__, "$dirname/1d.png")
 fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
 ax[1].set_ylabel(L"Vertical coordinate $z$")
 ax[1].set_xlabel("Flow")
-ax[2].set_xlabel(L"Stratification $\alpha \partial_z b$")
+ax[2].set_xlabel(L"Stratification $\alpha (N^2 \cos \theta + \partial_z b)$")
 for a ∈ ax
     a.set_ylim(-H, 0)
     a.spines["left"].set_visible(false)
@@ -102,13 +101,13 @@ ax[2].set_yticks([])
 bz = differentiate(b, z)
 ax[1].plot(u,       z, "C0-", label=L"$u$")
 ax[1].plot(v,       z, "C1-", label=L"$v$")
-ax[1].axvline(-Py/f, c="C0", ls="--", lw=0.5, label=L"$-P_y/f$")
-ax[1].axvline(+Px/f, c="C1", ls="--", lw=0.5, label=L"$P_x/f$")
+ax[1].axvline(-Py/f/cos(θ), c="C0", ls="--", lw=0.5, label=L"$-P_y/f'$")
+ax[1].axvline(+Px/f/cos(θ), c="C1", ls="--", lw=0.5, label=L"$P_x/f'$")
 uvmax = maximum(abs.([u; v]))
 ax[1].plot([-0.05*uvmax, 0.05*uvmax], [-H + q^-1, -H + q^-1], "C3-", lw=0.5)
 ax[1].set_xlim(-1.1*uvmax, 1.1*uvmax)
 ax[1].legend()
-ax[2].plot(α*(N² .+ bz), z, "k-")
+ax[2].plot(α*(N²*cos(θ) .+ bz), z, "k-")
 if t !== nothing
     ax[1].set_title(latexstring(@sprintf("\$t = %s\$", nuPGCM.sci_notation(t))))
 end
@@ -116,7 +115,7 @@ savefig(filename)
 @info "Saved '$filename'"
 plt.close()
 
-ν = abs.(f^2 ./ ( α * (N² .+ differentiate(b, z)) ))
+ν = abs.(f^2 * cos(θ)^2 ./ ( α * (N² .+ cos(θ)*bz) ))
 ν[ν .> 1e2 ] .= 1e2
 filename = joinpath(@__DIR__, "$dirname/nu.png")
 fig, ax = plt.subplots(1, figsize=(2, 3.2))
@@ -133,23 +132,26 @@ savefig(filename)
 plt.close()
 
 filename = joinpath(@__DIR__, "$dirname/slope.png")
-x = range(0, 0.5, nz)
-xx = repeat(x, 1, nz)
-zz = xx*tan(θ) + repeat(z, 1, nz)'
-bb = N²*zz + repeat(b, 1, nz)'
-uu = repeat(u, 1, nz)'
-vmax = maximum(abs.(u))
+x′ = repeat(range(0, 0.5, nz), 1, nz)
+z′ = repeat(z, 1, nz)'
+x = x′*cos(θ) - z′*sin(θ)
+z = x′*sin(θ) + z′*cos(θ)
+bb = N²*z + repeat(b, 1, nz)'
+uu = repeat(u, 1, nz)'*cos(θ)
+vmax = maximum(abs.(u))*cos(θ)
 fig, ax = subplots(1)
-img = ax.pcolormesh(xx, zz, uu, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
+img = ax.pcolormesh(x, z, uu, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
 cb = colorbar(img, ax=ax, label=L"Cross-slope flow $u$", shrink=0.5)
 # cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=true)
 levels = range(minimum(bb), maximum(bb), 20)
-ax.contour(xx, zz, bb, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+ax.contour(x, z, bb, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+ax.set_xlabel(L"x")
+ax.set_ylabel(L"z")
 ax.axis("equal")
 ax.spines["left"].set_visible(false)
 ax.spines["bottom"].set_visible(false)
 ax.set_xticks([0, 0.5])
-ax.set_yticks([-α, 0])
+ax.set_yticks([-H, 0])
 savefig(filename)
 @info "Saved '$filename'"
 plt.close()

@@ -1,5 +1,78 @@
 # 1D Model
 
+## Slope-rotated coordinates
+
+To understand some of the basic physics of the PG model, it can be useful to consider a 1D model over a uniform slope 
+at an angle $\theta$ with the horizontal (see [Peterson2022,Peterson2023,Peterson2026](@cite)). 
+The governing equations for the cross-slope flow $u$, along-slope flow $v$, and buoyancy perturbation $b$ to a background
+(nondimensional) stratification $N^2$ are
+```math
+\begin{aligned}
+-f v \cos\theta &= -P_x + \alpha^{-1} b \sin\theta + \alpha^2 \varepsilon^2 \pder{}{z} \left( \nu \pder{u}{z} \right),\\
+ f u \cos\theta &= -P_y + \hphantom{aaaaaaaaaa,}     \alpha^2 \varepsilon^2 \pder{}{z} \left( \nu \pder{v}{z} \right),\\
+ \mu\varrho \left( \pder{b}{t} + u N^2 \sin\theta \right) &= \alpha^2 \varepsilon^2 \pder{}{z} \left[ \kappa \left( N^2\cos\theta + \pder{b}{z} \right) \right],
+\end{aligned}
+```
+where $P_x$ and $P_y$ are barotropic pressure gradients [Peterson2022,Peterson2026](@cite).
+The boundary conditions on the flow are no slip at the bottom, no stress at the top, and a constraint on the barotropic 
+transport:
+```math
+\begin{aligned}
+u = v = 0 \quad &\text{at} \quad z = -H, \vphantom{\frac12}\\
+\pder{u}{z} = \pder{v}{z} = 0 \quad &\text{at} \quad z = 0,\\
+\int_{-H}^0 u \; \text{d}z = \int_{-H}^0 v \; \text{d}z &= 0
+\end{aligned}
+```
+The buoyancy perturbation satisfies
+```math
+\begin{aligned}
+N^2\cos\theta + \pder{b}{z} = 0 \quad &\text{at} \quad z = -H,\\
+b = 0 \quad &\text{at} \quad z = 0. \vphantom{\frac12}
+\end{aligned}
+```
+
+### Boundary layer scale
+
+We define a streamfunction such that $\partial_z \chi = u$.
+Then the $y$-momentum equation becomes
+```math
+f \partial_z \chi \cos\theta = -P_y + \alpha^2 \varepsilon^2 \partial_z ( \nu \partial_z v).
+```
+Integrating from the top $z = 0$ down to some level $z$, this implies
+```math
+f \chi \cos\theta = -P_y z + \alpha^2 \varepsilon^2 \nu \partial_z v.
+```
+Differentiating the $x$-momentum equation and substituting this in, we get
+```math
+\alpha^2 \varepsilon^2 \partial^2_z ( \nu \partial^2_z \chi) + \frac{f^2 \chi \cos^2\theta + f P_y z \cos\theta}{\alpha^2 \varepsilon^2 \nu} = -\alpha^{-1} \partial_z b' \sin\theta.
+```
+In the boundary layer (BL), we have
+```math
+\begin{aligned}
+\alpha^2 \varepsilon^2 \nu_B \partial^4_z \chi_B + \frac{f^2 \cos^2\theta}{\alpha^2 \varepsilon^2 \nu_B} \chi_B &= -\alpha^{-1} \partial_z b'_B \sin\theta,\\
+\mu\varrho \chi_B N^2 \sin\theta &= \alpha^2 \varepsilon^2 \kappa_B \partial_z b'_B, \vphantom{\frac12}
+\end{aligned}
+```
+where the second equation comes from assuming a steady flow in the BL and integrating.
+Substituting $\partial_z b'_B$ from the buoyancy equation into the inversion, we get
+```math
+\partial^4_z \chi_B + 4q^4 \chi_B = 0,\\
+```
+where
+```math
+\boxed{(\delta q)^4 = 1 + \frac{\mu\varrho}{\alpha} \frac{\nu_B}{\kappa_B} \frac{N^2 \tan^2\theta}{f^2} }
+```
+where
+```math
+\delta = \alpha \varepsilon \sqrt{\frac{2\nu_B}{f}}
+```
+is the typical flat-bottom Ekman BL scale.
+The BL thickness is then $q^{-1}$.
+Note that since $N^2 \sim \alpha^{-1}$ and $\tan \theta \sim \alpha$, the scaling for $\delta q$ is independent of
+$\alpha$.
+
+## Slope-aligned coordinates
+
 To understand some of the basic physics of the PG model, it can be useful to consider a 1D model over a uniform slope 
 at an angle $\theta$ with the horizontal (see [Peterson2022,Peterson2023,Peterson2026](@cite)). 
 The governing equations for the cross-slope flow $u$, along-slope flow $v$, and buoyancy perturbation $b$ to a background
@@ -29,7 +102,7 @@ b = 0 \quad &\text{at} \quad z = 0. \vphantom{\frac12}
 \end{aligned}
 ```
 
-## Derivation
+### Derivation
 
 We begin with the nondimensional PG equations from [before](nondimensionalization.md), now written in index notation:
 ```math
@@ -185,42 +258,3 @@ In summary, the 1D buoyancy equation reads:
 ```math
 \boxed{\mu\varrho ( \partial_t b + u^\xi N^2 \tan\theta ) = \alpha^2 \varepsilon^2 \partial_\zeta [ \kappa (N^2 + \sec^2\theta \partial_\zeta b') ]}
 ```
-
-## Boundary layer scale
-
-We define a streamfunction such that $\partial_z \chi = u$.
-Then the $y$-momentum equation becomes
-```math
-f \partial_z \chi = -P_y + c^2 \partial_z ( \nu \partial_z v),
-```
-where $c = \alpha \varepsilon \sec\theta$.
-Integrating from the top $z = 0$ down to some level $z$, this implies
-```math
-f \chi = -P_y z + c^2 \nu \partial_z v.
-```
-Differentiating the $x$-momentum equation and substituting this in, we get
-```math
-c^2 \partial^2_z ( \nu \partial^2_z \chi) + \frac{f^2 \chi + f P_y z}{c^2 \nu} = -\alpha^{-1} \partial_z b' \tan\theta.
-```
-In the boundary layer (BL), we have
-```math
-\begin{aligned}
-c^2 \nu_B \partial^4_z \chi_B + \frac{f^2 \chi_B}{c^2 \nu_B} &= -\alpha^{-1} \partial_z b'_B \tan\theta,\\
-\mu\varrho \chi_B N^2 \tan\theta &= c^2 \kappa_B \partial_z b'_B, \vphantom{\frac12}
-\end{aligned}
-```
-where the second equation comes from assuming a steady flow in the BL and integrating.
-Substituting $\partial_z b'_B$ from the buoyancy equation into the inversion, we get
-```math
-\partial^4_z \chi_B + 4q^4 \chi_B = 0,\\
-```
-where
-```math
-\boxed{(\delta q)^4 = 1 + \frac{\mu\varrho}{\alpha} \frac{\nu_B}{\kappa_B} \frac{N^2 \tan^2\theta}{f^2} }
-```
-where
-```math
-\delta = \alpha \varepsilon \sec\theta \sqrt{\frac{2\nu_B}{f}}
-```
-is the typical Ekman BL scale.
-The BL thickness is then $q^{-1}$.
