@@ -83,14 +83,14 @@ function InversionToolkit(arch::AbstractArchitecture,
 
     # use GMRES solver (which requires the `memory` and `restart` parameters)
     VT = vector_type(arch, T)
-    solver = Krylov.GmresSolver(N, N, memory, VT)
-    solver.x .= zero(T)
+    workspace = Krylov.GmresWorkspace(N, N, VT; memory)
+    workspace.x .= zero(T)
 
     # set up keyword arguments for iterative solver toolkit
     verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int, :restart=>restart)
 
-    solver_inversion = IterativeSolverToolkit(A, P, y, solver, kwargs, "Inversion") 
+    solver_inversion = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Inversion") 
 
     return InversionToolkit(B, b, solver_inversion)
 end

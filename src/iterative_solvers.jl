@@ -3,8 +3,8 @@ mutable struct IterativeSolverToolkit{A, P, V, S, K}
     P::P           # preconditioner for A
     x::V           # solution vector
     y::V           # RHS vector
-    solver::S      # iterative solver
-    kwargs::K      # keyword arguments for iterative solver
+    workspace::S   # Krylov.jl Workspace
+    kwargs::K      # keyword arguments for workspace
     label::String  # label for solver
 end
 
@@ -18,14 +18,14 @@ function Base.show(io::IO, solver::IterativeSolverToolkit)
     println(io, "├── P: ", summary(solver.P))
     println(io, "├── x: ", summary(solver.x))
     println(io, "├── y: ", summary(solver.y))
-    println(io, "├── solver: ", summary(solver.solver))
+    println(io, "├── workspace: ", summary(solver.workspace))
     println(io, "├── kwargs: ", solver.kwargs)
     println(io, "└── label: \"", solver.label, "\"")
 end
 
-function IterativeSolverToolkit(A, P, y, solver, kwargs, label)
-    # x just points to solver.x
-    return IterativeSolverToolkit(A, P, solver.x, y, solver, kwargs, label)
+function IterativeSolverToolkit(A, P, y, workspace, kwargs, label)
+    # x just points to workspace.x
+    return IterativeSolverToolkit(A, P, workspace.x, y, workspace, kwargs, label)
 end
 
 function iterative_solve!(solver_tk::IterativeSolverToolkit)
@@ -34,7 +34,7 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
     P = solver_tk.P
     x = solver_tk.x
     y = solver_tk.y
-    solver = solver_tk.solver
+    workspace = solver_tk.workspace
     kwargs = solver_tk.kwargs
     label = solver_tk.label
 
@@ -43,25 +43,25 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
         t0 = time()
         ldiv!(x, P, y)
         t1 = time()
-        @debug "Direct $label solve: time=$(t1-t0)" 
+        @debug @sprintf("Direct %s solve: time=%.3e", label, t1-t0)
         return solver_tk
     end
     if architecture(A) == CPU() && size(A, 1) < 300_000
         t0 = time()
         x .= A\y
         t1 = time()
-        @debug "Direct $label solve: time=$(t1-t0)" 
+        @debug @sprintf("Direct %s solve: time=%.3e", label, t1-t0)
         return solver_tk
     end
 
     # solve
-    Krylov.solve!(solver, A, y, x; M=P, kwargs...)
+    Krylov.krylov_solve!(workspace, A, y, x; M=P, kwargs...)
 
     @debug begin 
-        solved = solver.stats.solved
-        niter = solver.stats.niter 
-        time = solver.stats.timer
-        "$label iterative solve: solved=$solved, niter=$niter, time=$time" 
+        solved = workspace.stats.solved
+        niter = workspace.stats.niter 
+        time = workspace.stats.timer
+        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%.3e", label, solved, niter, time) 
     end
 
     return solver_tk

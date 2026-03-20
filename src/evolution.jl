@@ -80,13 +80,13 @@ function EvolutionToolkit(arch::AbstractArchitecture,
 
     # CG solver
     VT = vector_type(arch, T)
-    solver = Krylov.CgSolver(N, N, VT)
-    solver.x .= zero(T)
+    workspace = Krylov.CgWorkspace(N, N, VT)
+    workspace.x .= zero(T)
 
     # setup solver toolkit
     verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
-    solver = IterativeSolverToolkit(A, P, y, solver, kwargs, "Evolution")
+    solver = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Evolution")
 
     return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
 end
