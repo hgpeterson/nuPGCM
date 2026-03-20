@@ -1,13 +1,18 @@
 struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit, I}
+# struct EvolutionToolkit{A<:AbstractArchitecture, AS, M, V, VV, S<:IterativeSolverToolkit, I}
     arch::A      # architecture (CPU or GPU)
+    # assembler::AS # sparse matrix assembler (Gridap)
     M::M         # Mass matrix
     Kₕ::M        # Horiz. stiffness matrix
     Kᵥ::M        # Vert. stiffness matrix
+    # Kᵥ_cache::M  # cache for Kᵥ rebuilds
     rhs_diff::V  # rhs vector from diffusion
     rhs_flux::V  # rhs vector from surface b flux
     rhsₘ::V      # correction vector to add to rhs due to Dirichlet b.c. in M
     rhsₕ::V      # correction vector to add to rhs due to Dirichlet b.c. in Kₕ
     rhsᵥ::V      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
+    # rhsᵥ::VV      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
+    # rhsᵥ_cache::VV # cache for rhsᵥ rebuilds
     solver::S    # iterative solver toolkit
     order::I     # order of timestepping scheme
 end
@@ -19,14 +24,17 @@ end
 function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, summary(evolution), ":")
     println(io, "├── arch: ", evolution.arch)
+    # println(io, "├── assembler: ", summary(evolution.assembler))
     println(io, "├── M: ", summary(evolution.M))
     println(io, "├── Kₕ: ", summary(evolution.Kₕ))
     println(io, "├── Kᵥ: ", summary(evolution.Kᵥ))
+    # println(io, "├── Kᵥ_cache: ", summary(evolution.Kᵥ_cache))
     println(io, "├── rhs_diff: ", summary(evolution.rhs_diff))
     println(io, "├── rhs_flux: ", summary(evolution.rhs_flux))
     println(io, "├── rhsₘ: ", summary(evolution.rhsₘ))
     println(io, "├── rhsₕ: ", summary(evolution.rhsₕ))
     println(io, "├── rhsᵥ: ", summary(evolution.rhsᵥ))
+    # println(io, "├── rhsᵥ_cache: ", summary(evolution.rhsᵥ_cache))
     println(io, "├── solver: ", summary(evolution.solver))
       print(io, "└── order: ", evolution.order)
 end
@@ -39,6 +47,11 @@ end
                                          kwargs...)
                 
 Set up the evolution toolkit, which contains the matrices and solvers for the evolution problem.
+
+The PG buoyancy evolution equation is:
+```math
+μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ].
+```
 """
 function EvolutionToolkit(arch::AbstractArchitecture, 
                           fe_data::FEData, 
@@ -54,10 +67,30 @@ function EvolutionToolkit(arch::AbstractArchitecture,
         throw(ArgumentError("order $order not yet implemented"))
     end
 
+    # unpack
+    B_trial = fe_data.spaces.B_trial
+    B_test = fe_data.spaces.B_test
+    b_diri = fe_data.spaces.b_diri
+    dΩ = fe_data.mesh.dΩ
+    κₕ = forcings.κₕ
+    κᵥ = forcings.κᵥ
+
     # build
     @info "Building evolution system..."
-    @time "build evolution system" M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ = 
-                                        build_evolution_system(fe_data, params, forcings)
+
+    # save sparse assembler for efficient re-building later
+    assembler = Gridap.SparseMatrixAssembler(B_trial, B_test)
+
+    # build components
+    M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
+    Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
+    Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
+    rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
+    rhs_flux = build_rhs_flux(params, forcings, fe_data)
+
+    # # save caches for rebuilds
+    # Kᵥ_cache = copy(Kᵥ)
+    # rhsᵥ_cache = copy(rhsᵥ)
 
     # re-order dofs
     perm = fe_data.dofs.p_b
@@ -69,6 +102,14 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     rhsₘ = rhsₘ[perm]
     rhsₕ = rhsₕ[perm]
     rhsᵥ = rhsᵥ[perm]
+
+    # put rhs vectors on GPU if needed
+    rhs_diff = on_architecture(arch, rhs_diff)
+    rhs_flux = on_architecture(arch, rhs_flux)
+    rhsₘ = on_architecture(arch, rhsₘ)
+    rhsₕ = on_architecture(arch, rhsₕ)
+    rhsᵥ = on_architecture(arch, rhsᵥ)
+    # rhsᵥ = on_architecture(arch, rhsᵥ)  # not this one because it gets rebuilt
 
     # combine to make evolution LHS
     A, P = collect_evolution_LHS(arch, params, forcings, M, Kₕ, Kᵥ, order)
@@ -89,6 +130,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Evolution")
 
     return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
+    # return EvolutionToolkit(arch, assembler, M, Kₕ, Kᵥ, Kᵥ_cache, 
+    #                         rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, rhsᵥ_cache, solver, order)
 end
 
 function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings)
@@ -148,37 +191,6 @@ end
 ####
 #### Matrix-building functions
 ####
-
-"""
-    M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = 
-build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
-
-Build the matrices for the evolution problem of the PG equations.
-
-The evolution equation is written as
-```math
-μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ]
-```
-
-See also [`build_M`](@ref), [`build_Kₕ`](@ref), [`build_Kᵥ`](@ref).
-"""
-function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
-    # unpack
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
-    b_diri = fe_data.spaces.b_diri
-    dΩ = fe_data.mesh.dΩ
-    κₕ = forcings.κₕ
-    κᵥ = forcings.κᵥ
-
-    # build components
-    M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
-    Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
-    Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
-    rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
-    rhs_flux = build_rhs_flux(params, forcings, fe_data)
-    return M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ
-end
 
 """
     M, rhsₘ = build_M(B, D, dΩ, b_diri)
@@ -241,6 +253,10 @@ function build_matrix_vector(a, B, D, b_diri)
     A = assemble_matrix(a, B, D)
     rhs = assemble_vector(d -> a(b_diri, d), D)
     return A, rhs
+end
+function build_matrix_vector!(A, rhs, a, assembler, b_diri)
+    Gridap.assemble_matrix!(A, assembler, a)
+    Gridap.assemble_vector!(rhs, assembler, d -> a(b_diri, d))
 end
 
 # RHS: ∫( ∂z( κᵥ [N² + ∂z(b)] ) d )dΩ
