@@ -96,8 +96,19 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
     h_min = minimum([norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)])
 
     if model.forcings.eddy_param.is_on
-        # store inversion matrix without friction to speed up re-builds
-        A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
+        # cache data needed to re-assemble inversion matrix
+        X_trial = model.fe_data.spaces.X_trial
+        X_test = model.fe_data.spaces.X_test
+        dup = get_trial_fe_basis(X_trial)
+        dvq = get_fe_basis(X_test)
+        assembler = Gridap.SparseMatrixAssembler(X_trial, X_test)
+        perm = model.fe_data.dofs.p_inversion
+        iperm = model.fe_data.dofs.inv_p_inversion
+        A_inversion = on_architecture(CPU(), model.inversion.solver.A)
+        A_inversion = A_inversion[iperm, iperm]
+
+        # # store inversion matrix without friction to speed up re-builds
+        # A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
     end
 
     # number of steps between info print
@@ -140,16 +151,15 @@ function run!(model::Model; n_steps, i_step=1, n_save=Inf, n_plot=Inf, advection
         u_prev.free_values .= u_curr.free_values
         b_prev.free_values .= b_curr.free_values
 
-        if model.forcings.eddy_param.is_on && advection && mod(i, 10) == 0
+        if model.forcings.eddy_param.is_on && advection #&& mod(i, 10) == 0
             α = model.params.α
             N² = model.params.N²
             b = model.state.b
-            αbz = α*N² + α*∂z(b)
+            αbz = α*(N² + ∂z(b))
             ν = ν_eddy(model.forcings.eddy_param, αbz)
-            A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
-            perm = model.fe_data.dofs.p_inversion
-            A_inversion = A_inversion[perm, perm]
-            model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+            # A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
+            build_A_inversion!(A_inversion, dup, dvq, assembler, model.fe_data, model.params, ν)
+            model.inversion.solver.A = on_architecture(model.arch, A_inversion[perm, perm])
             # note: keeping same preconditioner (1/h^dim)
         end
 

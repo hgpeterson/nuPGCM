@@ -148,6 +148,29 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_onl
 
     return A
 end
+function build_A_inversion!(A, dup, dvq, assembler,
+                            fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
+    # unpack
+    X_trial = fe_data.spaces.X_trial
+    X_test = fe_data.spaces.X_test
+    dΩ = fe_data.mesh.dΩ
+    α²ε² = params.α^2*params.ε^2
+    f = params.f
+
+    # bilinear form
+    a((u, p), (v, q)) = bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+
+    # assemble 
+    @time "build inversion system" begin
+    contribution = a(dup, dvq)
+    matdata = Gridap.FESpaces.collect_cell_matrix(X_trial, X_test, contribution)
+    fill!(A, 0)
+    Gridap.FESpaces.assemble_matrix_add!(A, assembler, matdata)   
+    end
+
+    return A
+end
+
 function bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
     σ = Gridap.symmetric_gradient
     # for general ν, need full stress tensor
