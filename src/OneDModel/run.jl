@@ -42,8 +42,16 @@ function solve(params; eddy_param=false)
     t = 0
     u = @view uvp[1:nz]
     v = @view uvp[nz+1:2nz]
-    Px = @view uvp[2nz+1]
-    Py = @view uvp[2nz+2]
+    if params.no_Px
+        Px = 0
+    else
+        Px = @view uvp[2nz+1]
+    end
+    if params.no_Py
+        Py = 0
+    else
+        Py = @view uvp[2nz+2]
+    end
 
     # copies for timesteps
     b_old = zeros(nz)

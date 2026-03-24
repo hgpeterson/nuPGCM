@@ -35,6 +35,8 @@ H₀ = 4e3  # m
 Kₑ = 1000  # m² s⁻¹
 N₀ = 1e-3  # s⁻¹
 ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
+ν₀ /= 16
+# κ₀ /= 32
 ε = sqrt(ν₀/f₀/H₀^2)
 μ = ν₀/κ₀
 ϱ = (N₀*H₀/f₀/L)^2
@@ -51,7 +53,7 @@ nz = 2^8
 eddy_param = false
 
 z = H*OneDModel.chebyshev_nodes(nz)
-d = H/2
+d = H/8
 κ_B = 1e2
 κ_I = 1
 κ = @. κ_I + (κ_B - κ_I)exp(-(z + H)/d)
@@ -61,7 +63,7 @@ T = μϱ/ε^2/κ_B
 
 params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, no_Px=no_Px, no_Py=no_Py, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
 
-dirname = "1d_model/control"
+dirname = "1d_model/test"
 if eddy_param
     dirname *= "_eddy"
 end
@@ -101,13 +103,16 @@ ax[2].set_yticks([])
 bz = differentiate(b, z)
 ax[1].plot(u,       z, "C0-", label=L"$u$")
 ax[1].plot(v,       z, "C1-", label=L"$v$")
+ax[1].plot(+Px/f/cos(θ) .- b/α*sin(θ)/f/cos(θ), z, "C2--", label=L"$P_x/f' - \alpha^{-1} b \sin\theta / f'$")
 ax[1].axvline(-Py/f/cos(θ), c="C0", ls="--", lw=0.5, label=L"$-P_y/f'$")
 ax[1].axvline(+Px/f/cos(θ), c="C1", ls="--", lw=0.5, label=L"$P_x/f'$")
 uvmax = maximum(abs.([u; v]))
 ax[1].plot([-0.05*uvmax, 0.05*uvmax], [-H + q^-1, -H + q^-1], "C3-", lw=0.5)
-ax[1].set_xlim(-1.1*uvmax, 1.1*uvmax)
-ax[1].legend()
+# ax[1].set_xlim(-1.1*uvmax, 1.1*uvmax)
+ax[1].set_yticks([0, -H/2, -H])
+ax[1].legend(loc="upper left")
 ax[2].plot(α*(N²*cos(θ) .+ bz), z, "k-")
+ax[2].set_xlim(-0.2, 1.3)
 if t !== nothing
     ax[1].set_title(latexstring(@sprintf("\$t = %s\$", nuPGCM.sci_notation(t))))
 end
@@ -122,6 +127,7 @@ fig, ax = plt.subplots(1, figsize=(2, 3.2))
 ax.set_ylabel(L"Vertical coordinate $z$")
 ax.set_xlabel(L"Turbulent viscosity $\nu$")
 ax.set_ylim(-H, 0)
+ax.set_yticks([0, -H/2, -H])
 ax.spines["left"].set_visible(false)
 ax.axvline(0, color="k", lw=0.5)
 ax.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
@@ -151,7 +157,7 @@ ax.axis("equal")
 ax.spines["left"].set_visible(false)
 ax.spines["bottom"].set_visible(false)
 ax.set_xticks([0, 0.5])
-ax.set_yticks([-H, 0])
+ax.set_yticks([-α, 0])
 savefig(filename)
 @info "Saved '$filename'"
 plt.close()
