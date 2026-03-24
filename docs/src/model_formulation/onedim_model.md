@@ -14,6 +14,12 @@ The governing equations for the cross-slope flow $u$, along-slope flow $v$, and 
 \end{aligned}
 ```
 where $P_x$ and $P_y$ are barotropic pressure gradients [Peterson2022,Peterson2026](@cite).
+These equations are derived by transforming the nondimensional PG equations from [before](nondimensionalization.md) into
+the slope-aligned coordinates
+```math
+x' = x\cos(\theta) + z\sin(\theta) \quad \text{and} \quad z' = -x\sin(\theta) + z\cos(\theta),
+```
+and dropping the prime notation for cleanliness.
 The boundary conditions on the flow are no slip at the bottom, no stress at the top, and a constraint on the barotropic 
 transport:
 ```math

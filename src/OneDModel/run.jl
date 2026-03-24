@@ -23,7 +23,8 @@ function solve(params; eddy_param=false, t_save)
     K, rhs_diff = build_diffusion_system(z, κ, N², θ)
     rhs_evolution = zeros(nz)
     rhs_evolution[1] = -N²*cos(θ) # N²cos(θ) + dz(b) = 0 -> dz(b) = -N²cos(θ) at z = -H
-    rhs_evolution[nz] = 0 # b = 0 at z = 0
+    # rhs_evolution[nz] = 0 # b = 0 at z = 0
+    rhs_evolution[nz] = 0 # dz(b) = 0 at z = 0
 
     # BDF1 and BDF2 LHSs
     θ1 = Δt * α^2 * ε^2 / μϱ
@@ -78,8 +79,7 @@ function solve(params; eddy_param=false, t_save)
 
         # invert
         if eddy_param
-            ν = abs.(f^2 * cos(θ)^2 ./ ( α * (N² .+ cos(θ)*differentiate(b, z)) ))
-            ν[ν .> 1e2 ] .= 1e2
+            update_ν!(ν, b, params)
             LHS_inversion = build_LHS_inversion(z, ν, params)
         end
         update_rhs_inversion!(rhs_inversion, b, params)

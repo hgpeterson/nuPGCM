@@ -68,8 +68,14 @@ function build_diffusion_system(z, κ, N², θ)
     push!(K, (1, 2, fd_z[2]))
     push!(K, (1, 3, fd_z[3]))
 
-    # z = 0: b = 0
-    push!(K, (nz, nz, 1))
+    # # z = 0: b = 0
+    # push!(K, (nz, nz, 1))
+
+    # z = 0: dz(b) = 0
+    fd_z = mkfdstencil(z[nz-2:nz], z[nz], 1)
+    push!(K, (nz, nz-2, fd_z[1]))
+    push!(K, (nz, nz-1, fd_z[2]))
+    push!(K, (nz, nz,   fd_z[3]))
 
     # Create CSC sparse matrices
     K = sparse((x->x[1]).(K), (x->x[2]).(K), (x->x[3]).(K), nz, nz)
