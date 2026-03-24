@@ -1,4 +1,4 @@
-function solve(params; eddy_param=false)
+function solve(params; eddy_param=false, t_save)
     # unpack
     f = params.f
     N² = params.N²
@@ -16,12 +16,7 @@ function solve(params; eddy_param=false)
     ν = ones(nz)
 
     # build inversion matrices
-    LHS_inversion = build_LHS_inversion(z, ν, params)
-    if eddy_param
-        # fd_z, fd_zz = make_fd_stencils(z)
-    else
-        LHS_inversion = lu(LHS_inversion)
-    end
+    LHS_inversion = lu(build_LHS_inversion(z, ν, params))
     rhs_inversion = zeros(2nz+2)
 
     # build evolution matrices
@@ -42,16 +37,16 @@ function solve(params; eddy_param=false)
     t = 0
     u = @view uvp[1:nz]
     v = @view uvp[nz+1:2nz]
-    if params.no_Px
-        Px = 0
-    else
-        Px = @view uvp[2nz+1]
-    end
-    if params.no_Py
-        Py = 0
-    else
-        Py = @view uvp[2nz+2]
-    end
+    Px = @view uvp[2nz+1]
+    Py = @view uvp[2nz+2]
+
+    # arrays of saves
+    bs  = copy(b)
+    us  = copy(u)
+    vs  = copy(v)
+    Pxs = copy(Px)
+    Pys = copy(Py)
+    ts  = copy(t)
 
     # copies for timesteps
     b_old = zeros(nz)
@@ -63,6 +58,7 @@ function solve(params; eddy_param=false)
 
     # run
     n_steps = Int64(T ÷ Δt)
+    t_last_save = t
     @showprogress for i in 1:n_steps
         # sync before update
         b_old .= b
@@ -85,16 +81,24 @@ function solve(params; eddy_param=false)
             ν = abs.(f^2 * cos(θ)^2 ./ ( α * (N² .+ cos(θ)*differentiate(b, z)) ))
             ν[ν .> 1e2 ] .= 1e2
             LHS_inversion = build_LHS_inversion(z, ν, params)
-            # LHS_inversion = build_LHS_inversion!(LHS_inversion, fd_z, fd_zz, z, ν, params)
         end
         update_rhs_inversion!(rhs_inversion, b, params)
         uvp .= LHS_inversion\rhs_inversion
-        # ldiv!(uvp, LHS_inversion, rhs_inversion)
 
         # move old -> old old
         b_old_old .= b_old
         uvp_old_old .= uvp_old
+
+        if t - t_last_save ≥ t_save
+            bs  = hcat(bs, b)
+            us  = hcat(us, u)
+            vs  = hcat(vs, v)
+            Pxs = [Pxs; Px]
+            Pys = [Pys; Py]
+            ts  = [ts; t]
+            t_last_save = t
+        end
     end
 
-    return u, v, Px, Py, b, t, z
+    return us, vs, Pxs, Pys, bs, ts
 end

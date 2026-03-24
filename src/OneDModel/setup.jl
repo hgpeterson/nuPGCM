@@ -84,8 +84,8 @@ Build matrix representation of
 Boundary conditions:
     dz(u) = dz(v) = 0 at z = 0
     u = v = 0 at z = -H
-    ∫ u dz = 0 or Px = 0 depending on params.no_Px
-    ∫ v dz = 0 or Py = 0 depending on params.no_Py
+    ∫ u dz = params.U or Px = params.Px
+    ∫ v dz = params.V or Py = params.Py
 """
 function build_LHS_inversion(z, ν, params)
     # unpack
@@ -145,28 +145,40 @@ function build_LHS_inversion(z, ν, params)
     push!(LHS, (vmap[end], vmap[end-1], fd_z[2]))
     push!(LHS, (vmap[end], vmap[end],   fd_z[3]))
 
-    # ∫ u dz = 0 or Px = 0
-    if params.no_Px
+    if !isnothing(params.Px)
+        if !isnothing(params.U)
+            throw(ArgumentError("Must set either Px or U, not both"))
+        end
+        # set Px = Px
         push!(LHS, (iPx, iPx, 1))
-    else
+    elseif !isnothing(params.U)
+        # set ∫ u dz = U
         for j in 1:nz-1
             # trapezoidal rule
             dz = z[j+1] - z[j]
             push!(LHS, (iPx, umap[j],   dz/2))
             push!(LHS, (iPx, umap[j+1], dz/2))
         end
+    else
+        throw(ArgumentError("Must set either Px or U"))
     end
 
-    # ∫ v dz = 0 or Py = 0
-    if params.no_Py
+    if !isnothing(params.Py)
+        if !isnothing(params.V)
+            throw(ArgumentError("Must set either Py or V, not both"))
+        end
+        # set Py = Py
         push!(LHS, (iPy, iPy, 1))
-    else
+    elseif !isnothing(params.V)
+        # set ∫ v dz = V
         for j in 1:nz-1
             # trapezoidal rule
             dz = z[j+1] - z[j]
             push!(LHS, (iPy, vmap[j],   dz/2))
             push!(LHS, (iPy, vmap[j+1], dz/2))
         end
+    else
+        throw(ArgumentError("Must set either Py or V"))
     end
 
     # Create CSC sparse matrix from matrix elements
@@ -175,110 +187,6 @@ function build_LHS_inversion(z, ν, params)
     return LHS
 end
 
-## This code as a correctness bug somewhere
-
-# function build_LHS_inversion!(LHS, fd_z, fd_zz, z, ν, params)
-#     # unpack
-#     α = params.α
-#     ε = params.ε
-#     θ = params.θ
-#     f = params.f
-
-#     # setup
-#     nz = length(z)
-#     i = 1 # counter for value index
-
-#     function update_nzval!(LHS, i, v)
-#         LHS.nzval[i] = v
-#         i += 1
-#         return LHS, i
-#     end
-
-#     # interior nodes
-#     for j in 2:nz-1
-#         ν_z = fd_z[j, 1]*ν[j-1] + fd_z[j, 2]*ν[j] + fd_z[j, 3]*ν[j+1]
-        
-#         # eq 1: -α²ε²sec²θ dz(ν*dz(u)) - f*v + Px = b*tan(θ)/α
-#         # term 1 = -α²ε²sec²θ [dz(ν)*dz(u) + ν*dzz(u)] 
-#         c = α^2*ε^2*sec(θ)^2
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 1] + ν[j]*fd_zz[j, 1]))
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 2] + ν[j]*fd_zz[j, 2]))
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 3] + ν[j]*fd_zz[j, 3]))
-#         # term 2 = -f*v
-#         # LHS, i = update_nzval!(LHS, i, -f)
-#         i += 1
-#         # term 3 = Px
-#         # LHS, i = update_nzval!(LHS, i, 1)
-#         i += 1
-
-#         # eq 2: -α²ε²sec²θ dz(ν*dz(v)) + f*u + Py = 0
-#         # term 1 = -α²ε²sec²θ [dz(ν)*dz(v) + ν*dzz(v)]
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 1] + ν[j]*fd_zz[j, 1]))
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 2] + ν[j]*fd_zz[j, 2]))
-#         LHS, i = update_nzval!(LHS, i, -c*(ν_z*fd_z[j, 3] + ν[j]*fd_zz[j, 3]))
-#         # term 2 = f*u
-#         # LHS, i = update_nzval!(LHS, i, f)
-#         i += 1
-#         # term 3 = Py
-#         # LHS, i = update_nzval!(LHS, i, 1)
-#         i += 1
-#     end
-
-#     # # bottom boundary conditions: u = v = 0
-#     # LHS, i = update_nzval!(LHS, i, 1)
-#     # LHS, i = update_nzval!(LHS, i, 1)
-
-#     # # surface boundary conditions: dz(u) = dz(v) = 0
-#     # fd_z = mkfdstencil(z[end-2:end], z[end], 1)
-#     # LHS, i = update_nzval!(LHS, i, fd_z[1])
-#     # LHS, i = update_nzval!(LHS, i, fd_z[2])
-#     # LHS, i = update_nzval!(LHS, i, fd_z[3])
-#     # LHS, i = update_nzval!(LHS, i, fd_z[1])
-#     # LHS, i = update_nzval!(LHS, i, fd_z[2])
-#     # LHS, i = update_nzval!(LHS, i, fd_z[3])
-
-#     # # ∫ u dz = 0 or Px = 0
-#     # if params.no_Px
-#     #     LHS, i = update_nzval!(LHS, i, 1)
-#     # else
-#     #     for j in 1:nz-1
-#     #         # trapezoidal rule
-#     #         dz = z[j+1] - z[j]
-#     #         LHS, i = update_nzval!(LHS, i, dz/2)
-#     #         LHS, i = update_nzval!(LHS, i, dz/2)
-#     #     end
-#     # end
-
-#     # # ∫ v dz = 0 or Py = 0
-#     # if params.no_Py
-#     #     push!(LHS, (iPy, iPy, 1))
-#     # else
-#     #     for j in 1:nz-1
-#     #         # trapezoidal rule
-#     #         dz = z[j+1] - z[j]
-#     #         LHS, i = update_nzval!(LHS, i, dz/2)
-#     #         LHS, i = update_nzval!(LHS, i, dz/2)
-#     #     end
-#     # end
-
-#     return LHS
-# end
-
-# function make_fd_stencils(z)
-#     nz = length(z)
-#     fd_z = zeros(nz, 3)
-#     fd_zz = zeros(nz, 3)
-#     fd_z[1, :]  = mkfdstencil(z[1:3], z[1], 1)
-#     fd_zz[1, :] = mkfdstencil(z[1:3], z[1], 2)
-#     for j in 2:nz-1
-#         fd_z[j, :]  = mkfdstencil(z[j-1:j+1], z[j], 1)
-#         fd_zz[j, :] = mkfdstencil(z[j-1:j+1], z[j], 2)
-#     end
-#     fd_z[nz, :]  = mkfdstencil(z[nz-2:nz], z[nz], 1)
-#     fd_zz[nz, :] = mkfdstencil(z[nz-2:nz], z[nz], 2)
-#     return fd_z, fd_zz
-# end
-
 """
 Update vector for RHS of inversion 
    -α²ε²dz(ν*dz(u)) - f*v*cos(θ) + Px = b*sin(θ)/α
@@ -286,5 +194,15 @@ Update vector for RHS of inversion
 """
 function update_rhs_inversion!(rhs, b, params)
     rhs[2:params.nz-1] .= b[2:params.nz-1]*sin(params.θ)/params.α
+    if !isnothing(params.Px)
+        rhs[2params.nz+1] = params.Px
+    else  # error cases should be caught above
+        rhs[2params.nz+1] = params.U
+    end
+    if !isnothing(params.Py)
+        rhs[2params.nz+2] = params.Py
+    else  # error cases should be caught above
+        rhs[2params.nz+2] = params.V
+    end
     return rhs
 end
