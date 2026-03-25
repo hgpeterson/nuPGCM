@@ -9,8 +9,8 @@ x = x′\\cos(θ) - z′\\sin(θ) \\quad \\text{and} \\quad z = x′\\sin(θ) + 
 ```
 """
 function transform_to_physical(x′, z′, θ)
-    return @. x′*cos(θ) - z′*sin(θ), 
-           @. x′*sin(θ) + z′*cos(θ)
+    return x′*cos(θ) - z′*sin(θ), 
+           x′*sin(θ) + z′*cos(θ)
 end
 
 """
@@ -24,8 +24,8 @@ x′ = x\\cos(θ) + z\\sin(θ) \\quad \\text{and} \\quad z′ = -x\\sin(θ) + z\
 ```
 """
 function transform_to_rotated(x, z, θ)
-    return @.  x*cos(θ) + z*sin(θ), 
-           @. -x*sin(θ) + z*cos(θ)
+    return  x*cos(θ) + z*sin(θ), 
+           -x*sin(θ) + z*cos(θ)
 end
 
 """

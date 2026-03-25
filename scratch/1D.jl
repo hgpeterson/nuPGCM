@@ -40,7 +40,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/2
+α = 1/64
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -53,7 +53,7 @@ nz = 2^8
 eddy_param = true
 
 z = H*OneDModel.chebyshev_nodes(nz)
-_, z_phys = OneDModel.transform_to_physical(0, z, θ)
+_, z_phys = OneDModel.transform_to_physical.(0, z, θ)
 d = α/8
 κ_B = 1e2
 κ_I = 1
@@ -67,7 +67,7 @@ t_save = T/20
 
 params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, Px=Px, U=U, Py=Py, V=V, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
 
-dirname = "1d_model/alpha_test"
+dirname = "1d_model/diapycnal"
 label = @sprintf("_control_a%02d", Int(1/α))
 if eddy_param
     dirname *= "_eddy"
@@ -79,7 +79,7 @@ end
 @info "Label = '$label'"
 
 # solve
-us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+# us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
 
 function make_plots(; label="")
     z = params.z # ???
@@ -188,4 +188,156 @@ function make_plots(; label="")
     plt.close()
 end
 
-make_plots(; label)
+# make_plots(; label)
+
+"""
+    calculate_diapycnal_transport()
+
+Calculate -∫ σϖ dξ over an isopycnal.
+"""
+function calculate_diapycnal_transport()
+    # physical coords
+    z = params.z # ???
+    nx = 2*nz
+    x′ = repeat(range(0, 1, nx), 1, nz)
+    z′ = repeat(z, 1, nx)'
+    x = similar(x′)
+    z = similar(z′)
+    for i in 1:nx, j in 1:nz
+        x[i, j], z[i, j] = OneDModel.transform_to_physical(x′[i, j], z′[i, j], θ)
+    end
+
+    # mixing
+    d = α/8
+    κ_B = 1e2
+    κ_I = 1
+    hab = [z[i, j] - z[i, 1] for i in 1:nx, j in 1:nz]
+    κ = @. κ_I + (κ_B - κ_I)*exp(-hab/d)
+
+    # flat isopycnals [analytical solution: (κ_B - κ_I)*cot(θ)]
+    b = N²*z
+    b₀ = 0
+    j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
+    x_iso = [x[i, j_iso[i]] for i=1:nx]
+    z_iso = [z[i, j_iso[i]] for i=1:nx]
+
+    fig, ax = subplots(1)
+    levels = range(minimum(b), maximum(b), 20)
+    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.plot(x[:, 1], z[:, 1]/α, "k-")
+    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
+    ax.plot(x_iso, z_iso/α, "C1--", lw=0.5)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([-1, 0])
+    savefig(joinpath(@__DIR__, "$dirname/isopycnal_flat.png"))
+    println(joinpath(@__DIR__, "$dirname/isopycnal_flat.png"))
+    plt.close()
+
+    σϖ = zeros(nx, nz)
+    for i in 1:nx
+        # σϖ = ∂z(κ N²) / N² = ∂z(κ)
+        σϖ[i, :] = differentiate(κ[i, :], z[i, :])
+    end
+
+    fig, ax = subplots(1)
+    vmax = maximum(abs.(σϖ))
+    img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
+    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", shrink=0.5)
+    levels = range(minimum(b), maximum(b), 20)
+    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.plot(x[:, 1], z[:, 1]/α, "k-")
+    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C3", linewidths=1.0, alpha=0.5)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([-1, 0])
+    savefig(joinpath(@__DIR__, "$dirname/diapycnal_flat.png"))
+    println(joinpath(@__DIR__, "$dirname/diapycnal_flat.png"))
+    plt.close()
+
+    σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
+    T_flat = -nuPGCM.trapz(σϖ_iso, x_iso)
+    T_flat_analytical = (κ_B - κ_I)*cot(θ)
+    @printf("T_flat            = %.3e\n", T_flat)
+    @printf("T_flat_analytical = %.3e\n", T_flat_analytical)
+
+    fig, ax = subplots(1)
+    ax.fill_between(x_iso, σϖ_iso, 0)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
+    ax.set_title(L"$b_0 = 0$")
+    savefig(joinpath(@__DIR__, "$dirname/integrand_flat.png"))
+    println(joinpath(@__DIR__, "$dirname/integrand_flat.png"))
+    plt.close()
+
+    # isopycnals from solution
+    b = N²*z + repeat(bs[:, end], 1, nx)'
+    b₀ = 0
+    j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
+    mask = findall(i -> b₀ ≥ b[i, 1], 1:nx)
+    x_iso = [x[i, j_iso[i]] for i=1:nx]
+    z_iso = [z[i, j_iso[i]] for i=1:nx]
+
+    fig, ax = subplots(1)
+    levels = range(minimum(b), maximum(b), 20)
+    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.plot(x[:, 1], z[:, 1]/α, "k-")
+    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
+    ax.plot(x_iso[mask], z_iso[mask]/α, "C1-", lw=0.5)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([-1, 0])
+    savefig(joinpath(@__DIR__, "$dirname/isopycnal_soln.png"))
+    println(joinpath(@__DIR__, "$dirname/isopycnal_soln.png"))
+    plt.close()
+
+    σϖ = zeros(nx, nz)
+    for i in 1:nx
+        # σϖ = ∂z(κ ∂z(b)) / ∂z(b)
+        bz = differentiate(b[i, :], z[i, :])
+        σϖ[i, :] = differentiate(κ[i, :] .* bz, z[i, :]) ./ bz
+    end
+
+    fig, ax = subplots(1)
+    # vmax = maximum(abs.(σϖ))
+    vmax = 1e4
+    img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
+    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", shrink=0.5)
+    levels = range(minimum(b), maximum(b), 20)
+    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.plot(x[:, 1], z[:, 1]/α, "k-")
+    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C3", linewidths=1.0, alpha=0.5)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([-1, 0])
+    savefig(joinpath(@__DIR__, "$dirname/diapycnal_soln.png"))
+    println(joinpath(@__DIR__, "$dirname/diapycnal_soln.png"))
+    plt.close()
+
+    σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
+    T_soln = -nuPGCM.trapz(σϖ_iso, x_iso)
+    @printf("T_soln            = %.3e\n", T_soln)
+
+    fig, ax = subplots(1)
+    ax.fill_between(x_iso, σϖ_iso, 0)
+    ax.set_xlabel(L"Horizontal coordinate $x$")
+    ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
+    ax.set_title(L"$b_0 = 0$")
+    savefig(joinpath(@__DIR__, "$dirname/integrand_soln.png"))
+    println(joinpath(@__DIR__, "$dirname/integrand_soln.png"))
+    plt.close()
+end
+
+calculate_diapycnal_transport()
