@@ -16,7 +16,7 @@
 *.log
 *.pyc
 *.npz
+*.nsys-rep
 sims/
 docs/build/
 docs/src/literated/
-postprocess/venv/
