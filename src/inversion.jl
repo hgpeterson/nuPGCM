@@ -57,6 +57,7 @@ function InversionToolkit(arch::AbstractArchitecture,
         @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
         @time "lu(A_inversion)" P = lu(A)
     end
+    # P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
 
     # move to arch
     A = on_architecture(arch, A)

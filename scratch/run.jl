@@ -12,7 +12,7 @@ ENV["JULIA_DEBUG"] = nothing
 set_out_dir!(joinpath(@__DIR__, "../sims/sim024"))
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 
