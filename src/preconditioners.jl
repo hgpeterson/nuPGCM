@@ -62,23 +62,20 @@ end
 function BlockDiagonalPreconditioner(arch::AbstractArchitecture, params::Parameters, fe_data::FEData, A_inversion)
     # unpack
     dΩ = fe_data.mesh.dΩ
-    P_trial = fe_data.spaces.X_trial[4]
-    P_test = fe_data.spaces.X_test[4]
+    P_trial = fe_data.spaces.X_trial[2]
+    P_test = fe_data.spaces.X_test[2]
     ε = params.ε
     α = params.α
     p_p = fe_data.dofs.p_p
     nu = fe_data.dofs.nu
-    nv = fe_data.dofs.nv
-    nw = fe_data.dofs.nw
-    N = nu + nv + nw
     np = fe_data.dofs.np
 
     # blocks
-    A = A_inversion[1:N, 1:N]
-    nu = fe_data.dofs.nu
-    nv = fe_data.dofs.nv
-    A[1:nu, nu+1:nu+nv] .= 0  # remove Coriolis terms
-    A[nu+1:nu+nv, 1:nu] .= 0  # remove Coriolis terms
+    A = A_inversion[1:nu, 1:nu]
+    # nu = fe_data.dofs.nu
+    # nv = fe_data.dofs.nv
+    # A[1:nu, nu+1:nu+nv] .= 0  # remove Coriolis terms
+    # A[nu+1:nu+nv, 1:nu] .= 0  # remove Coriolis terms
     dropzeros!(A)
     P⁻¹ = P_block_setup(arch, A)
     P_block = Block(P⁻¹, 1:N)

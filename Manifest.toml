@@ -2,7 +2,7 @@
 
 julia_version = "1.10.2"
 manifest_format = "2.0"
-project_hash = "27b36c03ae26101bbd8745c788d2aaf38568e09e"
+project_hash = "ab5e9bd4d6f830c4534a0dbe5cacd8465189dcf3"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -690,6 +690,22 @@ git-tree-sha1 = "267dad6b4b7b5d529c76d40ff48d33f7e94cb834"
 pinned = true
 uuid = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 version = "0.9.6"
+
+[[deps.KrylovPreconditioners]]
+deps = ["Adapt", "KernelAbstractions", "LightGraphs", "LinearAlgebra", "Metis", "SparseArrays"]
+git-tree-sha1 = "517b267073c44f494357507e37650d8516adf100"
+uuid = "45d422c2-293f-44ce-8315-2cb988662dec"
+version = "0.3.1"
+
+    [deps.KrylovPreconditioners.extensions]
+    KrylovPreconditionersAMDGPUExt = "AMDGPU"
+    KrylovPreconditionersCUDAExt = "CUDA"
+    KrylovPreconditionersoneAPIExt = "oneAPI"
+
+    [deps.KrylovPreconditioners.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Preferences", "Printf", "Requires", "Unicode"]
