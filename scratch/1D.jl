@@ -40,7 +40,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/64
+α = 1/8
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -53,7 +53,7 @@ nz = 2^8
 eddy_param = true
 
 z = H*OneDModel.chebyshev_nodes(nz)
-_, z_phys = OneDModel.transform_to_physical.(0, z, θ)
+z_phys = last.(OneDModel.transform_to_physical.(0, z, θ))
 d = α/8
 κ_B = 1e2
 κ_I = 1
@@ -80,6 +80,11 @@ end
 
 # solve
 # us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
+# @save data_file us vs Pxs Pys bs ts
+# @info "Saved '$data_file'"
+@load data_file us vs Pxs Pys bs ts
+@info "Loaded '$data_file'"
 
 function make_plots(; label="")
     z = params.z # ???
@@ -233,8 +238,9 @@ function calculate_diapycnal_transport()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([0, 1])
     ax.set_yticks([-1, 0])
-    savefig(joinpath(@__DIR__, "$dirname/isopycnal_flat.png"))
-    println(joinpath(@__DIR__, "$dirname/isopycnal_flat.png"))
+    filename = joinpath(@__DIR__, "$dirname/isopycnal_flat.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 
     σϖ = zeros(nx, nz)
@@ -257,8 +263,9 @@ function calculate_diapycnal_transport()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([0, 1])
     ax.set_yticks([-1, 0])
-    savefig(joinpath(@__DIR__, "$dirname/diapycnal_flat.png"))
-    println(joinpath(@__DIR__, "$dirname/diapycnal_flat.png"))
+    filename = joinpath(@__DIR__, "$dirname/diapycnal_flat.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 
     σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
@@ -272,8 +279,9 @@ function calculate_diapycnal_transport()
     ax.set_xlabel(L"Horizontal coordinate $x$")
     ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
     ax.set_title(L"$b_0 = 0$")
-    savefig(joinpath(@__DIR__, "$dirname/integrand_flat.png"))
-    println(joinpath(@__DIR__, "$dirname/integrand_flat.png"))
+    filename = joinpath(@__DIR__, "$dirname/integrand_flat.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 
     # isopycnals from solution
@@ -296,8 +304,9 @@ function calculate_diapycnal_transport()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([0, 1])
     ax.set_yticks([-1, 0])
-    savefig(joinpath(@__DIR__, "$dirname/isopycnal_soln.png"))
-    println(joinpath(@__DIR__, "$dirname/isopycnal_soln.png"))
+    filename = joinpath(@__DIR__, "$dirname/isopycnal_soln.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 
     σϖ = zeros(nx, nz)
@@ -311,7 +320,7 @@ function calculate_diapycnal_transport()
     # vmax = maximum(abs.(σϖ))
     vmax = 1e4
     img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
-    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", shrink=0.5)
+    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", extend="both", shrink=0.5)
     levels = range(minimum(b), maximum(b), 20)
     ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
     ax.plot(x[:, 1], z[:, 1]/α, "k-")
@@ -322,8 +331,9 @@ function calculate_diapycnal_transport()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([0, 1])
     ax.set_yticks([-1, 0])
-    savefig(joinpath(@__DIR__, "$dirname/diapycnal_soln.png"))
-    println(joinpath(@__DIR__, "$dirname/diapycnal_soln.png"))
+    filename = joinpath(@__DIR__, "$dirname/diapycnal_soln.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 
     σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
@@ -335,8 +345,9 @@ function calculate_diapycnal_transport()
     ax.set_xlabel(L"Horizontal coordinate $x$")
     ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
     ax.set_title(L"$b_0 = 0$")
-    savefig(joinpath(@__DIR__, "$dirname/integrand_soln.png"))
-    println(joinpath(@__DIR__, "$dirname/integrand_soln.png"))
+    filename = joinpath(@__DIR__, "$dirname/integrand_soln.png")
+    savefig(filename)
+    @info "Saved '$filename'"
     plt.close()
 end
 
