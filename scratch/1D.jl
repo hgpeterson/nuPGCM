@@ -78,13 +78,13 @@ end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
 @info "Label = '$label'"
 
-# solve
-# us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
-data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-# @save data_file us vs Pxs Pys bs ts
-# @info "Saved '$data_file'"
-@load data_file us vs Pxs Pys bs ts
-@info "Loaded '$data_file'"
+# # solve
+# # us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+# data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
+# # @save data_file us vs Pxs Pys bs ts
+# # @info "Saved '$data_file'"
+# @load data_file us vs Pxs Pys bs ts
+# @info "Loaded '$data_file'"
 
 function make_plots(; label="")
     z = params.z # ???
@@ -92,8 +92,8 @@ function make_plots(; label="")
     # BL thickness
     if eddy_param
         bz = differentiate(bs[:, end], z)
-        ν = abs.(f^2 * cos(θ)^2 ./ ( α * (N² .+ cos(θ)*bz) ))
-        ν[ν .> 1e2] .= 1e2
+        ν = zeros(nz)
+        OneDModel.update_ν!(ν, bs[:, end], params)
         ν_B = ν[1]
     else
         ν_B = 1
@@ -285,25 +285,38 @@ function calculate_diapycnal_transport()
     plt.close()
 
     # isopycnals from solution
-    b = N²*z + repeat(bs[:, end], 1, nx)'
+    # b = N²*z + repeat(bs[:, end], 1, nx)'
+    h = α/4
+    # b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom?
+    # b = @. N²*z + h*N²*exp(-hab/h)
+    # b = @. N²*x′*sin(θ) + N²*z′*cos(θ) + h*N²*cos(θ)*exp(-(z′ + α)/h)
+    b = @. N²*z + h*N²*cos(θ)*exp(-(z′ + α)/h)
     b₀ = 0
     j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
-    mask = findall(i -> b₀ ≥ b[i, 1], 1:nx)
-    x_iso = [x[i, j_iso[i]] for i=1:nx]
-    z_iso = [z[i, j_iso[i]] for i=1:nx]
+    i_mask = findall(i -> b₀ ≥ b[i, 1], 1:nx)
+    x_iso = [x[i, j_iso[i]] for i in i_mask]
+    z_iso = [z[i, j_iso[i]] for i in i_mask]
 
     fig, ax = subplots(1)
     levels = range(minimum(b), maximum(b), 20)
-    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    ax.plot(x[:, 1], z[:, 1]/α, "k-")
-    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
-    ax.plot(x_iso[mask], z_iso[mask]/α, "C1-", lw=0.5)
+    # ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.contour(x, z, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    # ax.plot(x[:, 1], z[:, 1]/α, "k-")
+    ax.plot(x[:, 1], z[:, 1], "k-", lw=0.1)
+    # ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
+    ax.contour(x, z, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
+    # ax.plot(x_iso, z_iso/α, "C1-", lw=0.5)
+    ax.plot(x_iso, z_iso, "C1-", lw=0.5)
     ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    # ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.set_ylabel(L"Vertical coordinate $z$")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    ax.set_xticks([0, 1])
-    ax.set_yticks([-1, 0])
+    # ax.set_xticks([0, 1])
+    # ax.set_yticks([-1, 0])
+    ax.axis("equal")
+    # ax.set_xlim(0.8, 1.0)
+    # ax.set_ylim(-0.1, 0.1)
     filename = joinpath(@__DIR__, "$dirname/isopycnal_soln.png")
     savefig(filename)
     @info "Saved '$filename'"
@@ -336,7 +349,7 @@ function calculate_diapycnal_transport()
     @info "Saved '$filename'"
     plt.close()
 
-    σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
+    σϖ_iso = [σϖ[i, j_iso[i]] for i in i_mask]
     T_soln = -nuPGCM.trapz(σϖ_iso, x_iso)
     @printf("T_soln            = %.3e\n", T_soln)
 
