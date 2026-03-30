@@ -11,20 +11,6 @@ plt.close("all")
 
 # parameters
 
-# μϱ = 1
-# α = 1/4
-# θ = atan(2α)
-# ε = 0.1
-# N² = 1/α
-# no_Px = false
-# no_Py = false
-# H = α
-# f = 1
-# nz = 2^8
-# T = μϱ/ε^2/1e2
-# Δt = 1e-4*T
-# eddy_param = false
-
 Ω = 2π/86400  # s⁻¹
 a = 6.371e6  # m
 β = 2Ω/a  # m⁻¹ s⁻¹
@@ -40,7 +26,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/8
+α = 1/64
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -53,11 +39,14 @@ nz = 2^8
 eddy_param = true
 
 z = H*OneDModel.chebyshev_nodes(nz)
-z_phys = last.(OneDModel.transform_to_physical.(0, z, θ))
+xz_phys = OneDModel.transform_to_physical.(0, z, θ)
+x_phys = first.(xz_phys)
+z_phys = last.(xz_phys)
+z_bot = z_phys[1] .+ α*x_phys
 d = α/8
 κ_B = 1e2
 κ_I = 1
-κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_phys[1])/d)
+κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/d)
 
 # T = d^2 / (κ_B*α^2*ε^2/μϱ)
 T = H^2 / (κ_B*α^2*ε^2/μϱ)
@@ -67,7 +56,7 @@ t_save = T/20
 
 params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, Px=Px, U=U, Py=Py, V=V, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
 
-dirname = "1d_model/diapycnal"
+dirname = "1d_model/nu_test"
 label = @sprintf("_control_a%02d", Int(1/α))
 if eddy_param
     dirname *= "_eddy"
@@ -78,11 +67,11 @@ end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
 @info "Label = '$label'"
 
-# # solve
-# # us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
-# data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-# # @save data_file us vs Pxs Pys bs ts
-# # @info "Saved '$data_file'"
+# solve
+us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
+@save data_file us vs Pxs Pys bs ts
+@info "Saved '$data_file'"
 # @load data_file us vs Pxs Pys bs ts
 # @info "Loaded '$data_file'"
 
@@ -110,9 +99,9 @@ function make_plots(; label="")
     Py = Pys[end]
     filename = joinpath(@__DIR__, "$dirname/profiles$label.png")
     fig, ax = plt.subplots(1, 2, figsize=(4, 3.2))
-    ax[1].set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$ (\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax[1].set_ylabel(latexstring(@sprintf("Vertical coordinate \$\\acute{z}/\\alpha\$ (\$\\alpha = 1/%d\$)", Int(1/α))))
     ax[1].set_xlabel("Flow")
-    ax[2].set_xlabel(L"Stratification $\alpha (N^2 \cos \theta + \partial_z b)$")
+    ax[2].set_xlabel(L"Stratification $\alpha (N^2 \cos \theta + \partial_{\acute z} b')$")
     for a ∈ ax
         a.set_ylim(-H, 0)
         a.spines["left"].set_visible(false)
@@ -121,8 +110,8 @@ function make_plots(; label="")
         a.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
     end
     ax[2].set_yticks([])
-    ax[1].plot(u,       z, "C0-", label=L"$u$")
-    ax[1].plot(v,       z, "C1-", label=L"$v$")
+    ax[1].plot(u,       z, "C0-", label=L"$\acute u$")
+    ax[1].plot(v,       z, "C1-", label=L"$\acute v$")
     # ax[1].plot(+Px/f/cos(θ) .- b/α*sin(θ)/f/cos(θ), z, "C8--", label=L"$P_x/f' - \alpha^{-1} b \sin\theta / f'$")
     ax[1].axvline(-Py/f/cos(θ), c="C0", ls="--", lw=0.5, label=L"$-P_y/f'$")
     ax[1].axvline(+Px/f/cos(θ), c="C1", ls="--", lw=0.5, label=L"$P_x/f'$")
@@ -147,13 +136,14 @@ function make_plots(; label="")
     # plot ν
     filename = joinpath(@__DIR__, "$dirname/nu$label.png")
     fig, ax = plt.subplots(1, figsize=(2, 3.2))
-    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$ (\$\\alpha = 1/%d\$)", Int(1/α))))
+    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$\\acute{z}/\\alpha\$ (\$\\alpha = 1/%d\$)", Int(1/α))))
     ax.set_xlabel(L"Turbulent viscosity $\nu$")
+    ax.set_xlim(0, 10)
     ax.set_ylim(-H, 0)
     ax.set_yticks([0, -H/2, -H])
     ax.set_yticklabels([L"0", L"-0.5", L"-1.0"])
-    ax.spines["left"].set_visible(false)
-    ax.axvline(0, color="k", lw=0.5)
+    # ax.spines["left"].set_visible(false)
+    # ax.axvline(0, color="k", lw=0.5)
     ax.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
     ν = ones(nz) # allocate
     for i in 2:size(bs, 2)
@@ -166,11 +156,35 @@ function make_plots(; label="")
     @info "Saved '$filename'"
     plt.close()
 
+    # # plot bz (physical)
+    # filename = joinpath(@__DIR__, "$dirname/bz$label.png")
+    # fig, ax = plt.subplots(1, figsize=(2, 3.2))
+    # ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$\\acute{z}/\\alpha\$ (\$\\alpha = 1/%d\$)", Int(1/α))))
+    # ax.set_xlabel(L"Stratification $\alpha ( N^2 + \partial_{\acute z} b' \cos\theta)$")
+    # # ax.set_xlim(0, 2)
+    # ax.set_ylim(-H, 0)
+    # ax.set_yticks([0, -H/2, -H])
+    # ax.set_yticklabels([L"0", L"-0.5", L"-1.0"])
+    # ax.spines["left"].set_visible(false)
+    # ax.axvline(0, color="k", lw=0.5)
+    # ax.ticklabel_format(axis="x", style="sci", scilimits=(-2, 2), useMathText=true)
+    # ν = ones(nz) # allocate
+    # for i in 2:size(bs, 2)
+    #     alpha = 0.1 + 0.9*1.62^(i - size(bs, 2))
+    #     bz = α * ( N² .+ differentiate(bs[:, i], z)*cos(θ) )
+    #     # bz = α^-1 * ( N² .+ differentiate(bs[:, i], z)*cos(θ) )
+    #     ax.plot(bz, z, "k-", alpha=alpha)
+    # end
+    # ax.set_title(latexstring(@sprintf("\$t = %s\$", nuPGCM.sci_notation(ts[end]))))
+    # savefig(filename)
+    # @info "Saved '$filename'"
+    # plt.close()
+
     # plot u, b over slope
     filename = joinpath(@__DIR__, "$dirname/slope$label.png")
-    x′ = repeat(range(0, 1, nz), 1, nz)
-    z′ = repeat(z, 1, nz)'
-    x, z = OneDModel.transform_to_physical(x′, z′, θ)
+    x́ = repeat(range(0, 1, nz), 1, nz)
+    ź = repeat(z, 1, nz)'
+    x, z = OneDModel.transform_to_physical(x́, ź, θ)
     b = bs[:, end]
     bb = N²*z + repeat(b, 1, nz)'
     uu = repeat(u, 1, nz)'*cos(θ)
@@ -193,7 +207,7 @@ function make_plots(; label="")
     plt.close()
 end
 
-# make_plots(; label)
+make_plots(; label)
 
 """
     calculate_diapycnal_transport()
@@ -203,20 +217,21 @@ Calculate -∫ σϖ dξ over an isopycnal.
 function calculate_diapycnal_transport()
     # physical coords
     z = params.z # ???
-    nx = 2*nz
-    x′ = repeat(range(0, 1, nx), 1, nz)
-    z′ = repeat(z, 1, nx)'
-    x = similar(x′)
-    z = similar(z′)
+    nx = 10*nz
+    x́ = repeat(range(0, 1, nx), 1, nz)
+    ź = repeat(z, 1, nx)'
+    x = similar(x́)
+    z = similar(ź)
     for i in 1:nx, j in 1:nz
-        x[i, j], z[i, j] = OneDModel.transform_to_physical(x′[i, j], z′[i, j], θ)
+        x[i, j], z[i, j] = OneDModel.transform_to_physical(x́[i, j], ź[i, j], θ)
     end
 
     # mixing
     d = α/8
     κ_B = 1e2
     κ_I = 1
-    hab = [z[i, j] - z[i, 1] for i in 1:nx, j in 1:nz]
+    z_bot = z[1, 1] .+ α*(x .- x[1, 1])
+    hab = z - z_bot
     κ = @. κ_I + (κ_B - κ_I)*exp(-hab/d)
 
     # flat isopycnals [analytical solution: (κ_B - κ_I)*cot(θ)]
@@ -286,14 +301,11 @@ function calculate_diapycnal_transport()
 
     # isopycnals from solution
     # b = N²*z + repeat(bs[:, end], 1, nx)'
-    h = α/4
-    # b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom?
-    # b = @. N²*z + h*N²*exp(-hab/h)
-    # b = @. N²*x′*sin(θ) + N²*z′*cos(θ) + h*N²*cos(θ)*exp(-(z′ + α)/h)
-    b = @. N²*z + h*N²*cos(θ)*exp(-(z′ + α)/h)
+    h = α/8
+    b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom?
     b₀ = 0
     j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
-    i_mask = findall(i -> b₀ ≥ b[i, 1], 1:nx)
+    i_mask = findall(i -> j_iso[i] > 1, 1:nx)
     x_iso = [x[i, j_iso[i]] for i in i_mask]
     z_iso = [z[i, j_iso[i]] for i in i_mask]
 
@@ -364,4 +376,4 @@ function calculate_diapycnal_transport()
     plt.close()
 end
 
-calculate_diapycnal_transport()
+# calculate_diapycnal_transport()
