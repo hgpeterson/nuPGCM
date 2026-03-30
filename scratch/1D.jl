@@ -67,13 +67,13 @@ end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
 @info "Label = '$label'"
 
-# solve
-us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
-data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-@save data_file us vs Pxs Pys bs ts
-@info "Saved '$data_file'"
-# @load data_file us vs Pxs Pys bs ts
-# @info "Loaded '$data_file'"
+# # solve
+# us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+# data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
+# @save data_file us vs Pxs Pys bs ts
+# @info "Saved '$data_file'"
+# # @load data_file us vs Pxs Pys bs ts
+# # @info "Loaded '$data_file'"
 
 function make_plots(; label="")
     z = params.z # ???
@@ -207,7 +207,7 @@ function make_plots(; label="")
     plt.close()
 end
 
-make_plots(; label)
+# make_plots(; label)
 
 """
     calculate_diapycnal_transport()
@@ -302,7 +302,7 @@ function calculate_diapycnal_transport()
     # isopycnals from solution
     # b = N²*z + repeat(bs[:, end], 1, nx)'
     h = α/8
-    b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom?
+    b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom
     b₀ = 0
     j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
     i_mask = findall(i -> j_iso[i] > 1, 1:nx)
@@ -377,3 +377,87 @@ function calculate_diapycnal_transport()
 end
 
 # calculate_diapycnal_transport()
+
+function diapycnal_transport_flat_iso()
+    x = -exp.(range(10, -10, length=2^10))
+    x = [x; 0]
+    @printf("        x_max = %.2f\n", maximum(x))
+    @printf("        x_min = %.2f\n", minimum(x))
+    @printf("    length(x) = %d\n", length(x))
+    println("             ---")
+    d = α/8
+    κ_B = 1e2
+    κ_I = 1
+    σϖ = @. -1/d * (κ_B - κ_I) * exp(-(0 - α*x)/d)
+    T = -nuPGCM.trapz(σϖ, x)
+    Ta = (κ_B - κ_I) / α
+    @printf("            T = %.8e\n", T)
+    @printf("           Ta = %.8e\n", Ta)
+    @printf("     |T - Ta| = %.8e\n", abs(T - Ta))
+    @printf("|T - Ta|/|Ta| = %.8e\n", abs(T - Ta)/abs(Ta))
+end
+
+# diapycnal_transport_flat_iso()
+
+using Roots 
+
+function diapycnal_transport_b_exp()
+    h = α/4
+    b(x, z) = N²*z + h*N²*cos(θ)^2*exp(-(z - α*x)/h)
+    zb(x) = find_zero(z -> b(x, z), 0)  # guess z = 0
+    x_max = -h * cos(θ)^2 / α
+
+    x = x_max .- exp.(range(10, -100, length=2^12))
+    # x = [x; x_max]
+    @printf("        x_max = %.2f\n", maximum(x))
+    @printf("        x_min = %.2f\n", minimum(x))
+    @printf("    length(x) = %d\n", length(x))
+    println("             ---")
+    
+    filename = joinpath(@__DIR__, "$dirname/zb.png")
+    fig, ax = plt.subplots(1)
+    xp = range(-1, 0, length=2^8)
+    zp = range(-0.05, 0.05, length=2^8)
+    ax.contour(xp, zp, [zp[i] > α*xp[j] ? b(xp[j], zp[i]) : NaN for i in eachindex(zp), j in eachindex(xp)])
+    ax.plot(x, zb.(x), "r--")
+    ax.plot(xp, α*xp, "k-")
+    ax.plot([x_max], α*[x_max], "bo")
+    ax.set_xlim(-1, 0)
+    savefig(filename)
+    @info "Saved '$filename'"
+    plt.close()
+
+    b_z = @. N² - N²*cos(θ)^2*exp(-(zb(x) - α*x)/h)
+    b_zz = @. 1/h * N²*cos(θ)^2 * exp(-(zb(x) - α*x)/h)
+
+    d = α/8
+    κ_B = 1e2
+    κ_I = 1
+    κ = @. κ_I + (κ_B - κ_I) * exp(-(zb(x) - α*x)/d)
+    κ_z = @. -1/d * (κ_B - κ_I) * exp(-(zb(x) - α*x)/d)
+
+    σϖ = @. 1/b_z * (κ_z * b_z + κ * b_zz )
+    T = -nuPGCM.trapz(σϖ, x)
+    @printf("T = %.8e\n", T)
+
+    filename = joinpath(@__DIR__, "$dirname/sigmavarpi.png")
+    fig, ax = plt.subplots(1)
+    ax.fill_between(x, -σϖ, label=L"b' \sim \exp")
+    # ax.plot(x[end], σϖ[end], "C0.", ms=1)
+    σϖ_flat = @. -1/d * (κ_B - κ_I) * exp(-(0 - α*x)/d)
+    ax.fill_between(x, -σϖ_flat, facecolor="C2", alpha=0.75, label=L"b' = 0")
+    ax.set_xlim(x_max - 2, x_max + 0.02)
+    # ax.set_xlim(-1, x_max+0.1)
+    ax.legend()
+    # ax.set_xscale("log")
+    # ax.set_xlim(-x_max-0.01, 2)
+    ax.set_yscale("symlog")
+    # ax.set_yticks([-maximum(σϖ), 0, maximum(σϖ)])
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"-\sigma\varpi")
+    savefig(filename)
+    @info "Saved '$filename'"
+    plt.close()
+end
+
+diapycnal_transport_b_exp()
