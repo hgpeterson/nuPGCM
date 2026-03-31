@@ -26,7 +26,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/64
+α = 1/8
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -379,10 +379,11 @@ end
 # calculate_diapycnal_transport()
 
 function diapycnal_transport_flat_iso()
-    x = -exp.(range(10, -10, length=2^10))
+    x = -exp.(range(log(4), -10, length=2^11))
     x = [x; 0]
-    @printf("        x_max = %.2f\n", maximum(x))
-    @printf("        x_min = %.2f\n", minimum(x))
+    # x = range(-4, 0, length=2^12)
+    @printf("        x_max = %.3e\n", maximum(x))
+    @printf("        x_min = %.3e\n", minimum(x))
     @printf("    length(x) = %d\n", length(x))
     println("             ---")
     d = α/8
@@ -395,34 +396,48 @@ function diapycnal_transport_flat_iso()
     @printf("           Ta = %.8e\n", Ta)
     @printf("     |T - Ta| = %.8e\n", abs(T - Ta))
     @printf("|T - Ta|/|Ta| = %.8e\n", abs(T - Ta)/abs(Ta))
+
+    # α = 1/64
+    # d = α/8
+    # κ_B = 1e2
+    # κ_I = 1
+    # result: 6.33603267e+03
 end
 
 # diapycnal_transport_flat_iso()
 
 using Roots 
 
-function diapycnal_transport_b_exp()
-    h = α/4
+function diapycnal_transport_b_exp(; h)
     b(x, z) = N²*z + h*N²*cos(θ)^2*exp(-(z - α*x)/h)
     zb(x) = find_zero(z -> b(x, z), 0)  # guess z = 0
     x_max = -h * cos(θ)^2 / α
 
-    x = x_max .- exp.(range(10, -100, length=2^12))
-    # x = [x; x_max]
-    @printf("        x_max = %.2f\n", maximum(x))
-    @printf("        x_min = %.2f\n", minimum(x))
+    # x = x_max .- exp.(range(10, -100, length=2^12))
+    # x = x_max .- exp.(range(10, -200, length=2^10))
+    x = x_max .- exp.(range(10, -100, length=2^10))
+    x = [x; x_max]
+    @printf("        x_max = %.3e\n", maximum(x))
+    @printf("        x_min = %.3e\n", minimum(x))
     @printf("    length(x) = %d\n", length(x))
     println("             ---")
     
     filename = joinpath(@__DIR__, "$dirname/zb.png")
     fig, ax = plt.subplots(1)
-    xp = range(-1, 0, length=2^8)
-    zp = range(-0.05, 0.05, length=2^8)
-    ax.contour(xp, zp, [zp[i] > α*xp[j] ? b(xp[j], zp[i]) : NaN for i in eachindex(zp), j in eachindex(xp)])
-    ax.plot(x, zb.(x), "r--")
-    ax.plot(xp, α*xp, "k-")
-    ax.plot([x_max], α*[x_max], "bo")
-    ax.set_xlim(-1, 0)
+    xL = -8h/α
+    xp = range(xL, 0, length=2^8)
+    zp = range(xL*α, -xL*α, length=2^8)
+    ax.contour(xp, zp, [zp[i] > α*xp[j] ? b(xp[j], zp[i]) : NaN for i in eachindex(zp), j in eachindex(xp)],
+        colors="k", alpha=1.0, linewidths=1.0, linestyles="-")
+    ax.spines["left"].set_visible(false)
+    ax.spines["bottom"].set_visible(false)
+    # ax.plot(x, zb.(x), "w--", lw=0.5)
+    ax.plot(x, zb.(x), "C3.", ms=3)
+    ax.fill_between(xp, α*xp, xL*α*ones(2^8), facecolor="k", alpha=0.2)
+    ax.plot([x_max], α*[x_max], "bo", ms=1)
+    ax.set_xlim(xL, 0)
+    ax.set_xlabel(L"x")
+    ax.set_ylabel(L"z")
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
@@ -436,28 +451,40 @@ function diapycnal_transport_b_exp()
     κ = @. κ_I + (κ_B - κ_I) * exp(-(zb(x) - α*x)/d)
     κ_z = @. -1/d * (κ_B - κ_I) * exp(-(zb(x) - α*x)/d)
 
-    σϖ = @. 1/b_z * (κ_z * b_z + κ * b_zz )
+    σϖ = @. κ_z + κ*b_zz/b_z
     T = -nuPGCM.trapz(σϖ, x)
     @printf("T = %.8e\n", T)
 
     filename = joinpath(@__DIR__, "$dirname/sigmavarpi.png")
     fig, ax = plt.subplots(1)
-    ax.fill_between(x, -σϖ, label=L"b' \sim \exp")
-    # ax.plot(x[end], σϖ[end], "C0.", ms=1)
-    σϖ_flat = @. -1/d * (κ_B - κ_I) * exp(-(0 - α*x)/d)
-    ax.fill_between(x, -σϖ_flat, facecolor="C2", alpha=0.75, label=L"b' = 0")
-    ax.set_xlim(x_max - 2, x_max + 0.02)
-    # ax.set_xlim(-1, x_max+0.1)
-    ax.legend()
-    # ax.set_xscale("log")
-    # ax.set_xlim(-x_max-0.01, 2)
+    x_flat = x .- x_max
+    σϖ_flat = @. -1/d * (κ_B - κ_I) * exp(-(0 - α*x_flat)/d)
+    # ax.fill_between(x_flat, -σϖ_flat, facecolor="C2", alpha=0.7, label=L"b' = 0")
+    ax.fill_between(x,      -σϖ,      facecolor="C0", alpha=0.7, label=L"b' \sim \exp")
+    ax.plot(x, -κ_z,          "C3", lw=0.7, label=L"-\kappa_z")
+    ax.plot(x, -κ.*b_zz./b_z, "C4", lw=0.7, label=L"-\kappa b_{zz} / b_z")
+    ax.plot(x, κ, lw=0.7, label=L"\kappa")
+    ax.plot(x, b_zz, lw=0.7, label=L"b_{zz}")
+    ax.plot(x, 1.0./b_z, lw=0.7, label=L"1 / b_z")
+    ax.plot(x[end], -σϖ[end], "C0.", ms=1)
+    # ax.set_xlim(-4, 0)
+    ax.set_xlim(x_max-2h, x_max)
+    # ax.set_xlim(-1e-2, 0)
+    ax.legend(loc="lower left")
     ax.set_yscale("symlog")
-    # ax.set_yticks([-maximum(σϖ), 0, maximum(σϖ)])
+    ymax = 10^round(log10(maximum(abs.(σϖ))), RoundUp)
+    ax.set_ylim(-ymax, ymax)
+    ax.set_yticks([-ymax, 0, ymax])
     ax.set_xlabel(L"x")
     ax.set_ylabel(L"-\sigma\varpi")
+    ax.text(0.05, 0.85, latexstring(@sprintf("\$T = %s\$", nuPGCM.sci_notation(T))), transform=ax.transAxes)
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
+
+    return T
 end
 
-diapycnal_transport_b_exp()
+hs = α./2.0.^(0:1:10)
+# hs = [α/2^0]
+Ts = [diapycnal_transport_b_exp(;h) for h in hs]
