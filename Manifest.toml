@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "ff1785c4777ffcfe7c7b519a03c9a8e0b4cc5c30"
+project_hash = "d1388e11bece0f586416f1cc93ad5e04f91b3ab4"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -828,6 +828,22 @@ deps = ["LinearAlgebra", "Printf", "SparseArrays"]
 git-tree-sha1 = "c4d19f51afc7ba2afbe32031b8f2d21b11c9e26e"
 uuid = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 version = "0.10.6"
+
+[[deps.KrylovPreconditioners]]
+deps = ["Adapt", "Graphs", "KernelAbstractions", "LinearAlgebra", "Metis", "SparseArrays"]
+git-tree-sha1 = "22b91a6915a2c9bae33cb8331b191682871518ee"
+uuid = "45d422c2-293f-44ce-8315-2cb988662dec"
+version = "0.3.7"
+
+    [deps.KrylovPreconditioners.extensions]
+    KrylovPreconditionersAMDGPUExt = "AMDGPU"
+    KrylovPreconditionersCUDAExt = "CUDA"
+    KrylovPreconditionersOneAPIExt = "oneAPI"
+
+    [deps.KrylovPreconditioners.weakdeps]
+    AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+    CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [[deps.LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Preferences", "Printf", "Unicode"]
@@ -1728,7 +1744,7 @@ uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.64.0+1"
 
 [[deps.nuPGCM]]
-deps = ["BenchmarkTools", "CUDA", "CuthillMcKee", "Gmsh", "Gridap", "GridapGmsh", "JLD2", "Krylov", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "Revise", "SparseArrays", "WriteVTK"]
+deps = ["BenchmarkTools", "CUDA", "CuthillMcKee", "Gmsh", "Gridap", "GridapGmsh", "JLD2", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "Revise", "SparseArrays", "WriteVTK"]
 path = "."
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.6.1"

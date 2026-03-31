@@ -2,10 +2,10 @@ abstract type Preconditioner end
 
 ################################################################################
 
-struct CgPreconditioner{M, P, S, I} <: Preconditioner
+struct CgPreconditioner{M, P, W, I} <: Preconditioner
     matrix::M
     preconditioner::P
-    solver::S
+    workspace::W
     ldiv::Bool
     label::String
     itmax::I
@@ -16,23 +16,23 @@ function CgPreconditioner(matrix, preconditioner; ldiv=false, label="", itmax=0)
     n = size(matrix, 1)
     T = eltype(matrix)
     VT = vector_type(arch, T)
-    solver = CgSolver(n, n, VT)
-    solver.x .= zero(T)
-    return CgPreconditioner(matrix, preconditioner, solver, ldiv, label, itmax)
+    workspace = CgWorkspace(n, n, VT)
+    workspace.x .= zero(T)
+    return CgPreconditioner(matrix, preconditioner, workspace, ldiv, label, itmax)
 end
 
 function LinearAlgebra.mul!(y, cgp::CgPreconditioner, x)
-    Krylov.solve!(cgp.solver, cgp.matrix, x, cgp.solver.x, 
+    Krylov.krylov_solve!(cgp.workspace, cgp.matrix, x, cgp.workspace.x, 
                   M=cgp.preconditioner, ldiv=cgp.ldiv, itmax=cgp.itmax)#, atol=1e-6, rtol=1e-6)
     @debug begin 
         label = cgp.label
-        solved = cgp.solver.stats.solved
-        niter = cgp.solver.stats.niter 
-        time = cgp.solver.stats.timer
+        solved = cgp.workspace.stats.solved
+        niter = cgp.workspace.stats.niter 
+        time = cgp.workspace.stats.timer
         @sprintf("%s iterative solve: solved=%s, niter=%d, time=%1.3e", 
                  label, solved, niter, time)
     end
-    y .= cgp.solver.x
+    y .= cgp.workspace.x
     return y
 end
 
@@ -71,29 +71,15 @@ function BlockDiagonalPreconditioner(arch::AbstractArchitecture, params::Paramet
     np = fe_data.dofs.np
 
     # blocks
-    A = A_inversion[1:nu, 1:nu]
-    # nu = fe_data.dofs.nu
-    # nv = fe_data.dofs.nv
-    # A[1:nu, nu+1:nu+nv] .= 0  # remove Coriolis terms
-    # A[nu+1:nu+nv, 1:nu] .= 0  # remove Coriolis terms
+    # A = A_inversion[1:nu, 1:nu]
+    @warn "Using ν = 1 for preconditioner"
+    ν = 1
+    A = build_A_inversion(fe_data, params, ν; friction_only=true)
+    A = A[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
+    A = A[1:nu, 1:nu]
     dropzeros!(A)
     P⁻¹ = P_block_setup(arch, A)
-    P_block = Block(P⁻¹, 1:N)
-
-    # indices_u = 1:nu
-    # indices_v = nu+1:nu+nv
-    # indices_w = nu+nv+1:N
-    # dropzeros!(A_inversion)
-    # Au = A_inversion[indices_u, indices_u]
-    # Av = A_inversion[indices_v, indices_v]
-    # Aw = A_inversion[indices_w, indices_w]
-
-    # Pu⁻¹ = P_block_setup(arch, Au, tag="u")
-    # Pv⁻¹ = P_block_setup(arch, Av, tag="v")
-    # Pw⁻¹ = P_block_setup(arch, Aw, tag="w")
-    # Pu_block = Block(Pu⁻¹, indices_u)
-    # Pv_block = Block(Pv⁻¹, indices_v)
-    # Pw_block = Block(Pw⁻¹, indices_w)
+    P_block = Block(P⁻¹, 1:nu)
 
     # T⁻¹ = CG with pressure mass matrix and its diagonal
     a(p, q) = ∫( p*q )dΩ
@@ -101,10 +87,9 @@ function BlockDiagonalPreconditioner(arch::AbstractArchitecture, params::Paramet
     T_prec = Diagonal(on_architecture(arch, Vector(1 ./ diag(T))))
     T = on_architecture(arch, T)
     T⁻¹ = CgPreconditioner(T, T_prec; ldiv=false, label="T-block", itmax=0)
-    T_block = Block(T⁻¹, N+1:N+np)
+    T_block = Block(T⁻¹, nu+1:nu+np)
 
     return BlockDiagonalPreconditioner([P_block, T_block])
-    # return BlockDiagonalPreconditioner([Pu_block, Pv_block, Pw_block, T_block])
 end
 
 function P_block_setup(::CPU, A; tag="")
@@ -118,15 +103,16 @@ function P_block_setup(::GPU, A; tag="")
     # P⁻¹ = CG with A and its Incomplete LU-factorization
     P = on_architecture(GPU(), A)
 
-    # P_prec = KrylovPreconditioners.kp_ilu0(P)
-    # return CgPreconditioner(P, P_prec; ldiv=true, label="P$tag-block", itmax=0)
+    P_prec = KrylovPreconditioners.kp_ilu0(P)
+    return CgPreconditioner(P, P_prec; ldiv=true, label="P$tag-block", itmax=100)
 
-    h = 0.028
-    dim = 3
-    P_prec = Diagonal(on_architecture(GPU(), 1/h^dim*ones(size(A, 1))))
+    # h = 2.56e-2
+    # dim = 3
+    # @warn "Assuming h = $h and dim = $dim"
+    # P_prec = Diagonal(on_architecture(GPU(), 1/h^dim*ones(size(A, 1))))
 
-    # P_prec = Diagonal(on_architecture(GPU(), Vector(1 ./ diag(A))))
-    return CgPreconditioner(P, P_prec; ldiv=false, label="P$tag-block", itmax=0)
+    # # P_prec = Diagonal(on_architecture(GPU(), Vector(1 ./ diag(A))))
+    # return CgPreconditioner(P, P_prec; ldiv=false, label="P$tag-block", itmax=1000)
 end
 
 function LinearAlgebra.mul!(y, bdp::BlockDiagonalPreconditioner, x)
