@@ -235,7 +235,7 @@ function evolve!(model::Model, u_prev, b_prev, order)
         κᵥ = κᵥ_convection(model.forcings, αbz)
 
         # rebuild vertical diffusion components
-        @ctime "  build Kᵥ" Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)
+        @ctime "  build Kᵥ" Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)  # TODO: cache
         # @ctime "  build Kᵥ" build_Kᵥ!(model, κᵥ)
         @ctime "  build rhs_diff" rhs_diff = build_rhs_diff(model.params, model.fe_data, κᵥ)
         Kᵥ = Kᵥ[perm, perm]
