@@ -240,20 +240,17 @@ if __name__ == "__main__":
     # sims = [42, 43]
     # sims = [44, 45]
     # geoms = ["slope", "flat"]
-    sims = [50]
+    sims = ["sim050"]
     geoms = ["slope"]
     # sims_dir = "../sims"
-    sims_dir = "/resnick/scratch/hppeters/"
+    sims_dir = "/resnick/scratch/hppeters"
+    # sims_dir = "../scratch"
     for i in range(len(sims)):
         sim = sims[i]
         geom = geoms[i]
 
-        if sim in [34, 35, 36, 37]:
-            dir = f"{sims_dir}/sim{sim:03d}b"
-        elif sim in [27, 28, 33, 38, 39, 40, 41, 44, 48, 49]:
-            dir = f"{sims_dir}/sim{sim:03d}a"
-        else:
-            dir = f"{sims_dir}/sim{sim:03d}"
+        # dir = f"{sims_dir}/sim{sim}"
+        dir = f"{sims_dir}/{sim}"
         vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
 
         for vtu_file in vtu_files:
