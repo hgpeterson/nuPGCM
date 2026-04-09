@@ -4,13 +4,14 @@ using Printf
 using Gridap
 
 # for making mesh
-include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
+# include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
+include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
 
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
 # set_out_dir!(joinpath(@__DIR__, "test"))
-set_out_dir!("/resnick/scratch/hppeters/sim050")
+set_out_dir!("/resnick/scratch/hppeters/sim051")
 
 # architecture
 arch = GPU()
@@ -45,74 +46,57 @@ t₀ = 1/f₀/ϱ  # s
 N² = 0
 Δt = 5*86400/t₀
 f(x) = x[2]
-# H(x) = α
-function H((x, y, z))
-    L = 2
-    W = 1
-    L_channel = L/4
-    L_flat_channel = 5L_channel/8 # length of flat part of channel
-    H = α*W
+H(x) = α
+# function H((x, y, z))
+#     L = 2
+#     W = 1
+#     L_channel = L/4
+#     L_flat_channel = 5L_channel/8 # length of flat part of channel
+#     H = α*W
 
-    # parabola that has a maximum of H at x_max and a 0 at x_zero
-    parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
+#     # parabola that has a maximum of H at x_max and a 0 at x_zero
+#     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
 
-    function H_basin(x)
-        if 0 ≤ x ≤ W
-            return parabola(x, W/2, 0)
-        else
-            throw(ArgumentError("x out of bounds"))
-        end
-    end
+#     function H_basin(x)
+#         if 0 ≤ x ≤ W
+#             return parabola(x, W/2, 0)
+#         else
+#             throw(ArgumentError("x out of bounds"))
+#         end
+#     end
 
-    if -L/2 ≤ y ≤ -L/2 + L_flat_channel
-        return H
-    elseif y ≤ -L/2 + L_channel
-        H_channel = parabola(y, -L/2 + L_flat_channel, -L/2 + L_channel)
-        return max(H_channel, H_basin(x))
-    elseif y ≤ L/2 - W/2
-        return H_basin(x)
-    elseif y ≤ L/2
-        r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
-        if r > W/2
-            if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
-                return 0
-            else
-                throw(ArgumentError("(x, y) out of bounds"))
-            end
-        else
-            return parabola(r, 0, W/2)
-        end
-    else
-        throw(ArgumentError("y out of bounds"))
-    end
-end
+#     if -L/2 ≤ y ≤ -L/2 + L_flat_channel
+#         return H
+#     elseif y ≤ -L/2 + L_channel
+#         H_channel = parabola(y, -L/2 + L_flat_channel, -L/2 + L_channel)
+#         return max(H_channel, H_basin(x))
+#     elseif y ≤ L/2 - W/2
+#         return H_basin(x)
+#     elseif y ≤ L/2
+#         r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
+#         if r > W/2
+#             if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
+#                 return 0
+#             else
+#                 throw(ArgumentError("(x, y) out of bounds"))
+#             end
+#         else
+#             return parabola(r, 0, W/2)
+#         end
+#     else
+#         throw(ArgumentError("y out of bounds"))
+#     end
+# end
 params = Parameters(ε, α, μϱ, N², Δt, f, H)
 display(params)
 
-# using PyPlot
-# pygui(false)
-# fig, ax = plt.subplots(1)
-# x = range(0, 1, length=2^8)
-# y = range(-1, 1, length=2^8)
-# H_vals = zeros(length(x), length(y))
-# for i in eachindex(x), j in eachindex(y)
-#     try 
-#         H_vals[i, j] = H([x[i], y[j], 0])
-#     catch
-#         H_vals[i, j] = NaN
-#     end
-# end
-# img = ax.pcolormesh(x, y, H_vals', shading="auto", rasterized=true)
-# plt.colorbar(img, ax=ax)
-# ax.axis("equal")
-# savefig("$out_dir/images/H.png")
-# println("$out_dir/images/H.png")
-# plt.close()
-
 # forcings
-κ_I = 1
-κ_B = 1e2
-d = 500/4000*α
+# κ_I = 1
+# κ_B = 1e2
+# d = 500/4000*α
+κ_I = 5.706e+00
+κ_B = 2.535e+01
+d = 3.526e-01*α
 ν(x) = 1
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
@@ -132,14 +116,16 @@ function setup_model()
     # mesh
     # h = 4e-2
     h = 2e-2
-    mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+    # mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
     if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-        mesh_channel_basin_no_flat(h, α)
+        # mesh_channel_basin_no_flat(h, α)
+        mesh_channel_basin_flat(h, α)
     end
     mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
-    # save κ
-    writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
+    # # save κ
+    # writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
 
     # FE data
     u_diri_tags = ["bottom", "coastline", "surface"]

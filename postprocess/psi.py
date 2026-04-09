@@ -234,30 +234,21 @@ def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png"
 if __name__ == "__main__":
     overwrite = False
     # overwrite = True
-    # sims = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]
-    # geoms = ["slope", "slope", "flat", "slope", "flat", "slope", "flat", "slope", "flat", "slope", "flat", "slope", "flat",
-    #          "slope", "flat", "slope", "flat"]
-    # sims = [42, 43]
-    # sims = [44, 45]
-    # geoms = ["slope", "flat"]
-    sims = ["sim050"]
+    sims = ["051"]
     geoms = ["slope"]
     # sims_dir = "../sims"
     sims_dir = "/resnick/scratch/hppeters"
-    # sims_dir = "../scratch"
     for i in range(len(sims)):
         sim = sims[i]
         geom = geoms[i]
 
-        # dir = f"{sims_dir}/sim{sim}"
-        dir = f"{sims_dir}/{sim}"
+        dir = f"{sims_dir}/sim{sim}"
         vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
 
         for vtu_file in vtu_files:
         # for vtu_file in [vtu_files[-1]]:
             i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
             img_file = f"{dir}/images/psi{i:016d}.png"
-            # img_file = f"{dir}/images/psi{i:016d}.pdf"
             if os.path.exists(img_file) and not overwrite:
                 print("Skipping " + img_file)
                 continue
@@ -272,8 +263,6 @@ if __name__ == "__main__":
                                             bmin=-15, 
                                             # bmax=0, 
                                             bmax=-10, 
-                                            # psimax=0.25, 
-                                            # psimax=0.36, 
                                             geometry=geom)
 
         # dataset = pv.read(vtu_file)
