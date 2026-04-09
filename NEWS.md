@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated to Julia 1.12.5
+- Updated to Julia 1.10.11
 - Updated packages (importantly, Krylov.jl is now on v0.10.6 and unpinned, CUDA.jl is now on v5.11.0, and the
   CUDA_Runtime_jll has been changed to 12.2 in `LocalPreferences.toml`)
 

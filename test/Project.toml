@@ -1,6 +1,0 @@
-[deps]
-Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
-JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-nuPGCM = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
