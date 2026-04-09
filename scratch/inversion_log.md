@@ -86,3 +86,106 @@ Tridiagonal $P$ with $\tilde S^{-1} = K_p^{-1}$ where $K_p$ is just the ($1/f$-w
 
 Different forms of $\tilde A^{-1}$:
 - $\tilde A^{-1} = \left(\begin{array}{c c c} 0 & -M^{-1} & 0 \\ M^{-1} & 0 & 0 \\ 0 & 0 & K^{-1} \end{array}\right)$
+
+# Experiment Set 2 (January 2026)
+
+- νPGCM v0.5.0
+- 3D bowl
+- $b$ from spin-up ($\mu\varrho = \varepsilon = 1$, $t = 0.1$)
+- $h = 0.2\alpha$
+- DoFs: 
+    - $\alpha = 1$: 4201
+    - $\alpha = 1/2$: 15946
+    - $\alpha = 1/4$: 64597
+    - $\alpha = 1/8$: 261736
+- $f = 1 + y/2$
+
+## $\alpha = 1$
+
+### $\varepsilon = 1$ ($\delta/h = \varepsilon\sqrt{2}/0.2 \approx 7.07$)
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 8402       | 8.492e+00 (solved=false) |
+| `BlockDiagonal(lu(A))`           | 41         | 1.131e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 41         | 7.955e-02 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 41         | 5.196e+00 |
+
+### $\varepsilon = 1/2$ ($\delta/h \approx 3.54$)
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 8189       | 4.005e+00 |
+| `BlockDiagonal(lu(A))`           | 61         | 2.103e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 61         | 1.668e-01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 61         | 7.887e+00 |
+
+### $\varepsilon = 1/4$ ($\delta/h \approx 1.77$)
+ 
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 2043       | 1.024e+00 |
+| `BlockDiagonal(lu(A))`           | 101        | 3.160e-01 |
+| `BlockDiagonal(lu(A_no_f))`      | 521        | 1.034e+00 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 341        | 4.367e+01 |
+
+## $\alpha = 1/2$
+
+### $\varepsilon = 1$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 31892      | 1.607e+01 (solved=false) |
+| `BlockDiagonal(lu(A))`           | 41         | 1.071e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 41         | 8.790e+00 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 41         | 1.938e+01 |
+
+### $\varepsilon = 1/2$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 11973      | 5.969e+00 |
+| `BloackDiagonal(I/h^3)`          | 421        | 7.191e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=20, 4` | 1561        | 4.201e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=30, 4` | 1061        | 3.664e+00 |
+| `BloackDiagonal(I/h^3)`, `itmax=40, 4` | 1181        | 4.921e+00 |
+| `BlockDiagonal(lu(A))`           | 121        | 3.124e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 281        | 5.648e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 381        | 1.870e+02 |
+| `BlockDiagonal(kp_ilu0(A_no_f))`, `itmax=10,4` | 561        | 1.795e+02 |
+| `BlockDiagonal(kp_ilu0(Au, Av, Aw))` | 401        | 2.945+02 |
+| `BlockDiagonal(kp_ilu0(Au, Av, Aw))`, `itmax=10,4` | 401        | 2.162e+02 |
+
+### $\varepsilon = 1/4$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 3356       | 1.681e+00 |
+| `BlockDiagonal(lu(A))`           | 1581       | 4.069e+02 |
+
+## $\alpha = 1/4$
+
+### $\varepsilon = 1$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 36265      | 2.139e+01 |
+| `BlockDiagonal(lu(A))`           | 61         | 4.407e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 61         | 4.097e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 61         | 1.213e+02 |
+
+### $\varepsilon = 1/2$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 17303      | 1.039e+01 |
+| `BlockDiagonal(lu(A))`           | 61         | 4.398e+01 |
+| `BlockDiagonal(lu(A_no_f))`      | 81         | 5.453e+01 |
+| `BlockDiagonal(kp_ilu0(A_no_f))` | 81         | 1.491e+02 |
+
+### $\varepsilon = 1/4$
+
+| Preconditioner                   | iterations | time (s)  |
+| -                                | -          | -         |
+| `I/h^3`                          | 6794       | 3.985e+00 |
+| `BlockDiagonal(lu(A))`           | 554        | 3.988e+02 |

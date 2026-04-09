@@ -71,6 +71,7 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, pr
 
     # evenly-spaced grid
     grid = utils.Grid(dataset, nx, ny, nz)
+    alpha = -grid.z.min()  # aspect ratio
 
     # sample
     samples = utils.sample_to_grid(dataset, grid)
@@ -80,19 +81,37 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, pr
 
     # zonal means
     width = utils.zonal_width(samples, grid)
-    v_bar = utils.zonal_mean(v, grid, width)
+    v_int = trapezoid(v, x=grid.x, axis=0)
     b_bar = utils.zonal_mean(b, grid, width)
 
-    # calculate streamfunction as Ψ(y,z) = -∫_-H^z v(y, z') dz'
-    v_bar_filled = np.nan_to_num(v_bar, nan=0.0)  # replaces NaNs with 0
-    psi_bar = -cumulative_trapezoid(v_bar_filled, grid.z, axis=1, initial=0)
-    nan_mask = np.isnan(v_bar)
+    # # debug: plot width
+    # y = grid.y
+    # z = grid.z
+    # alpha = -z.min()
+    # fig, ax = plt.subplots(1, figsize=(33 / 6, 33 / 6 / 1.62 / 2))
+    # ax.spines["bottom"].set_visible(False)
+    # ax.spines["left"].set_visible(False)
+    # cf1 = ax.pcolormesh(y, z, width.T, cmap="viridis")
+    # plt.colorbar(cf1, label="Width")
+    # ax.set_xticks([-1, 0, 1])
+    # ax.set_yticks([-alpha, 0])
+    # ax.set_yticklabels([r"$-\alpha$", "0"])
+    # ax.set_xlabel(r"$y$")
+    # ax.set_ylabel(rf"$z$ ($\alpha = {alpha}$)")
+    # plt.savefig("width.png")
+    # print("width.png")
+    # plt.close()
+
+    # calculate streamfunction as Ψ(y,z) = -1/α * ∫_-H^z v(y, z') dz'
+    psi_bar = -1 / alpha * cumulative_trapezoid(v_int, grid.z, axis=1, initial=0)
+    nan_mask = np.where(width == 0)
+    v_int[nan_mask] = np.nan
     psi_bar[nan_mask] = np.nan
 
     if printtime:
-        print(f"psi computed in {time()-t0:.3e} s")
+        print(f"psi computed in {time() - t0:.3e} s")
 
-    return psi_bar, v_bar, b_bar, grid, t
+    return psi_bar, v_int, b_bar, grid, t
 
 
 def plot_barotropic_streamfunction(psi_grid, x_grid, y_grid, U_grid=None):
@@ -136,7 +155,7 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
         alpha = -np.min(z)
         z = z / alpha / 2
 
-    fig, ax = plt.subplots(1, figsize=(33/6, 33/6/1.62))
+    fig, ax = plt.subplots(1, figsize=(33 / 6, 33 / 6 / 1.62))
     ax.spines["bottom"].set_visible(False)
     ax.spines["left"].set_visible(False)
     vmax = np.nanmax(np.abs(field))
@@ -165,33 +184,46 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
     plt.close()
 
 
-def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png", bmax=10):
+def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png", bmin=None, bmax=None, geometry="", 
+                                    psimax=None):
     y = grid.y
     z = grid.z
 
-    fig, ax = plt.subplots(1, figsize=(33/6, 33/6/1.62/2))
+    alpha = -z.min()  # aspect ratio
+
+    if bmin is None:
+        bmin = b_bar.min()
+    if bmax is None:
+        bmax = b_bar.max()
+
+    fig, ax = plt.subplots(1, figsize=(33 / 6, 33 / 6 / 1.62 / 2))
     ax.spines["bottom"].set_visible(False)
     ax.spines["left"].set_visible(False)
 
-    vmax = np.nanmax(np.abs(psi))
-    cf1 = ax.pcolormesh(y, z, psi.T, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    levels = np.linspace(-0.9 * vmax, 0.9 * vmax, 8)
+    if psimax is None:
+        psimax = np.nanmax(np.abs(psi))
+    cf1 = ax.pcolormesh(y, z, psi.T, cmap="RdBu_r", vmin=-psimax, vmax=psimax, rasterized=True)
+    levels = np.linspace(-0.9 * psimax, 0.9 * psimax, 8)
     ax.contour(y, z, psi.T, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-    cb = plt.colorbar(cf1, label=r"Streamfunction $\bar{\psi}$")
-    cb.ax.set_yticks([-vmax, 0, vmax])
+    cb = plt.colorbar(cf1, label=r"Streamfunction $\psi$")
+    cb.ax.set_yticks([-psimax, 0, psimax])
     cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
-    ax.text(0.65, 0.02, rf"Max = {utils.to_latex_sci(vmax)}")
-    levels = np.linspace(-bmax, bmax, 40)
-    ax.contour(y, z, -b_bar.T, levels=levels, colors="k", linewidths=0.5, alpha=0.3)
-    y0 = -0.6875
-    y1 = -0.5
-    y_c = np.linspace(y0, y1, 100)
-    ax.plot(y_c, z.min()*(1 - ((y_c - y0)/(y1 - y0))**2), "k--", lw=0.5, alpha=0.4)
-    # ax.axvline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
+    ax.text(0.8, 1.02, rf"Max = {utils.to_latex_sci(psimax)}", transform=ax.transAxes, size=7)
+    levels = np.linspace(bmin, bmax, 20)
+    ax.contour(y, z, b_bar.T, levels=levels, colors="k", linestyles="-", linewidths=0.5, alpha=0.3)
+    if geometry == "slope":
+        y0 = -0.6875
+        y1 = -0.5
+        y_c = np.linspace(y0, y1, 100)
+        ax.plot(y_c, z.min() * (1 - ((y_c - y0) / (y1 - y0)) ** 2), "k--", lw=0.5, alpha=0.4)
+    elif geometry == "flat":
+        ax.axvline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
     ax.set_xticks([-1, 0, 1])
-    ax.set_yticks([z.min(), 0])
-    ax.set_xlabel(r"$y$")
-    ax.set_ylabel(r"$z$")
+    ax.set_xticklabels([r"$-L$", r"$0$", r"$L$"])
+    ax.set_yticks([-alpha, 0])
+    ax.set_yticklabels([r"$-\dfrac{H}{L}$", "0"])
+    ax.set_xlabel(r"Meridional coordinate $y$")
+    ax.set_ylabel(r"Vertical coordinate $z$")
     if t is not None:
         ax.set_title(r"$t = $" + utils.to_latex_sci(t))
     plt.savefig(filename)
@@ -200,30 +232,38 @@ def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png"
 
 
 if __name__ == "__main__":
-
-    # psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction("../velocity_linear.vtu", printtime=True)
-    # plot_overturning_streamfunction(
-    #     psi_bar, b_bar, grid, t=t, filename=f"../sims/sim024/images/psi{15100:016d}.png", bmax=15
-    # )
-
     overwrite = False
-    sim = 24
-    dir = f"../sims/sim{sim:03d}"
-    # dir = "../scratch/h0.10_wind_bim"
-    vtu_files = sorted(Path(f"{dir}/data/").glob("*.vtu"))
+    # overwrite = True
+    sims = ["051"]
+    geoms = ["slope"]
+    # sims_dir = "../sims"
+    sims_dir = "/resnick/scratch/hppeters"
+    for i in range(len(sims)):
+        sim = sims[i]
+        geom = geoms[i]
 
-          
-    for vtu_file in vtu_files:
-        i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-        img_file = f"{dir}/images/psi{i:016d}.png"
-        if os.path.exists(img_file) and not overwrite:
-            print("Skipping " + img_file)
-            continue
+        dir = f"{sims_dir}/sim{sim}"
+        vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
 
-        psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(vtu_file)
-        plot_overturning_streamfunction(
-            psi_bar, b_bar, grid, t=t, filename=img_file, bmax=15
-        )
+        for vtu_file in vtu_files:
+        # for vtu_file in [vtu_files[-1]]:
+            i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
+            img_file = f"{dir}/images/psi{i:016d}.png"
+            if os.path.exists(img_file) and not overwrite:
+                print("Skipping " + img_file)
+                continue
+
+            n = 2**7
+            psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
+                vtu_file, nx=n, ny=n, nz=n, printtime=True
+            )
+            plot_overturning_streamfunction(psi_bar, b_bar, grid, 
+                                            t=t, 
+                                            filename=img_file, 
+                                            bmin=-15, 
+                                            # bmax=0, 
+                                            bmax=-10, 
+                                            geometry=geom)
 
         # dataset = pv.read(vtu_file)
         # t = dataset["t"][0]

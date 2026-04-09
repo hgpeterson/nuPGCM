@@ -99,9 +99,25 @@ function run!(model::Model; t_stop, n_info=10, n_save=Inf, n_plot=Inf, advection
     h_min = minimum([norm(points[edges[i, 1], :] - points[edges[i, 2], :]) for i ∈ axes(edges, 1)])
 
     if model.forcings.eddy_param.is_on
-        # store inversion matrix without friction to speed up re-builds
-        A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
+        # cache data needed to re-assemble inversion matrix
+        X_trial = model.fe_data.spaces.X_trial
+        X_test = model.fe_data.spaces.X_test
+        dup = get_trial_fe_basis(X_trial)
+        dvq = get_fe_basis(X_test)
+        assembler = Gridap.SparseMatrixAssembler(X_trial, X_test)
+        perm = model.fe_data.dofs.p_inversion
+        iperm = model.fe_data.dofs.inv_p_inversion
+        A_inversion = on_architecture(CPU(), model.inversion.solver.A)
+        A_inversion = A_inversion[iperm, iperm]
+
+        # # store inversion matrix without friction to speed up re-builds
+        # A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
     end
+
+    # number of steps between info print
+    # n_info = min(10, max(div(n_steps, 100, RoundNearest), 1))
+    n_info = 1
+    @info "Beginning integration with" n_steps i_step n_save n_plot n_info
 
     # store copies of previous and current u, b
     u_prev = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
@@ -151,12 +167,11 @@ function run!(model::Model; t_stop, n_info=10, n_save=Inf, n_plot=Inf, advection
             α = model.params.α
             N² = model.params.N²
             b = model.state.b
-            αbz = α*N² + α*∂z(b)
+            αbz = α*(N² + ∂z(b))
             ν = ν_eddy(model.forcings.eddy_param, αbz)
-            A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
-            perm = model.fe_data.dofs.p_inversion
-            A_inversion = A_inversion[perm, perm]
-            model.inversion.solver.A = on_architecture(model.arch, A_inversion)
+            # A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
+            build_A_inversion!(A_inversion, dup, dvq, assembler, model.fe_data, model.params, ν)
+            model.inversion.solver.A = on_architecture(model.arch, A_inversion[perm, perm])
             # note: keeping same preconditioner (1/h^dim)
         end
 
@@ -179,7 +194,8 @@ function run!(model::Model; t_stop, n_info=10, n_save=Inf, n_plot=Inf, advection
             msg *= @sprintf("%.3e ≤ b_free ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n", 
                             minimum(b.free_values), maximum(b.free_values), 
                             maximum(abs.(b.free_values - b_prev.free_values)/Δt))
-            msg *= @sprintf("Memory usage: %.3e/%.3e GB\n", (Sys.total_memory() - Sys.free_memory())/1e9, Sys.total_memory()/1e9) 
+            msg *= @sprintf("Memory usage: %.3e / %.3e GB\n", Sys.total_memory()/1e9 - Sys.free_memory()/1e9, Sys.total_memory()/1e9)
+            msg *= @sprintf("Live heap: %.3e GB\n", Base.gc_live_bytes()/1e9)
             msg
             end
             t_last_info = t₁
@@ -222,18 +238,20 @@ function evolve!(model::Model, u_prev, b_prev, order, Δt)
 
     if model.forcings.conv_param.is_on
         # recompute κᵥ for convection
-        α = model.params.α
-        N² = model.params.N²
-        b = model.state.b
-        αbz = α*N² + α*∂z(b)
+        αbz = α*(N² + ∂z(b))
         κᵥ = κᵥ_convection(model.forcings, αbz)
 
         # rebuild vertical diffusion components
-        Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)
-        rhs_diff = build_rhs_diff(model.params, model.fe_data, κᵥ)
+        @ctime "  build Kᵥ" Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)  # TODO: cache
+        # @ctime "  build Kᵥ" build_Kᵥ!(model, κᵥ)
+        @ctime "  build rhs_diff" rhs_diff = build_rhs_diff(model.params, model.fe_data, κᵥ)
         Kᵥ = Kᵥ[perm, perm]
         rhsᵥ = rhsᵥ[perm]
+        # model.evolution.Kᵥ .= model.evolution.Kᵥ_cache[perm, perm]
+        # model.evolution.rhsᵥ .= model.evolution.rhsᵥ_cache[perm, perm]
         rhs_diff = rhs_diff[perm]
+        rhsᵥ = on_architecture(arch, rhsᵥ)
+        rhs_diff = on_architecture(arch, rhs_diff)
         model.evolution.rhsᵥ .= rhsᵥ
         model.evolution.rhs_diff .= rhs_diff
     else
@@ -258,11 +276,11 @@ function evolve!(model::Model, u_prev, b_prev, order, Δt)
     rhsᵥ = model.evolution.rhsᵥ
     w = u⋅z⃗
     w_prev = u_prev⋅z⃗
-    rhs_adv = assemble_vector(d -> advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, Val(order)), B_test)
+    @ctime "  build rhs_adv" rhs_adv = assemble_vector(d -> advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, Val(order)), B_test)
     rhs_adv = rhs_adv[perm]
-    @ctime "  build evol_rhs" solver.y .= on_architecture(arch,
-        rhs_adv + θ*rhs_diff + Δt*rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
-    )
+    rhs_adv  = on_architecture(arch, rhs_adv)
+    # rhsᵥ  = on_architecture(arch, model.evolution.rhsᵥ)
+    @. solver.y = rhs_adv + θ*rhs_diff + rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
     @ctime "  solve evol sys" iterative_solve!(solver)
 
     # sync buoyancy to state
@@ -270,6 +288,11 @@ function evolve!(model::Model, u_prev, b_prev, order, Δt)
 
     return model
 end
+
+# function build_Kᵥ!(model::Model, κᵥ)
+#     aᵥ(b, d) = ∫( κᵥ*∂z(b)*∂z(d) )dΩ
+#     build_matrix_vector!(model.evolution.Kᵥ_cache, model.evolution.rhsᵥ_cache, aᵥ, model.evolution.assembler, model.fe_data.spaces.b_diri)
+# end
 
 function advection_lform(d, b, b_prev, Δt, u, u_prev, w, w_prev, N², dΩ, ::Val{1})
     # BDF1

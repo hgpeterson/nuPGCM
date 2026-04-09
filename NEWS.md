@@ -7,11 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-04-09
+
+### Added
+
+- Some code for experimenting with different preconditioners in `src/preconditioners.jl` (not used yet by default)
+
+### Fixed
+
+- Fix missing `^2` in `ν_eddy` 
+- For eddy parameterization, we now update the inversion matrix in-place to save memory
+
+### Changed
+
+- Updated to Julia 1.10.11
+- Updated packages (importantly, Krylov.jl is now on v0.10.6 and unpinned, CUDA.jl is now on v5.11.0, and the
+  CUDA_Runtime_jll has been changed to 12.2 in `LocalPreferences.toml`)
+
 ## [0.6.1] - 2026-03-05
 
 ### Added
 
-- Conditionally turn on timings by setting `ENABLE_TIMING[] = true` (defualt `false`)
+- Conditionally turn on timings by setting `ENABLE_TIMING[] = true` (default `false`)
 
 ### Fixed
 

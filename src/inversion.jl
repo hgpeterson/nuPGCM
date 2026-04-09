@@ -57,6 +57,7 @@ function InversionToolkit(arch::AbstractArchitecture,
         @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
         @time "lu(A_inversion)" P = lu(A)
     end
+    # P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
 
     # move to arch
     A = on_architecture(arch, A)
@@ -64,7 +65,7 @@ function InversionToolkit(arch::AbstractArchitecture,
     b = on_architecture(arch, b)
 
     if typeof(arch) == GPU
-        CUDA.memory_status()
+        CUDA.pool_status()
     end
 
     # setup inversion toolkit
@@ -83,14 +84,14 @@ function InversionToolkit(arch::AbstractArchitecture,
 
     # use GMRES solver (which requires the `memory` and `restart` parameters)
     VT = vector_type(arch, T)
-    solver = Krylov.GmresSolver(N, N, memory, VT)
-    solver.x .= zero(T)
+    workspace = Krylov.GmresWorkspace(N, N, VT; memory)
+    workspace.x .= zero(T)
 
     # set up keyword arguments for iterative solver toolkit
     verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int, :restart=>restart)
 
-    solver_inversion = IterativeSolverToolkit(A, P, y, solver, kwargs, "Inversion") 
+    solver_inversion = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Inversion") 
 
     return InversionToolkit(B, b, solver_inversion)
 end
@@ -148,6 +149,29 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_onl
 
     return A
 end
+function build_A_inversion!(A, dup, dvq, assembler,
+                            fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
+    # unpack
+    X_trial = fe_data.spaces.X_trial
+    X_test = fe_data.spaces.X_test
+    dΩ = fe_data.mesh.dΩ
+    α²ε² = params.α^2*params.ε^2
+    f = params.f
+
+    # bilinear form
+    a((u, p), (v, q)) = bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+
+    # assemble 
+    @time "build inversion system" begin
+    contribution = a(dup, dvq)
+    matdata = Gridap.FESpaces.collect_cell_matrix(X_trial, X_test, contribution)
+    fill!(A, 0)
+    Gridap.FESpaces.assemble_matrix_add!(A, assembler, matdata)   
+    end
+
+    return A
+end
+
 function bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
     σ = Gridap.symmetric_gradient
     # for general ν, need full stress tensor

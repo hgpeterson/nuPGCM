@@ -2,11 +2,11 @@ using nuPGCM
 using Gridap
 using JLD2
 using Printf
-
-nuPGCM_dir = "/resnick/groups/oceanphysics/henry/nuPGCM"
+using Gridap
 
 # for making mesh
-include("$nuPGCM_dir/meshes/channel_basin.jl")
+# include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
+include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
 
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
@@ -47,100 +47,83 @@ t₀ = 1/f₀/ϱ  # s
 N² = 0
 Δt = 3600/t₀
 f(x) = x[2]
-function H(xyz)
-    x = xyz[1]
-    y = xyz[2]
+H(x) = α
+# function H((x, y, z))
+#     L = 2
+#     W = 1
+#     L_channel = L/4
+#     L_flat_channel = 5L_channel/8 # length of flat part of channel
+#     H = α*W
 
-    L = 2
-    W = 1
-    L_channel = L/4
-    L_flat_channel = L_channel/4 # length of flat part of channel
-    L_curve_channel = (L_channel - L_flat_channel)/2 # length of each curved part of channel
-    W_flat_basin = W/2 # width of flat part of basin
-    W_curve_basin = (W - W_flat_basin)/2 # width of each curved part of basin
-    L_curve_basin = W_curve_basin # length of curved end of basin
-    H = α*W
+#     # parabola that has a maximum of H at x_max and a 0 at x_zero
+#     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
 
-    # parabola that has a maximum of H at x_max and a 0 at x_zero
-    parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
+#     function H_basin(x)
+#         if 0 ≤ x ≤ W
+#             return parabola(x, W/2, 0)
+#         else
+#             throw(ArgumentError("x out of bounds"))
+#         end
+#     end
 
-    function H_basin(x)
-        if 0 ≤ x ≤ W_curve_basin
-            return parabola(x, W_curve_basin, 0)
-        elseif x ≤ W_curve_basin + W_flat_basin
-            return H
-        elseif x ≤ W
-            return parabola(x, W_curve_basin + W_flat_basin, W)
-        else
-            throw(ArgumentError("x out of bounds"))
-        end
-    end
-
-    if -L/2 ≤ y ≤ -L/2 + L_curve_channel
-        return H
-    elseif y ≤ -L/2 + L_curve_channel + L_flat_channel
-        return H
-    elseif y ≤ -L/2 + L_channel
-        H_channel = parabola(y, -L/2 + L_curve_channel + L_flat_channel, -L/2 + L_channel)
-        return max(H_channel, H_basin(x))
-    elseif y ≤ L/2 - L_curve_basin
-        return H_basin(x)
-    elseif y ≤ L/2
-        if 0 ≤ x ≤ W_curve_basin
-            x₀ = W_curve_basin
-            y₀ = L/2 - L_curve_basin
-            r = √( (x - x₀)^2 + (y - y₀)^2 )
-            return parabola(r, 0, W_curve_basin)
-        elseif W_curve_basin ≤ x ≤ W_curve_basin + W_flat_basin
-            return parabola(y, L/2 - L_curve_basin, L/2)
-        elseif x ≤ W
-            x₀ = W_curve_basin + W_flat_basin
-            y₀ = L/2 - L_curve_basin
-            r = √( (x - x₀)^2 + (y - y₀)^2 )
-            return parabola(r, 0, W_curve_basin)
-        else
-            throw(ArgumentError("x out of bounds"))
-        end
-    else
-        throw(ArgumentError("y out of bounds"))
-    end
-end
+#     if -L/2 ≤ y ≤ -L/2 + L_flat_channel
+#         return H
+#     elseif y ≤ -L/2 + L_channel
+#         H_channel = parabola(y, -L/2 + L_flat_channel, -L/2 + L_channel)
+#         return max(H_channel, H_basin(x))
+#     elseif y ≤ L/2 - W/2
+#         return H_basin(x)
+#     elseif y ≤ L/2
+#         r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
+#         if r > W/2
+#             if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
+#                 return 0
+#             else
+#                 throw(ArgumentError("(x, y) out of bounds"))
+#             end
+#         else
+#             return parabola(r, 0, W/2)
+#         end
+#     else
+#         throw(ArgumentError("y out of bounds"))
+#     end
+# end
 params = Parameters(ε, α, μϱ, N², Δt, f, H)
 display(params)
 
 # forcings
+# κ_I = 1
+# κ_B = 1e2
+# d = 500/4000*α
+κ_I = 5.706e+00
+κ_B = 2.535e+01
+d = 3.526e-01*α
 ν(x) = 1
-κ_B = 1e2
-κ_I = 1
-d = 500/4000 * α
-# d = 500/2000 * α  # 2x larger decay scale
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
-# κₕ(x) = κ_I
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
 conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=1e-3)
+eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 display(forcings.conv_param)
 display(forcings.eddy_param)
+@info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 function setup_model()
     # mesh
+    # h = 4e-2
     h = 2e-2
-    refinement_factor = 2
-    if refinement_factor === nothing
-        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e", h, α)
-    else
-        mesh_name = @sprintf("channel_basin_h%.2e_a%.2e_r%d", h, α, refinement_factor)
-    end   
-    if !isfile("$nuPGCM_dir/meshes/$mesh_name.msh")
-        mesh_channel_basin(h, α; refinement_factor)
+    # mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+    if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+        # mesh_channel_basin_no_flat(h, α)
+        mesh_channel_basin_flat(h, α)
     end
-    mesh = Mesh("$nuPGCM_dir/meshes/$mesh_name.msh")
+    mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
     # # save κ
     # writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
