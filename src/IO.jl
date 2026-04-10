@@ -1,18 +1,19 @@
 function save_state(model::Model, ofile)
     s = model.state
-    jldsave(ofile; u=s.u.free_values, p=s.p.free_values.args[1], b=s.b.free_values, t=s.t)
+    ts = model.timestepper
+    jldsave(ofile; u=s.u.free_values, p=s.p.free_values.args[1], b=s.b.free_values, t=ts.t[])
     @info "Model state saved to '$ofile'"
 end
 
-function set_state_from_file!(s::State, ifile)
+function set_state_from_file!(m::Model, ifile)
     d = jldopen(ifile, "r")
-    s.u.free_values .= d["u"]
-    s.p.free_values.args[1] .= d["p"]
-    s.b.free_values .= d["b"]
-    s.t = d["t"]
+    m.state.u.free_values .= d["u"]
+    m.state.p.free_values.args[1] .= d["p"]
+    m.state.b.free_values .= d["b"]
+    m.timestepper.t[] = d["t"]
     close(d)
-    @info "State set from '$ifile'"
-    return s
+    @info "Model state set from '$ifile'"
+    return m
 end
 
 function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
@@ -41,7 +42,7 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         "alpha*b_z" => αbz,
         "nu" => ν,
         "kappa_v" => κᵥ,
-        "t" => m.state.t,
+        "t" => m.timestepper.t[],
     ])
     @info "VTK state saved to '$ofile'"
 end

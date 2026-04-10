@@ -11,11 +11,11 @@ include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-# set_out_dir!(joinpath(@__DIR__, "adaptive_timestep"))
-set_out_dir!("/resnick/scratch/hppeters/sim050")
+set_out_dir!(joinpath(@__DIR__, "adaptive_timestep"))
+# set_out_dir!("/resnick/scratch/hppeters/sim050")
 
 # architecture
-arch = GPU()
+arch = CPU()
 
 # params
 
@@ -45,7 +45,7 @@ t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
 α = 1/4
 N² = 0
-Δt = 3600/t₀
+Δt = 3600/t₀  # TODO: move to timestepper
 f(x) = x[2]
 H(x) = α
 # function H((x, y, z))
@@ -105,54 +105,49 @@ d = 3.526e-01*α
 τʸ(x) = 0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
-conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
+conv_param = nothing#ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
+eddy_param = nothing#EddyParameterization(f=f, N²min=sqrt(1e-3))
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 display(forcings.conv_param)
 display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
-function setup_model()
-    # mesh
-    # h = 4e-2
-    h = 2e-2
-    # mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
-    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
-    if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-        # mesh_channel_basin_no_flat(h, α)
-        mesh_channel_basin_flat(h, α)
-    end
-    mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-
-    # # save κ
-    # writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
-
-    # FE data
-    u_diri_tags = ["bottom", "coastline", "surface"]
-    u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
-    u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
-    b_diri_tags = ["coastline", "surface"]
-    b_diri_vals = [b_surface, b_surface]
-    spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals, b_order=1) 
-    fe_data = FEData(mesh, spaces)
-    display(fe_data.dofs)
-
-    # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
-
-    # build evolution system
-    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings; order=1) 
-
-    # put it all together in the `model` struct
-    model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
-
-    return model
+# mesh
+h = 8e-2
+# h = 2e-2
+# mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+    # mesh_channel_basin_no_flat(h, α)
+    mesh_channel_basin_flat(h, α)
 end
+mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+
+# # save κ
+# writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
+
+# FE data
+u_diri_tags = ["bottom", "coastline", "surface"]
+u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
+b_diri_tags = ["coastline", "surface"]
+b_diri_vals = [b_surface, b_surface]
+spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals, b_order=1) 
+fe_data = FEData(mesh, spaces)
+display(fe_data.dofs)
+
+# setup inversion toolkit
+inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
+
+# set timestepper
+timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=params.Δt, adaptive=true, CFL_factor=0.8)
+
+# build evolution system
+evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 
 
 # set up model
-model = setup_model()
-display(model)
+model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
 set_b!(model, x -> b_surface(x))
@@ -160,10 +155,9 @@ invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # solve
-t_stop = μϱ/ε^2/κ_B
-@info @sprintf("Diffusion timescale: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
+@info @sprintf("Diffusion timescales: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
 n_save = 100
 n_plot = Inf
-run!(model; t_stop, n_save, n_plot)
+run!(model; n_save, n_plot)
 
 println("Done.")

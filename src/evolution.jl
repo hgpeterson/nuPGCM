@@ -14,7 +14,6 @@ struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit
     # rhsᵥ::VV      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
     # rhsᵥ_cache::VV # cache for rhsᵥ rebuilds
     solver::S    # iterative solver toolkit
-    order::I     # order of timestepping scheme
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -35,15 +34,15 @@ function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, "├── rhsₕ: ", summary(evolution.rhsₕ))
     println(io, "├── rhsᵥ: ", summary(evolution.rhsᵥ))
     # println(io, "├── rhsᵥ_cache: ", summary(evolution.rhsᵥ_cache))
-    println(io, "├── solver: ", summary(evolution.solver))
-      print(io, "└── order: ", evolution.order)
+      print(io, "└── solver: ", summary(evolution.solver))
 end
 
 """
     evolution_toolkit = EvolutionToolkit(arch::AbstractArchitecture, 
                                          fe_data::FEData, 
                                          params::Parameters, 
-                                         forcings::Forcings; 
+                                         forcings::Forcings,
+                                         timestepper::AbstractTimestepper; 
                                          kwargs...)
                 
 Set up the evolution toolkit, which contains the matrices and solvers for the evolution problem.
@@ -56,17 +55,13 @@ The PG buoyancy evolution equation is:
 function EvolutionToolkit(arch::AbstractArchitecture, 
                           fe_data::FEData, 
                           params::Parameters, 
-                          forcings::Forcings; 
-                          order=2,
+                          forcings::Forcings,
+                          timestepper::AbstractTimestepper; 
                           atol=1e-6, 
                           rtol=1e-6, 
                           itmax=0, 
                           history=true, 
                           verbose=false)
-    if order != 1 && order != 2
-        throw(ArgumentError("order $order not yet implemented"))
-    end
-
     # unpack
     B_trial = fe_data.spaces.B_trial
     B_test = fe_data.spaces.B_test
@@ -112,7 +107,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     # rhsᵥ = on_architecture(arch, rhsᵥ)  # not this one because it gets rebuilt
 
     # combine to make evolution LHS
-    A, P = collect_evolution_LHS(arch, params, params.Δt, forcings, M, Kₕ, Kᵥ, order)
+    A, P = collect_evolution_LHS(arch, params, forcings, timestepper, M, Kₕ, Kᵥ)
 
     # rhs vector for solver
     N = size(A, 1)
@@ -129,24 +124,41 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Evolution")
 
-    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
+    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver)
     # return EvolutionToolkit(arch, assembler, M, Kₕ, Kᵥ, Kᵥ_cache, 
     #                         rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, rhsᵥ_cache, solver, order)
 end
 
-function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, Δt, forcings::Forcings)
+function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings, timestepper::AbstractTimestepper)
     arch = evolution.arch
     M = evolution.M
     Kₕ = evolution.Kₕ
     Kᵥ = evolution.Kᵥ
-    order = evolution.order
-    A, P = collect_evolution_LHS(arch, params, Δt, forcings, M, Kₕ, Kᵥ, order)
+    A, P = collect_evolution_LHS(arch, params, forcings, timestepper, M, Kₕ, Kᵥ)
     evolution.solver.A = on_architecture(arch, A)
     evolution.solver.P = P
     return evolution
 end
-function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, Δt, forcings::Forcings, M, Kₕ, Kᵥ, order)
-    θ = evolution_parameter(params, Δt, Val(order))
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF1, M, Kₕ, Kᵥ)
+    θ = evolution_parameter(params, timestepper)
+    A = M + θ*(Kₕ + Kᵥ) 
+
+    # preconditioner
+    if typeof(arch) == GPU || forcings.conv_param.is_on || timestepper.adaptive
+        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+    else
+        @warn "LU-factoring evolution matrix with $(size(A, 1)) DOFs..."
+        @time "lu(A_evol)" P = lu(A)
+    end
+
+    # move to arch
+    A = on_architecture(arch, A)
+
+    return A, P
+end
+#TODO: Can unify this with BDF1 once adaptive timestepping is implemented for BDF2
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF2, M, Kₕ, Kᵥ)
+    θ = evolution_parameter(params, timestepper)
     A = M + θ*(Kₕ + Kᵥ) 
 
     # preconditioner
@@ -164,28 +176,19 @@ function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, �
 end
 
 """
-    θ = evolution_parameter(p::Parameters, Δt, order::Val)
+    θ = evolution_parameter(p::Parameters, timestepper::AbstractTimestepper)
 
 Returns the coefficient needed to build the LHS matrix in the evolution problem of the form
 ```math
 A = M + θ*(Kₕ + Kᵥ)
 ```
-For `order` = 1, we use Backwards Euler (BDF1), so 
-```math
-θ = Δt α² ε² / μϱ.
-```
-For `order` = 2, we use BDF2:
-```math
-θ = 2/3 Δt α² ε² / μϱ.
-```
 """
-function evolution_parameter(p::Parameters, Δt, ::Val{1})
-    # BDF1
-    return Δt * p.α^2 * p.ε^2 / p.μϱ
+function evolution_parameter(p::Parameters, ts::BDF1)
+    return ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
-function evolution_parameter(p::Parameters, Δt, ::Val{2})
-    # BDF2
-    return 2/3 * Δt * p.α^2 * p.ε^2 / p.μϱ
+function evolution_parameter(p::Parameters, ts::BDF2)
+    #TODO: This assumes fixed Δt.
+    return 2/3 * ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
 
 ####
