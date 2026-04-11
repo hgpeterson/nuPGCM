@@ -274,7 +274,8 @@ function evolve!(model::Model, u_prev, b_prev)
     rhs_adv = rhs_adv[perm]
     rhs_adv  = on_architecture(arch, rhs_adv)
     # rhsᵥ  = on_architecture(arch, model.evolution.rhsᵥ)
-    @. solver.y = rhs_adv + θ*rhs_diff + rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
+    Δt = model.timestepper.Δt[]
+    @. solver.y = rhs_adv + θ*rhs_diff + Δt*rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
     @ctime "  solve evol sys" iterative_solve!(solver)
 
     # sync buoyancy to state

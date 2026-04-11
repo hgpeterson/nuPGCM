@@ -34,12 +34,11 @@ arch = CPU()
 α = 1/2    # aspect ratio
 μϱ = 1     # Prandtl times Burger number
 N² = 1/α   # background stratification (if you want `b` to be a perturbation from N²z)
-Δt = 1e-3  # time step
 f₀ = 1.0
 β = 0.5
 f(x) = f₀ + β*x[2]  # Coriolis parameter
 H(x) = α*(1 - x[1]^2 - x[2]^2)  # bathymetry
-params = Parameters(ε, α, μϱ, N², Δt, f, H)
+params = Parameters(; ε, α, μϱ, N², f, H)
 
 # Next, we define the forcings. For this simple example, we'll be applying 
 # bottom-enhanced mixing and no wind stress.
@@ -159,17 +158,22 @@ set_b!(model, x -> 0.1*exp(-(x[3] + H(x))/(0.1*α)))
 invert!(model)
 save_state(model, "$out_dir/data/state.jld2")
 save_vtk(model, ofile="$out_dir/data/state.vtu")
- 
-# Here we want to see how the flow and buoyancy evolve in time, however, so 
-# we need to build the evolution system.
 
-evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings)
+# Here we want to see how the flow and buoyancy evolve in time, however, so 
+# we need to set up a timestepper and build the evolution system. We currently
+# support the BDF1 and BDF2 implicit-explicit time stepping schemes. For adaptive
+# time stepping based on the CFL condition, set `adaptive=true` and choose a 
+# `CFL_factor` (currently only for the BDF1 scheme). For this example, we'll 
+# just use a fixed time step.
+
+timestepper = BDF2(; t_start=0, t_stop=0.1*μϱ/ε^2, Δt=1e-3)
+evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper)
 
 # # Construct `Model`
 
 # Now we put everything together in the `Model` type.
 
-model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # We can set the intial condition to be whatever we want with `set_b!(model, foo)`
 # where `foo` is a function of `x`. By default, the buoyancy is always set to 0
@@ -179,6 +183,9 @@ model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_tool
 # having a nonzero background startification is that the inversion tends to be more
 # accurate for smaller variations in buoyancy.
 
+# If you have a data file with a state you want to start from, use 
+# `set_state_from_file!(model, datafile)`.
+
 # To start with, let's sync up the flow with whatever initial condition we chose
 # and save a `.vtu` file.
  
@@ -187,13 +194,9 @@ save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # # `run!`
 
-# Finally, it's time to run the model! `run!` just needs to know how many steps
-# to take `n_steps`, how often to make save files `n_save` (default `Inf`),
-# and how often to make plots `n_plot` (default `Inf`). If you want to turn
-# advection off and only diffuse buoyancy, set `advection=false`. If you are
-# starting from a save file, you can also set `i_step` to something other than `1`.
+# Finally, it's time to run the model! `run!` just needs to know how often to
+# print info `n_info` (default 10), how often to make save files `n_save` 
+# (default `Inf`), and how often to make plots `n_plot` (default `Inf`). If 
+# you want to turn advection off and only diffuse buoyancy, set `advection=false`.
 
-T = 0.1*μϱ/ε^2  # simulation time
-n_steps = Int(round(T / Δt))
-n_save = n_steps ÷ 100
-run!(model; n_steps, n_save)
+run!(model; n_save=250)
