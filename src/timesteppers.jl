@@ -40,6 +40,15 @@ struct BDF2{RT, T, DT} <: AbstractTimestepper
     Δt::DT          # Ref to current timestep
 end
 
+# TODO: this overload will not be needed once BDF2 supports adaptive timestepping
+function Base.getproperty(ts::BDF2, sym::Symbol)
+    if sym == :adaptive
+        return false
+    else
+        return getfield(ts, sym)
+    end
+end
+
 function Base.show(io::IO, ts::BDF2)
     println(io, summary(ts), ":")
     println(io, "├── t: ", ts.t[])
@@ -95,8 +104,8 @@ where `c = timestepper.CFL_factor`, `h_K = h_cells[k]` is the cell size, and `|u
 cell K (computed over the quadrature points). `u_min` is a lower bound on velocity to prevent Δt from becoming too large 
 when velocities are small.
 """
-# NOTE: this function currently cannot be used for BDF2, but should be supported in the future
-function update_Δt!(timestepper::AbstractTimestepper, u, dΩ, h_cells; u_min=0.01)
+# TODO: once BDF2 supports adaptive timestepping, this function should be updated to take a generic AbstractTimestepper
+function update_Δt!(timestepper::BDF1, u, dΩ, h_cells; u_min=0.01)
     # local L∞ velocity norm: max |u| over quadrature points in each cell
     q_pts = get_cell_points(dΩ)
     speed_q = evaluate(Operation(norm)(u), q_pts) # cell array of arrays
@@ -106,5 +115,8 @@ function update_Δt!(timestepper::AbstractTimestepper, u, dΩ, h_cells; u_min=0.
     ratios = h_cells ./ max.(u_cells, u_min)
     timestepper.Δt[] = timestepper.CFL_factor*minimum(ratios)
 
+    return timestepper
+end
+function update_Δt!(timestepper::BDF2, u, dΩ, h_cells; u_min=0.01)
     return timestepper
 end

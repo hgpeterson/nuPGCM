@@ -1,5 +1,5 @@
-struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit, I}
-# struct EvolutionToolkit{A<:AbstractArchitecture, AS, M, V, VV, S<:IterativeSolverToolkit, I}
+struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit}
+# struct EvolutionToolkit{A<:AbstractArchitecture, AS, M, V, VV, S<:IterativeSolverToolkit}
     arch::A      # architecture (CPU or GPU)
     # assembler::AS # sparse matrix assembler (Gridap)
     M::M         # Mass matrix
@@ -56,7 +56,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
                           fe_data::FEData, 
                           params::Parameters, 
                           forcings::Forcings,
-                          timestepper::AbstractTimestepper; 
+                          ts::AbstractTimestepper; 
                           atol=1e-6, 
                           rtol=1e-6, 
                           itmax=0, 
@@ -73,8 +73,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     # build
     @info "Building evolution system..."
 
-    # save sparse assembler for efficient re-building later
-    assembler = Gridap.SparseMatrixAssembler(B_trial, B_test)
+    # # save sparse assembler for efficient re-building later
+    # assembler = Gridap.SparseMatrixAssembler(B_trial, B_test)
 
     # build components
     M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
@@ -107,7 +107,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     # rhsᵥ = on_architecture(arch, rhsᵥ)  # not this one because it gets rebuilt
 
     # combine to make evolution LHS
-    A, P = collect_evolution_LHS(arch, params, forcings, timestepper, M, Kₕ, Kᵥ)
+    ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[]) # dummy timestepper since we always have to start with a BDF1 step
+    A, P = collect_evolution_LHS(arch, params, forcings, ts1, M, Kₕ, Kᵥ)
 
     # rhs vector for solver
     N = size(A, 1)

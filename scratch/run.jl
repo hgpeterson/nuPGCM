@@ -45,7 +45,6 @@ t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
 α = 1/4
 N² = 0
-Δt = 3600/t₀  # TODO: move to timestepper
 f(x) = x[2]
 H(x) = α
 # function H((x, y, z))
@@ -88,7 +87,7 @@ H(x) = α
 #         throw(ArgumentError("y out of bounds"))
 #     end
 # end
-params = Parameters(ε, α, μϱ, N², Δt, f, H)
+params = Parameters(; ε, α, μϱ, N², f, H)
 display(params)
 
 # forcings
@@ -141,7 +140,9 @@ display(fe_data.dofs)
 inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
 
 # set timestepper
-timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=params.Δt, adaptive=true, CFL_factor=0.8)
+Δt = 10*86400/t₀
+# timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt, adaptive=true, CFL_factor=0.8)
+timestepper = BDF2(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt)
 
 # build evolution system
 evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 

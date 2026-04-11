@@ -5,18 +5,13 @@ struct Parameters{T<:Real, F, H}
     α::T      # aspect ratio (H₀ / L₀)
     μϱ::T     # Prandtl (ν₀ / κ₀) times Burger number (N₀²H₀² / f₀²L₀²)
     N²::T     # background stratification (nondimensional)
-    Δt::T     # timestep
     f::F      # Coriolis parameter (function of x)
     H::H      # Depth (function of x)
+end
 
-    # inner constructor to ensure all parameters are of the same type
-    function Parameters(ε, α, μϱ, N², Δt, f, H)
-        args = promote(ε, α, μϱ, N², Δt)
-        T = typeof(args[1])
-        f_type = typeof(f)
-        H_type = typeof(H)
-        return new{T, f_type, H_type}(args..., f, H)
-    end
+function Parameters(; ε, α, μϱ, N², f, H)
+    args = promote(ε, α, μϱ, N²)
+    return Parameters(args..., f, H)
 end
 
 function Base.summary(params::Parameters)
@@ -29,7 +24,6 @@ function Base.show(io::IO, params::Parameters)
     println(io, @sprintf("├── α  = %1.1e", params.α))
     println(io, @sprintf("├── μϱ = %1.1e", params.μϱ))
     println(io, @sprintf("├── N² = %1.1e", params.N²))
-    println(io, @sprintf("├── Δt = %1.1e", params.Δt))
     println(io,          "├── f: ", params.f)
       print(io,          "└── H: ", params.H)
 end

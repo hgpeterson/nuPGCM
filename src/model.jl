@@ -131,15 +131,9 @@ function run!(model::Model; n_info=10, n_save=Inf, n_plot=Inf, advection=true)
         update_Δt!(timestepper, u, model.fe_data.mesh.dΩ, h_cells)
         Δt = timestepper.Δt[]
 
-        if i == 1
-            # first-order timestep at first
-            order = 1
-        elseif i == 2
-            # can be second-order later
-            order = model.evolution.order
-            if order == 2
-                collect_evolution_LHS!(model.evolution, model.params, Δt, model.forcings)
-            end
+        if i == 2 && typeof(timestepper) <: BDF2
+            # need to do one step with BDF1, now we can switch to BDF2 if desired
+            collect_evolution_LHS!(model.evolution, model.params, model.forcings, timestepper)
         end
 
         # sync current u, b before they update
