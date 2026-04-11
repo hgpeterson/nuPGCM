@@ -38,6 +38,7 @@ jobs:
           Pkg.build("GridapGmsh")
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
+          Pkg.precompile()
       - name: Build and deploy
         run: julia --color=yes --project=docs docs/make.jl
         env:
