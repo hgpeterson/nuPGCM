@@ -120,12 +120,15 @@ end
 """
     h_cells = compute_h_cells(mesh::Mesh)
 
-Compute characteristic cell size cell in the mesh.
+Compute characteristic cell size for each cell in the mesh.
 
-Here we use h_K ∼ vol(K)^(1/dim) as a simple measure of cell size. 
+Here we just use the maximum edge length of the cell.
 """
 function compute_h_cells(mesh::Mesh)
-    dim = num_dims(mesh.model)
-    vols = collect(get_cell_measure(mesh.Ω))
-    return vols .^ (1 / dim)
+    coords = get_cell_coordinates(mesh.Ω)  # lazy cell array of vertex tuples
+    map(get_array(coords)) do verts
+        maximum(norm(verts[i] - verts[j])
+                for i in 1:length(verts)
+                for j in i+1:length(verts))
+    end
 end
