@@ -16,7 +16,7 @@ function Base.show(io::IO, state::State)
 end
 
 struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData, 
-             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing}, S<:State, T<:AbstractTimestepper}
+             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing}, S<:State, T<:Union{AbstractTimestepper,Nothing}}
     arch::A
     params::P
     forcings::F

@@ -3,9 +3,9 @@ module nuPGCM
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
-using CUDA
-using CUDA.CUSPARSE
-using CUDA.CUSOLVER
+# using CUDA
+# using CUDA.CUSPARSE
+# using CUDA.CUSOLVER
 using CuthillMcKee
 using JLD2
 using LinearAlgebra
@@ -14,6 +14,13 @@ using Krylov
 using KrylovPreconditioners
 using PyPlot
 using Printf
+
+# # silence CUDA discovery warning
+# function __init__()
+#     if !CUDA.functional(true)
+#         @info "No CUDA-capable GPU found, falling back to CPU."
+#     end
+# end
 
 # unit vectors
 x⃗ = VectorValue(1.0, 0.0, 0.0)
