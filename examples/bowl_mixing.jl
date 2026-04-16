@@ -20,9 +20,11 @@ set_out_dir!(joinpath(@__DIR__, ""))
 # You can choose to run the model on either a `CPU()` or `GPU()`. When you 
 # run on the CPU, the model will try to factorize matrices if they are small 
 # enough. On the GPU (or for large problems on the CPU), the model uses 
-# iterative solvers. For simplicity here, let's just use a CPU.
+# iterative solvers. For simplicity here, let's just use a CPU. 
 
 arch = CPU()
+
+# If you want to run on a GPU, first do `using CUDA` to load the `nuPGCMCUDAExt` extension.
 
 # ## Setting `Parameters` and `Forcings`
 
