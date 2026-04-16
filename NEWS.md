@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added 
+
+- New `AbstractTimestepper` type with `BDF1` and `BDF2` implementations to handle timestepping
+- Adaptive timestepping for `BDF1`
+
+### Changed
+
+- Moved CUDA-specific code to `ext/nuPGCMCUDAExt.jl` so that it only gets loaded after `using CUDA`
+
 ## [0.6.2] - 2026-04-09
 
 ### Added
