@@ -76,6 +76,11 @@ def sample_to_grid(dataset: pv.DataSet, grid: Grid):
     return samples
 
 
+def depth(samples: pv.PointSet, grid: Grid):
+    mask = samples["vtkValidPointMask"].reshape(grid.nx, grid.ny, grid.nz)
+    return trapezoid(mask, x=grid.z, axis=2)
+
+
 def zonal_width(samples: pv.PointSet, grid: Grid):
     mask = samples["vtkValidPointMask"].reshape(grid.nx, grid.ny, grid.nz)
     return trapezoid(mask, x=grid.x, axis=0)

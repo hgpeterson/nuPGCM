@@ -12,7 +12,7 @@ include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!("/resnick/scratch/hppeters/sim052")
+set_out_dir!("/resnick/scratch/hppeters/sim051e")
 
 # architecture
 arch = GPU()
@@ -140,8 +140,9 @@ inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000
 
 # set timestepper
 Δt = 1*86400/t₀
-timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt, adaptive=true, CFL_factor=0.8)
-# timestepper = BDF2(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt)
+# t_stop = μϱ/ε^2/κ_B
+t_stop = μϱ/ε^2/κ_I
+timestepper = BDF1(; t_start=0, t_stop=t_stop, Δt=Δt, adaptive=true, CFL_factor=0.8)
 
 # build evolution system
 evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 
@@ -150,7 +151,8 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timesteppe
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
-set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
+# set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
+set_state_from_file!(model, "/resnick/scratch/hppeters/sim051c/data/state_0000000000010800.jld2")
 invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 

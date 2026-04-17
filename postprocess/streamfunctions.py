@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import pyvista as pv
 import numpy as np
-from tqdm import tqdm
 from time import time
 from scipy.integrate import trapezoid, cumulative_trapezoid
 from pathlib import Path
@@ -12,51 +11,37 @@ wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
 
 
-def calculate_barotropic_streamfunction(vtu_file, n_grid=2**6, n_z_samples=2**5):
+def calculate_barotropic_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, printtime=False):
+    if printtime:
+        t0 = time()
+
     # read the VTU file
     dataset = pv.read(vtu_file)
 
-    if "u" not in dataset.array_names:
-        raise ValueError(f"Velocity field 'u' not found. Available: {dataset.array_names}")
+    # time
+    t = dataset["t"][0]
 
-    # create 2D grid for (x, y) evaluation
-    points = dataset.points
-    x_min, x_max = points[:, 0].min(), points[:, 0].max()
-    y_min, y_max = points[:, 1].min(), points[:, 1].max()
-    z_min, z_max = points[:, 2].min(), points[:, 2].max()
+    # evenly-spaced grid
+    grid = utils.Grid(dataset, nx, ny, nz)
 
-    x_1d = np.linspace(x_min, x_max, n_grid)
-    y_1d = np.linspace(y_min, y_max, n_grid)
-    x_grid, y_grid = np.meshgrid(x_1d, y_1d)
-    z_grid = np.linspace(z_min, z_max, n_z_samples)
+    # sample
+    samples = utils.sample_to_grid(dataset, grid)
+    u = samples["u"][:, 0].reshape(nx, ny, nz)
 
-    # for each (x, y) point, integrate u(x, y, z) from z = -H to z = 0
-    U_grid = np.zeros_like(x_grid)
-    for i in tqdm(range(n_grid)):
-        for j in range(n_grid):
-            x_ij = x_grid[j, i]
-            y_ij = y_grid[j, i]
+    # vertical integral
+    U = trapezoid(u, x=grid.z, axis=2)
+    H = utils.depth(samples, grid)
 
-            # sample velocity along this vertical line
-            line = pv.PointSet(np.array([[x_ij, y_ij, z] for z in z_grid]))
-            samples = line.sample(dataset)
+    # calculate streamfunction as Psi(x, y) = -∫_0^y U(x, y') dx
+    Psi = trapezoid(U, grid.y, axis=1) - cumulative_trapezoid(U, grid.y, axis=1, initial=0)
+    nan_mask = np.where(H == 0)
+    U[nan_mask] = np.nan
+    Psi[nan_mask] = np.nan
 
-            # check which points are inside the mesh (points outside will be NaNs)
-            valid_mask = samples["vtkValidPointMask"] == 1
+    if printtime:
+        print(f"barotropic streamfunction computed in {time() - t0:.3e} s")
 
-            if any(valid_mask):
-                # integrate U = ∫ u dz from -H to 0
-                z_valid = z_grid[valid_mask]
-                u_valid = samples["u"][valid_mask]
-                U_grid[j, i] = trapezoid(u_valid, z_valid)
-
-    # calculate streamfunction as Ψ(x,y) = ∫_y^L U(x, y') dy' from y = y to y = L
-    # or equivalently, ∫_{-L}^L U(x, y') dy' - ∫_0^y U(x, y') dy'
-    psi_grid = np.zeros_like(U_grid)
-    for i in range(n_grid):
-        psi_grid[:, i] = trapezoid(U_grid[:, i], y_1d) - cumulative_trapezoid(U_grid[:, i], y_1d, initial=0)
-
-    return psi_grid, x_grid, y_grid, U_grid
+    return Psi, U, grid, t
 
 
 def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, printtime=False):
@@ -75,7 +60,6 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, pr
 
     # sample
     samples = utils.sample_to_grid(dataset, grid)
-    # v = samples["v"].reshape(nx, ny, nz)
     v = samples["u"][:, 1].reshape(nx, ny, nz)
     b = samples["b"].reshape(nx, ny, nz)
 
@@ -84,25 +68,7 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, pr
     v_int = trapezoid(v, x=grid.x, axis=0)
     b_bar = utils.zonal_mean(b, grid, width)
 
-    # # debug: plot width
-    # y = grid.y
-    # z = grid.z
-    # alpha = -z.min()
-    # fig, ax = plt.subplots(1, figsize=(33 / 6, 33 / 6 / 1.62 / 2))
-    # ax.spines["bottom"].set_visible(False)
-    # ax.spines["left"].set_visible(False)
-    # cf1 = ax.pcolormesh(y, z, width.T, cmap="viridis")
-    # plt.colorbar(cf1, label="Width")
-    # ax.set_xticks([-1, 0, 1])
-    # ax.set_yticks([-alpha, 0])
-    # ax.set_yticklabels([r"$-\alpha$", "0"])
-    # ax.set_xlabel(r"$y$")
-    # ax.set_ylabel(rf"$z$ ($\alpha = {alpha}$)")
-    # plt.savefig("width.png")
-    # print("width.png")
-    # plt.close()
-
-    # calculate streamfunction as Ψ(y,z) = -1/α * ∫_-H^z v(y, z') dz'
+    # calculate streamfunction as psi(y,z) = -1/α * ∫_-H^z v(y, z') dz'
     psi_bar = -1 / alpha * cumulative_trapezoid(v_int, grid.z, axis=1, initial=0)
     nan_mask = np.where(width == 0)
     v_int[nan_mask] = np.nan
@@ -114,37 +80,40 @@ def calculate_overturning_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, pr
     return psi_bar, v_int, b_bar, grid, t
 
 
-def plot_barotropic_streamfunction(psi_grid, x_grid, y_grid, U_grid=None):
-    fig, axes = plt.subplots(1, 2 if U_grid is not None else 1, figsize=(14, 5))
+def plot_barotropic_streamfunction(Psi, grid, t=None, filename="psi_baro.png", Psimax=None, maskchannel=False):
+    x = grid.x
+    y = grid.y
+    xx, yy = np.meshgrid(x, y, indexing="ij")
 
-    if U_grid is not None:
-        ax1, ax2 = axes
-    else:
-        ax1 = axes
+    fig, ax = plt.subplots(1, figsize=(19 / 6, 19 / 6 * 1.62))
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
 
-    # Plot streamfunction
-    levels = 20
-    vmax = np.max(np.abs(psi_grid))
-    cf1 = ax1.contourf(x_grid, y_grid, psi_grid, levels=levels, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-    ax1.contour(x_grid, y_grid, psi_grid, levels=levels, colors="k", linewidths=0.5, alpha=0.3)
-    plt.colorbar(cf1, ax=ax1, label="Streamfunction Ψ")
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("y")
-    ax1.set_title("Barotropic Streamfunction")
-    ax1.set_aspect("equal")
+    if maskchannel:
+        nan_mask = np.where((yy < -0.5))
+        Psi[nan_mask] = np.nan
+    if Psimax is None:
+        Psimax = np.nanmax(np.abs(Psi))
 
-    # Plot depth-averaged velocity if provided
-    if U_grid is not None:
-        vmax = np.max(np.abs(U_grid))
-        cf2 = ax2.contourf(x_grid, y_grid, U_grid, levels=levels, cmap="RdBu_r", vmin=-vmax, vmax=vmax)
-        plt.colorbar(cf2, ax=ax2, label="U (depth-averaged velocity)")
-        ax2.set_xlabel("x")
-        ax2.set_ylabel("y")
-        ax2.set_title("Depth-Averaged Velocity U")
-        ax2.set_aspect("equal")
-
-    plt.tight_layout()
-    plt.show()
+    cf1 = ax.pcolormesh(x, y, Psi.T, cmap="RdBu_r", vmin=-Psimax, vmax=Psimax, rasterized=True)
+    levels = np.linspace(-0.9 * Psimax, 0.9 * Psimax, 8)
+    ax.contour(x, y, Psi.T, levels=levels, colors="k", linestyles="-", linewidths=0.25)
+    cb = plt.colorbar(cf1, label=r"Barotropic streamfunction $\Psi$", shrink=0.5)
+    cb.ax.set_yticks([-Psimax, 0, Psimax])
+    cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
+    ax.text(0.8, 1.02, rf"Max = {utils.to_latex_sci(Psimax)}", transform=ax.transAxes, size=7)
+    if maskchannel:
+        ax.fill_between(x, -0.5, y.min(), color="k", alpha=0.1, ec="none")
+    ax.axhline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
+    ax.set_xticks([0, 1])
+    ax.set_yticks([-1, 0, 1])
+    ax.set_xlabel(r"Zonal coordinate $x$")
+    ax.set_ylabel(r"Meridional coordinate $y$")
+    if t is not None:
+        ax.set_title(r"$t = $" + utils.to_latex_sci(t))
+    plt.savefig(filename)
+    print(filename)
+    plt.close()
 
 
 def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=None, i=None, cmap="RdBu_r", cb_sym=True):
@@ -234,8 +203,8 @@ def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png"
 if __name__ == "__main__":
     overwrite = False
     # overwrite = True
-    sims = ["051"]
-    geoms = ["slope"]
+    sims = ["050a", "051a", "051b", "051c", "051d"]
+    geoms = ["slope", "flat", "flat", "flat", "flat"]
     # sims_dir = "../sims"
     sims_dir = "/resnick/scratch/hppeters"
     for i in range(len(sims)):
@@ -248,22 +217,36 @@ if __name__ == "__main__":
         for vtu_file in vtu_files:
         # for vtu_file in [vtu_files[-1]]:
             i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-            img_file = f"{dir}/images/psi{i:016d}.png"
+
+            # img_file = f"{dir}/images/psi{i:016d}.png"
+            # if os.path.exists(img_file) and not overwrite:
+            #     print("Skipping " + img_file)
+            #     continue
+            # n = 2**7
+            # psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
+            #     vtu_file, nx=n, ny=n, nz=n, printtime=True
+            # )
+            # plot_overturning_streamfunction(psi_bar, b_bar, grid, 
+            #                                 t=t, 
+            #                                 filename=img_file, 
+            #                                 bmin=-15, 
+            #                                 # bmax=0, 
+            #                                 bmax=-10, 
+            #                                 geometry=geom)
+
+            img_file = f"{dir}/images/psi_baro{i:016d}.png"
             if os.path.exists(img_file) and not overwrite:
                 print("Skipping " + img_file)
                 continue
-
             n = 2**7
-            psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
-                vtu_file, nx=n, ny=n, nz=n, printtime=True
-            )
-            plot_overturning_streamfunction(psi_bar, b_bar, grid, 
-                                            t=t, 
-                                            filename=img_file, 
-                                            bmin=-15, 
-                                            # bmax=0, 
-                                            bmax=-10, 
-                                            geometry=geom)
+            Psi, U, grid, t = calculate_barotropic_streamfunction(vtu_file, nx=n, ny=n, nz=n, printtime=True)
+            plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file)
+
+            img_file = f"{dir}/images/psi_baro_mask{i:016d}.png"
+            if os.path.exists(img_file) and not overwrite:
+                print("Skipping " + img_file)
+                continue
+            plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file, maskchannel=True)
 
         # dataset = pv.read(vtu_file)
         # t = dataset["t"][0]
