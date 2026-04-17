@@ -17,7 +17,8 @@ end
 
 export on_architecture, 
 architecture, 
-vector_type
+vector_type,
+print_memory_status
 
 # implement `on_architecture`, `architecture`, and `vector_type` for CUDA
 nuPGCM.on_architecture(::GPU, a::Array) = CuArray(a)
@@ -29,5 +30,6 @@ nuPGCM.on_architecture(::GPU, a::CuSparseMatrixCSR) = a
 nuPGCM.architecture(::CuArray) = GPU()
 nuPGCM.architecture(::CuSparseMatrixCSR) = GPU()
 nuPGCM.vector_type(::GPU, T) = CuVector{T}
+nuPGCM.print_memory_status(::GPU) = CUDA.pool_status()
 
 end # module

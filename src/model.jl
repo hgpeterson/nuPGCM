@@ -184,8 +184,8 @@ function run!(model::Model; n_info=10, n_save=Inf, n_plot=Inf, advection=true)
             msg *= @sprintf("%.3e ≤ b_free ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n", 
                             minimum(b.free_values), maximum(b.free_values), 
                             maximum(abs.(b.free_values - b_prev.free_values)/Δt))
-            msg *= @sprintf("Memory usage: %.3e / %.3e GB\n", Sys.total_memory()/1e9 - Sys.free_memory()/1e9, Sys.total_memory()/1e9)
-            msg *= @sprintf("Live heap: %.3e GB\n", Base.gc_live_bytes()/1e9)
+            # msg *= @sprintf("Memory usage: %.3e / %.3e GB\n", Sys.total_memory()/1e9 - Sys.free_memory()/1e9, Sys.total_memory()/1e9)
+            # msg *= @sprintf("Live heap: %.3e GB\n", Base.gc_live_bytes()/1e9)
             msg
             end
             t_last_info = t₁

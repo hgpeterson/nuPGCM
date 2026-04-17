@@ -1,4 +1,5 @@
 using nuPGCM
+using CUDA
 using Gridap
 using JLD2
 using Printf
@@ -11,11 +12,10 @@ include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))
 # ENV["JULIA_DEBUG"] = nuPGCM
 ENV["JULIA_DEBUG"] = nothing
 
-set_out_dir!(joinpath(@__DIR__, "adaptive_timestep"))
-# set_out_dir!("/resnick/scratch/hppeters/sim050")
+set_out_dir!("/resnick/scratch/hppeters/sim052")
 
 # architecture
-arch = CPU()
+arch = GPU()
 
 # params
 
@@ -104,8 +104,8 @@ d = 3.526e-01*α
 τʸ(x) = 0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
-conv_param = nothing#ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = nothing#EddyParameterization(f=f, N²min=sqrt(1e-3))
+conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
+eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 display(forcings.conv_param)
@@ -113,8 +113,7 @@ display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 # mesh
-h = 8e-2
-# h = 2e-2
+h = 2e-2
 # mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
 mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
 if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
@@ -140,9 +139,9 @@ display(fe_data.dofs)
 inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
 
 # set timestepper
-Δt = 10*86400/t₀
-# timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt, adaptive=true, CFL_factor=0.8)
-timestepper = BDF2(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt)
+Δt = 1*86400/t₀
+timestepper = BDF1(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt, adaptive=true, CFL_factor=0.8)
+# timestepper = BDF2(; t_start=0, t_stop=μϱ/ε^2/κ_B, Δt=Δt)
 
 # build evolution system
 evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 
@@ -151,7 +150,7 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timesteppe
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
-set_b!(model, x -> b_surface(x))
+set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
 invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
@@ -160,5 +159,3 @@ save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 n_save = 100
 n_plot = Inf
 run!(model; n_save, n_plot)
-
-println("Done.")

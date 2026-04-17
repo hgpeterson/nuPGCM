@@ -1,5 +1,6 @@
 using Test
 using nuPGCM
+using CUDA
 using Gridap
 using JLD2
 using Printf

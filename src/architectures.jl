@@ -15,3 +15,6 @@ architecture(::SparseMatrixCSC) = CPU()
 
 # create a vector holding elements of type T on architecture 
 vector_type(::CPU, T) = Vector{T}
+
+# memory status
+print_memory_status(::CPU) = println("CPU memory usage: " * string(round(Sys.maxrss() / 1e9, digits = 3)) * " GiB")
