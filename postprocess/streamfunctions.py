@@ -203,8 +203,8 @@ def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png"
 if __name__ == "__main__":
     overwrite = False
     # overwrite = True
-    sims = ["050a", "051a", "051b", "051c", "051d"]
-    geoms = ["slope", "flat", "flat", "flat", "flat"]
+    sims = ["050b", "051e"]
+    geoms = ["slope", "flat"]
     # sims_dir = "../sims"
     sims_dir = "/resnick/scratch/hppeters"
     for i in range(len(sims)):
