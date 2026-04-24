@@ -5,20 +5,26 @@ using JLD2
 using Printf
 using Gridap
 
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
+ENABLE_TIMING[] = true
+
+set_out_dir!("/resnick/scratch/hppeters/sim054")
+
+geom = :tub
+# geom = :box
+
 # for making mesh
-# include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
-include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
-
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
-
-set_out_dir!("/resnick/scratch/hppeters/sim051e")
+if geom == :tub
+    include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
+elseif geom == :box
+    include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
+end
 
 # architecture
 arch = GPU()
 
 # params
-
 Ω = 2π/86400  # s⁻¹
 a = 6.371e6  # m
 β = 2Ω/a  # m⁻¹ s⁻¹
@@ -43,66 +49,72 @@ t₀ = 1/f₀/ϱ  # s
 @info "scales" b₀ ν₀ τ₀ t₀
 
 μϱ = μ*ϱ
-α = 1/4
+α = 1/8
 N² = 0
 f(x) = x[2]
-H(x) = α
-# function H((x, y, z))
-#     L = 2
-#     W = 1
-#     L_channel = L/4
-#     L_flat_channel = 5L_channel/8 # length of flat part of channel
-#     H = α*W
+function H((x, y, z))
+    if geom == :box
+        return α
+    end
+    L = 2
+    W = 1
+    L_channel = L/4
+    L_flat_channel = 5L_channel/8 # length of flat part of channel
+    H = α*W
 
-#     # parabola that has a maximum of H at x_max and a 0 at x_zero
-#     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
+    # parabola that has a maximum of H at x_max and a 0 at x_zero
+    parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
 
-#     function H_basin(x)
-#         if 0 ≤ x ≤ W
-#             return parabola(x, W/2, 0)
-#         else
-#             throw(ArgumentError("x out of bounds"))
-#         end
-#     end
+    function H_basin(x)
+        if 0 ≤ x ≤ W
+            return parabola(x, W/2, 0)
+        else
+            throw(ArgumentError("x out of bounds"))
+        end
+    end
 
-#     if -L/2 ≤ y ≤ -L/2 + L_flat_channel
-#         return H
-#     elseif y ≤ -L/2 + L_channel
-#         H_channel = parabola(y, -L/2 + L_flat_channel, -L/2 + L_channel)
-#         return max(H_channel, H_basin(x))
-#     elseif y ≤ L/2 - W/2
-#         return H_basin(x)
-#     elseif y ≤ L/2
-#         r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
-#         if r > W/2
-#             if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
-#                 return 0
-#             else
-#                 throw(ArgumentError("(x, y) out of bounds"))
-#             end
-#         else
-#             return parabola(r, 0, W/2)
-#         end
-#     else
-#         throw(ArgumentError("y out of bounds"))
-#     end
-# end
+    if -L/2 ≤ y ≤ -L/2 + L_flat_channel
+        return H
+    elseif y ≤ -L/2 + L_channel
+        H_channel = parabola(y, -L/2 + L_flat_channel, -L/2 + L_channel)
+        return max(H_channel, H_basin(x))
+    elseif y ≤ L/2 - W/2
+        return H_basin(x)
+    elseif y ≤ L/2
+        r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
+        if r > W/2
+            if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
+                return 0
+            else
+                throw(ArgumentError("(x, y) out of bounds"))
+            end
+        else
+            return parabola(r, 0, W/2)
+        end
+    else
+        throw(ArgumentError("y out of bounds"))
+    end
+end
 params = Parameters(; ε, α, μϱ, N², f, H)
 display(params)
 
 # forcings
-# κ_I = 1
-# κ_B = 1e2
-# d = 500/4000*α
-κ_I = 5.706e+00
-κ_B = 2.535e+01
-d = 3.526e-01*α
+if geom == :tub
+    κ_I = 1
+    κ_B = 1e2
+    d = 500/4000*α
+elseif geom == :box
+    κ_I = 5.706e+00
+    κ_B = 2.535e+01
+    d = 3.526e-01*α
+end
 ν(x) = 1
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
 τʸ(x) = 0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
+# b_surface(x) = -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
 conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
 eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
@@ -113,12 +125,18 @@ display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 # mesh
-h = 2e-2
-# mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
-mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+h = 1e-2
+if geom == :tub
+    mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+elseif geom == :box
+    mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
+end
 if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
-    # mesh_channel_basin_no_flat(h, α)
-    mesh_channel_basin_flat(h, α)
+    if geom == :tub
+        mesh_channel_basin_no_flat(h, α)
+    elseif geom == :box
+        mesh_channel_basin_flat(h, α)
+    end
 end
 mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
 
@@ -151,13 +169,12 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timesteppe
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
-# set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
-set_state_from_file!(model, "/resnick/scratch/hppeters/sim051c/data/state_0000000000010800.jld2")
+set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
+# set_state_from_file!(model, "/resnick/scratch/hppeters/sim051c/data/state_0000000000010800.jld2")
 invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 
 # solve
 @info @sprintf("Diffusion timescales: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
 n_save = 100
-n_plot = Inf
-run!(model; n_save, n_plot)
+run!(model; n_save)

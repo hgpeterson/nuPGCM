@@ -39,6 +39,7 @@ class Grid:
         self.x = np.linspace(x_min, x_max, nx)
         self.y = np.linspace(y_min, y_max, ny)
         self.z = np.linspace(z_min, z_max, nz)
+        # self.xx, self.yy, self.zz = np.meshgrid(self.x, self.y, self.z, indexing="ij")
         self.nx = nx
         self.ny = ny
         self.nz = nz

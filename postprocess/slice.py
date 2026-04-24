@@ -64,6 +64,12 @@ class SlicePlotter:
         else:
             if vmax < np.max(np.abs(field)):
                 extend = "both"
+            elif vmax < field.max():
+                extend = "max"
+            elif -vmax < field.min():
+                extend = "min"
+            else:
+                extend = "neither"
         b = ds_slice["b"]
         if bmax is None:
             bmax = b.max()
@@ -82,10 +88,8 @@ class SlicePlotter:
         ax.set_ylabel(self.ylabel)
         if self.direction in ["x", "y"]:
             ax.set_yticks([x2.min(), 0])
-            ax.set_yticklabels([r"$\dfrac{H}{L}$", r"$0$"])
         if self.direction == "y":
             ax.set_xticks([0, x1.max()])
-            ax.set_xticklabels([r"$0$", r"$L$"])
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
         # ax.set_title(rf"${self.direction} = {self.location:0.2f}$")
@@ -156,56 +160,6 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
     print(output_file)
     plt.close()
 
-def diapycnal_vel_plot(vtu_file, y, bmin=None, bmax=None, n=2**8, output_file="image.png"):
-    dataset = pv.read(vtu_file)
-    p = dataset.points
-    x_min, x_max = p[:, 0].min(), p[:, 0].max()
-    z_min, z_max = p[:, 2].min(), p[:, 2].max()
-    x = np.linspace(x_min, x_max, n)
-    z = np.linspace(z_min, z_max, n)
-    alpha = -z_min
-
-    # params: sim034/35
-    varepsilon = 6.9e-2
-    muvarrho = 18
-
-    # sample
-    xx, zz = np.meshgrid(x, z, indexing="ij")
-    points = pv.PointSet(np.column_stack([xx.ravel(), y*np.ones(n**2), zz.ravel()]))
-    samples = points.sample(dataset)
-    b = samples["b"].reshape(n, n)
-    kappa = samples["kappa_v"].reshape(n, n)
-    kappa *= alpha**2 * varepsilon**2 / muvarrho
-    nanmask = (samples["vtkValidPointMask"] == 0).reshape(n, n)
-    b[nanmask] = np.nan
-
-    # diapycnal velocity e = -(kappa * b_z)_z / |b_z|
-    bz = np.gradient(b, z, axis=1)
-    e = -np.gradient(kappa*bz, z, axis=1) / (np.abs(bz) + 1e-16)
-
-    # mask errors
-    e[np.where(np.abs(e) > 0.1)] = 0.1
-
-    # plot
-    # vmax = np.nanmax(np.abs(e))
-    vmax = 0.1
-    if bmin is None:
-        bmin = b.min()
-    if bmax is None:
-        bmax = b.max()
-    fig, ax = plt.subplots(1)
-    im = ax.pcolormesh(x, z, e.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r", rasterized=True)
-    plt.colorbar(im, ax=ax, label=r"$\tilde{e}$", shrink=0.5)
-    ax.contour(x, z, b.T, levels=np.linspace(bmin, bmax, 20), colors="k", linestyles="-", alpha=0.3)
-    ax.set_xlabel(r"Zonal coordinate $x$")
-    ax.set_ylabel(r"Vertical coordinate")
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.set_title(rf"$y = {y:0.2f}$")
-    plt.savefig(output_file) 
-    print(output_file)
-    plt.close()
-
 
 if __name__ == "__main__":
     # for sim in range(33, 45):
@@ -239,26 +193,19 @@ if __name__ == "__main__":
     #         diapycnal_vel_plot(vtu_file, y, bmin=-15, bmax=-10, output_file=f"{dir}/images/e_slice_y{y:0.2f}.png")
 
     # e.vtu
-    # for sim in [27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]:
-    for sim in [42, 43, 44, 45]:
-        if sim in [34, 35, 36, 37]:
-            dir = f"../sims/sim{sim:03d}b"
-        elif sim in [27, 28, 33, 38, 39, 40, 41, 44, 48, 49]:
-            dir = f"../sims/sim{sim:03d}a"
-        else:
-            dir = f"../sims/sim{sim:03d}"
+    sims_dir = "/resnick/scratch/hppeters"
+    sims = ["050b", "051e"]
+    for sim in sims:
+        dir = f"{sims_dir}/sim{sim}"
         vtu_file = Path(f"{dir}/data/e.vtu")
-        shutil.copy(f'/resnick/scratch/hppeters/{dir[8:]}/data/e.vtu', vtu_file)
         print(f"Creating slices from: {vtu_file}")
 
         sp = SlicePlotter(vtu_file)
-        # for y in [-0.25, 0.25, 0.5]:
-        for y in [-0.25]:
+        for y in [-0.25, 0.25, 0.5]:
             sp.set_slice("y", y)
-            sp.plot("e", bmin=-15, bmax=0, label=r"Diapycnal flow $\tilde{e}$", 
-                    vmax=0.5,
-                    # output_file=f"{dir}/images/e_slice_y{y:0.2f}.png")
-                    output_file=f"{dir}/images/e_slice_y{y:0.2f}.pdf")
+            sp.plot("e", bmin=-15, bmax=0, label=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$", 
+                    # vmax=0.08,
+                    output_file=f"{dir}/images/e_slice_y{y:0.2f}.png")
 
     ################################################################################
 
