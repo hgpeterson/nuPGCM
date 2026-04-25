@@ -3,17 +3,20 @@ import pyvista as pv
 from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.integrate import trapezoid, cumulative_trapezoid
-import utils
-import shutil
 
 wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
 
-class SlicePlotter:
 
+class SlicePlotter:
     def __init__(self, file_name):
+        if not Path(file_name).exists():
+            raise FileNotFoundError(f"VTU file not found: {file_name}")
         self.file_name = file_name
         self.dataset = pv.read(file_name)
+        self.alpha = -self.dataset.points[:, 2].min()  # aspect ratio
+
+        print(f"SlicePlotter initialized for VTU file: {vtu_file}")
 
     def set_slice(self, direction, location):
         self.direction = direction.lower()
@@ -36,20 +39,24 @@ class SlicePlotter:
         else:
             ValueError("'direction' must be one of 'x', 'y', or 'z'")
 
-    def plot(self, field_name, label=None, output_file="image.png", bmin=None, bmax=None, vmax=None):
+    def plot(self, field_name, title=None, output_file="image.png", bmin=None, bmax=None, vmax=None):
         # slice with plane
         ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
+
         p = ds_slice.points
         if self.direction == "x":
             x1 = p[:, 1]
             x2 = p[:, 2]
+            figsize = (33 / 6, 33 / 6 / 1.62 / 2)
         elif self.direction == "y":
             x1 = p[:, 0]
             x2 = p[:, 2]
+            figsize = (19 / 6, 19 / 6 / 1.62)
         elif self.direction == "z":
             x1 = p[:, 0]
             x2 = p[:, 1]
-            
+            figsize = (19 / 6 / 1.62, 19 / 6)
+
         if field_name == "u":
             field = ds_slice["u"][:, 0]
         elif field_name == "v":
@@ -58,6 +65,7 @@ class SlicePlotter:
             field = ds_slice["u"][:, 2]
         else:
             field = ds_slice[field_name]
+
         if vmax is None:
             vmax = np.max(np.abs(field))
             extend = "neither"
@@ -70,6 +78,7 @@ class SlicePlotter:
                 extend = "min"
             else:
                 extend = "neither"
+
         b = ds_slice["b"]
         if bmax is None:
             bmax = b.max()
@@ -77,26 +86,33 @@ class SlicePlotter:
             bmin = b.min()
 
         # plot
-        fig, ax = plt.subplots(1)
+        fig, ax = plt.subplots(1, figsize=figsize)
         im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
-        if label is None: 
-            label = field_name
-        # plt.colorbar(im, ax=ax, label=label, shrink=0.8)
-        cb = plt.colorbar(im, ax=ax, shrink=0.8, ticks=[-vmax, 0, vmax], extend=extend)
-        ax.tricontour(x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+        plt.colorbar(im, ax=ax, shrink=0.5, ticks=[-vmax, 0, vmax], extend=extend)
+        ax.tricontour(
+            x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5
+        )
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
-        if self.direction in ["x", "y"]:
+        if self.direction == "x":
+            ax.set_xticks([-1, 0, 1])
             ax.set_yticks([x2.min(), 0])
         if self.direction == "y":
-            ax.set_xticks([0, x1.max()])
-        ax.spines['bottom'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        # ax.set_title(rf"${self.direction} = {self.location:0.2f}$")
-        ax.set_title(label)
-        plt.savefig(output_file) 
+            ax.set_xticks([0, 1])
+            ax.set_yticks([x2.min(), 0])
+        if self.direction == "z":
+            ax.axis("equal")
+            ax.set_xticks([0, 1])
+            ax.set_yticks([-1, 0, 1])
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        if title is None:
+            title = rf"${field_name}$ at ${self.direction} = {self.location:0.2f}$"
+        ax.set_title(title)
+        plt.savefig(output_file)
         print(output_file)
         plt.close()
+
 
 def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.png"):
     dataset = pv.read(vtu_file)
@@ -111,21 +127,21 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
         x = location
         x1 = y
         x2 = z
-        flow_comp = 'w'
+        flow_comp = "w"
         xlabel = r"$y$"
         ylabel = r"$z$"
     elif direction == "y":
         y = location
         x1 = x
         x2 = z
-        flow_comp = 'w'
+        flow_comp = "w"
         xlabel = r"$x$"
         ylabel = r"$z$"
     elif direction == "z":
         z = location
         x1 = x
         x2 = y
-        flow_comp = 'v'
+        flow_comp = "v"
         xlabel = r"$x$"
         ylabel = r"$y$"
     else:
@@ -143,162 +159,64 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
     circ[:, np.where(x2 < -0.5)] = 0
 
     # plot
-    aspect_ratio = (x2.max() - x2.min())/(x1.max() - x1.min())
-    width = 19/6
+    aspect_ratio = (x2.max() - x2.min()) / (x1.max() - x1.min())
+    width = 19 / 6
     vmax = np.nanmax(np.abs(circ))
-    fig, ax = plt.subplots(1, figsize=(width, width*aspect_ratio))
+    fig, ax = plt.subplots(1, figsize=(width, width * aspect_ratio))
     im = ax.pcolormesh(x1, x2, circ.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
-    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9*vmax, 0.9*vmax, 10), colors="k", linestyles="-")
+    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9 * vmax, 0.9 * vmax, 10), colors="k", linestyles="-")
     plt.colorbar(im, ax=ax, label=r"$\phi$", shrink=0.5)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.axis('equal')
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
+    ax.axis("equal")
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
     ax.set_title(rf"$z = {z:0.2f}$")
-    plt.savefig(output_file) 
+    plt.savefig(output_file)
     print(output_file)
     plt.close()
 
 
 if __name__ == "__main__":
-    # for sim in range(33, 45):
-    #     if sim in [34, 35, 36, 37]:
-    #         dir = f"../sims/sim{sim:03d}b"
-    #     elif sim in [27, 28, 33, 38, 39, 40, 41, 44]:
-    #         dir = f"../sims/sim{sim:03d}a"
-    #     else:
-    #         dir = f"../sims/sim{sim:03d}"
-    #     vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
-    #     vtu_file = vtu_files[-1]
-    #     print(f"Creating slices from: {vtu_file}")
-
-    #     sp = SlicePlotter(vtu_file)
-    #     # for y in np.arange(-0.95, 1, 0.05):
-    #     for y in [-0.25, 0.25, 0.5]:
-    #         sp.set_slice("y", y)
-    #         sp.plot("u", vmax=0.1, bmin=-15, bmax=-10, label=r"$u$", output_file=f"{dir}/images/u_slice_y{y:0.2f}.png")
-    #         sp.plot("v", vmax=0.1, bmin=-15, bmax=-10, label=r"$v$", output_file=f"{dir}/images/v_slice_y{y:0.2f}.png")
-    #         sp.plot("w", vmax=0.1, bmin=-15, bmax=-10, label=r"$w$", output_file=f"{dir}/images/w_slice_y{y:0.2f}.png")
-
-    # for sim in [34, 35]:
-    #     if sim in [27, 28, 34, 35, 36, 37]:
-    #         dir = f"{wd}/../sims/sim{sim:03d}a"
-    #     else:
-    #         dir = f"{wd}/../sims/sim{sim:03d}"
-    #     vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
-    #     vtu_file = vtu_files[-1]
-    #     print(f"Creating slices from: {vtu_file}")
-    #     for y in [-0.25]:
-    #         diapycnal_vel_plot(vtu_file, y, bmin=-15, bmax=-10, output_file=f"{dir}/images/e_slice_y{y:0.2f}.png")
-
-    # e.vtu
     sims_dir = "/resnick/scratch/hppeters"
-    sims = ["050b", "051e"]
+    sims = ["050b", "051e", "052", "053", "054", "055", "056"]
+    xvals = [0.25, 0.5, 0.75]
+    yvals = [-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
+    zvals = [-0.75, -0.5, -0.25]  # scaled by 1/alpha
+
     for sim in sims:
         dir = f"{sims_dir}/sim{sim}"
-        vtu_file = Path(f"{dir}/data/e.vtu")
-        print(f"Creating slices from: {vtu_file}")
 
+        # flow/isopycnal slices
+        vtu_file = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))[-1]
         sp = SlicePlotter(vtu_file)
-        for y in [-0.25, 0.25, 0.5]:
+        for x in xvals:
+            sp.set_slice("x", x)
+            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_x{x:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_x{x:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_x{x:0.2f}.png")
+        for y in yvals:
             sp.set_slice("y", y)
-            sp.plot("e", bmin=-15, bmax=0, label=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$", 
-                    # vmax=0.08,
-                    output_file=f"{dir}/images/e_slice_y{y:0.2f}.png")
+            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_y{y:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_y{y:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_y{y:0.2f}.png")
+        for z in zvals:
+            sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
+            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_z{z:0.2f}a.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_z{z:0.2f}a.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_z{z:0.2f}a.png")
 
-    ################################################################################
-
-    # mesh = pv.read(file_name)
-    # sliced_mesh = mesh.slice(normal='y', origin=mesh.center)
-    # contours_b = sliced_mesh.contour(isosurfaces=10, scalars='b')
-    # plotter = pv.Plotter()
-    # vmax_abs = np.max(np.abs(sliced_mesh['v']))
-    # plotter.add_mesh(
-    #     sliced_mesh, 
-    #     scalars='v', 
-    #     clim=[-vmax_abs, vmax_abs],
-    #     cmap='RdBu_r',
-    #     lighting=False,
-    #     scalar_bar_args={'title': 'Along-slope flow v'}
-    # )
-    # plotter.add_mesh(
-    #     contours_b, 
-    #     color='black',
-    #     opacity=0.25,
-    #     line_width=2, 
-    # )
-    # plotter.enable_2d_style()
-    # plotter.show(cpos="xz")
-    # plotter.screenshot("v.png")
-
-    ################################################################################
-
-    # mesh = pv.read(file_name)
-    # origin = mesh.center
-    # normal = [0, 1, 0]
-    # # slice_plane = pv.Plane(center=origin, normal=normal, i_size=mesh.bounds[1]-mesh.bounds[0], j_size=mesh.bounds[5]-mesh.bounds[4])
-    # sliced_polydata = mesh.slice(normal=normal, origin=origin)
-
-    # x_unstructured = sliced_polydata.points[:, 0]
-    # z_unstructured = sliced_polydata.points[:, 2]
-    # v_unstructured = sliced_polydata['v']
-
-    # bounds = sliced_polydata.bounds
-    # n = 2**8
-    # spacing = (bounds[1] - bounds[0]) / (n-1), 0, (bounds[5] - bounds[4]) / (n-1)
-    # grid_2d = pv.ImageData(dimensions=(n, 1, n), spacing=spacing, origin=(bounds[0], 0, bounds[4]))
-
-    # # gridded_data = grid_2d.sample(sliced_polydata)
-    # gridded_data = grid_2d.sample(mesh)
-
-    # # nan mask
-    # nan_mask = gridded_data['vtkValidPointMask'] == 0
-    # u = gridded_data['u']
-    # v = gridded_data['v']
-    # w = gridded_data['w']
-    # b = gridded_data['b']
-    # u[nan_mask] = np.nan
-    # v[nan_mask] = np.nan
-    # w[nan_mask] = np.nan
-    # b[nan_mask] = np.nan
-
-    # # maxima
-    # umax = np.nanmax(np.abs(u))
-    # vmax = np.nanmax(np.abs(v))
-    # wmax = np.nanmax(np.abs(w))
-
-    # x_2d = gridded_data.points[:, 0].reshape((n, n))
-    # z_2d = gridded_data.points[:, 2].reshape((n, n))
-    # u_2d = u.reshape((n, n))
-    # v_2d = v.reshape((n, n))
-    # w_2d = w.reshape((n, n))
-    # b_2d = b.reshape((n, n))
-
-    # fig, ax = plt.subplots(3, 1, figsize=(3.2, 3*1.1))
-    # c = ax[0].pcolormesh(x_2d, z_2d, u_2d, cmap='RdBu_r', vmin=-umax, vmax=umax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[0], label=r'$u$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[0].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # c = ax[1].pcolormesh(x_2d, z_2d, v_2d, cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[1], label=r'$v$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[1].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # c = ax[2].pcolormesh(x_2d, z_2d, w_2d, cmap='RdBu_r', vmin=-wmax, vmax=wmax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[2], label=r'$w$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[2].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # for a in ax:
-    #     a.axis('equal')
-    #     a.set_xticks([])
-    #     a.set_yticks([-0.5, 0])
-    #     a.spines['bottom'].set_visible(False)
-    #     a.spines['left'].set_visible(False)
-    #     a.set_ylabel(r'$z$')
-    # ax[2].set_xticks(np.arange(-1, 1.1, 0.5))
-    # ax[2].set_xlabel(r'$x$')
-    # plt.savefig('example1a.png')
-    # plt.close()
+        # diapycnal flow slices
+        vtu_file = Path(f"{dir}/data/e.vtu")
+        if vtu_file.exists():
+            sp = SlicePlotter(vtu_file)
+            for y in yvals:
+                sp.set_slice("y", y)
+                sp.plot(
+                    "e",
+                    bmin=-15,
+                    bmax=0,
+                    title=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$",
+                    output_file=f"{dir}/images/e_slice_y{y:0.2f}.png",
+                )
+        print()
