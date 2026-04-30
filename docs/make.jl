@@ -52,7 +52,6 @@ format = Documenter.HTML(; repolink="https://github.com/hgpeterson/nuPGCM",
                            mathengine)
 
 makedocs(; sitename="νPGCM",
-<<<<<<< HEAD
          plugins=[bib],
          pages,
          repo="https://github.com/hgpeterson/nuPGCM",
@@ -60,12 +59,5 @@ makedocs(; sitename="νPGCM",
          format,
          draft=true
          )
-=======
-           plugins=[bib],
-           pages,
-           remotes=nothing,  # nuPGCM is dev dependency using local path ".."
-        #    draft=true,
-           format)
->>>>>>> main
 
 deploydocs(repo="github.com/hgpeterson/nuPGCM.git")
