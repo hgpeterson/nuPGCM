@@ -39,6 +39,7 @@ class Grid:
         self.x = np.linspace(x_min, x_max, nx)
         self.y = np.linspace(y_min, y_max, ny)
         self.z = np.linspace(z_min, z_max, nz)
+        # self.xx, self.yy, self.zz = np.meshgrid(self.x, self.y, self.z, indexing="ij")
         self.nx = nx
         self.ny = ny
         self.nz = nz
@@ -74,6 +75,11 @@ def sample_to_grid(dataset: pv.DataSet, grid: Grid):
     points = pv.PointSet(np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()]))
     samples = points.sample(dataset)
     return samples
+
+
+def depth(samples: pv.PointSet, grid: Grid):
+    mask = samples["vtkValidPointMask"].reshape(grid.nx, grid.ny, grid.nz)
+    return trapezoid(mask, x=grid.z, axis=2)
 
 
 def zonal_width(samples: pv.PointSet, grid: Grid):

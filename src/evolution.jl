@@ -1,15 +1,19 @@
-struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit, I}
+struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit}
+# struct EvolutionToolkit{A<:AbstractArchitecture, AS, M, V, VV, S<:IterativeSolverToolkit}
     arch::A      # architecture (CPU or GPU)
+    # assembler::AS # sparse matrix assembler (Gridap)
     M::M         # Mass matrix
     Kₕ::M        # Horiz. stiffness matrix
     Kᵥ::M        # Vert. stiffness matrix
+    # Kᵥ_cache::M  # cache for Kᵥ rebuilds
     rhs_diff::V  # rhs vector from diffusion
     rhs_flux::V  # rhs vector from surface b flux
     rhsₘ::V      # correction vector to add to rhs due to Dirichlet b.c. in M
     rhsₕ::V      # correction vector to add to rhs due to Dirichlet b.c. in Kₕ
     rhsᵥ::V      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
+    # rhsᵥ::VV      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
+    # rhsᵥ_cache::VV # cache for rhsᵥ rebuilds
     solver::S    # iterative solver toolkit
-    order::I     # order of timestepping scheme
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -19,45 +23,69 @@ end
 function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, summary(evolution), ":")
     println(io, "├── arch: ", evolution.arch)
+    # println(io, "├── assembler: ", summary(evolution.assembler))
     println(io, "├── M: ", summary(evolution.M))
     println(io, "├── Kₕ: ", summary(evolution.Kₕ))
     println(io, "├── Kᵥ: ", summary(evolution.Kᵥ))
+    # println(io, "├── Kᵥ_cache: ", summary(evolution.Kᵥ_cache))
     println(io, "├── rhs_diff: ", summary(evolution.rhs_diff))
     println(io, "├── rhs_flux: ", summary(evolution.rhs_flux))
     println(io, "├── rhsₘ: ", summary(evolution.rhsₘ))
     println(io, "├── rhsₕ: ", summary(evolution.rhsₕ))
     println(io, "├── rhsᵥ: ", summary(evolution.rhsᵥ))
-    println(io, "├── solver: ", summary(evolution.solver))
-      print(io, "└── order: ", evolution.order)
+    # println(io, "├── rhsᵥ_cache: ", summary(evolution.rhsᵥ_cache))
+      print(io, "└── solver: ", summary(evolution.solver))
 end
 
 """
     evolution_toolkit = EvolutionToolkit(arch::AbstractArchitecture, 
                                          fe_data::FEData, 
                                          params::Parameters, 
-                                         forcings::Forcings; 
+                                         forcings::Forcings,
+                                         timestepper::AbstractTimestepper; 
                                          kwargs...)
                 
 Set up the evolution toolkit, which contains the matrices and solvers for the evolution problem.
+
+The PG buoyancy evolution equation is:
+```math
+μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ].
+```
 """
 function EvolutionToolkit(arch::AbstractArchitecture, 
                           fe_data::FEData, 
                           params::Parameters, 
-                          forcings::Forcings; 
-                          order=2,
+                          forcings::Forcings,
+                          ts::AbstractTimestepper; 
                           atol=1e-6, 
                           rtol=1e-6, 
                           itmax=0, 
                           history=true, 
                           verbose=false)
-    if order != 1 && order != 2
-        throw(ArgumentError("order $order not yet implemented"))
-    end
+    # unpack
+    B_trial = fe_data.spaces.B_trial
+    B_test = fe_data.spaces.B_test
+    b_diri = fe_data.spaces.b_diri
+    dΩ = fe_data.mesh.dΩ
+    κₕ = forcings.κₕ
+    κᵥ = forcings.κᵥ
 
     # build
     @info "Building evolution system..."
-    @time "build evolution system" M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ = 
-                                        build_evolution_system(fe_data, params, forcings)
+
+    # # save sparse assembler for efficient re-building later
+    # assembler = Gridap.SparseMatrixAssembler(B_trial, B_test)
+
+    # build components
+    M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
+    Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
+    Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
+    rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
+    rhs_flux = build_rhs_flux(params, forcings, fe_data)
+
+    # # save caches for rebuilds
+    # Kᵥ_cache = copy(Kᵥ)
+    # rhsᵥ_cache = copy(rhsᵥ)
 
     # re-order dofs
     perm = fe_data.dofs.p_b
@@ -70,8 +98,17 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     rhsₕ = rhsₕ[perm]
     rhsᵥ = rhsᵥ[perm]
 
+    # put rhs vectors on GPU if needed
+    rhs_diff = on_architecture(arch, rhs_diff)
+    rhs_flux = on_architecture(arch, rhs_flux)
+    rhsₘ = on_architecture(arch, rhsₘ)
+    rhsₕ = on_architecture(arch, rhsₕ)
+    rhsᵥ = on_architecture(arch, rhsᵥ)
+    # rhsᵥ = on_architecture(arch, rhsᵥ)  # not this one because it gets rebuilt
+
     # combine to make evolution LHS
-    A, P = collect_evolution_LHS(arch, params, forcings, M, Kₕ, Kᵥ, order)
+    ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[]) # dummy timestepper since we always have to start with a BDF1 step
+    A, P = collect_evolution_LHS(arch, params, forcings, ts1, M, Kₕ, Kᵥ)
 
     # rhs vector for solver
     N = size(A, 1)
@@ -80,30 +117,49 @@ function EvolutionToolkit(arch::AbstractArchitecture,
 
     # CG solver
     VT = vector_type(arch, T)
-    solver = Krylov.CgSolver(N, N, VT)
-    solver.x .= zero(T)
+    workspace = Krylov.CgWorkspace(N, N, VT)
+    workspace.x .= zero(T)
 
     # setup solver toolkit
     verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
     kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
-    solver = IterativeSolverToolkit(A, P, y, solver, kwargs, "Evolution")
+    solver = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Evolution")
 
-    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver, order)
+    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver)
+    # return EvolutionToolkit(arch, assembler, M, Kₕ, Kᵥ, Kᵥ_cache, 
+    #                         rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, rhsᵥ_cache, solver, order)
 end
 
-function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings)
+function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings, timestepper::AbstractTimestepper)
     arch = evolution.arch
     M = evolution.M
     Kₕ = evolution.Kₕ
     Kᵥ = evolution.Kᵥ
-    order = evolution.order
-    A, P = collect_evolution_LHS(arch, params, forcings::Forcings, M, Kₕ, Kᵥ, order)
+    A, P = collect_evolution_LHS(arch, params, forcings, timestepper, M, Kₕ, Kᵥ)
     evolution.solver.A = on_architecture(arch, A)
     evolution.solver.P = P
     return evolution
 end
-function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, M, Kₕ, Kᵥ, order)
-    θ = evolution_parameter(params, Val(order))
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF1, M, Kₕ, Kᵥ)
+    θ = evolution_parameter(params, timestepper)
+    A = M + θ*(Kₕ + Kᵥ) 
+
+    # preconditioner
+    if typeof(arch) == GPU || forcings.conv_param.is_on || timestepper.adaptive
+        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
+    else
+        @warn "LU-factoring evolution matrix with $(size(A, 1)) DOFs..."
+        @time "lu(A_evol)" P = lu(A)
+    end
+
+    # move to arch
+    A = on_architecture(arch, A)
+
+    return A, P
+end
+#TODO: Can unify this with BDF1 once adaptive timestepping is implemented for BDF2
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF2, M, Kₕ, Kᵥ)
+    θ = evolution_parameter(params, timestepper)
     A = M + θ*(Kₕ + Kᵥ) 
 
     # preconditioner
@@ -121,64 +177,24 @@ function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, f
 end
 
 """
-    θ = evolution_parameter(p::Parameters, order::Val)
+    θ = evolution_parameter(p::Parameters, timestepper::AbstractTimestepper)
 
 Returns the coefficient needed to build the LHS matrix in the evolution problem of the form
 ```math
 A = M + θ*(Kₕ + Kᵥ)
 ```
-For `order` = 1, we use Backwards Euler (BDF1), so 
-```math
-θ = Δt α² ε² / μϱ.
-```
-For `order` = 2, we use BDF2:
-```math
-θ = 2/3 Δt α² ε² / μϱ.
-```
 """
-function evolution_parameter(p::Parameters, ::Val{1})
-    # BDF1
-    return p.Δt * p.α^2 * p.ε^2 / p.μϱ
+function evolution_parameter(p::Parameters, ts::BDF1)
+    return ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
-function evolution_parameter(p::Parameters, ::Val{2})
-    # BDF2
-    return 2/3 * p.Δt * p.α^2 * p.ε^2 / p.μϱ
+function evolution_parameter(p::Parameters, ts::BDF2)
+    #TODO: This assumes fixed Δt.
+    return 2/3 * ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
 
 ####
 #### Matrix-building functions
 ####
-
-"""
-    M, Kₕ, Kᵥ, rhs_diff, rhsₘ, rhsₕ, rhsᵥ = 
-build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
-
-Build the matrices for the evolution problem of the PG equations.
-
-The evolution equation is written as
-```math
-μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ]
-```
-
-See also [`build_M`](@ref), [`build_Kₕ`](@ref), [`build_Kᵥ`](@ref).
-"""
-function build_evolution_system(fe_data::FEData, params::Parameters, forcings::Forcings)
-    # unpack
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
-    b_diri = fe_data.spaces.b_diri
-    dΩ = fe_data.mesh.dΩ
-    κₕ = forcings.κₕ
-    κᵥ = forcings.κᵥ
-
-    # build components
-    M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
-    Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
-    Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
-    rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
-    rhs_flux = build_rhs_flux(params, forcings, fe_data)
-    return M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ
-end
 
 """
     M, rhsₘ = build_M(B, D, dΩ, b_diri)
@@ -242,6 +258,10 @@ function build_matrix_vector(a, B, D, b_diri)
     rhs = assemble_vector(d -> a(b_diri, d), D)
     return A, rhs
 end
+function build_matrix_vector!(A, rhs, a, assembler, b_diri)
+    Gridap.assemble_matrix!(A, assembler, a)
+    Gridap.assemble_vector!(rhs, assembler, d -> a(b_diri, d))
+end
 
 # RHS: ∫( ∂z( κᵥ [N² + ∂z(b)] ) d )dΩ
 # IBP: ∫( κᵥ [N² + ∂z(b)] d )dΓ - ∫( κᵥ N² ∂z(d) )dΩ - ∫( κᵥ ∂z(b) ∂z(d) )dΩ
@@ -263,12 +283,11 @@ end
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC)
     # unpack
     α = params.α
-    Δt = params.Δt
     dΓ = fe_data.mesh.dΓ
     B_test = fe_data.spaces.B_test
 
     # rhs vector surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
-    l(d) = ∫( Δt * α * (bc.flux * d) )dΓ  
+    l(d) = ∫( α * (bc.flux * d) )dΓ  
     return assemble_vector(l, B_test)
 end
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC)

@@ -38,16 +38,6 @@ function Mesh(ifile; degree=4, surface_tags=["surface"])
     return Mesh(model, Ω, dΩ, Γ, dΓ)
 end
 
-function get_dim(m::Mesh)
-    if m.model.grid_topology.polytopes[1] == TRI
-        return 2
-    elseif m.model.grid_topology.polytopes[1] == TET
-        return 3
-    else
-        throw(ArgumentError("Could not determine dimension of mesh."))
-    end
-end
-
 ### some utility functions for working with meshes
 
 """
@@ -125,4 +115,20 @@ Find all boundary nodes in the triangulation `t`.
 function boundary_nodes(t)
     edges, boundary_indices, _ = all_edges(t)
     return unique(edges[boundary_indices,:][:])
+end
+
+"""
+    h_cells = compute_h_cells(mesh::Mesh)
+
+Compute characteristic cell size for each cell in the mesh.
+
+Here we just use the maximum edge length of the cell.
+"""
+function compute_h_cells(mesh::Mesh)
+    coords = get_cell_coordinates(mesh.Ω)  # lazy cell array of vertex tuples
+    map(get_array(coords)) do verts
+        maximum(norm(verts[i] - verts[j])
+                for i in 1:length(verts)
+                for j in i+1:length(verts))
+    end
 end

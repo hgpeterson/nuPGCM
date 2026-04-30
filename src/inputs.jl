@@ -5,18 +5,13 @@ struct Parameters{T<:Real, F, H}
     α::T      # aspect ratio (H₀ / L₀)
     μϱ::T     # Prandtl (ν₀ / κ₀) times Burger number (N₀²H₀² / f₀²L₀²)
     N²::T     # background stratification (nondimensional)
-    Δt::T     # timestep
     f::F      # Coriolis parameter (function of x)
     H::H      # Depth (function of x)
+end
 
-    # inner constructor to ensure all parameters are of the same type
-    function Parameters(ε, α, μϱ, N², Δt, f, H)
-        args = promote(ε, α, μϱ, N², Δt)
-        T = typeof(args[1])
-        f_type = typeof(f)
-        H_type = typeof(H)
-        return new{T, f_type, H_type}(args..., f, H)
-    end
+function Parameters(; ε, α, μϱ, N², f, H)
+    args = promote(ε, α, μϱ, N²)
+    return Parameters(args..., f, H)
 end
 
 function Base.summary(params::Parameters)
@@ -29,7 +24,6 @@ function Base.show(io::IO, params::Parameters)
     println(io, @sprintf("├── α  = %1.1e", params.α))
     println(io, @sprintf("├── μϱ = %1.1e", params.μϱ))
     println(io, @sprintf("├── N² = %1.1e", params.N²))
-    println(io, @sprintf("├── Δt = %1.1e", params.Δt))
     println(io,          "├── f: ", params.f)
       print(io,          "└── H: ", params.H)
 end
@@ -122,15 +116,24 @@ function EddyParameterization(; f, N²min)
     return EddyParameterization(f, N²min, true)
 end
 
-function ν_eddy(eddy_param::EddyParameterization, αbz)
+"""
+    ν = ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=1)
+
+Compute ν for eddy parameterization.
+
+The parameterization reads
+```math
+ν = f² / (α ∂_z b).
+```
+We also smoothly limit ν_min ≤ ν ≤ f² / N²min.
+"""
+function ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=1)
     f = eddy_param.f
     N²min = eddy_param.N²min
 
-    # this function converges to max(ν₁, ν₂) as γ → ∞
-    γ = 10  # smoothing factor
-    ν₀ = 1  # minimum viscosity value
-    ν₁ = f * (f / (sqrt∘(N²min +  αbz * αbz)))  # eddy value
-    return (log∘(exp(γ*ν₀) + exp∘(γ*ν₁)) / γ)  # LogSumExp
+    # this function converges to max(ν, ν_min) as smoothing → ∞
+    ν = f * (f / (sqrt∘(N²min^2 +  αbz * αbz)))  # eddy value
+    return (log∘(exp(smoothing*ν_min) + exp∘(smoothing*ν)) / smoothing)  # LogSumExp
 end
 
 #### Forcings type ####

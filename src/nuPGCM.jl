@@ -3,14 +3,12 @@ module nuPGCM
 using Gridap
 using GridapGmsh
 using Gmsh: gmsh
-using CUDA
-using CUDA.CUSPARSE
-using CUDA.CUSOLVER
 using CuthillMcKee
 using JLD2
 using LinearAlgebra
 using SparseArrays
 using Krylov
+using KrylovPreconditioners
 using PyPlot
 using Printf
 
@@ -81,7 +79,9 @@ include("meshes.jl")
 include("spaces.jl")
 include("dofs.jl")
 include("iterative_solvers.jl")
+include("preconditioners.jl")
 include("inversion.jl")
+include("timesteppers.jl")
 include("evolution.jl")
 include("model.jl")
 include("IO.jl")
@@ -107,6 +107,7 @@ CPU,
 GPU,
 on_architecture,
 architecture,
+print_memory_status,
 # inputs.jl
 Parameters,
 SurfaceDirichletBC,
@@ -123,6 +124,9 @@ FEData,
 # inversion.jl
 InversionToolkit,
 invert!,
+# timesteppers.jl
+BDF1,
+BDF2,
 # evolution.jl
 EvolutionToolkit,
 # model.jl

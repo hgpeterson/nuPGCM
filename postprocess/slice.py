@@ -3,16 +3,20 @@ import pyvista as pv
 from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.integrate import trapezoid, cumulative_trapezoid
-import utils
 
 wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
 
-class SlicePlotter:
 
+class SlicePlotter:
     def __init__(self, file_name):
+        if not Path(file_name).exists():
+            raise FileNotFoundError(f"VTU file not found: {file_name}")
         self.file_name = file_name
         self.dataset = pv.read(file_name)
+        self.alpha = -self.dataset.points[:, 2].min()  # aspect ratio
+
+        print(f"SlicePlotter initialized for VTU file: {vtu_file}")
 
     def set_slice(self, direction, location):
         self.direction = direction.lower()
@@ -20,35 +24,39 @@ class SlicePlotter:
         if self.direction == "x":
             self.normal = [1, 0, 0]
             self.origin = [location, 0, 0]
-            self.xlabel = r"$y$"
-            self.ylabel = r"$z$"
+            self.xlabel = r"Meridional coordinate $y$"
+            self.ylabel = r"Vertical coordinate $z$"
         elif self.direction == "y":
             self.normal = [0, 1, 0]
             self.origin = [0, location, 0]
-            self.xlabel = r"$x$"
-            self.ylabel = r"$z$"
+            self.xlabel = r"Zonal coordinate $x$"
+            self.ylabel = r"Vertical coordinate $z$"
         elif self.direction == "z":
             self.normal = [0, 0, 1]
             self.origin = [0, 0, location]
-            self.xlabel = r"$x$"
-            self.ylabel = r"$y$"
+            self.xlabel = r"Zonal coordinate $x$"
+            self.ylabel = r"Meridional coordinate $y$"
         else:
             ValueError("'direction' must be one of 'x', 'y', or 'z'")
 
-    def plot(self, field_name, label=None, n=2**8, output_file="image.png"):
+    def plot(self, field_name, title=None, output_file="image.png", bmin=None, bmax=None, vmax=None):
         # slice with plane
         ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
+
         p = ds_slice.points
         if self.direction == "x":
             x1 = p[:, 1]
             x2 = p[:, 2]
+            figsize = (33 / 6, 33 / 6 / 1.62 / 2)
         elif self.direction == "y":
             x1 = p[:, 0]
             x2 = p[:, 2]
+            figsize = (19 / 6, 19 / 6 / 1.62)
         elif self.direction == "z":
             x1 = p[:, 0]
             x2 = p[:, 1]
-            
+            figsize = (19 / 6 / 1.62, 19 / 6)
+
         if field_name == "u":
             field = ds_slice["u"][:, 0]
         elif field_name == "v":
@@ -57,26 +65,54 @@ class SlicePlotter:
             field = ds_slice["u"][:, 2]
         else:
             field = ds_slice[field_name]
-        vmax = np.max(np.abs(field))
+
+        if vmax is None:
+            vmax = np.max(np.abs(field))
+            extend = "neither"
+        else:
+            if vmax < np.max(np.abs(field)):
+                extend = "both"
+            elif vmax < field.max():
+                extend = "max"
+            elif -vmax < field.min():
+                extend = "min"
+            else:
+                extend = "neither"
+
         b = ds_slice["b"]
-        bmin = b.min()
-        bmax = b.max()
+        if bmax is None:
+            bmax = b.max()
+        if bmin is None:
+            bmin = b.min()
 
         # plot
-        fig, ax = plt.subplots(1)
+        fig, ax = plt.subplots(1, figsize=figsize)
         im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
-        if label is None: 
-            label = field_name
-        plt.colorbar(im, ax=ax, label=label, shrink=0.8)
-        ax.tricontour(x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+        plt.colorbar(im, ax=ax, shrink=0.5, ticks=[-vmax, 0, vmax], extend=extend)
+        ax.tricontour(
+            x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5
+        )
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
-        ax.spines['bottom'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.set_title(rf"${self.direction} = {self.location:0.2f}$")
-        plt.savefig(output_file) 
+        if self.direction == "x":
+            ax.set_xticks([-1, 0, 1])
+            ax.set_yticks([x2.min(), 0])
+        if self.direction == "y":
+            ax.set_xticks([0, 1])
+            ax.set_yticks([x2.min(), 0])
+        if self.direction == "z":
+            ax.axis("equal")
+            ax.set_xticks([0, 1])
+            ax.set_yticks([-1, 0, 1])
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+        if title is None:
+            title = rf"${field_name}$ at ${self.direction} = {self.location:0.2f}$"
+        ax.set_title(title)
+        plt.savefig(output_file)
         print(output_file)
         plt.close()
+
 
 def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.png"):
     dataset = pv.read(vtu_file)
@@ -91,21 +127,21 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
         x = location
         x1 = y
         x2 = z
-        flow_comp = 'w'
+        flow_comp = "w"
         xlabel = r"$y$"
         ylabel = r"$z$"
     elif direction == "y":
         y = location
         x1 = x
         x2 = z
-        flow_comp = 'w'
+        flow_comp = "w"
         xlabel = r"$x$"
         ylabel = r"$z$"
     elif direction == "z":
         z = location
         x1 = x
         x2 = y
-        flow_comp = 'v'
+        flow_comp = "v"
         xlabel = r"$x$"
         ylabel = r"$y$"
     else:
@@ -123,134 +159,84 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
     circ[:, np.where(x2 < -0.5)] = 0
 
     # plot
-    aspect_ratio = (x2.max() - x2.min())/(x1.max() - x1.min())
-    width = 19/6
+    aspect_ratio = (x2.max() - x2.min()) / (x1.max() - x1.min())
+    width = 19 / 6
     vmax = np.nanmax(np.abs(circ))
-    fig, ax = plt.subplots(1, figsize=(width, width*aspect_ratio))
+    fig, ax = plt.subplots(1, figsize=(width, width * aspect_ratio))
     im = ax.pcolormesh(x1, x2, circ.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
-    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9*vmax, 0.9*vmax, 10), colors="k", linestyles="-")
+    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9 * vmax, 0.9 * vmax, 10), colors="k", linestyles="-")
     plt.colorbar(im, ax=ax, label=r"$\phi$", shrink=0.5)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
-    ax.axis('equal')
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
+    ax.axis("equal")
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["left"].set_visible(False)
     ax.set_title(rf"$z = {z:0.2f}$")
-    plt.savefig(output_file) 
+    plt.savefig(output_file)
     print(output_file)
     plt.close()
 
 
 if __name__ == "__main__":
-    # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state.vtu"
-    # file_name = f"{wd}/../../nuPGCM/docs/src/literated/data/state_{25:016d}.vtu"
-    # i = 8300
-    # vtu_file = f"/home/hpeter/Downloads/states/state_{i:016d}.vtu"
-    i = 2000
-    vtu_file = f"../scratch/test/data/state_{i:016d}.vtu"
-    sp = SlicePlotter(vtu_file)
-    # zs = np.linspace(-1/4, 0, 20)
-    # for j in range(1, len(zs)-1):
-    #     sp.set_slice("z", zs[j])
-    #     sp.plot("v", label=r"$v$", output_file=f"v{j:02d}.png")
-    #     circulation_plot(vtu_file, "z", zs[j], output_file=f"circ{j:02d}.png")
-    sp.set_slice("x", 0.5)
-    sp.plot("u", label=r"$u$", output_file="../scratch/test/images/u_pv.png")
-    sp.plot("v", label=r"$v$", output_file="../scratch/test/images/v_pv.png")
-    sp.plot("w", label=r"$w$", output_file="../scratch/test/images/w_pv.png")
+    sims_dir = Path("/resnick/scratch/hppeters")
+    sims = ["050b", "051e", "052", "053", "054", "055", "056", "057", "058"]
+    xvals = [0.25, 0.5, 0.75]
+    yvals = [-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
+    zvals = [-0.75, -0.5, -0.25]  # scaled by 1/alpha
 
-    ################################################################################
+    for sim in sims:
+        dir = sims_dir / f"sim{sim}"
+        print(f"Processing {dir}")
 
-    # mesh = pv.read(file_name)
-    # sliced_mesh = mesh.slice(normal='y', origin=mesh.center)
-    # contours_b = sliced_mesh.contour(isosurfaces=10, scalars='b')
-    # plotter = pv.Plotter()
-    # vmax_abs = np.max(np.abs(sliced_mesh['v']))
-    # plotter.add_mesh(
-    #     sliced_mesh, 
-    #     scalars='v', 
-    #     clim=[-vmax_abs, vmax_abs],
-    #     cmap='RdBu_r',
-    #     lighting=False,
-    #     scalar_bar_args={'title': 'Along-slope flow v'}
-    # )
-    # plotter.add_mesh(
-    #     contours_b, 
-    #     color='black',
-    #     opacity=0.25,
-    #     line_width=2, 
-    # )
-    # plotter.enable_2d_style()
-    # plotter.show(cpos="xz")
-    # plotter.screenshot("v.png")
+        # latest snapshot
+        vtu_file = sorted((dir / "data").glob("state_*.vtu"))[-1]
+        print(f"Latest VTU file: {vtu_file}")
+        slices_state = dir / "slices_state.txt"  # text file containing name of VTU file last used to makes slices
 
-    ################################################################################
+        if slices_state.exists():
+            prev_vtu_file = slices_state.read_text()
+            print(f"{slices_state} found. Contents: {prev_vtu_file}")
+            if prev_vtu_file == str(vtu_file):
+                # skip if no new states have been saved
+                print(f"Skipping {dir}\n")
+                continue
+        else:
+            print(f"No {slices_state} found.")
 
-    # mesh = pv.read(file_name)
-    # origin = mesh.center
-    # normal = [0, 1, 0]
-    # # slice_plane = pv.Plane(center=origin, normal=normal, i_size=mesh.bounds[1]-mesh.bounds[0], j_size=mesh.bounds[5]-mesh.bounds[4])
-    # sliced_polydata = mesh.slice(normal=normal, origin=origin)
+        # flow/isopycnal slices
+        sp = SlicePlotter(vtu_file)
+        for x in xvals:
+            sp.set_slice("x", x)
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_x{x:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_x{x:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_x{x:0.2f}.png")
+        for y in yvals:
+            sp.set_slice("y", y)
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_y{y:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_y{y:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_y{y:0.2f}.png")
+        for z in zvals:
+            sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_z{z:0.2f}a.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_z{z:0.2f}a.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_z{z:0.2f}a.png")
 
-    # x_unstructured = sliced_polydata.points[:, 0]
-    # z_unstructured = sliced_polydata.points[:, 2]
-    # v_unstructured = sliced_polydata['v']
-
-    # bounds = sliced_polydata.bounds
-    # n = 2**8
-    # spacing = (bounds[1] - bounds[0]) / (n-1), 0, (bounds[5] - bounds[4]) / (n-1)
-    # grid_2d = pv.ImageData(dimensions=(n, 1, n), spacing=spacing, origin=(bounds[0], 0, bounds[4]))
-
-    # # gridded_data = grid_2d.sample(sliced_polydata)
-    # gridded_data = grid_2d.sample(mesh)
-
-    # # nan mask
-    # nan_mask = gridded_data['vtkValidPointMask'] == 0
-    # u = gridded_data['u']
-    # v = gridded_data['v']
-    # w = gridded_data['w']
-    # b = gridded_data['b']
-    # u[nan_mask] = np.nan
-    # v[nan_mask] = np.nan
-    # w[nan_mask] = np.nan
-    # b[nan_mask] = np.nan
-
-    # # maxima
-    # umax = np.nanmax(np.abs(u))
-    # vmax = np.nanmax(np.abs(v))
-    # wmax = np.nanmax(np.abs(w))
-
-    # x_2d = gridded_data.points[:, 0].reshape((n, n))
-    # z_2d = gridded_data.points[:, 2].reshape((n, n))
-    # u_2d = u.reshape((n, n))
-    # v_2d = v.reshape((n, n))
-    # w_2d = w.reshape((n, n))
-    # b_2d = b.reshape((n, n))
-
-    # fig, ax = plt.subplots(3, 1, figsize=(3.2, 3*1.1))
-    # c = ax[0].pcolormesh(x_2d, z_2d, u_2d, cmap='RdBu_r', vmin=-umax, vmax=umax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[0], label=r'$u$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[0].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # c = ax[1].pcolormesh(x_2d, z_2d, v_2d, cmap='RdBu_r', vmin=-vmax, vmax=vmax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[1], label=r'$v$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[1].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # c = ax[2].pcolormesh(x_2d, z_2d, w_2d, cmap='RdBu_r', vmin=-wmax, vmax=wmax, shading='gouraud')
-    # cbar = fig.colorbar(c, ax=ax[2], label=r'$w$', shrink=0.8)
-    # cbar.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # ax[2].contour(x_2d, z_2d, b_2d, levels=np.arange(-0.9, 0.0, 0.1), 
-    #           colors='k', linestyles='-', linewidths=0.5, alpha=0.25)
-    # for a in ax:
-    #     a.axis('equal')
-    #     a.set_xticks([])
-    #     a.set_yticks([-0.5, 0])
-    #     a.spines['bottom'].set_visible(False)
-    #     a.spines['left'].set_visible(False)
-    #     a.set_ylabel(r'$z$')
-    # ax[2].set_xticks(np.arange(-1, 1.1, 0.5))
-    # ax[2].set_xlabel(r'$x$')
-    # plt.savefig('example1a.png')
-    # plt.close()
+        # diapycnal flow slices
+        e_vtu_file = dir / "data/e.vtu"
+        if e_vtu_file.exists():
+            sp = SlicePlotter(e_vtu_file)
+            for y in yvals:
+                sp.set_slice("y", y)
+                sp.plot(
+                    "e",
+                    bmin=-15,
+                    bmax=0,
+                    title=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$",
+                    output_file=dir/f"images/e_slice_y{y:0.2f}.png",
+                )
+        
+        # create or overwrite "slices_state.txt" file with last used VTU file name
+        slices_state.write_text(str(vtu_file))
+        print(f"Contents of {slices_state} set to {vtu_file}\n")
+    
+    print("Done.")

@@ -1,6 +1,6 @@
 # 𝜈PGCM
 
-[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://hgpeterson.github.io/nuPGCM/)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://hgpeterson.github.io/nuPGCM/)
 [![GNU GPLv3 License](https://img.shields.io/badge/License-GNU%20GPL-blue)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
 This repository hosts a planetary geostrophic circulation model (𝜈PGCM) that solves the 3D planetary geostrophic (PG) equations using finite elements.

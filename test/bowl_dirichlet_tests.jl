@@ -16,12 +16,11 @@ function bowl_dirichlet(arch)
     α = 1/2
     μϱ = 1
     N² = 0
-    Δt = 1e-1
     f₀ = 0
     β = 0.5
     f(x) = f₀ + β*x[2]
     H(x) = α*(1 - x[1]^2 - x[2]^2)
-    params = Parameters(ε, α, μϱ, N², Δt, f, H)
+    params = Parameters(; ε, α, μϱ, N², f, H)
     ν = 1
     κₕ(x) = 1
     κᵥ(x) = 1
@@ -30,7 +29,6 @@ function bowl_dirichlet(arch)
     b_surface(x) = x[2]
     b_surface_bc = SurfaceDirichletBC(b_surface)
     forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
-    n_steps = 50
 
     # coarse mesh
     dim = 3
@@ -49,17 +47,21 @@ function bowl_dirichlet(arch)
     # setup inversion toolkit
     inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings)
 
+    # set timestepper
+    Δt = 1e-1
+    timestepper = BDF2(; t_start=0, t_stop=50*Δt, Δt)
+
     # build evolution system
-    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings) 
+    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 
 
     # put it all together in the `model` struct
-    model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit)
+    model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
     # initial condition
     set_b!(model, b_surface)
 
     # solve
-    run!(model; n_steps)
+    run!(model)
 
     # # plot for sanity check
     # save_vtk(model)

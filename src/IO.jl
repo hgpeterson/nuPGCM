@@ -1,18 +1,25 @@
 function save_state(model::Model, ofile)
     s = model.state
-    jldsave(ofile; u=s.u.free_values, p=s.p.free_values.args[1], b=s.b.free_values, t=s.t)
+    if isnothing(model.timestepper) 
+        t = 0
+    else
+        t = model.timestepper.t[]
+    end
+    jldsave(ofile; u=s.u.free_values, p=s.p.free_values.args[1], b=s.b.free_values, t=t)
     @info "Model state saved to '$ofile'"
 end
 
-function set_state_from_file!(s::State, ifile)
+function set_state_from_file!(m::Model, ifile)
     d = jldopen(ifile, "r")
-    s.u.free_values .= d["u"]
-    s.p.free_values.args[1] .= d["p"]
-    s.b.free_values .= d["b"]
-    s.t = d["t"]
+    m.state.u.free_values .= d["u"]
+    m.state.p.free_values.args[1] .= d["p"]
+    m.state.b.free_values .= d["b"]
+    if !isnothing(m.timestepper)
+        m.timestepper.t[] = d["t"]
+    end
     close(d)
-    @info "State set from '$ifile'"
-    return s
+    @info "Model state set from '$ifile'"
+    return m
 end
 
 function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
@@ -33,6 +40,11 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
     else
         κᵥ = m.forcings.κᵥ
     end
+    if isnothing(m.timestepper)
+        t = 0
+    else
+        t = m.timestepper.t[]
+    end
     # IMPORTANT: must have order = 2 for quadratic velocities!
     writevtk(m.fe_data.mesh.Ω, ofile, order=2, cellfields=[
         "u" => s.u, 
@@ -41,7 +53,7 @@ function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
         "alpha*b_z" => αbz,
         "nu" => ν,
         "kappa_v" => κᵥ,
-        "t" => m.state.t,
+        "t" => t,
     ])
     @info "VTK state saved to '$ofile'"
 end
