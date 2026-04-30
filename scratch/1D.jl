@@ -26,7 +26,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/8
+α = 1/2^5
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -39,24 +39,26 @@ nz = 2^8
 eddy_param = true
 
 z = H*OneDModel.chebyshev_nodes(nz)
+
+# κ needs to be in physical coordinates as it is in terms of HAB
 xz_phys = OneDModel.transform_to_physical.(0, z, θ)
 x_phys = first.(xz_phys)
 z_phys = last.(xz_phys)
 z_bot = z_phys[1] .+ α*x_phys
-d = α/8
+h_κ = α/8
 κ_B = 1e2
 κ_I = 1
-κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/d)
+κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/h_κ)
 
-# T = d^2 / (κ_B*α^2*ε^2/μϱ)
-T = H^2 / (κ_B*α^2*ε^2/μϱ)
+T = h_κ^2 / (κ_B*α^2*ε^2/μϱ)
+# T = H^2 / (κ_B*α^2*ε^2/μϱ)
 Δt = min(100*86400/t₀, T/100000)
 t_save = T/20
 @info "Time" T Δt t_save T÷Δt
 
 params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, Px=Px, U=U, Py=Py, V=V, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
 
-dirname = "1d_model/nu_test"
+dirname = "1d_model/diapycnal"
 label = @sprintf("_control_a%02d", Int(1/α))
 if eddy_param
     dirname *= "_eddy"
@@ -67,13 +69,15 @@ end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
 @info "Label = '$label'"
 
-# # solve
-# us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
-# data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-# @save data_file us vs Pxs Pys bs ts
-# @info "Saved '$data_file'"
-# # @load data_file us vs Pxs Pys bs ts
-# # @info "Loaded '$data_file'"
+# solve
+us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
+@save data_file us vs Pxs Pys bs ts
+@info "Saved '$data_file'"
+
+# # load 
+# @load data_file us vs Pxs Pys bs ts
+# @info "Loaded '$data_file'"
 
 function make_plots(; label="")
     z = params.z # ???
@@ -226,123 +230,49 @@ function calculate_diapycnal_transport()
         x[i, j], z[i, j] = OneDModel.transform_to_physical(x́[i, j], ź[i, j], θ)
     end
 
-    # mixing
-    d = α/8
-    κ_B = 1e2
-    κ_I = 1
-    z_bot = z[1, 1] .+ α*(x .- x[1, 1])
-    hab = z - z_bot
-    κ = @. κ_I + (κ_B - κ_I)*exp(-hab/d)
-
-    # flat isopycnals [analytical solution: (κ_B - κ_I)*cot(θ)]
-    b = N²*z
-    b₀ = 0
-    j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
-    x_iso = [x[i, j_iso[i]] for i=1:nx]
-    z_iso = [z[i, j_iso[i]] for i=1:nx]
-
-    fig, ax = subplots(1)
-    levels = range(minimum(b), maximum(b), 20)
-    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    ax.plot(x[:, 1], z[:, 1]/α, "k-")
-    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
-    ax.plot(x_iso, z_iso/α, "C1--", lw=0.5)
-    ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    ax.set_xticks([0, 1])
-    ax.set_yticks([-1, 0])
-    filename = joinpath(@__DIR__, "$dirname/isopycnal_flat.png")
-    savefig(filename)
-    @info "Saved '$filename'"
-    plt.close()
-
-    σϖ = zeros(nx, nz)
-    for i in 1:nx
-        # σϖ = ∂z(κ N²) / N² = ∂z(κ)
-        σϖ[i, :] = differentiate(κ[i, :], z[i, :])
-    end
-
-    fig, ax = subplots(1)
-    vmax = maximum(abs.(σϖ))
-    img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
-    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", shrink=0.5)
-    levels = range(minimum(b), maximum(b), 20)
-    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    ax.plot(x[:, 1], z[:, 1]/α, "k-")
-    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C3", linewidths=1.0, alpha=0.5)
-    ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    ax.set_xticks([0, 1])
-    ax.set_yticks([-1, 0])
-    filename = joinpath(@__DIR__, "$dirname/diapycnal_flat.png")
-    savefig(filename)
-    @info "Saved '$filename'"
-    plt.close()
-
-    σϖ_iso = [σϖ[i, j_iso[i]] for i in 1:nx]
-    T_flat = -nuPGCM.trapz(σϖ_iso, x_iso)
-    T_flat_analytical = (κ_B - κ_I)*cot(θ)
-    @printf("T_flat            = %.3e\n", T_flat)
-    @printf("T_flat_analytical = %.3e\n", T_flat_analytical)
-
-    fig, ax = subplots(1)
-    ax.fill_between(x_iso, σϖ_iso, 0)
-    ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
-    ax.set_title(L"$b_0 = 0$")
-    filename = joinpath(@__DIR__, "$dirname/integrand_flat.png")
-    savefig(filename)
-    @info "Saved '$filename'"
-    plt.close()
+    # mixing array
+    κ = repeat(params.κ, 1, nx)'
 
     # isopycnals from solution
-    # b = N²*z + repeat(bs[:, end], 1, nx)'
-    h = α/8
-    b = @. N²*z + h*N²*cos(θ)^2*exp(-hab/h)  # need to have ∂z(b) = N²(1 - cos²θ) at the bottom
+    b = N²*z + repeat(bs[:, end], 1, nx)'
     b₀ = 0
     j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
     i_mask = findall(i -> j_iso[i] > 1, 1:nx)
     x_iso = [x[i, j_iso[i]] for i in i_mask]
     z_iso = [z[i, j_iso[i]] for i in i_mask]
 
+    # plot isopycnals and b = b₀
+    filename = joinpath(@__DIR__, @sprintf("%s/isopycnals_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
     levels = range(minimum(b), maximum(b), 20)
-    # ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
     ax.contour(x, z, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    # ax.plot(x[:, 1], z[:, 1]/α, "k-")
     ax.plot(x[:, 1], z[:, 1], "k-", lw=0.1)
-    # ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
     ax.contour(x, z, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
-    # ax.plot(x_iso, z_iso/α, "C1-", lw=0.5)
     ax.plot(x_iso, z_iso, "C1-", lw=0.5)
     ax.set_xlabel(L"Horizontal coordinate $x$")
-    # ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
     ax.set_ylabel(L"Vertical coordinate $z$")
     ax.spines["left"].set_visible(false)
     ax.spines["bottom"].set_visible(false)
-    # ax.set_xticks([0, 1])
-    # ax.set_yticks([-1, 0])
     ax.axis("equal")
-    # ax.set_xlim(0.8, 1.0)
-    # ax.set_ylim(-0.1, 0.1)
-    filename = joinpath(@__DIR__, "$dirname/isopycnal_soln.png")
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
 
-    σϖ = zeros(nx, nz)
+    # compute integrand (and components)
+    κ_z = zeros(nx, nz)
+    b_z = zeros(nx, nz)
+    b_zz = zeros(nx, nz)
     for i in 1:nx
-        # σϖ = ∂z(κ ∂z(b)) / ∂z(b)
-        bz = differentiate(b[i, :], z[i, :])
-        σϖ[i, :] = differentiate(κ[i, :] .* bz, z[i, :]) ./ bz
+        b_z[i, :] = differentiate(b[i, :], z[i, :])
+        b_zz[i, :] = differentiate(b_z[i, :], z[i, :])
+        κ_z[i, :] = differentiate(κ[i, :], z[i, :])
     end
+    # σϖ = α * ∂z(κ ∂z(b)) / ∂z(b) = α * ( ∂z(κ) + κ ∂zz(b) / ∂z(b) )
+    σϖ = @. α * ( κ_z + κ * b_zz / b_z )
 
+    # plot 2D integrand
+    filename = joinpath(@__DIR__, @sprintf("%s/integrand_2D_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
-    # vmax = maximum(abs.(σϖ))
     vmax = 1e4
     img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
     colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", extend="both", shrink=0.5)
@@ -356,24 +286,41 @@ function calculate_diapycnal_transport()
     ax.spines["bottom"].set_visible(false)
     ax.set_xticks([0, 1])
     ax.set_yticks([-1, 0])
-    filename = joinpath(@__DIR__, "$dirname/diapycnal_soln.png")
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
 
+    # compute integral over isopycnal
     σϖ_iso = [σϖ[i, j_iso[i]] for i in i_mask]
-    T_soln = -nuPGCM.trapz(σϖ_iso, x_iso)
-    @printf("T_soln            = %.3e\n", T_soln)
+    T = -nuPGCM.trapz(σϖ_iso, x_iso)
+    T_flat = κ_B - κ_I  # analytical solution to -∫ κ_z dx for x ∈ (-∞, 0] at z = 0
+    @printf("T      = %.3e\n", T)
+    @printf("T_flat = %.3e\n", T_flat)
 
+    # plot integrand
+    κ_iso = [κ[i, j_iso[i]] for i in i_mask]
+    κ_z_iso = [κ_z[i, j_iso[i]] for i in i_mask]
+    b_z_iso = [b_z[i, j_iso[i]] for i in i_mask]
+    b_zz_iso = [b_zz[i, j_iso[i]] for i in i_mask]
+    j_0 = [argmin(abs.(z[i, :])) for i in 1:nx]  # z = 0
+    κ_z_0 = [κ_z[i, j_0[i]] for i in 1:nx]
+    x_0 = [x[i, j_0[i]] for i in 1:nx]
+    filename = joinpath(@__DIR__, @sprintf("%s/integrand_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
-    ax.fill_between(x_iso, σϖ_iso, 0)
+    ax.fill_between(x_iso, -asinh.(σϖ_iso), 0, label=L"\sigma\varpi")
+    ax.plot(x_0,   -asinh.(α*κ_z_0),                    "C2", lw=0.7, label=L"\alpha\kappa_z(z = 0)")
+    ax.plot(x_iso, -asinh.(α*κ_z_iso),                  "C3", lw=0.7, label=L"\alpha\kappa_z")
+    ax.plot(x_iso, -asinh.(α*κ_iso.*b_zz_iso./b_z_iso), "C4", lw=0.7, label=L"\alpha\kappa b_{zz} / b_z")
     ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(L"Thickness $\times$ diapycnal flow $\sigma\varpi$")
-    ax.set_title(L"$b_0 = 0$")
-    filename = joinpath(@__DIR__, "$dirname/integrand_soln.png")
+    ax.set_ylabel(L"$-\sinh^{-1}$(integrand components)")
+    ax.legend(loc="lower left")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-15, 15)
+    ax.text(0.05, 0.95, latexstring(@sprintf("\$T = %s\$",              nuPGCM.sci_notation(T))), transform=ax.transAxes)
+    ax.text(0.05, 0.85, latexstring(@sprintf("\$T_{\\rm{flat}} = %s\$", nuPGCM.sci_notation(T_flat))), transform=ax.transAxes)
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
 end
 
-# calculate_diapycnal_transport()
+calculate_diapycnal_transport()
