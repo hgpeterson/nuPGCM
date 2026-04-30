@@ -178,38 +178,53 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
 
 
 if __name__ == "__main__":
-    sims_dir = "/resnick/scratch/hppeters"
-    sims = ["050b", "051e", "052", "053", "054", "055", "056"]
+    sims_dir = Path("/resnick/scratch/hppeters")
+    sims = ["050b", "051e", "052", "053", "054", "055", "056", "057", "058"]
     xvals = [0.25, 0.5, 0.75]
     yvals = [-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
     zvals = [-0.75, -0.5, -0.25]  # scaled by 1/alpha
 
     for sim in sims:
-        dir = f"{sims_dir}/sim{sim}"
+        dir = sims_dir / f"sim{sim}"
+        print(f"Processing {dir}")
+
+        # latest snapshot
+        vtu_file = sorted((dir / "data").glob("state_*.vtu"))[-1]
+        print(f"Latest VTU file: {vtu_file}")
+        slices_state = dir / "slices_state.txt"  # text file containing name of VTU file last used to makes slices
+
+        if slices_state.exists():
+            prev_vtu_file = slices_state.read_text()
+            print(f"{slices_state} found. Contents: {prev_vtu_file}")
+            if prev_vtu_file == str(vtu_file):
+                # skip if no new states have been saved
+                print(f"Skipping {dir}\n")
+                continue
+        else:
+            print(f"No {slices_state} found.")
 
         # flow/isopycnal slices
-        vtu_file = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))[-1]
         sp = SlicePlotter(vtu_file)
         for x in xvals:
             sp.set_slice("x", x)
-            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_x{x:0.2f}.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_x{x:0.2f}.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_x{x:0.2f}.png")
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_x{x:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_x{x:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_x{x:0.2f}.png")
         for y in yvals:
             sp.set_slice("y", y)
-            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_y{y:0.2f}.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_y{y:0.2f}.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_y{y:0.2f}.png")
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_y{y:0.2f}.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_y{y:0.2f}.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_y{y:0.2f}.png")
         for z in zvals:
             sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
-            sp.plot("u", bmin=-15, bmax=-10, output_file=f"{dir}/images/u_slice_z{z:0.2f}a.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=f"{dir}/images/v_slice_z{z:0.2f}a.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=f"{dir}/images/w_slice_z{z:0.2f}a.png")
+            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_z{z:0.2f}a.png")
+            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_z{z:0.2f}a.png")
+            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_z{z:0.2f}a.png")
 
         # diapycnal flow slices
-        vtu_file = Path(f"{dir}/data/e.vtu")
-        if vtu_file.exists():
-            sp = SlicePlotter(vtu_file)
+        e_vtu_file = dir / "data/e.vtu"
+        if e_vtu_file.exists():
+            sp = SlicePlotter(e_vtu_file)
             for y in yvals:
                 sp.set_slice("y", y)
                 sp.plot(
@@ -217,6 +232,11 @@ if __name__ == "__main__":
                     bmin=-15,
                     bmax=0,
                     title=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$",
-                    output_file=f"{dir}/images/e_slice_y{y:0.2f}.png",
+                    output_file=dir/f"images/e_slice_y{y:0.2f}.png",
                 )
-        print()
+        
+        # create or overwrite "slices_state.txt" file with last used VTU file name
+        slices_state.write_text(str(vtu_file))
+        print(f"Contents of {slices_state} set to {vtu_file}\n")
+    
+    print("Done.")

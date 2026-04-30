@@ -5,20 +5,23 @@ using JLD2
 using Printf
 using Gridap
 
-ENV["JULIA_DEBUG"] = nuPGCM
-# ENV["JULIA_DEBUG"] = nothing
-ENABLE_TIMING[] = true
+# ENV["JULIA_DEBUG"] = nuPGCM
+ENV["JULIA_DEBUG"] = nothing
+# ENABLE_TIMING[] = true
 
-set_out_dir!("/resnick/scratch/hppeters/sim054")
+PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM"
+SIMS_PATH = "/resnick/scratch/hppeters"
 
-geom = :tub
-# geom = :box
+set_out_dir!(joinpath(SIMS_PATH, "sim056"))
+
+# geom = :tub
+geom = :box
 
 # for making mesh
 if geom == :tub
-    include(joinpath(@__DIR__, "../meshes/channel_basin_no_flat_round_end.jl"))  
+    include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat_round_end.jl"))  
 elseif geom == :box
-    include(joinpath(@__DIR__, "../meshes/channel_basin_flat.jl"))  
+    include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))  
 end
 
 # architecture
@@ -49,7 +52,8 @@ t₀ = 1/f₀/ϱ  # s
 @info "scales" b₀ ν₀ τ₀ t₀
 
 μϱ = μ*ϱ
-α = 1/8
+α = 1/4
+# α = 1/8
 N² = 0
 f(x) = x[2]
 function H((x, y, z))
@@ -111,10 +115,11 @@ end
 ν(x) = 1
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
-τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
+# τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
+τˣ(x) = -0.2/τ₀*sin(π*x[2])*sin(2π*x[2])
 τʸ(x) = 0
-b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
-# b_surface(x) = -b₀*x[2]^2
+# b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
+b_surface(x) = -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
 conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
 eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
@@ -125,20 +130,22 @@ display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 # mesh
-h = 1e-2
+h = 2e-2
+# h = 1e-2
 if geom == :tub
     mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
 elseif geom == :box
     mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
 end
-if !isfile(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+mesh_file = joinpath(PROJ_PATH, "meshes/$mesh_name.msh")
+if !isfile(mesh_file)
     if geom == :tub
         mesh_channel_basin_no_flat(h, α)
     elseif geom == :box
         mesh_channel_basin_flat(h, α)
     end
 end
-mesh = Mesh(joinpath(@__DIR__, "../meshes/$mesh_name.msh"))
+mesh = Mesh(mesh_file)
 
 # # save κ
 # writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
@@ -170,7 +177,7 @@ model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_tool
 
 # set initial buoyancy
 set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
-# set_state_from_file!(model, "/resnick/scratch/hppeters/sim051c/data/state_0000000000010800.jld2")
+# set_state_from_file!(model, joinpath(SIMS_PATH, "sim051c/data/state_0000000000010800.jld2"))
 invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
 

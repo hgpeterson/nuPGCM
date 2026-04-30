@@ -1,3 +1,4 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import pyvista as pv
 import numpy as np
@@ -7,8 +8,9 @@ from pathlib import Path
 import os
 import utils
 
-wd = Path(__file__).parent.resolve()
-plt.style.use(f"{wd}/../plots.mplstyle")
+matplotlib.use("Agg")  # non-interactive backend
+FILE_DIR = Path(__file__).parent.resolve()
+plt.style.use(Path(FILE_DIR, "../plots.mplstyle"))
 
 
 def calculate_barotropic_streamfunction(vtu_file, nx=2**8, ny=2**8, nz=2**8, printtime=False):
@@ -153,8 +155,9 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
     plt.close()
 
 
-def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png", bmin=None, bmax=None, geometry="", 
-                                    psimax=None):
+def plot_overturning_streamfunction(
+    psi, b_bar, grid, t=None, filename="psi.png", bmin=None, bmax=None, geometry="", psimax=None
+):
     y = grid.y
     z = grid.z
 
@@ -198,11 +201,41 @@ def plot_overturning_streamfunction(psi, b_bar, grid, t=None, filename="psi.png"
     plt.close()
 
 
+def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
+    """Process a single VTU file: calculate and plot overturning and barotropic streamfunctions."""
+    i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
+
+    # overturning streamfunction
+    img_file = f"{dir}/images/psi{i:016d}.png"
+    if not (os.path.exists(img_file) and not overwrite):
+        psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
+            vtu_file, nx=n, ny=n, nz=n, printtime=True
+        )
+        plot_overturning_streamfunction(psi_bar, b_bar, grid, t=t, filename=img_file, bmin=-15, bmax=-10, geometry=geom)
+    else:
+        print(f"Skipping {img_file}")
+
+    # barotropic streamfunction
+    img_file = f"{dir}/images/psi_baro{i:016d}.png"
+    if not (os.path.exists(img_file) and not overwrite):
+        Psi, U, grid, t = calculate_barotropic_streamfunction(vtu_file, nx=n, ny=n, nz=n, printtime=True)
+        plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file)
+    else:
+        print(f"Skipping {img_file}")
+
+    # barotropic streamfunction with channel mask
+    img_file = f"{dir}/images/psi_baro_mask{i:016d}.png"
+    if not (os.path.exists(img_file) and not overwrite):
+        plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file, maskchannel=True)
+    else:
+        print(f"Skipping {img_file}")
+
+
 if __name__ == "__main__":
     overwrite = False
     # overwrite = True
-    sims = ["052", "053", "054"]
-    geoms = ["slope", "flat", "slope"]
+    sims = ["052", "053", "054", "055", "056", "057", "058"]
+    geoms = ["slope", "flat", "slope", "slope", "flat", "slope", "flat"]
     # sims_dir = "../sims"
     sims_dir = "/resnick/scratch/hppeters"
     for i in range(len(sims)):
@@ -210,40 +243,19 @@ if __name__ == "__main__":
         geom = geoms[i]
 
         dir = f"{sims_dir}/sim{sim}"
+        print(f"Processing files in {dir}")
         vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
 
+        # process VTU files in parallel ??
+        # n_tasks = os.environ.get("SLURM_NTASKS", os.cpu_count())
+        # print(f"Using {n_tasks} tasks")
+        # results = Parallel(n_jobs=int(n_tasks), verbose=10)(
+        #     delayed(process_vtu)(vtu_file, dir, geom, overwrite) for vtu_file in vtu_files
+        # )
+
         for vtu_file in vtu_files:
-        # for vtu_file in [vtu_files[-1]]:
-            i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-
-            img_file = f"{dir}/images/psi{i:016d}.png"
-            if os.path.exists(img_file) and not overwrite:
-                print("Skipping " + img_file)
-                continue
-            n = 2**7
-            psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
-                vtu_file, nx=n, ny=n, nz=n, printtime=True
-            )
-            plot_overturning_streamfunction(psi_bar, b_bar, grid, 
-                                            t=t, 
-                                            filename=img_file, 
-                                            bmin=-15, 
-                                            bmax=-10, 
-                                            geometry=geom)
-
-            img_file = f"{dir}/images/psi_baro{i:016d}.png"
-            if os.path.exists(img_file) and not overwrite:
-                print("Skipping " + img_file)
-                continue
-            n = 2**7
-            Psi, U, grid, t = calculate_barotropic_streamfunction(vtu_file, nx=n, ny=n, nz=n, printtime=True)
-            plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file)
-
-            img_file = f"{dir}/images/psi_baro_mask{i:016d}.png"
-            if os.path.exists(img_file) and not overwrite:
-                print("Skipping " + img_file)
-                continue
-            plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file, maskchannel=True)
+            # for vtu_file in [vtu_files[-1]]:
+            results = process_vtu(vtu_file, dir, geom, overwrite)
 
         # dataset = pv.read(vtu_file)
         # t = dataset["t"][0]
