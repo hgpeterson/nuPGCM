@@ -206,7 +206,7 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
     i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
 
     # overturning streamfunction
-    img_file = f"{dir}/images/psi{i:016d}.png"
+    img_file = dir / f"images/psi{i:016d}.png"
     if not (os.path.exists(img_file) and not overwrite):
         psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
             vtu_file, nx=n, ny=n, nz=n, printtime=True
@@ -216,7 +216,7 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
         print(f"Skipping {img_file}")
 
     # barotropic streamfunction
-    img_file = f"{dir}/images/psi_baro{i:016d}.png"
+    img_file = dir / f"images/psi_baro{i:016d}.png"
     if not (os.path.exists(img_file) and not overwrite):
         Psi, U, grid, t = calculate_barotropic_streamfunction(vtu_file, nx=n, ny=n, nz=n, printtime=True)
         plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file)
@@ -224,7 +224,7 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
         print(f"Skipping {img_file}")
 
     # barotropic streamfunction with channel mask
-    img_file = f"{dir}/images/psi_baro_mask{i:016d}.png"
+    img_file = dir / f"images/psi_baro_mask{i:016d}.png"
     if not (os.path.exists(img_file) and not overwrite):
         plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file, maskchannel=True)
     else:
@@ -236,15 +236,14 @@ if __name__ == "__main__":
     # overwrite = True
     sims = ["052", "053", "054", "055", "056", "057", "058"]
     geoms = ["slope", "flat", "slope", "slope", "flat", "slope", "flat"]
-    # sims_dir = "../sims"
-    sims_dir = "/resnick/scratch/hppeters"
+    sims_dir = Path("/resnick/scratch/hppeters")
     for i in range(len(sims)):
         sim = sims[i]
         geom = geoms[i]
 
-        dir = f"{sims_dir}/sim{sim}"
-        print(f"Processing files in {dir}")
-        vtu_files = sorted(Path(f"{dir}/data/").glob("state_*.vtu"))
+        dir = sims_dir / f"sim{sim}"
+        print(f"\nProcessing files in {dir}")
+        vtu_files = sorted((dir / "data").glob("state_*.vtu"))
 
         # process VTU files in parallel ??
         # n_tasks = os.environ.get("SLURM_NTASKS", os.cpu_count())

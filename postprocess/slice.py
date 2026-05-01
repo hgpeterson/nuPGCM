@@ -39,7 +39,17 @@ class SlicePlotter:
         else:
             ValueError("'direction' must be one of 'x', 'y', or 'z'")
 
-    def plot(self, field_name, title=None, output_file="image.png", bmin=None, bmax=None, vmax=None):
+    def plot(
+        self,
+        field_name,
+        vmax=None,
+        bmin=None,
+        bmax=None,
+        n_isopycnals=10,
+        label_isopycnals=False,
+        title=None,
+        output_file="image.png",
+    ):
         # slice with plane
         ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
 
@@ -89,9 +99,18 @@ class SlicePlotter:
         fig, ax = plt.subplots(1, figsize=figsize)
         im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
         plt.colorbar(im, ax=ax, shrink=0.5, ticks=[-vmax, 0, vmax], extend=extend)
-        ax.tricontour(
-            x1, x2, b, levels=np.linspace(bmin, bmax, 20), linestyles="-", colors="k", alpha=0.3, linewidths=0.5
+        isopycnals = ax.tricontour(
+            x1,
+            x2,
+            b,
+            levels=np.linspace(bmin, bmax, n_isopycnals),
+            linestyles="-",
+            colors="k",
+            alpha=0.3,
+            linewidths=0.5,
         )
+        if label_isopycnals:
+            ax.clabel(isopycnals, fontsize=4)
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
         if self.direction == "x":
@@ -191,7 +210,9 @@ if __name__ == "__main__":
         # latest snapshot
         vtu_file = sorted((dir / "data").glob("state_*.vtu"))[-1]
         print(f"Latest VTU file: {vtu_file}")
-        slices_state = dir / "slices_state.txt"  # text file containing name of VTU file last used to makes slices
+        slices_state = (
+            dir / "images/slices_state.txt"
+        )  # text file containing name of VTU file last used to makes slices
 
         if slices_state.exists():
             prev_vtu_file = slices_state.read_text()
@@ -205,38 +226,38 @@ if __name__ == "__main__":
 
         # flow/isopycnal slices
         sp = SlicePlotter(vtu_file)
-        for x in xvals:
+        for i, x in enumerate(xvals):
             sp.set_slice("x", x)
-            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_x{x:0.2f}.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_x{x:0.2f}.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_x{x:0.2f}.png")
-        for y in yvals:
+            sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_x{i}.png")
+            sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_x{i}.png")
+            sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_x{i}.png")
+        for i, y in enumerate(yvals):
             sp.set_slice("y", y)
-            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_y{y:0.2f}.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_y{y:0.2f}.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_y{y:0.2f}.png")
-        for z in zvals:
+            sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_y{i}.png")
+            sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_y{i}.png")
+            sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_y{i}.png")
+        for i, z in enumerate(zvals):
             sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
-            sp.plot("u", bmin=-15, bmax=-10, output_file=dir/f"images/u_slice_z{z:0.2f}a.png")
-            sp.plot("v", bmin=-15, bmax=-10, output_file=dir/f"images/v_slice_z{z:0.2f}a.png")
-            sp.plot("w", bmin=-15, bmax=-10, output_file=dir/f"images/w_slice_z{z:0.2f}a.png")
+            sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_z{i}.png")
+            sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_z{i}.png")
+            sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_z{i}.png")
 
         # diapycnal flow slices
         e_vtu_file = dir / "data/e.vtu"
         if e_vtu_file.exists():
             sp = SlicePlotter(e_vtu_file)
-            for y in yvals:
+            for i, y in enumerate(yvals):
                 sp.set_slice("y", y)
                 sp.plot(
                     "e",
                     bmin=-15,
                     bmax=0,
                     title=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$",
-                    output_file=dir/f"images/e_slice_y{y:0.2f}.png",
+                    output_file=dir / f"images/e_slice_y{i}.png",
                 )
-        
+
         # create or overwrite "slices_state.txt" file with last used VTU file name
         slices_state.write_text(str(vtu_file))
         print(f"Contents of {slices_state} set to {vtu_file}\n")
-    
+
     print("Done.")
