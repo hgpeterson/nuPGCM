@@ -4,6 +4,8 @@ using nuPGCM.OneDModel
 using Printf
 using PyPlot
 using JLD2
+using Roots
+using Dierckx
 
 pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
@@ -26,7 +28,7 @@ N₀ = 1e-3  # s⁻¹
 ϱ = (N₀*H₀/f₀/L)^2
 t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
-α = 1/2^5
+α = 1/2^8
 N² = 1/α
 θ = atan(α)
 f = 0.5
@@ -68,16 +70,18 @@ if !isdir(joinpath(@__DIR__, dirname))
 end
 @info "Saving in $(joinpath(@__DIR__, dirname))"
 @info "Label = '$label'"
-
-# solve
-us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
 data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-@save data_file us vs Pxs Pys bs ts
-@info "Saved '$data_file'"
 
-# # load 
-# @load data_file us vs Pxs Pys bs ts
-# @info "Loaded '$data_file'"
+if !isfile(data_file)
+    # solve
+    us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+    @save data_file us vs Pxs Pys bs ts
+    @info "Saved '$data_file'"
+else
+    # load 
+    @load data_file us vs Pxs Pys bs ts
+    @info "Loaded '$data_file'"
+end
 
 function make_plots(; label="")
     z = params.z # ???
@@ -219,36 +223,54 @@ end
 Calculate -∫ σϖ dξ over an isopycnal.
 """
 function calculate_diapycnal_transport()
-    # physical coords
-    z = params.z # ???
-    nx = 10*nz
-    x́ = repeat(range(0, 1, nx), 1, nz)
-    ź = repeat(z, 1, nx)'
-    x = similar(x́)
-    z = similar(ź)
-    for i in 1:nx, j in 1:nz
-        x[i, j], z[i, j] = OneDModel.transform_to_physical(x́[i, j], ź[i, j], θ)
-    end
-
-    # mixing array
-    κ = repeat(params.κ, 1, nx)'
-
-    # isopycnals from solution
-    b = N²*z + repeat(bs[:, end], 1, nx)'
+    # choose isopycnal 
     b₀ = 0
-    j_iso = [argmin(abs.(b[i, :] .- b₀)) for i=1:nx]
-    i_mask = findall(i -> j_iso[i] > 1, 1:nx)
-    x_iso = [x[i, j_iso[i]] for i in i_mask]
-    z_iso = [z[i, j_iso[i]] for i in i_mask]
+    z₀ = b₀ / N²
+
+    # intersects slope where b₀ = N²z + b′(ź=-α)
+    b′ = bs[:, end]  # in ź coordinates
+    zR = (b₀ - b′[1])/N²
+    xR_flat = √(1 + α^2)  # xval of intersection of flat isopycnal at N²z = b₀
+    xR = xR_flat + zR/α
+
+    # can't go to x → -∞ because we have a finite domain
+    # since b′(ź=0) = 0, we can get intersection with upper boundary using simple geometry
+    xL = 0
+    zL = 0
+
+    # exponential grid confined near xR
+    n = 2^12
+    x = xR .- (xR - xL)*exp.(range(0, -100, length=n))
+    x = [x; xR]
+
+    # interpolate b′ so we can find roots
+    ź = params.z
+    b′_func = Spline1D(ź, b′)
+
+    # function for z(x) along isopycnal
+    ź_func(x, z) = OneDModel.transform_to_rotated(x, z, θ)[2]
+    b(x, z) = N²*z + b′_func(ź_func(x, z))
+    zb(x) = find_zero(z -> b(x, z), z₀)
+
+    # arrays in physical coords
+    nx = 10*nz
+    x́2D = repeat(range(0, 1, nx), 1, nz)
+    ź2D = repeat(z, 1, nx)'
+    x2D = similar(x́2D)
+    z2D = similar(ź2D)
+    for i in 1:nx, j in 1:nz
+        x2D[i, j], z2D[i, j] = OneDModel.transform_to_physical(x́2D[i, j], ź2D[i, j], θ)
+    end
+    b2D= N²*z2D + repeat(b′, 1, nx)'
 
     # plot isopycnals and b = b₀
     filename = joinpath(@__DIR__, @sprintf("%s/isopycnals_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
-    levels = range(minimum(b), maximum(b), 20)
-    ax.contour(x, z, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    ax.plot(x[:, 1], z[:, 1], "k-", lw=0.1)
-    ax.contour(x, z, b, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
-    ax.plot(x_iso, z_iso, "C1-", lw=0.5)
+    levels = range(minimum(b2D), maximum(b2D), 20)
+    ax.contour(x2D, z2D, b2D, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
+    ax.plot(x2D[:, 1], z2D[:, 1], "k-", lw=0.1)
+    ax.contour(x2D, z2D, b2D, levels=[b₀], linestyles="-", colors="C0", linewidths=1)
+    ax.plot(x, zb.(x), "C1-", lw=0.5)
     ax.set_xlabel(L"Horizontal coordinate $x$")
     ax.set_ylabel(L"Vertical coordinate $z$")
     ax.spines["left"].set_visible(false)
@@ -258,64 +280,40 @@ function calculate_diapycnal_transport()
     @info "Saved '$filename'"
     plt.close()
 
-    # compute integrand (and components)
-    κ_z = zeros(nx, nz)
-    b_z = zeros(nx, nz)
-    b_zz = zeros(nx, nz)
-    for i in 1:nx
-        b_z[i, :] = differentiate(b[i, :], z[i, :])
-        b_zz[i, :] = differentiate(b_z[i, :], z[i, :])
-        κ_z[i, :] = differentiate(κ[i, :], z[i, :])
-    end
-    # σϖ = α * ∂z(κ ∂z(b)) / ∂z(b) = α * ( ∂z(κ) + κ ∂zz(b) / ∂z(b) )
+    # compute integrand as a function of ź
+    b_z = N² .+ differentiate(b′, ź)*cos(θ)
+    b_zz = differentiate(b_z, ź)*cos(θ)
+    κ = params.κ
+    κ_z = differentiate(κ, ź)*cos(θ)
     σϖ = @. α * ( κ_z + κ * b_zz / b_z )
 
-    # plot 2D integrand
-    filename = joinpath(@__DIR__, @sprintf("%s/integrand_2D_a%d_soln.png", dirname, Int(1/α)))
-    fig, ax = subplots(1)
-    vmax = 1e4
-    img = ax.pcolormesh(x, z/α, σϖ, cmap="RdBu_r", rasterized=true, shading="auto", vmin=-vmax, vmax=vmax)
-    colorbar(img, ax=ax, label=L"Thickness $\times$ diapycnal flow $\sigma\varpi$", extend="both", shrink=0.5)
-    levels = range(minimum(b), maximum(b), 20)
-    ax.contour(x, z/α, b, levels=levels, linestyles="-", colors="k", alpha=0.3, linewidths=0.5)
-    ax.plot(x[:, 1], z[:, 1]/α, "k-")
-    ax.contour(x, z/α, b, levels=[b₀], linestyles="-", colors="C3", linewidths=1.0, alpha=0.5)
-    ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(latexstring(@sprintf("Vertical coordinate \$z/\\alpha\$\n(\$\\alpha = 1/%d\$)", Int(1/α))))
-    ax.spines["left"].set_visible(false)
-    ax.spines["bottom"].set_visible(false)
-    ax.set_xticks([0, 1])
-    ax.set_yticks([-1, 0])
-    savefig(filename)
-    @info "Saved '$filename'"
-    plt.close()
-
-    # compute integral over isopycnal
-    σϖ_iso = [σϖ[i, j_iso[i]] for i in i_mask]
-    T = -nuPGCM.trapz(σϖ_iso, x_iso)
+    # interpolate, evaluate along isopycnal, and integrate
+    σϖ_func = Spline1D(ź, σϖ)
+    σϖ_iso = σϖ_func.(ź_func.(x, zb.(x)))
+    T = -nuPGCM.trapz(σϖ_iso, x)
     T_flat = κ_B - κ_I  # analytical solution to -∫ κ_z dx for x ∈ (-∞, 0] at z = 0
     @printf("T      = %.3e\n", T)
     @printf("T_flat = %.3e\n", T_flat)
 
     # plot integrand
-    κ_iso = [κ[i, j_iso[i]] for i in i_mask]
-    κ_z_iso = [κ_z[i, j_iso[i]] for i in i_mask]
-    b_z_iso = [b_z[i, j_iso[i]] for i in i_mask]
-    b_zz_iso = [b_zz[i, j_iso[i]] for i in i_mask]
-    j_0 = [argmin(abs.(z[i, :])) for i in 1:nx]  # z = 0
-    κ_z_0 = [κ_z[i, j_0[i]] for i in 1:nx]
-    x_0 = [x[i, j_0[i]] for i in 1:nx]
+    x_flat = xL:0.01:xR_flat
+    κ_z_flat = Spline1D(ź, κ_z).(ź_func.(x_flat, z₀))
+    κ_iso = Spline1D(ź, κ).(ź_func.(x, zb.(x)))
+    κ_z_iso = Spline1D(ź, κ_z).(ź_func.(x, zb.(x)))
+    b_z_iso = Spline1D(ź, b_z).(ź_func.(x, zb.(x)))
+    b_zz_iso = Spline1D(ź, b_zz).(ź_func.(x, zb.(x)))
     filename = joinpath(@__DIR__, @sprintf("%s/integrand_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
-    ax.fill_between(x_iso, -asinh.(σϖ_iso), 0, label=L"\sigma\varpi")
-    ax.plot(x_0,   -asinh.(α*κ_z_0),                    "C2", lw=0.7, label=L"\alpha\kappa_z(z = 0)")
-    ax.plot(x_iso, -asinh.(α*κ_z_iso),                  "C3", lw=0.7, label=L"\alpha\kappa_z")
-    ax.plot(x_iso, -asinh.(α*κ_iso.*b_zz_iso./b_z_iso), "C4", lw=0.7, label=L"\alpha\kappa b_{zz} / b_z")
+    ax.fill_between(x, -asinh.(σϖ_iso), 0, label=L"\sigma\varpi")
+    ax.plot(x_flat,   -asinh.(α*κ_z_flat),                    "C2", lw=0.7, label=L"\alpha\kappa_z(z = 0)")
+    ax.plot(x, -asinh.(α*κ_z_iso),                  "C3", lw=0.7, label=L"\alpha\kappa_z")
+    ax.plot(x, -asinh.(α*κ_iso.*b_zz_iso./b_z_iso), "C4", lw=0.7, label=L"\alpha\kappa b_{zz} / b_z")
     ax.set_xlabel(L"Horizontal coordinate $x$")
     ax.set_ylabel(L"$-\sinh^{-1}$(integrand components)")
     ax.legend(loc="lower left")
     ax.set_xlim(0, 1)
-    ax.set_ylim(-15, 15)
+    # ax.set_ylim(-15, 15)
+    ax.set_ylim(-20, 20)
     ax.text(0.05, 0.95, latexstring(@sprintf("\$T = %s\$",              nuPGCM.sci_notation(T))), transform=ax.transAxes)
     ax.text(0.05, 0.85, latexstring(@sprintf("\$T_{\\rm{flat}} = %s\$", nuPGCM.sci_notation(T_flat))), transform=ax.transAxes)
     savefig(filename)

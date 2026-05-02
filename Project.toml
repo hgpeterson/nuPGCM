@@ -5,6 +5,7 @@ version = "0.6.2"
 
 [deps]
 CuthillMcKee = "17f17636-5e38-52e3-a803-7ae3aaaf3da9"
+Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 Gridap = "56d4f2e9-7ea1-5844-9cf6-b9c51ca7ce8e"
 GridapGmsh = "3025c34a-b394-11e9-2a55-3fee550c04c8"
@@ -48,4 +49,4 @@ CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "CUDA"]
+test = ["Test"]
