@@ -42,7 +42,7 @@ def plot_stratification_slice(N2, b, mask, grid, y0, t=None, filename="strat.png
     if t is not None:
         ax.set_title(r"$t = $" + utils.to_latex_sci(t))
     plt.savefig(filename)
-    print(filename)
+    print("Saved", filename)
     plt.close()
 
 
@@ -59,7 +59,7 @@ def plot_stratification(N2_bar, grid, t=None, filename="strat.png"):
     if t is not None:
         ax.set_title(r"$t = $" + utils.to_latex_sci(t))
     plt.savefig(filename)
-    print(filename)
+    print("Saved", filename)
     plt.close()
 
 
@@ -76,7 +76,7 @@ def plot_stratifications(N2_bars, grid, labels, filename="strats.png"):
     ax.set_xlabel(r"Average stratification $\overline{\alpha \partial_z b}$")
     ax.set_ylabel(r"Vertical coordinate $z$")
     plt.savefig(filename)
-    print(filename)
+    print("Saved", filename)
     plt.close()
 
 
@@ -115,7 +115,7 @@ def plot_b_flux_slice(F, b, mask, grid, y0, t=None, filename="b_flux.png", bmin=
     if t is not None:
         ax.set_title(r"$t = $" + utils.to_latex_sci(t))
     plt.savefig(filename)
-    print(filename)
+    print("Saved", filename)
     plt.close()
 
 
@@ -124,23 +124,29 @@ def plot_b_fluxes(F_bars, grid, labels, filename="bfluxes.png"):
 
     z = grid.z
     fig, ax = plt.subplots(1, figsize=(19 / 6 / 1.62, 19 / 6))
+    ax.spines["left"].set_visible(False)
+    ax.axvline(3, lw=0.5, c="k", ls="-")
     for i, F_bar in enumerate(F_bars):
-        ax.semilogx(-F_bar, z, label=labels[i])
+        ax.plot(-np.log10(-F_bar), z, label=labels[i])
     ax.legend()
-    ax.set_xlim(1e-3, 1e3)
-    ax.set_xticks([1e-3, 1e-1, 1e1, 1e3])
-    ax.set_xticklabels([r"$-10^{-3}$", r"$-10^{-1}$", r"$-10^{1}$", r"$-10^{3}$"])
+    ax.set_xlim(-3, 3.1)
+    ax.set_xticks([-3, -1, 1, 3])
+    ax.set_xticklabels([r"$-10^{3}$", r"$-10^{1}$", r"$-10^{-1}$", r"$-10^{-3}$"])
     ax.set_ylim(z.min(), 0)
     ax.set_xlabel(r"Average buoyancy flux $-\overline{\alpha \kappa \partial_z b}$")
     ax.set_ylabel(r"Vertical coordinate $z$")
     plt.savefig(filename)
-    print(filename)
+    print("Saved", filename)
     plt.close()
 
 
 if __name__ == "__main__":
-    sims = ["050b", "051e"]
-    # sims = ["050b"]
+    # sims = ["050b", "051e"]
+    # sims = ["052", "053"]
+    # sims = ["055", "056"]
+    # sims = ["057", "058"]
+    # sims = ["061", "063"]
+    sims = ["062", "064"]
     sims_dir = Path("/resnick/scratch/hppeters")
     N2_bars_channel = []
     N2_bars_basin = []
