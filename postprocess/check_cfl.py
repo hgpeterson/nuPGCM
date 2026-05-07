@@ -1,6 +1,5 @@
 import numpy as np
 import pyvista as pv
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from pathlib import Path
@@ -8,17 +7,19 @@ from pathlib import Path
 wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
 
+
 def get_h(triangle, direction):
-    if direction == 'x':
+    if direction == "x":
         i = 0
-    elif direction == 'y':
+    elif direction == "y":
         i = 1
-    elif direction == 'z':
+    elif direction == "z":
         i = 2
     else:
         ValueError("`direction` must be one of 'x', 'y', or 'z'")
 
     return np.max(triangle[i, :]) - np.min(triangle[i, :])
+
 
 def plot_cfl(file_name, i=None, rescale_z=False):
     # read VTU file
@@ -26,8 +27,8 @@ def plot_cfl(file_name, i=None, rescale_z=False):
 
     # prep data
     coords = dataset.points
-    v = dataset['v']
-    w = dataset['w']
+    v = dataset["v"]
+    w = dataset["w"]
     y = coords[:, 1]
     z = coords[:, 2]
     alpha = np.max(np.abs(z))
@@ -39,8 +40,8 @@ def plot_cfl(file_name, i=None, rescale_z=False):
     hzs = np.max(tri_z, axis=1) - np.min(tri_z, axis=1)
     tri_v = np.max(np.abs(v[tri]), axis=1)
     tri_w = np.max(np.abs(w[tri]), axis=1)
-    dt_y = hys/(tri_v + 1e-16)
-    dt_z = hzs/(tri_w + 1e-16)
+    dt_y = hys / (tri_v + 1e-16)
+    dt_z = hzs / (tri_w + 1e-16)
     print(f"min(hy) = {hys.min():.1e}")
     print(f"min(hz) = {hzs.min():.1e}")
     print(f"max(v)  = {tri_v.max():.1e}")
@@ -57,28 +58,44 @@ def plot_cfl(file_name, i=None, rescale_z=False):
     #     print(f"CFL dt = {np.min([hy/vmax, hz/wmax])}")
 
     if rescale_z:
-        z = z/(2*alpha)
+        z = z / (2 * alpha)
 
     # data is 2D, create a tri-plot
     vmax = 1
     fig, ax = plt.subplots(1, 2, figsize=(5.5, 2.2), sharey=True)
-    im = ax[0].tripcolor(y, z, dt_y, triangles=tri, shading='flat', cmap='inferno_r', norm=LogNorm(vmax=vmax))
-    im = ax[1].tripcolor(y, z, dt_z, triangles=tri, shading='flat', cmap='inferno_r', norm=LogNorm(vmax=vmax))
+    im = ax[0].tripcolor(
+        y,
+        z,
+        dt_y,
+        triangles=tri,
+        shading="flat",
+        cmap="inferno_r",
+        norm=LogNorm(vmax=vmax),
+    )
+    im = ax[1].tripcolor(
+        y,
+        z,
+        dt_z,
+        triangles=tri,
+        shading="flat",
+        cmap="inferno_r",
+        norm=LogNorm(vmax=vmax),
+    )
     plt.colorbar(im, label=r"CFL $\Delta t$", fraction=0.03)
     for a in ax:
         a.triplot(y, z, tri, "k-", linewidth=0.25, alpha=0.1)
-        a.set_xlabel(r'$y$')
+        a.set_xlabel(r"$y$")
         a.set_xticks([-1, -0.75, -0.5])
-        a.spines['left'].set_visible(False)
-        a.spines['bottom'].set_visible(False)
-        a.axis('equal')
+        a.spines["left"].set_visible(False)
+        a.spines["bottom"].set_visible(False)
+        a.axis("equal")
     if rescale_z:
-        ax[0].set_ylabel(r'$z$ (rescaled)')
+        ax[0].set_ylabel(r"$z$ (rescaled)")
         ax[0].set_yticks([-0.5, -0.25, -0.0])
     else:
-        ax[0].set_ylabel(r'$z$')
-    ax[0].set_title(r'$y$-direction')
-    ax[1].set_title(r'$z$-direction')
+        ax[0].set_ylabel(r"$z$")
+    ax[0].set_title(r"$y$-direction")
+    ax[1].set_title(r"$z$-direction")
     # plt.subplots_adjust(wspace=0.1)
     if i is None:
         img_file = "images/cfl.png"
@@ -87,6 +104,7 @@ def plot_cfl(file_name, i=None, rescale_z=False):
     plt.savefig(img_file)
     print(img_file)
     plt.close()
+
 
 if __name__ == "__main__":
     i = 1700

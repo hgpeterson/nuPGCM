@@ -16,4 +16,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipykernel>=6.31.0",
+    "ruff>=0.15.12",
 ]
+
+[tool.ruff]
+line-length = 120

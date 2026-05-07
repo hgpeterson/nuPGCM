@@ -103,7 +103,13 @@ def plot_barotropic_streamfunction(Psi, grid, t=None, filename="psi_baro.png", P
     cb = plt.colorbar(cf1, label=r"Barotropic streamfunction $\Psi$", shrink=0.5)
     cb.ax.set_yticks([-Psimax, 0, Psimax])
     cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
-    ax.text(0.8, 1.02, rf"Max = {utils.to_latex_sci(Psimax)}", transform=ax.transAxes, size=7)
+    ax.text(
+        0.8,
+        1.02,
+        rf"Max = {utils.to_latex_sci(Psimax)}",
+        transform=ax.transAxes,
+        size=7,
+    )
     if maskchannel:
         ax.fill_between(x, -0.5, y.min(), color="k", alpha=0.1, ec="none")
     ax.axhline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
@@ -118,7 +124,18 @@ def plot_barotropic_streamfunction(Psi, grid, t=None, filename="psi_baro.png", P
     plt.close()
 
 
-def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=None, i=None, cmap="RdBu_r", cb_sym=True):
+def plot_zonal_mean(
+    field,
+    grid,
+    b,
+    label="",
+    cb_label="",
+    rescale_z=True,
+    t=None,
+    i=None,
+    cmap="RdBu_r",
+    cb_sym=True,
+):
     y = grid.y
     z = grid.z
 
@@ -156,7 +173,15 @@ def plot_zonal_mean(field, grid, b, label="", cb_label="", rescale_z=True, t=Non
 
 
 def plot_overturning_streamfunction(
-    psi, b_bar, grid, t=None, filename="psi.png", bmin=None, bmax=None, geometry="", psimax=None
+    psi,
+    b_bar,
+    grid,
+    t=None,
+    filename="psi.png",
+    bmin=None,
+    bmax=None,
+    geometry="",
+    psimax=None,
 ):
     y = grid.y
     z = grid.z
@@ -180,15 +205,30 @@ def plot_overturning_streamfunction(
     cb = plt.colorbar(cf1, label=r"Streamfunction $\psi$")
     cb.ax.set_yticks([-psimax, 0, psimax])
     cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
-    ax.text(0.8, 1.02, rf"Max = {utils.to_latex_sci(psimax)}", transform=ax.transAxes, size=7)
+    ax.text(
+        0.8,
+        1.02,
+        rf"Max = {utils.to_latex_sci(psimax)}",
+        transform=ax.transAxes,
+        size=7,
+    )
     levels = np.linspace(bmin, bmax, 20)
-    ax.contour(y, z, b_bar.T, levels=levels, colors="k", linestyles="-", linewidths=0.5, alpha=0.3)
-    if geometry == "slope":
+    ax.contour(
+        y,
+        z,
+        b_bar.T,
+        levels=levels,
+        colors="k",
+        linestyles="-",
+        linewidths=0.5,
+        alpha=0.3,
+    )
+    if geometry == "tub":
         y0 = -0.6875
         y1 = -0.5
         y_c = np.linspace(y0, y1, 100)
         ax.plot(y_c, z.min() * (1 - ((y_c - y0) / (y1 - y0)) ** 2), "k--", lw=0.5, alpha=0.4)
-    elif geometry == "flat":
+    elif geometry == "box":
         ax.axvline(-0.5, c="k", ls="--", lw=0.5, alpha=0.4)
     ax.set_xticks([-1, 0, 1])
     ax.set_yticks([-alpha, 0])
@@ -211,7 +251,16 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
         psi_bar, v_bar, b_bar, grid, t = calculate_overturning_streamfunction(
             vtu_file, nx=n, ny=n, nz=n, printtime=True
         )
-        plot_overturning_streamfunction(psi_bar, b_bar, grid, t=t, filename=img_file, bmin=-15, bmax=-10, geometry=geom)
+        plot_overturning_streamfunction(
+            psi_bar,
+            b_bar,
+            grid,
+            t=t,
+            filename=img_file,
+            bmin=-15,
+            bmax=-10,
+            geometry=geom,
+        )
     else:
         print(f"Skipping {img_file}")
 
@@ -234,12 +283,25 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
 if __name__ == "__main__":
     overwrite = False
     # overwrite = True
-    sims = ["052", "053", "054", "055", "056", "057", "058"]
-    geoms = ["slope", "flat", "slope", "slope", "flat", "slope", "flat"]
+    sims = [
+        ["052", "tub"],
+        ["053", "box"],
+        ["054", "tub"],
+        ["055", "tub"],
+        ["056", "box"],
+        ["057", "tub"],
+        ["058", "box"],
+        ["059", "box"],
+        ["060", "tub"],
+        ["061", "tub"],
+        ["062", "tub"],
+        ["063", "box"],
+        ["064", "box"],
+    ]
     sims_dir = Path("/resnick/scratch/hppeters")
     for i in range(len(sims)):
-        sim = sims[i]
-        geom = geoms[i]
+        sim = sims[i][0]
+        geom = sims[i][1]
 
         dir = sims_dir / f"sim{sim}"
         print(f"\nProcessing files in {dir}")

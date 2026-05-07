@@ -99,18 +99,19 @@ class SlicePlotter:
         fig, ax = plt.subplots(1, figsize=figsize)
         im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
         plt.colorbar(im, ax=ax, shrink=0.5, ticks=[-vmax, 0, vmax], extend=extend)
-        isopycnals = ax.tricontour(
-            x1,
-            x2,
-            b,
-            levels=np.linspace(bmin, bmax, n_isopycnals),
-            linestyles="-",
-            colors="k",
-            alpha=0.3,
-            linewidths=0.5,
-        )
-        if label_isopycnals:
-            ax.clabel(isopycnals, fontsize=4)
+        if bmin != bmax:
+            isopycnals = ax.tricontour(
+                x1,
+                x2,
+                b,
+                levels=np.linspace(bmin, bmax, n_isopycnals),
+                linestyles="-",
+                colors="k",
+                alpha=0.3,
+                linewidths=0.5,
+            )
+            if label_isopycnals:
+                ax.clabel(isopycnals, fontsize=4)
         ax.set_xlabel(self.xlabel)
         ax.set_ylabel(self.ylabel)
         if self.direction == "x":
@@ -183,7 +184,14 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
     vmax = np.nanmax(np.abs(circ))
     fig, ax = plt.subplots(1, figsize=(width, width * aspect_ratio))
     im = ax.pcolormesh(x1, x2, circ.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
-    ax.contour(x1, x2, circ.T, levels=np.linspace(-0.9 * vmax, 0.9 * vmax, 10), colors="k", linestyles="-")
+    ax.contour(
+        x1,
+        x2,
+        circ.T,
+        levels=np.linspace(-0.9 * vmax, 0.9 * vmax, 10),
+        colors="k",
+        linestyles="-",
+    )
     plt.colorbar(im, ax=ax, label=r"$\phi$", shrink=0.5)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -198,7 +206,21 @@ def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.p
 
 if __name__ == "__main__":
     sims_dir = Path("/resnick/scratch/hppeters")
-    sims = ["050b", "051e", "052", "053", "054", "055", "056", "057", "058"]
+    sims = [
+        "052",
+        "053",
+        "054",
+        "055",
+        "056",
+        "057",
+        "058",
+        "059",
+        "060",
+        "061",
+        "062",
+        "063",
+        "064",
+    ]
     xvals = [0.25, 0.5, 0.75]
     yvals = [-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
     zvals = [-0.75, -0.5, -0.25]  # scaled by 1/alpha
