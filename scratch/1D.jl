@@ -11,80 +11,88 @@ pygui(false)
 plt.style.use(joinpath(@__DIR__, "../plots.mplstyle"))
 plt.close("all")
 
-# parameters
 
-Ω = 2π/86400  # s⁻¹
-a = 6.371e6  # m
-β = 2Ω/a  # m⁻¹ s⁻¹
-L = 2π*a*60/360  # m
-f₀ = β*L  # s⁻¹
-H₀ = 4e3  # m
-κ₀ = 1e-5  # m² s⁻¹
-Kₑ = 1000  # m² s⁻¹
-N₀ = 1e-3  # s⁻¹
-ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
-ε = sqrt(ν₀/f₀/H₀^2)
-μ = ν₀/κ₀
-ϱ = (N₀*H₀/f₀/L)^2
-t₀ = 1/f₀/ϱ  # s
-μϱ = μ*ϱ
-α = 1/2^8
-N² = 1/α
-θ = atan(α)
-f = 0.5
-Px = nothing
-U = 0
-Py = nothing
-V = 0
-H = α
-nz = 2^8
-eddy_param = true
+function load_parameters(; α)
+    Ω = 2π/86400  # s⁻¹
+    a = 6.371e6  # m
+    β = 2Ω/a  # m⁻¹ s⁻¹
+    L = 2π*a*60/360  # m
+    f₀ = β*L  # s⁻¹
+    H₀ = 4e3  # m
+    κ₀ = 1e-5  # m² s⁻¹
+    Kₑ = 1000  # m² s⁻¹
+    N₀ = 1e-3  # s⁻¹
+    ν₀ = Kₑ*f₀^2/N₀^2  # m² s⁻¹
+    ε = sqrt(ν₀/f₀/H₀^2)
+    μ = ν₀/κ₀
+    ϱ = (N₀*H₀/f₀/L)^2
+    t₀ = 1/f₀/ϱ  # s
+    μϱ = μ*ϱ
+    N² = 1/α
+    θ = atan(α)
+    f = 0.5
+    Px = nothing
+    U = 0
+    Py = nothing
+    V = 0
+    H = α
+    nz = 2^8
+    eddy_param = true
 
-z = H*OneDModel.chebyshev_nodes(nz)
+    z = H*OneDModel.chebyshev_nodes(nz)
 
-# κ needs to be in physical coordinates as it is in terms of HAB
-xz_phys = OneDModel.transform_to_physical.(0, z, θ)
-x_phys = first.(xz_phys)
-z_phys = last.(xz_phys)
-z_bot = z_phys[1] .+ α*x_phys
-h_κ = α/8
-κ_B = 1e2
-κ_I = 1
-κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/h_κ)
+    # κ needs to be in physical coordinates as it is in terms of HAB
+    xz_phys = OneDModel.transform_to_physical.(0, z, θ)
+    x_phys = first.(xz_phys)
+    z_phys = last.(xz_phys)
+    z_bot = z_phys[1] .+ α*(x_phys .- x_phys[1])
+    h_κ = α/8
+    κ_B = 1e2
+    κ_I = 1
+    κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/h_κ)
 
-T = h_κ^2 / (κ_B*α^2*ε^2/μϱ)
-# T = H^2 / (κ_B*α^2*ε^2/μϱ)
-Δt = min(100*86400/t₀, T/100000)
-t_save = T/20
-@info "Time" T Δt t_save T÷Δt
+    T = h_κ^2 / (κ_B*α^2*ε^2/μϱ)
+    Δt = min(100*86400/t₀, T/100000)
+    t_save = T/20
+    @info "Time" T Δt t_save T÷Δt
 
-params = (μϱ=μϱ, α=α, θ=θ, ε=ε, N²=N², Δt=Δt, Px=Px, U=U, Py=Py, V=V, H=H, f=f, T=T, z=z, nz=nz, κ=κ)
-
-dirname = "1d_model/diapycnal"
-label = @sprintf("_control_a%02d", Int(1/α))
-if eddy_param
-    dirname *= "_eddy"
-end
-if !isdir(joinpath(@__DIR__, dirname))
-    mkdir(joinpath(@__DIR__, dirname))
-end
-@info "Saving in $(joinpath(@__DIR__, dirname))"
-@info "Label = '$label'"
-data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/α))) 
-
-if !isfile(data_file)
-    # solve
-    us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
-    @save data_file us vs Pxs Pys bs ts
-    @info "Saved '$data_file'"
-else
-    # load 
-    @load data_file us vs Pxs Pys bs ts
-    @info "Loaded '$data_file'"
+    return (; μϱ, α, θ, ε, N², Δt, Px, U, Py, V, H, f, T, z, nz, κ, eddy_param, t_save)
 end
 
-function make_plots(; label="")
-    z = params.z # ???
+function setup_output(params)
+    dirname = "1d_model/diapycnal"
+    label = @sprintf("_control_a%02d", Int(1/params.α))
+    if params.eddy_param
+        dirname *= "_eddy"
+    end
+    if !isdir(joinpath(@__DIR__, dirname))
+        mkdir(joinpath(@__DIR__, dirname))
+    end
+    @info "Output directory: $(joinpath(@__DIR__, dirname))"
+    @info "Label = '$label'"
+    data_file = joinpath(@__DIR__, @sprintf("%s/sol_a%02d.jld2", dirname, Int(1/params.α))) 
+
+    return dirname, label, data_file
+end
+
+function run_or_load_sim(params; data_file)
+    if !isfile(data_file)
+        # solve
+        (; eddy_param, t_save) = params
+        us, vs, Pxs, Pys, bs, ts = OneDModel.solve(params; eddy_param, t_save)
+        @save data_file us vs Pxs Pys bs ts
+        @info "Saved '$data_file'"
+    else
+        # load 
+        @load data_file us vs Pxs Pys bs ts
+        @info "Loaded '$data_file'"
+    end
+    return (; us, vs, Pxs, Pys, bs, ts)
+end
+
+function make_plots(params, sol; dirname, label)
+    (; μϱ, α, θ, ε, N², Px, Py, H, f, z, nz, κ, eddy_param) = params
+    (; us, vs, Pxs, Pys, bs, ts) = sol
 
     # BL thickness
     if eddy_param
@@ -95,7 +103,7 @@ function make_plots(; label="")
     else
         ν_B = 1
     end
-    κ_B = 1e2
+    κ_B = κ[1]
     δ = α*ε*sqrt(2*ν_B/f)
     q = 1/δ * (1 + μϱ/α * ν_B/κ_B *  N²*tan(θ)^2 / f^2)^(1/4)
     @sprintf("BL scale q⁻¹ = %.3e", q^-1)
@@ -215,14 +223,15 @@ function make_plots(; label="")
     plt.close()
 end
 
-# make_plots(; label)
-
 """
     calculate_diapycnal_transport()
 
 Calculate -∫ σϖ dξ over an isopycnal.
 """
-function calculate_diapycnal_transport()
+function calculate_diapycnal_transport(params, sol)
+    (; α, θ, N², z, nz, κ) = params
+    (; bs) = sol
+
     # choose isopycnal 
     b₀ = 0
     z₀ = b₀ / N²
@@ -239,8 +248,8 @@ function calculate_diapycnal_transport()
     zL = 0
 
     # exponential grid confined near xR
-    n = 2^12
-    x = xR .- (xR - xL)*exp.(range(0, -100, length=n))
+    n = 2^10
+    x = xR .- (xR - xL)*2.0.^(range(0, -52, length=n))
     x = [x; xR]
 
     # interpolate b′ so we can find roots
@@ -283,7 +292,6 @@ function calculate_diapycnal_transport()
     # compute integrand as a function of ź
     b_z = N² .+ differentiate(b′, ź)*cos(θ)
     b_zz = differentiate(b_z, ź)*cos(θ)
-    κ = params.κ
     κ_z = differentiate(κ, ź)*cos(θ)
     σϖ = @. α * ( κ_z + κ * b_zz / b_z )
 
@@ -291,9 +299,9 @@ function calculate_diapycnal_transport()
     σϖ_func = Spline1D(ź, σϖ)
     σϖ_iso = σϖ_func.(ź_func.(x, zb.(x)))
     T = -nuPGCM.trapz(σϖ_iso, x)
-    T_flat = κ_B - κ_I  # analytical solution to -∫ κ_z dx for x ∈ (-∞, 0] at z = 0
-    @printf("T      = %.3e\n", T)
-    @printf("T_flat = %.3e\n", T_flat)
+    T_flat = κ[1] - κ[end]  # κ_B - κ_I = analytical solution to -∫ κ_z dx for x ∈ (-∞, 0] at z = 0
+    @printf("T      = %.5e\n", T)
+    @printf("T_flat = %.5e\n", T_flat)
 
     # plot integrand
     x_flat = xL:0.01:xR_flat
@@ -319,6 +327,42 @@ function calculate_diapycnal_transport()
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
+
+    return T
 end
 
-calculate_diapycnal_transport()
+function α_convergence()
+    αs = 2.0.^-(2:8)
+    Ts = zeros(length(αs))
+    for (i, α) in enumerate(αs)
+        params = load_parameters(; α)
+        _, _, data_file = setup_output(params)
+        sol = run_or_load_sim(params; data_file)
+        Ts[i] = calculate_diapycnal_transport(params, sol)
+    end
+
+    filename = joinpath(@__DIR__, "$dirname/alpha_conv.png")
+    fig, ax = plt.subplots(1)
+    ax.axhline(-1, lw=0.5, ls=":", c="gray")
+    ax.axhline(0, lw=0.5, ls="-", c="k")
+    ax.spines["bottom"].set_visible(false)
+    ax.plot(log2.(αs), Ts, "o")
+    ax.set_xticks([-8, -6, -4, -2])
+    ax.set_xticklabels([L"2^{-8}", L"2^{-6}", L"2^{-4}", L"2^{-2}"])
+    ax.set_ylim(-2, 6)
+    ax.set_xlabel(L"Aspect ratio $\alpha$")
+    ax.set_ylabel(L"Diapycnal tranport $T$")
+    savefig(filename) 
+    @info "Saved '$filename'"
+    plt.close()
+
+    return αs, Ts
+end
+
+# params = load_parameters(; α)
+# dirname, label, data_file = setup_output(params)
+# sol = run_or_load_sim(params; data_file)
+# make_plots(params, sol; dirname, label)
+# T = calculate_diapycnal_transport(params, sol)
+
+αs, Ts = α_convergence()
