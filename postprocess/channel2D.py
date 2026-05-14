@@ -5,32 +5,36 @@ from scipy.integrate import cumulative_trapezoid
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
-from utils import to_latex_sci
+import utils
 
 wd = Path(__file__).parent.resolve()
 plt.style.use(f"{wd}/../plots.mplstyle")
 
 
-def plot_fieldb(file_name, field, label=None, i=None, rescale_z=False, vmax=None):
+def plot_fieldb(vtu_file, field, label=None, vmax=None, filename="field.png"):
     # read VTU file
-    dataset = pv.read(file_name)
+    dataset = pv.read(vtu_file)
 
     # prep data
     coords = dataset.points
-    f = dataset[field]
+    if field == "u":
+        f = dataset["u"][:, 0]
+    elif field == "v":
+        f = dataset["u"][:, 1]
+    elif field == "w":
+        f = dataset["u"][:, 2]
+    else:
+        f = dataset[field]
     b = dataset["b"]
     y = coords[:, 1]
     z = coords[:, 2]
-    alpha = np.max(np.abs(z))
-    tri = dataset.cells_dict[5]
+    t = dataset["t"][0]
+    tri = dataset.cells_dict[22]  # 22 = quadratic triangle
 
     # vmax for colorbar
     if vmax is None:
         print(f"max({field}) = {np.max(np.abs(f)):.3e}")
         vmax = np.max(np.abs(f))
-
-    if rescale_z:
-        z = z / (2 * alpha)
 
     # data is 2D, create a tri-plot
     fig, ax = plt.subplots(1, figsize=(19 / 6, 19 / 6))
@@ -39,90 +43,30 @@ def plot_fieldb(file_name, field, label=None, i=None, rescale_z=False, vmax=None
     if label is None:
         label = field
     plt.colorbar(im, label=label, fraction=0.03)
-    tri = dataset.cells_dict[5]
-    ax.triplot(y, z, tri, "k-", linewidth=0.25, alpha=0.1)
-    ax.set_xlabel(r"$y$")
-    if rescale_z:
-        ax.set_ylabel(r"$z$ (rescaled)")
-    else:
-        ax.set_ylabel(r"$z$")
+    ax.triplot(y, z, tri[:, 0:3], linestyle="-", color="k", linewidth=0.25, alpha=0.1)
+    ax.set_xlabel(r"Meridional coordinate $y$")
+    ax.set_ylabel(r"Vertical coordinate $z$")
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
-    ax.axis("equal")
-    ax.set_title(r"$\alpha = $" + f"{alpha:0.3f}")
-    if i is None:
-        img_file = f"images/{field}.png"
-    else:
-        img_file = f"images/{field}{i:05d}.png"
-    plt.savefig(img_file)
-    print(img_file)
-    plt.close()
-
-
-def plot_uvwb(file_name, i=None, rescale_z=False):
-    # read VTU file
-    dataset = pv.read(file_name)
-
-    # prep data
-    coords = dataset.points
-    u = dataset["u"]
-    v = dataset["v"]
-    w = dataset["w"]
-    b = dataset["b"]
-    y = coords[:, 1]
-    z = coords[:, 2]
-    alpha = np.max(np.abs(z))
-    tri = dataset.cells_dict[5]
-    speed = np.sqrt(v**2 + w**2)
-
-    # vmax for colorbar
-    print(f"max speed: {np.max(speed):.3e}")
-    vmax = np.max(np.abs(u))
-    # vmax = 1
-
-    if rescale_z:
-        # rescale for plotting only
-        z = z / (2 * alpha)
-
-    # data is 2D, create a tri-plot
-    fig, ax = plt.subplots(1, figsize=(19 / 6, 19 / 6))
-    im = ax.tripcolor(y, z, u, triangles=tri, vmin=-vmax, vmax=vmax, shading="gouraud", cmap="RdBu_r")
-    ax.tricontour(y, z, b, levels=20, colors="k", alpha=0.25, linestyles="-", linewidths=0.5)
-    ax.quiver(y, z, v, w)
-    plt.colorbar(im, label=r"$u$", fraction=0.03)
-    ax.set_xlabel(r"$y$")
-    if rescale_z:
-        ax.set_ylabel(r"$z$ (rescaled)")
-    else:
-        ax.set_ylabel(r"$z$")
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    ax.axis("equal")
-    ax.set_title(r"$\alpha = $" + f"{alpha:0.3f}")
-    if i is None:
-        img_file = "images/uvwb.png"
-    else:
-        img_file = f"images/uvwb{i:05d}.png"
-    plt.savefig(img_file)
-    print(img_file)
+    ax.set_title(r"$t = $" + utils.to_latex_sci(t))
+    plt.savefig(filename)
+    print(filename)
     plt.close()
 
 
 def plot_psib(
-    file_name,
-    i=None,
+    vtu_file,
     n=2**8,
-    rescale_z=False,
+    bmin=None,
+    bmax=None,
     vmax=None,
-    subdir="",
-    show_progress=False,
+    filename="psi.png",
 ):
     # read VTU file
-    dataset = pv.read(file_name)
+    dataset = pv.read(vtu_file)
 
     # load data
     x = dataset.points[0, 0]  # should all be the same
-    # x = 0.5
     y = dataset.points[:, 1]
     z = dataset.points[:, 2]
     t = dataset["t"][0]
@@ -133,33 +77,21 @@ def plot_psib(
     z_min, z_max = z.min(), z.max()
     y_1d = np.linspace(y_min, y_max, n)
     z_1d = np.linspace(z_min, z_max, n)
-    y_grid, z_grid = np.meshgrid(y_1d, z_1d)
+    y_grid, z_grid = np.meshgrid(y_1d, z_1d, indexing="ij")
 
-    # evaluate v and b on the grid and compute psi
-    psi = np.zeros_like(y_grid)
-    v_grid = np.zeros_like(y_grid)
-    b_grid = np.zeros_like(y_grid)
-    for j in tqdm(range(n), disable=(not show_progress)):
-        y_j = y_1d[j]
+    # evaluate v and b on the grid
+    points = pv.PointSet(np.column_stack([x * np.ones(n**2), y_grid.ravel(), z_grid.ravel()]))
+    samples = points.sample(dataset)
+    v_grid = samples["u"][:, 1].reshape(n, n)
+    b_grid = samples["b"].reshape(n, n)
 
-        line = pv.PointSet(np.array([[x, y_j, z] for z in z_1d]))
-        samples = line.sample(dataset)
+    # integrate: -alpha*dz(psi) = v
+    psi = -1 / alpha * cumulative_trapezoid(v_grid, z_1d, initial=0)
 
-        v_grid[:, j] = samples["v"]
-        b_grid[:, j] = samples["b"]
-
-        # integrate: -alpha*dz(psi) = v
-        psi[:, j] = -1 / alpha * cumulative_trapezoid(v_grid[:, j], z_1d, initial=0)
-
-        # mask points outside the domain
-        nan_mask = samples["vtkValidPointMask"] == 0
-        b_grid[nan_mask, j] = np.nan
-        psi[nan_mask, j] = np.nan
-
-    if rescale_z:
-        # rescale for plotting only
-        z_grid = z_grid / (2 * alpha)
-        z = z / (2 * alpha)
+    # mask points outside the domain
+    nan_mask = (samples["vtkValidPointMask"] == 0).reshape(n, n)
+    b_grid[nan_mask] = np.nan
+    psi[nan_mask] = np.nan
 
     # max value for colorbar
     if vmax is None:
@@ -178,7 +110,11 @@ def plot_psib(
         linestyles="-",
         linewidths=0.25,
     )
-    levels = np.linspace(-9.5, -0.5, 20)
+    if bmin is None:
+        bmin = np.nanmin(b_grid)
+    if bmax is None:
+        bmax = np.nanmax(b_grid)
+    levels = np.linspace(bmin, bmax, 20)
     ax.contour(
         y_grid,
         z_grid,
@@ -189,47 +125,25 @@ def plot_psib(
         linestyles="-",
         linewidths=0.5,
     )
-    levels = np.linspace(0, 9, 20)
-    ax.contour(
-        y_grid,
-        z_grid,
-        b_grid,
-        levels=levels,
-        colors="k",
-        alpha=0.25,
-        linestyles="--",
-        linewidths=0.5,
-    )
-    cb = plt.colorbar(im, label=r"$\Psi$", fraction=0.03)
+    cb = plt.colorbar(im, label=r"Streamfunction $\psi$", fraction=0.03)
     cb.ax.set_yticks([-vmax, 0, vmax])
     cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"$+$Max"])
-    ax.annotate(f"Max = {to_latex_sci(vmax)}", xy=(0.92, 0.98), xycoords="axes fraction")
-    # cb.ax.ticklabel_format(style="sci", scilimits=(-2, 2), useMathText=True)
-    # tri = dataset.cells_dict[5]
-    # ax.triplot(y, z, tri, "k-", linewidth=0.25, alpha=0.1)
-    ax.set_xlabel(r"$y$")
-    if rescale_z:
-        ax.set_ylabel(rf"$z$ (rescaled, $\alpha = {alpha:0.3f}$)")
-    else:
-        ax.set_ylabel(r"$z$")
+    ax.annotate(f"Max = {utils.to_latex_sci(vmax)}", xy=(0.92, 1.02), xycoords="axes fraction")
+    tri = dataset.cells_dict[22]
+    ax.triplot(y, z, tri[:, 0:3], "k-", linewidth=0.25, alpha=0.1)
+    ax.set_xlabel(r"Meridional coordinate $y$")
+    ax.set_ylabel(r"Vertical coordinate $z$")
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
-    ax.axis("equal")
-    ax.set_xticks([-1, -3 / 4, -1 / 2])
-    ax.set_yticks([z_grid.min(), z_grid.min() / 2, 0])
-    ax.set_title(r"$t = $" + to_latex_sci(t))
-    if i is None:
-        img_file = f"images/{subdir}psi.png"
-    else:
-        img_file = f"images/{subdir}psi{i:05d}.png"
-    plt.savefig(img_file)
-    print(img_file)
+    ax.set_title(r"$t = $" + utils.to_latex_sci(t))
+    plt.savefig(filename)
+    print(filename)
     plt.close()
 
 
-def plot_psi_profile(file_name, y, n=2**8):
+def plot_psi_profile(vtu_file, y, n=2**8):
     # read VTU file
-    dataset = pv.read(file_name)
+    dataset = pv.read(vtu_file)
 
     # load data
     x = dataset.points[0, 0]  # should all be the same
@@ -265,12 +179,12 @@ def plot_psi_profile(file_name, y, n=2**8):
     plt.close()
 
 
-def plot_surface_b_flux(file_name, n=2**8, show_progress=False):
+def plot_surface_b_flux(vtu_file, n=2**8, show_progress=False):
     # hardcode parameters for now:
     Ek = np.sqrt(1e-1)
     PrBu = 1
 
-    dataset = pv.read(file_name)
+    dataset = pv.read(vtu_file)
     x = dataset.points[0, 0]
     y = dataset.points[:, 1]
     z = dataset.points[:, 2]
@@ -306,47 +220,108 @@ def plot_surface_b_flux(file_name, n=2**8, show_progress=False):
     plt.close()
 
 
-def make_plots(subdir, overwrite=False, i_start=0, i_stop=np.inf, inc=1):
-    if subdir[-1] != "/":
-        subdir += "/"
+def plot_isopycnal_depth(vtu_files, bs=np.arange(-14.5, -12.5, 0.5), y0=-0.75, n=2**8, filename="isopycnal_depths.png"):
+    # same profile for every file
+    dataset0 = pv.read(vtu_files[0])
+    x0 = dataset0.points[0, 0]
+    zp = dataset0.points[:, 2]
+    z = np.linspace(zp.min(), zp.max(), n)
+    profile = pv.PointSet(np.array([[x0, y0, z] for z in z]))
 
-    if not os.path.exists(f"images/{subdir}"):
-        os.mkdir(f"images/{subdir}")
+    # loop over files
+    depths = np.zeros((len(vtu_files), len(bs)))
+    ts = np.zeros(len(vtu_files))
+    for i, vtu_file in enumerate(vtu_files):
+        dataset = pv.read(vtu_file)
 
-    for file in sorted(Path(f"/home/hpeter/Downloads/states/nu/channel2D/{subdir}data/").glob("*.vtu")):
-        i = int(file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-        if (i < i_start) or (i % inc != 0):
-            print(f"Skipping {file}")
-            continue
-        if i > i_stop:
-            return
-        if os.path.exists(f"images/{subdir}psi{i:05d}.png"):
-            if overwrite:
-                print(f"WARNING: Overwriting images/{subdir}psi{i:05d}.png")
+        samples = profile.sample(dataset)
+        b = samples["b"]
+        ts[i] = dataset["t"][0]
+
+        # find depth where b crosses the specified value
+        for j, b0 in enumerate(bs):
+            if (b0 < b.min()) or (b0 > b.max()):
+                depths[i, j] = np.nan
             else:
-                print(f"Skipping {file}")
-                continue
-        plot_psib(file, i, n=2**8, rescale_z=True, subdir=subdir)
+                depths[i, j] = np.interp(b0, b, z)
+
+    fig, ax = plt.subplots(1)
+    for j, b0 in enumerate(bs):
+        ax.plot(ts, depths[:, j], label=rf"$b = {b0:.1f}$")
+    ax.legend()
+    ax.set_xlim(ts[0], ts[-1])
+    ax.set_ylim(z[0], z[-1])
+    ax.set_xlabel(r"Time $t$")
+    ax.set_ylabel(r"Vertical coordinate $z$")
+    ax.set_title(rf"Depth of isopycnal at $y = {y0:.2f}$")
+    plt.savefig(filename)
+    print(filename)
+    plt.close()
+
+
+# def make_plots(subdir, overwrite=False, i_start=0, i_stop=np.inf, inc=1):
+#     if subdir[-1] != "/":
+#         subdir += "/"
+
+#     if not os.path.exists(f"images/{subdir}"):
+#         os.mkdir(f"images/{subdir}")
+
+#     for file in sorted(Path(f"/home/hpeter/Downloads/states/nu/channel2D/{subdir}data/").glob("*.vtu")):
+#         i = int(file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
+#         if (i < i_start) or (i % inc != 0):
+#             print(f"Skipping {file}")
+#             continue
+#         if i > i_stop:
+#             return
+#         if os.path.exists(f"images/{subdir}psi{i:05d}.png"):
+#             if overwrite:
+#                 print(f"WARNING: Overwriting images/{subdir}psi{i:05d}.png")
+#             else:
+#                 print(f"Skipping {file}")
+#                 continue
+#         plot_psib(file, i, n=2**8, rescale_z=True, subdir=subdir)
 
 
 if __name__ == "__main__":
     # i_state = 44900
     # i_sim = 10
-    # file_name = f"/home/hpeter/Downloads/states/nu/channel2D/sim{i_sim:03d}/data/state_{i_state:016d}.vtu"
+    # vtu_file = f"/home/hpeter/Downloads/states/nu/channel2D/sim{i_sim:03d}/data/state_{i_state:016d}.vtu"
 
-    # plot_fieldb(file_name, 'lambda', label=r"$\lambda$", rescale_z=True, i=i_state)
-    # plot_fieldb(file_name, 'v', label=r"$v$", rescale_z=True, i=i)
-    # plot_fieldb(file_name, 'w', label=r"$w$", rescale_z=True, i=i)
-    # plot_fieldb(file_name, 'nu', rescale_z=True)
-    # plot_fieldb(file_name, 'kappa_v', rescale_z=True, vmax=1)
-    # plot_uvwb(file_name, rescale_z=True)
-    # plot_psib(file_name, n=2**9, rescale_z=True)
-    # plot_surface_b_flux(file_name, n=2**10)
-    # plot_psi_profile(file_name, -0.51)
+    sims_dir = Path("/home/hppeters/group_dir/nuPGCM/scratch/channel2D")
+    sims = ["000"]
+    i_sim = 0
+    for sim in sims:
+        dir = sims_dir / f"sim{sim}"
+        print(f"Processing files in {dir}")
+        vtu_files = sorted((dir / "data").glob("state_*.vtu"))
 
-    # make_plots("sim008", overwrite=False, inc=100)
-    make_plots("test", overwrite=True, i_start=1200, inc=100, i_stop=4500)
-    # make_plots("sim009", overwrite=False, inc=100)
-    # make_plots("sim010", overwrite=False, inc=100)
-    # make_plots("sim011", overwrite=False, inc=100)
-    # make_plots("sim012", overwrite=False, inc=100)
+        plot_isopycnal_depth(vtu_files, filename=dir/"images/isopycnal_depths.png")
+
+        for vtu_file in vtu_files:
+            print(f"Processing {vtu_file}")
+            i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
+            if (dir/f"images/psi_{i:016d}.png").exists():
+                print(f"Skipping {vtu_file}")
+                continue
+            # plot_fieldb(vtu_file, "v", label=r"Meridional flow $v$", filename=dir/f"images/v_{i:016d}.png")
+            # plot_fieldb(vtu_file, "w", label=r"Vertical flow $w$", filename=dir/f"images/w_{i:016d}.png")
+            plot_fieldb(vtu_file, "nu", label=r"Turbulent viscosity $\nu$", filename=dir / f"images/nu_{i:016d}.png")
+            plot_fieldb(
+                vtu_file,
+                "kappa_v",
+                vmax=100,
+                label=r"Turbulent diffusivity $\kappa_v$",
+                filename=dir / f"images/kappa_v_{i:016d}.png",
+            )
+            plot_psib(vtu_file, bmin=-15, bmax=-13, filename=dir / f"images/psi_{i:016d}.png")
+            # plot_surface_b_flux(vtu_file, n=2**10)
+            # plot_psi_profile(vtu_file, -0.51)
+
+        print()
+
+    # # make_plots("sim008", overwrite=False, inc=100)
+    # make_plots("test", overwrite=True, i_start=1200, inc=100, i_stop=4500)
+    # # make_plots("sim009", overwrite=False, inc=100)
+    # # make_plots("sim010", overwrite=False, inc=100)
+    # # make_plots("sim011", overwrite=False, inc=100)
+    # # make_plots("sim012", overwrite=False, inc=100)
