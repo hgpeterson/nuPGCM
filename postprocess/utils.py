@@ -136,6 +136,37 @@ def horizontal_average(field, mask, grid, xmin=0, xmax=1, ymin=-1, ymax=1):
     )
 
 
+def horizontal_integral(field, mask, grid, xmin=0, xmax=1, ymin=-1, ymax=1, area_weighted=False):
+    """Calculate horizontal integral of field in [xmin, xmax] x [ymin, ymax]"""
+
+    # take subset
+    ixmin = np.searchsorted(grid.x, xmin)
+    ixmax = np.searchsorted(grid.x, xmax)
+    iymin = np.searchsorted(grid.y, ymin)
+    iymax = np.searchsorted(grid.y, ymax)
+    field = field[ixmin : ixmax + 1, iymin : iymax + 1, :]
+    mask = mask[ixmin : ixmax + 1, iymin : iymax + 1, :]
+
+    # clean up before integrating
+    field[np.where(mask == 0)] = 0
+
+    # 2D horizontal integral: (\int_xmin^xmax \int_ymin^ymax field(x, y, z) dx dy)
+    field_int = trapezoid(
+        trapezoid(field, x=grid.x[ixmin : ixmax + 1], axis=0),
+        x=grid.y[iymin : iymax + 1],
+        axis=0,
+    )
+    if area_weighted:
+        area = trapezoid(
+            trapezoid(mask, x=grid.x[ixmin : ixmax + 1], axis=0),
+            x=grid.y[iymin : iymax + 1],
+            axis=0,
+        )
+        return field_int / area
+    else:
+        return field_int
+
+
 def depth(samples: pv.PointSet, grid: Grid):
     mask = samples["vtkValidPointMask"].reshape(grid.nx, grid.ny, grid.nz)
     return trapezoid(mask, x=grid.z, axis=2)

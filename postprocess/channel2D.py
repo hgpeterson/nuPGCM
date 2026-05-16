@@ -3,7 +3,6 @@ import pyvista as pv
 from tqdm import tqdm
 from scipy.integrate import cumulative_trapezoid
 import matplotlib.pyplot as plt
-import os
 from pathlib import Path
 import utils
 
@@ -259,48 +258,25 @@ def plot_isopycnal_depth(vtu_files, bs=np.arange(-14.5, -12.5, 0.5), y0=-0.75, n
     plt.close()
 
 
-# def make_plots(subdir, overwrite=False, i_start=0, i_stop=np.inf, inc=1):
-#     if subdir[-1] != "/":
-#         subdir += "/"
-
-#     if not os.path.exists(f"images/{subdir}"):
-#         os.mkdir(f"images/{subdir}")
-
-#     for file in sorted(Path(f"/home/hpeter/Downloads/states/nu/channel2D/{subdir}data/").glob("*.vtu")):
-#         i = int(file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-#         if (i < i_start) or (i % inc != 0):
-#             print(f"Skipping {file}")
-#             continue
-#         if i > i_stop:
-#             return
-#         if os.path.exists(f"images/{subdir}psi{i:05d}.png"):
-#             if overwrite:
-#                 print(f"WARNING: Overwriting images/{subdir}psi{i:05d}.png")
-#             else:
-#                 print(f"Skipping {file}")
-#                 continue
-#         plot_psib(file, i, n=2**8, rescale_z=True, subdir=subdir)
-
-
 if __name__ == "__main__":
-    # i_state = 44900
-    # i_sim = 10
-    # vtu_file = f"/home/hpeter/Downloads/states/nu/channel2D/sim{i_sim:03d}/data/state_{i_state:016d}.vtu"
-
+    # overwrite = True
+    overwrite = False
     sims_dir = Path("/home/hppeters/group_dir/nuPGCM/scratch/channel2D")
-    sims = ["000"]
-    i_sim = 0
+    # sims = ["000", "001", "002"]
+    sims = ["002", "003"]
     for sim in sims:
         dir = sims_dir / f"sim{sim}"
         print(f"Processing files in {dir}")
         vtu_files = sorted((dir / "data").glob("state_*.vtu"))
 
-        plot_isopycnal_depth(vtu_files, filename=dir/"images/isopycnal_depths.png")
+        # plot_isopycnal_depth(vtu_files, filename=dir / "images/isopycnal_depths.png")
+        plot_isopycnal_depth(vtu_files, bs=np.arange(-11.5, -9.5, 0.5), filename=dir / "images/isopycnal_depths.png")
 
         for vtu_file in vtu_files:
+        # for vtu_file in [vtu_files[-1]]:
             print(f"Processing {vtu_file}")
             i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
-            if (dir/f"images/psi_{i:016d}.png").exists():
+            if (dir / f"images/psi_{i:016d}.png").exists() and not overwrite:
                 print(f"Skipping {vtu_file}")
                 continue
             # plot_fieldb(vtu_file, "v", label=r"Meridional flow $v$", filename=dir/f"images/v_{i:016d}.png")
@@ -313,15 +289,10 @@ if __name__ == "__main__":
                 label=r"Turbulent diffusivity $\kappa_v$",
                 filename=dir / f"images/kappa_v_{i:016d}.png",
             )
-            plot_psib(vtu_file, bmin=-15, bmax=-13, filename=dir / f"images/psi_{i:016d}.png")
+            # plot_psib(vtu_file, bmin=-15, bmax=-13, filename=dir / f"images/psi_{i:016d}.png")
+            plot_psib(vtu_file, bmin=-15, bmax=0, filename=dir / f"images/psi_{i:016d}.png")
+            # plot_psib(vtu_file, filename=dir / f"images/psi_{i:016d}.png")
             # plot_surface_b_flux(vtu_file, n=2**10)
             # plot_psi_profile(vtu_file, -0.51)
 
         print()
-
-    # # make_plots("sim008", overwrite=False, inc=100)
-    # make_plots("test", overwrite=True, i_start=1200, inc=100, i_stop=4500)
-    # # make_plots("sim009", overwrite=False, inc=100)
-    # # make_plots("sim010", overwrite=False, inc=100)
-    # # make_plots("sim011", overwrite=False, inc=100)
-    # # make_plots("sim012", overwrite=False, inc=100)

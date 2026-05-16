@@ -133,7 +133,7 @@ def plot_b_fluxes(F_bars, grid, labels, filename="bfluxes.png"):
     ax.set_xticks([-3, -1, 1, 3])
     ax.set_xticklabels([r"$-10^{3}$", r"$-10^{1}$", r"$-10^{-1}$", r"$-10^{-3}$"])
     ax.set_ylim(z.min(), 0)
-    ax.set_xlabel(r"Average buoyancy flux $-\overline{\alpha \kappa \partial_z b}$")
+    ax.set_xlabel(r"Integrated buoyancy flux $-\iint \alpha \kappa \partial_z b \; \mathrm{d}x\mathrm{d}y$")
     ax.set_ylabel(r"Vertical coordinate $z$")
     plt.savefig(filename)
     print("Saved", filename)
@@ -150,8 +150,8 @@ if __name__ == "__main__":
     sims_dir = Path("/resnick/scratch/hppeters")
     N2_bars_channel = []
     N2_bars_basin = []
-    F_bars_channel = []
-    F_bars_basin = []
+    F_ints_channel = []
+    F_ints_basin = []
     for sim in sims:
         dir = sims_dir / f"sim{sim}"
         vtu_file = sorted((dir / "data").glob("state_*.vtu"))[-1]
@@ -175,23 +175,23 @@ if __name__ == "__main__":
         plot_b_flux_slice(F, b, mask, grid, 0, t=t, filename=img_file)
 
         # basin avg
-        N2_bar = utils.horizontal_average(N2, mask, grid, ymin=-0.5, ymax=1)
-        F_bar = utils.horizontal_average(F, mask, grid, ymin=-0.5, ymax=1)
+        N2_bar = utils.horizontal_integral(N2, mask, grid, ymin=-0.5, ymax=1, area_weighted=True)
+        F_int = utils.horizontal_integral(F, mask, grid, ymin=-0.5, ymax=1)
         N2_bars_basin.append(N2_bar)
-        F_bars_basin.append(F_bar)
+        F_ints_basin.append(F_int)
         img_file = dir / f"images/strat_basin{i:016d}.png"
         plot_stratification(N2_bar, grid, t=t, filename=img_file)
 
         # channel avg
-        N2_bar = utils.horizontal_average(N2, mask, grid, ymin=-1.0, ymax=-0.5)
-        F_bar = utils.horizontal_average(F, mask, grid, ymin=-1.0, ymax=-0.5)
+        N2_bar = utils.horizontal_integral(N2, mask, grid, ymin=-1.0, ymax=-0.5, area_weighted=True)
+        F_int = utils.horizontal_integral(F, mask, grid, ymin=-1.0, ymax=-0.5)
         N2_bars_channel.append(N2_bar)
-        F_bars_channel.append(F_bar)
+        F_ints_channel.append(F_int)
         img_file = dir / f"images/strat_channel{i:016d}.png"
         plot_stratification(N2_bar, grid, t=t, filename=img_file)
 
     sims_str = "_".join(sims)
     plot_stratifications(N2_bars_basin, grid, sims, filename=f"images/strat_basin_{sims_str}.png")
     plot_stratifications(N2_bars_channel, grid, sims, filename=f"images/strat_channel_{sims_str}.png")
-    plot_b_fluxes(F_bars_basin, grid, sims, filename=f"images/b_fluxes_basin_{sims_str}.png")
-    plot_b_fluxes(F_bars_channel, grid, sims, filename=f"images/b_fluxes_channel_{sims_str}.png")
+    plot_b_fluxes(F_ints_basin, grid, sims, filename=f"images/b_fluxes_basin_{sims_str}.png")
+    plot_b_fluxes(F_ints_channel, grid, sims, filename=f"images/b_fluxes_channel_{sims_str}.png")
