@@ -49,6 +49,7 @@ function load_parameters(; α)
     h_κ = α/8
     κ_B = 1e2
     κ_I = 1
+    # κ_I = 2
     κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/h_κ)
 
     T = h_κ^2 / (κ_B*α^2*ε^2/μϱ)
@@ -61,6 +62,7 @@ end
 
 function setup_output(params)
     dirname = "1d_model/diapycnal"
+    # dirname = "1d_model/diapycnal_kappaI2"
     label = @sprintf("_control_a%02d", Int(1/params.α))
     if params.eddy_param
         dirname *= "_eddy"
@@ -226,10 +228,10 @@ end
 """
     calculate_diapycnal_transport()
 
-Calculate -∫ σϖ dξ over an isopycnal.
+Calculate T = ∫ σϖ dξ over an isopycnal.
 """
 function calculate_diapycnal_transport(params, sol)
-    (; α, θ, N², z, nz, κ) = params
+    (; α, ε, μϱ, θ, N², z, nz, κ) = params
     (; bs) = sol
 
     # choose isopycnal 
@@ -293,15 +295,15 @@ function calculate_diapycnal_transport(params, sol)
     b_z = N² .+ differentiate(b′, ź)*cos(θ)
     b_zz = differentiate(b_z, ź)*cos(θ)
     κ_z = differentiate(κ, ź)*cos(θ)
-    σϖ = @. α * ( κ_z + κ * b_zz / b_z )
+    σϖ = @. α^2*ε^2/μϱ * (κ_z + κ * b_zz / b_z)
 
     # interpolate, evaluate along isopycnal, and integrate
     σϖ_func = Spline1D(ź, σϖ)
     σϖ_iso = σϖ_func.(ź_func.(x, zb.(x)))
-    T = -nuPGCM.trapz(σϖ_iso, x)
-    T_flat = κ[1] - κ[end]  # κ_B - κ_I = analytical solution to -∫ κ_z dx for x ∈ (-∞, 0] at z = 0
-    @printf("T      = %.5e\n", T)
-    @printf("T_flat = %.5e\n", T_flat)
+    T = nuPGCM.trapz(σϖ_iso, x)
+    T_theory = α^2*ε^2/μϱ * κ[end]/α  # analytical solution
+    @printf("T/α        = %.5e\n", T/α)
+    @printf("T_theory/α = %.5e\n", T_theory/α)
 
     # plot integrand
     x_flat = xL:0.01:xR_flat
@@ -312,18 +314,18 @@ function calculate_diapycnal_transport(params, sol)
     b_zz_iso = Spline1D(ź, b_zz).(ź_func.(x, zb.(x)))
     filename = joinpath(@__DIR__, @sprintf("%s/integrand_a%d_soln.png", dirname, Int(1/α)))
     fig, ax = subplots(1)
-    ax.fill_between(x, -asinh.(σϖ_iso), 0, label=L"\sigma\varpi")
-    ax.plot(x_flat,   -asinh.(α*κ_z_flat),                    "C2", lw=0.7, label=L"\alpha\kappa_z(z = 0)")
-    ax.plot(x, -asinh.(α*κ_z_iso),                  "C3", lw=0.7, label=L"\alpha\kappa_z")
-    ax.plot(x, -asinh.(α*κ_iso.*b_zz_iso./b_z_iso), "C4", lw=0.7, label=L"\alpha\kappa b_{zz} / b_z")
+    ax.fill_between(x, asinh.(σϖ_iso),   0,                                         label=L"\sigma\varpi")
+    ax.plot(x_flat,    asinh.(α^2*ε^2/μϱ * κ_z_flat),                 "C2", lw=0.7, label=L"\kappa_z(z = 0)")
+    ax.plot(x,         asinh.(α^2*ε^2/μϱ * κ_z_iso),                  "C3", lw=0.7, label=L"\kappa_z")
+    ax.plot(x,         asinh.(α^2*ε^2/μϱ * κ_iso.*b_zz_iso./b_z_iso), "C4", lw=0.7, label=L"\kappa b_{zz} / b_z")
     ax.set_xlabel(L"Horizontal coordinate $x$")
-    ax.set_ylabel(L"$-\sinh^{-1}$(integrand components)")
+    ax.set_ylabel(L"$\sinh^{-1}$(integrand components)")
     ax.legend(loc="lower left")
     ax.set_xlim(0, 1)
     # ax.set_ylim(-15, 15)
-    ax.set_ylim(-20, 20)
-    ax.text(0.05, 0.95, latexstring(@sprintf("\$T = %s\$",              nuPGCM.sci_notation(T))), transform=ax.transAxes)
-    ax.text(0.05, 0.85, latexstring(@sprintf("\$T_{\\rm{flat}} = %s\$", nuPGCM.sci_notation(T_flat))), transform=ax.transAxes)
+    # ax.set_ylim(-20, 20)
+    ax.text(0.05, 0.95, latexstring(@sprintf("\$T/\\alpha = %s\$",                nuPGCM.sci_notation(T/α))), transform=ax.transAxes)
+    ax.text(0.05, 0.85, latexstring(@sprintf("\$T_{\\rm{theory}}/\\alpha = %s\$", nuPGCM.sci_notation(T_theory/α))), transform=ax.transAxes)
     savefig(filename)
     @info "Saved '$filename'"
     plt.close()
@@ -341,17 +343,19 @@ function α_convergence()
         Ts[i] = calculate_diapycnal_transport(params, sol)
     end
 
+    params = load_parameters(; α=αs[1])
+    (; ε, μϱ) = params
     filename = joinpath(@__DIR__, "$dirname/alpha_conv.png")
     fig, ax = plt.subplots(1)
-    ax.axhline(-1, lw=0.5, ls=":", c="gray")
+    ax.axhline(1, lw=0.5, ls=":", c="gray")
     ax.axhline(0, lw=0.5, ls="-", c="k")
     ax.spines["bottom"].set_visible(false)
-    ax.plot(log2.(αs), Ts, "o")
+    ax.plot(log2.(αs), μϱ/ε^2 * Ts ./ αs, "o")
     ax.set_xticks([-8, -6, -4, -2])
     ax.set_xticklabels([L"2^{-8}", L"2^{-6}", L"2^{-4}", L"2^{-2}"])
-    ax.set_ylim(-2, 6)
+    ax.set_ylim(-6, 2)
     ax.set_xlabel(L"Aspect ratio $\alpha$")
-    ax.set_ylabel(L"Diapycnal tranport $T$")
+    ax.set_ylabel(L"Scaled transport $\frac{\mu\varrho}{\alpha\varepsilon^2} T$")
     savefig(filename) 
     @info "Saved '$filename'"
     plt.close()
@@ -359,10 +363,11 @@ function α_convergence()
     return αs, Ts
 end
 
-# params = load_parameters(; α)
+
+# params = load_parameters(; α=2^-3)
 # dirname, label, data_file = setup_output(params)
 # sol = run_or_load_sim(params; data_file)
-# make_plots(params, sol; dirname, label)
+# # make_plots(params, sol; dirname, label)
 # T = calculate_diapycnal_transport(params, sol)
 
 αs, Ts = α_convergence()
