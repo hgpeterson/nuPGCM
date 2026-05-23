@@ -127,7 +127,7 @@ The parameterization reads
 ```
 We also smoothly limit ν_min ≤ ν ≤ f² / N²min.
 """
-function ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=1)
+function ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=0)
     f = eddy_param.f
     N²min = eddy_param.N²min
 
