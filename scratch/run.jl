@@ -12,7 +12,7 @@ ENV["JULIA_DEBUG"] = nothing
 PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM"
 SIMS_PATH = "/resnick/scratch/hppeters"
 
-set_out_dir!(joinpath(SIMS_PATH, "sim056"))
+set_out_dir!(joinpath(SIMS_PATH, "sim066b"))
 
 # geom = :tub
 geom = :box
@@ -20,6 +20,7 @@ geom = :box
 # for making mesh
 if geom == :tub
     include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat_round_end.jl"))  
+    # include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat.jl"))  
 elseif geom == :box
     include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))  
 end
@@ -111,18 +112,22 @@ elseif geom == :box
     κ_I = 5.706e+00
     κ_B = 2.535e+01
     d = 3.526e-01*α
+    # κ_I = 3.752e+00  # wall
+    # κ_B = 2.834e+01
+    # d = 3.881e-01*α
 end
 ν(x) = 1
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
-# τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
-τˣ(x) = -0.2/τ₀*sin(π*x[2])*sin(2π*x[2])
+τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
+# τˣ(x) = -0.2/τ₀*sin(π*x[2])*sin(2π*x[2])
 τʸ(x) = 0
-# b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
-b_surface(x) = -b₀*x[2]^2
+b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
+# b_surface(x) = -b₀*x[2]^2
+# b_surface(x) = -b₀*(x[2]^2 - 0.1*x[2])/1.1  # lower b in SO
 b_surface_bc = SurfaceDirichletBC(b_surface)
 conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3))
+eddy_param = EddyParameterization(f=f, N²min=1e-3, ν_min=1e3*κ₀/ν₀)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 display(forcings.conv_param)
@@ -134,6 +139,7 @@ h = 2e-2
 # h = 1e-2
 if geom == :tub
     mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
+    # mesh_name = @sprintf("channel_basin_no_flat_wall_h%.2e_a%.2e", h, α)
 elseif geom == :box
     mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
 end
@@ -162,6 +168,8 @@ display(fe_data.dofs)
 
 # setup inversion toolkit
 inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
+# inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings)
+# model = Model(arch, params, forcings, fe_data, inversion_toolkit)
 
 # set timestepper
 Δt = 1*86400/t₀
@@ -176,7 +184,7 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timesteppe
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
-set_b!(model, x -> b₀*x[3]/α + b_surface(x)*exp(x[3]/(α/4)))
+set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/8)))
 # set_state_from_file!(model, joinpath(SIMS_PATH, "sim051c/data/state_0000000000010800.jld2"))
 invert!(model)
 save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
