@@ -95,6 +95,8 @@ end
 struct EddyParameterization{F, T}
     f::F      # Coriolis
     N²min::T  # minimum stratification α*∂z(b) before eddy parameterization starts tapering off
+    ν_min::T  # minimum eddy viscosity
+    smoothing::T  # smoothing parameter for ν_eddy (higher → closer to max(ν, ν_min))
     is_on::Bool
 end
 
@@ -106,18 +108,20 @@ function Base.show(io::IO, eddy_param::EddyParameterization)
     print(io, summary(eddy_param), ":")
     if eddy_param.is_on
         println(io,        "\n├── f: ", eddy_param.f)
-          print(io, @sprintf("└── N²min = %1.1e", eddy_param.N²min))
+        println(io, @sprintf("├── N²min = %1.1e", eddy_param.N²min))
+        println(io, @sprintf("├── ν_min = %1.1e", eddy_param.ν_min))
+          print(io, @sprintf("└── smoothing = %1.1e", eddy_param.smoothing))
     else
         print(io, " off")
     end
 end
 
-function EddyParameterization(; f, N²min)
-    return EddyParameterization(f, N²min, true)
+function EddyParameterization(; f, N²min, ν_min=0., smoothing=10.)
+    return EddyParameterization(f, N²min, ν_min, smoothing, true)
 end
 
 """
-    ν = ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=1)
+    ν = ν_eddy(eddy_param::EddyParameterization, αbz)
 
 Compute ν for eddy parameterization.
 
@@ -127,13 +131,14 @@ The parameterization reads
 ```
 We also smoothly limit ν_min ≤ ν ≤ f² / N²min.
 """
-function ν_eddy(eddy_param::EddyParameterization, αbz; smoothing=10, ν_min=0)
-    f = eddy_param.f
-    N²min = eddy_param.N²min
+function ν_eddy(eddy_param::EddyParameterization, αbz)
+    (; f, N²min, ν_min, smoothing) = eddy_param
 
-    # this function converges to max(ν, ν_min) as smoothing → ∞
-    ν = f * (f / (sqrt∘(N²min^2 +  αbz * αbz)))  # eddy value
-    return (log∘(exp(smoothing*ν_min) + exp∘(smoothing*ν)) / smoothing)  # LogSumExp
+    # eddy value → f² / (α ∂_z b) for large stratification and → f² / N²min for low stratification
+    ν = f * (f / (sqrt∘(N²min^2 +  αbz * αbz)))  
+
+    # LogSumExp converges to max(ν, ν_min) as smoothing → ∞
+    return (log∘(exp(smoothing*ν_min) + exp∘(smoothing*ν)) / smoothing)  
 end
 
 #### Forcings type ####

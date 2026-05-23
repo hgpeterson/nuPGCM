@@ -87,7 +87,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model; n_info=10, n_save=Inf, n_plot=Inf, advection=true)
+function run!(model::Model; i_start=1, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
     # unpack
     u = model.state.u
     b = model.state.b
@@ -124,7 +124,7 @@ function run!(model::Model; n_info=10, n_save=Inf, n_plot=Inf, advection=true)
 
     # start timers
     t₀ = t_last_info = time()
-    i = 1
+    i = i_start
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
