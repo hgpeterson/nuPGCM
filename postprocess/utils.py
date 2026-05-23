@@ -32,18 +32,33 @@ def to_latex_sci(x: float, decimals=2):
 
 
 class Grid:
-    def __init__(self, dataset: pv.DataSet, nx: int, ny: int, nz: int):
+    def __init__(self, dataset: pv.DataSet, nx: int = 2**8, ny: int = 2**8, nz: int = 2**8):
         p = dataset.points
         x_min, x_max = p[:, 0].min(), p[:, 0].max()
         y_min, y_max = p[:, 1].min(), p[:, 1].max()
         z_min, z_max = p[:, 2].min(), p[:, 2].max()
-        self.x = np.linspace(x_min, x_max, nx)
-        self.y = np.linspace(y_min, y_max, ny)
-        self.z = np.linspace(z_min, z_max, nz)
-        # self.xx, self.yy, self.zz = np.meshgrid(self.x, self.y, self.z, indexing="ij")
-        self.nx = nx
-        self.ny = ny
-        self.nz = nz
+        if x_min == x_max:
+            self.x = np.array([x_min])
+            self.nx = 1
+        else:
+            self.x = np.linspace(x_min, x_max, nx)
+            self.nx = nx
+
+        if y_min == y_max:
+            self.y = np.array([y_min])
+            self.ny = 1
+        else:
+            self.y = np.linspace(y_min, y_max, ny)
+            self.ny = ny
+
+        if z_min == z_max:
+            self.z = np.array([z_min])
+            self.nz = 1
+        else:
+            self.z = np.linspace(z_min, z_max, nz)
+            self.nz = nz
+
+        self.xx, self.yy, self.zz = np.meshgrid(self.x, self.y, self.z, indexing="ij")
 
 
 def sample_to_grid(dataset: pv.DataSet, grid: Grid):
@@ -78,6 +93,17 @@ def sample_to_grid(dataset: pv.DataSet, grid: Grid):
     return samples
 
 
+def sample_field(samples, field, nx, ny, nz):
+    if field == "u":
+        return samples["u"][:, 0].reshape(nx, ny, nz)
+    elif field == "v":
+        return samples["u"][:, 1].reshape(nx, ny, nz)
+    elif field == "w":
+        return samples["u"][:, 2].reshape(nx, ny, nz)
+    else:
+        return samples[field].reshape(nx, ny, nz)
+
+
 def sample_fields(vtu_file, fields, nx=2**8, ny=2**8, nz=2**8, printtime=False):
     """Sample fields from a VTU file"""
 
@@ -97,8 +123,8 @@ def sample_fields(vtu_file, fields, nx=2**8, ny=2**8, nz=2**8, printtime=False):
     samples = sample_to_grid(dataset, grid)
     fields_dict = {}
     for field in fields:
-        fields_dict[field] = samples[field].reshape(nx, ny, nz)
-    fields_dict["mask"] = samples["vtkValidPointMask"].reshape(nx, ny, nz)
+        fields_dict[field] = sample_field(samples, field, grid.nx, grid.ny, grid.nz)
+    fields_dict["mask"] = sample_field(samples, "vtkValidPointMask", grid.nx, grid.ny, grid.nz)
 
     if printtime:
         print(f"sampled fields {fields} from {vtu_file} in {time() - t0:.3f} s")
