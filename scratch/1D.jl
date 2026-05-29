@@ -37,7 +37,11 @@ function load_parameters(; α)
     V = 0
     H = α
     nz = 2^8
+    # for eddy param:
     eddy_param = true
+    νmin = κ₀/ν₀
+    N²min = sqrt(1e-3)
+    smoothing = 10
 
     z = H*OneDModel.chebyshev_nodes(nz)
 
@@ -49,7 +53,6 @@ function load_parameters(; α)
     h_κ = α/8
     κ_B = 1e2
     κ_I = 1
-    # κ_I = 2
     κ = @. κ_I + (κ_B - κ_I)*exp(-(z_phys - z_bot)/h_κ)
 
     T = h_κ^2 / (κ_B*α^2*ε^2/μϱ)
@@ -57,12 +60,11 @@ function load_parameters(; α)
     t_save = T/20
     @info "Time" T Δt t_save T÷Δt
 
-    return (; μϱ, α, θ, ε, N², Δt, Px, U, Py, V, H, f, T, z, nz, κ, eddy_param, t_save)
+    return (; μϱ, α, θ, ε, N², Δt, Px, U, Py, V, H, f, T, z, nz, κ, eddy_param, νmin, N²min, smoothing, t_save)
 end
 
 function setup_output(params)
-    dirname = "1d_model/diapycnal"
-    # dirname = "1d_model/diapycnal_kappaI2"
+    dirname = "1d_model/diapycnal_new_nu"
     label = @sprintf("_control_a%02d", Int(1/params.α))
     if params.eddy_param
         dirname *= "_eddy"
@@ -224,84 +226,6 @@ function make_plots(params, sol; dirname, label)
     @info "Saved '$filename'"
     plt.close()
 end
-
-# # in rotated coords
-# function calculate_diapycnal_transport(params, sol)
-#     (; α, ε, μϱ, θ, N², z, κ) = params
-#     (; bs) = sol
-#     ź = z
-
-#     # take final timestep
-#     b′ = bs[:, end]  # in ź coordinates
-
-#     # choose isopycnal b₀ = N²*x́*sin(θ) + N²*ź*cos(θ) + b′(ź)
-#     b₀ = 0
-
-#     # endpoints at ź = 0 and ź = -α
-#     x́L = (b₀ - b′[end]) / (N²*sin(θ))
-#     x́R = (b₀ - b′[1] + N²*α*cos(θ)) / (N²*sin(θ))
-#     @printf("Endpoints: x́L = %.3e, x́R = %.3e\n", x́L, x́R)
-
-#     # exponential grid refined near x́R
-#     n = 2^10
-#     x́ = x́R .- (x́R - x́L)*2.0.^(range(0, -52, length=n))
-#     # x́ = [x́; x́R]
-
-#     # interpolate b′ so we can find roots
-#     b′_func = Spline1D(ź, b′)
-
-#     # function for ź(x́) along isopycnal
-#     ź_iso(x́) = find_zero(ź -> N²*x́*sin(θ) + N²*ź*cos(θ) + b′_func(ź) - b₀, -α)
-
-#     # fig, ax = plt.subplots(1)
-#     # ax.plot(x́, ź_iso.(x́), "k-", lw=0.5)
-#     # ax.set_xlabel(L"Horizontal coordinate $\acute{\xi}$")
-#     # ax.set_ylabel(L"Vertical coordinate $\acute{\zeta}$")
-#     # ax.set_xlim(0, 1)
-#     # ax.set_ylim(-α, 0)
-#     # savefig(joinpath(@__DIR__, "$dirname/isopycnal.png"))
-#     # @info "Saved '$(joinpath(@__DIR__, "$dirname/isopycnal.png"))'"
-#     # plt.close()
-
-#     # compute integrand as a function of ź
-#     b′_ź = differentiate(b′, ź)
-#     b′_źź = differentiate(b′_ź, ź)
-#     κ_ź = differentiate(κ, ź)
-#     σϖ_num   = @. α^2*ε^2/μϱ*(κ_ź*(N²*cos(θ) + b′_ź) + κ * b′_źź)
-#     σϖ_denom = @. N²*cos(θ) + b′_ź
-#     fig, ax = plt.subplots(1, figsize=(2, 3.2))
-#     ax.plot(σϖ_num, ź, label=L"\frac{\alpha^2\varepsilon^2}{\mu\varrho}\left[\kappa_{\acute{z}} (N^2 \cos\theta + b'_{\acute{z}}) + \kappa b'_{\acute{z}\acute{z}}\right]")
-#     ax.plot(σϖ_denom, ź, label=L"N^2 \cos\theta + b'_{\acute{z}}")
-#     ax.legend()
-#     ax.set_ylabel(L"Vertical coordinate $\acute{z}$")
-#     ax.set_ylim(-α, 0)
-#     savefig(joinpath(@__DIR__, "$dirname/terms.png"))
-#     @info "Saved '$(joinpath(@__DIR__, "$dirname/terms.png"))'"
-#     plt.close()
-
-#     # interpolate, evaluate along isopycnal, and integrate
-#     σϖ_num_func = Spline1D(ź, σϖ_num)
-#     σϖ_denom_func = Spline1D(ź, σϖ_denom)
-#     σϖ_iso = σϖ_num_func.(ź_iso.(x́)) ./ σϖ_denom_func.(ź_iso.(x́))
-#     T = nuPGCM.trapz(σϖ_iso, x́)
-#     T_theory = α^2*ε^2/μϱ * κ[end]/α  # analytical solution
-#     @printf("T/α        = %.5e\n", T/α)
-#     @printf("T_theory/α = %.5e\n", T_theory/α)
-
-#     filename = joinpath(@__DIR__, @sprintf("%s/integrand_a%d_soln.png", dirname, Int(1/α)))
-#     fig, ax = subplots(1)
-#     ax.plot(x́, asinh.(μϱ*σϖ_iso/ε^2*α^2), lw=0.5,   label=L"\sigma\varpi")
-#     ax.set_xlabel(L"Horizontal coordinate $x$")
-#     ax.set_ylabel(L"$\sinh^{-1}$(integrand components)")
-#     ax.legend(loc="lower left")
-#     ax.text(0.05, 0.95, latexstring(@sprintf("\$T/\\alpha = %s\$",                nuPGCM.sci_notation(T/α))), transform=ax.transAxes)
-#     ax.text(0.05, 0.85, latexstring(@sprintf("\$T_{\\rm{theory}}/\\alpha = %s\$", nuPGCM.sci_notation(T_theory/α))), transform=ax.transAxes)
-#     savefig(filename)
-#     @info "Saved '$filename'"
-#     plt.close()
-
-#     return T
-# end
 
 """
     calculate_diapycnal_transport()
@@ -474,10 +398,10 @@ function α_convergence()
 end
 
 
-# params = load_parameters(; α=2^-3)
+# params = load_parameters(; α=2^-7)
 # dirname, label, data_file = setup_output(params)
 # sol = run_or_load_sim(params; data_file)
-# # make_plots(params, sol; dirname, label)
+# make_plots(params, sol; dirname, label)
 # # T = calculate_diapycnal_transport(params, sol)
 # dVdt = calculate_volume_tendency(params, sol)
 
