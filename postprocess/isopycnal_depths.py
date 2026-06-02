@@ -33,16 +33,22 @@ def plot_isopycnal_depth(vtu_files, bs=np.arange(-14.5, -12.5, 0.5), y0=0, n=2**
             if (b0 < b.min()) or (b0 > b.max()):
                 depths[i, j] = np.nan
             else:
-                # depths[i, j] = np.interp(b0, b, z)  # doesn't work if b is non-monotonic
-                depths[i, j] = z[np.argmin(np.abs(b - b0))]
+                depths[i, j] = np.interp(b0, b, z)
+                if depths[i, j] == z[0]:
+                    # interp doesn't work if b is non-monotonic
+                    depths[i, j] = z[np.argmin(np.abs(b - b0))]
 
     # plot
     fig, ax = plt.subplots(1)
     dt_end = ts[-1] - ts[0]
     for j, b0 in enumerate(bs):
         dzdt = (depths[-1, j] - depths[-2, j]) / dt_end
-        ax.plot(ts, depths[:, j], label=rf"$b = {b0:.1f} (z_t = {utils.to_latex_sci(dzdt)})$")
-    ax.legend(fontsize=6)
+        if np.isnan(dzdt):
+            label = rf"$b = {b0:.1f}$"
+        else:
+            label = rf"$b = {b0:.1f}$ ($z_t = {utils.to_latex_sci(dzdt)}$)"
+        ax.plot(ts, depths[:, j], label=label)
+    ax.legend(loc=(1.05, 0.5), fontsize=6)
     ax.set_xlim(ts[0], ts[-1])
     ax.set_ylim(z[0], z[-1])
     ax.set_xlabel(r"Time $t$")
@@ -59,7 +65,14 @@ if __name__ == "__main__":
     overwrite = True
     # overwrite = False
     sims_dir = Path("/resnick/scratch/hppeters")
-    sims = ["050b", "051e", "052", "053", "055", "056", "057", "058", "061", "063", "062", "064"]
+    sims = [
+        "065a", 
+        "065c", 
+        "065d", 
+        "066c", 
+        "066d", 
+        "067"
+        ]
     for sim in sims:
         dir = sims_dir / f"sim{sim}"
         print(f"Processing files in {dir}")
@@ -70,6 +83,6 @@ if __name__ == "__main__":
             print(f"Skipping {sim}")
             continue
 
-        plot_isopycnal_depth(vtu_files, bs=[-14, -13.5, -13, -10, -5], filename=filename)
+        plot_isopycnal_depth(vtu_files, bs=[-5, -10, -13, -13.5, -14], filename=filename)
 
         print()

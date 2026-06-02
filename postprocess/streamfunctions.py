@@ -106,7 +106,7 @@ def plot_barotropic_streamfunction(Psi, grid, t=None, filename="psi_baro.png", P
     ax.text(
         0.8,
         1.02,
-        rf"Max = {utils.to_latex_sci(Psimax)}",
+        rf"Max = ${utils.to_latex_sci(Psimax)}$",
         transform=ax.transAxes,
         size=7,
     )
@@ -118,7 +118,7 @@ def plot_barotropic_streamfunction(Psi, grid, t=None, filename="psi_baro.png", P
     ax.set_xlabel(r"Zonal coordinate $x$")
     ax.set_ylabel(r"Meridional coordinate $y$")
     if t is not None:
-        ax.set_title(r"$t = $" + utils.to_latex_sci(t))
+        ax.set_title(r"$t = " + utils.to_latex_sci(t) + r"$")
     plt.savefig(filename)
     print(filename)
     plt.close()
@@ -199,16 +199,28 @@ def plot_overturning_streamfunction(
 
     if psimax is None:
         psimax = np.nanmax(np.abs(psi))
+        extend = "neither"
+    else:
+        extend_max = psimax > np.nanmax(np.abs(psi))
+        extend_min = -psimax < np.nanmin(np.abs(psi))
+        if extend_max and extend_min:
+            extend = "both"
+        elif extend_max:
+            extend = "max"
+        elif extend_min:
+            extend = "min"
+        else:
+            extend = "neither"
     cf1 = ax.pcolormesh(y, z, psi.T, cmap="RdBu_r", vmin=-psimax, vmax=psimax, rasterized=True)
     levels = np.linspace(-0.9 * psimax, 0.9 * psimax, 8)
     ax.contour(y, z, psi.T, levels=levels, colors="k", linestyles="-", linewidths=0.25)
-    cb = plt.colorbar(cf1, label=r"Streamfunction $\psi$")
+    cb = plt.colorbar(cf1, label=r"Streamfunction $\psi$", extend=extend)
     cb.ax.set_yticks([-psimax, 0, psimax])
     cb.ax.set_yticklabels([r"$-$Max", r"$0$", r"Max"])
     ax.text(
         0.8,
         1.02,
-        rf"Max = {utils.to_latex_sci(psimax)}",
+        rf"Max = ${utils.to_latex_sci(psimax)}$",
         transform=ax.transAxes,
         size=7,
     )
@@ -235,7 +247,7 @@ def plot_overturning_streamfunction(
     ax.set_xlabel(r"Meridional coordinate $y$")
     ax.set_ylabel(r"Vertical coordinate $z$")
     if t is not None:
-        ax.set_title(r"$t = $" + utils.to_latex_sci(t))
+        ax.set_title(r"$t = " + utils.to_latex_sci(t) + r"$")
     plt.savefig(filename)
     print(filename)
     plt.close()
@@ -260,24 +272,19 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**7):
             bmin=-15,
             bmax=-10,
             geometry=geom,
+            # psimax=1e-2,
         )
-    else:
-        print(f"Skipping {img_file}")
 
     # barotropic streamfunction
     img_file = dir / f"images/psi_baro{i:016d}.png"
     if not (os.path.exists(img_file) and not overwrite):
         Psi, U, grid, t = calculate_barotropic_streamfunction(vtu_file, nx=n, ny=n, nz=n, printtime=True)
         plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file)
-    else:
-        print(f"Skipping {img_file}")
 
     # barotropic streamfunction with channel mask
     img_file = dir / f"images/psi_baro_mask{i:016d}.png"
     if not (os.path.exists(img_file) and not overwrite):
         plot_barotropic_streamfunction(Psi, grid, t=t, filename=img_file, maskchannel=True)
-    else:
-        print(f"Skipping {img_file}")
 
 
 if __name__ == "__main__":
@@ -297,12 +304,17 @@ if __name__ == "__main__":
         # ["062", "tub"],
         # ["063", "box"],
         # ["064", "box"],
-        ["065", "tub"],
+        # ["065", "tub"],
         ["065a", "tub"],
-        ["065b", "tub"],
-        ["066", "box"],
-        ["066a", "box"],
-        ["066b", "box"],
+        # ["065b", "tub"],
+        ["065c", "tub"],
+        ["065d", "tub"],
+        # ["066", "box"],
+        # ["066a", "box"],
+        # ["066b", "box"],
+        ["066c", "box"],
+        ["066d", "box"],
+        ["067", "tub"],
     ]
     sims_dir = Path("/resnick/scratch/hppeters")
     for i in range(len(sims)):
@@ -323,28 +335,3 @@ if __name__ == "__main__":
         for vtu_file in vtu_files:
             # for vtu_file in [vtu_files[-1]]:
             results = process_vtu(vtu_file, dir, geom, overwrite)
-
-        # dataset = pv.read(vtu_file)
-        # t = dataset["t"][0]
-        # n = 2**8
-        # grid = utils.Grid(dataset, n, n, n)
-        # samples = utils.sample_to_grid(dataset, grid)
-        # b = samples["b"].reshape(n, n, n)
-        # # nu = samples["nu"].reshape(n, n, n)
-        # # kappa_v = samples["kappa_v"].reshape(n, n, n)
-        # # w = samples["w"].reshape(n, n, n)
-        # adv = samples["advection"].reshape(n, n, n)
-
-        # width = utils.zonal_width(samples, grid)
-        # b = utils.zonal_mean(b, grid, width)
-        # # nu = utils.zonal_mean(nu, grid, width)
-        # # kappa_v = utils.zonal_mean(kappa_v, grid, width)
-        # # w = utils.zonal_mean(w, grid, width)
-        # adv = utils.zonal_mean(adv, grid, width)
-
-        # # plot_zonal_mean(nu, grid, b, label="nu", cb_label=r"$\bar \nu$", t=t, i=i, cmap="viridis", cb_sym=False)
-        # # plot_zonal_mean(
-        # #     kappa_v, grid, b, label="kappa_v", cb_label=r"$\bar \kappa_v$", t=t, i=i, cmap="viridis", cb_sym=False
-        # # )
-        # # plot_zonal_mean(w, grid, b, label="w", cb_label=r"$\bar w$", t=t, i=i, cmap="RdBu_r", cb_sym=True)
-        # plot_zonal_mean(adv, grid, b, label="adv", cb_label=r"$\overline{\vec{u} \cdot \nabla b}$", t=t, i=i, cmap="RdBu_r", cb_sym=True)
