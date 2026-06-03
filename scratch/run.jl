@@ -5,14 +5,14 @@ using JLD2
 using Printf
 using Gridap
 
-# ENV["JULIA_DEBUG"] = nuPGCM
-ENV["JULIA_DEBUG"] = nothing
-# ENABLE_TIMING[] = true
+ENV["JULIA_DEBUG"] = nuPGCM
+# ENV["JULIA_DEBUG"] = nothing
+ENABLE_TIMING[] = true
 
 PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM"
 SIMS_PATH = "/resnick/scratch/hppeters"
 
-set_out_dir!(joinpath(SIMS_PATH, "sim066b"))
+set_out_dir!(joinpath(SIMS_PATH, "sim069"))
 
 # geom = :tub
 geom = :box
@@ -103,6 +103,11 @@ end
 params = Parameters(; ε, α, μϱ, N², f, H)
 display(params)
 
+# resolution
+# h = 4e-2
+# h = 2e-2
+h = 1e-2
+
 # forcings
 if geom == :tub
     κ_I = 1
@@ -127,7 +132,7 @@ b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
 # b_surface(x) = -b₀*(x[2]^2 - 0.1*x[2])/1.1  # lower b in SO
 b_surface_bc = SurfaceDirichletBC(b_surface)
 conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=1e-3, ν_min=1e3*κ₀/ν₀)
+eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3), ν_min=10*h^2/2)
 forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 display(forcings.conv_param)
@@ -135,8 +140,6 @@ display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 # mesh
-h = 2e-2
-# h = 1e-2
 if geom == :tub
     mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
     # mesh_name = @sprintf("channel_basin_no_flat_wall_h%.2e_a%.2e", h, α)
@@ -173,7 +176,6 @@ inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000
 
 # set timestepper
 Δt = 1*86400/t₀
-# t_stop = μϱ/ε^2/κ_B
 t_stop = μϱ/ε^2/κ_I
 timestepper = BDF1(; t_start=0, t_stop=t_stop, Δt=Δt, adaptive=true, CFL_factor=0.8)
 
@@ -184,12 +186,12 @@ evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timesteppe
 model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
 
 # set initial buoyancy
-set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/8)))
-# set_state_from_file!(model, joinpath(SIMS_PATH, "sim051c/data/state_0000000000010800.jld2"))
-invert!(model)
-save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, 0))
+set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/4)))
+# i_start = 11700
+# set_state_from_file!(model, joinpath(out_dir, @sprintf("data/state_%016d.jld2", i_start)))
 
 # solve
 @info @sprintf("Diffusion timescales: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
 n_save = 100
 run!(model; n_save)
+# run!(model; i_start, n_save)

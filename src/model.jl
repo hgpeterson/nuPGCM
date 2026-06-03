@@ -87,7 +87,7 @@ function set_b!(model::Model, b::AbstractArray)
     return model
 end
 
-function run!(model::Model; i_start=1, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
+function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
     # unpack
     u = model.state.u
     b = model.state.b
@@ -114,6 +114,24 @@ function run!(model::Model; i_start=1, n_info=10, n_save=Inf, n_plot=Inf, advect
 
         # # store inversion matrix without friction to speed up re-builds
         # A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
+
+        # update ν and inversion matrix (keeping the same preconditioner 1/h^dim)
+        α = model.params.α
+        N² = model.params.N²
+        b = model.state.b
+        αbz = α*(N² + ∂z(b))
+        ν = ν_eddy(model.forcings.eddy_param, αbz)
+        # A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
+        build_A_inversion!(A_inversion, dup, dvq, assembler, model.fe_data, model.params, ν)
+        model.inversion.solver.A = on_architecture(model.arch, A_inversion[perm, perm])
+
+        # invert to sync up
+        invert!(model)
+    end
+
+    if i_start == 0
+        save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i_start))
+        save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i_start))
     end
 
     # store copies of previous and current u, b
@@ -124,14 +142,14 @@ function run!(model::Model; i_start=1, n_info=10, n_save=Inf, n_plot=Inf, advect
 
     # start timers
     t₀ = t_last_info = time()
-    i = i_start
+    i = i_start + 1
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
         update_Δt!(timestepper, u, model.fe_data.mesh.dΩ, h_cells)
         Δt = timestepper.Δt[]
 
-        if i == 2 && typeof(timestepper) <: BDF2
+        if i == i_start + 2 && typeof(timestepper) <: BDF2
             # need to do one step with BDF1, now we can switch to BDF2 if desired
             collect_evolution_LHS!(model.evolution, model.params, model.forcings, timestepper)
         end
