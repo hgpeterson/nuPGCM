@@ -43,44 +43,17 @@ make_facet_values(fe_data::FEData; kwargs...) =
 """
     K = allocate_inversion_matrix(fe_data)
 
-Allocate a sparse `(nu+np) × (nu+np)` matrix with the correct sparsity pattern
-for the inversion (Stokes + Coriolis) system. The block layout is:
-
-    [ A_uu  B_up' ]   rows 1:nu    (velocity)
-    [ B_up  0     ]   rows nu+1:nu+np  (pressure)
-
-p DOFs are offset by `nu` so they occupy rows/cols `nu+1 : nu+np`.
+Allocate a sparse matrix for the inversion (Stokes + Coriolis) system using
+`dh_up` and `ch_up`. Ferrite's `allocate_matrix(dh, ch)` augments the standard
+cell-adjacency sparsity with the entries needed for periodic BC application,
+so `apply!` never writes outside the pattern.
 """
-function allocate_inversion_matrix(fe_data::FEData)
-    nu, np, _ = get_n_dofs(fe_data)
-    N         = nu + np
-    grid      = fe_data.mesh.grid
-    n_cells   = getncells(grid)
-    n_u       = ndofs_per_cell(fe_data.dh_u)
-    n_p       = ndofs_per_cell(fe_data.dh_p)
-    n_loc     = n_u + n_p
-
-    rows = Vector{Int}(undef, n_cells * n_loc^2)
-    cols = Vector{Int}(undef, n_cells * n_loc^2)
-    idx  = 1
-    for k in 1:n_cells
-        dofs = vcat(celldofs(fe_data.dh_u, k),
-                    celldofs(fe_data.dh_p, k) .+ nu)
-        for i in dofs, j in dofs
-            rows[idx] = i
-            cols[idx] = j
-            idx += 1
-        end
-    end
-
-    K = sparse(rows, cols, ones(length(rows)), N, N)
-    fill!(K.nzval, 0.0)
-    return K
-end
+allocate_inversion_matrix(fe_data::FEData) =
+    allocate_matrix(fe_data.dh_up, fe_data.ch_up)
 
 """
     M = allocate_evolution_matrix(fe_data)
 
 Allocate a sparse `nb × nb` matrix for the buoyancy evolution system.
 """
-allocate_evolution_matrix(fe_data::FEData) = allocate_matrix(fe_data.dh_b)
+allocate_evolution_matrix(fe_data::FEData) = allocate_matrix(fe_data.dh_b, fe_data.ch_b)

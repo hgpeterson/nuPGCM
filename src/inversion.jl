@@ -1,249 +1,258 @@
-struct InversionToolkit{B, V, S<:IterativeSolverToolkit}
-    B::B       # RHS matrix
-    b::V       # RHS vector
-    solver::S  # iterative solver toolkit
+struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit}
+    B::B       # RHS coupling matrix (N_up × nb): maps buoyancy DOFs to (u,p) DOFs
+    f_wind::V  # RHS from wind-stress surface integral
+    f_bc::V    # RHS correction for inhomogeneous BCs (0 for homogeneous)
+    ch_up::CUP # ConstraintHandler for setting constrained DOF values in invert!
+    solver::S
 end
 
-function Base.summary(inversion::InversionToolkit)
-    t = typeof(inversion)
+function Base.summary(inv::InversionToolkit)
+    t = typeof(inv)
     return "$(parentmodule(t)).$(nameof(t))"
 end
-function Base.show(io::IO, inversion::InversionToolkit)
-    println(io, summary(inversion), ":")
-    println(io, "├── B: ", summary(inversion.B))
-    println(io, "├── b: ", summary(inversion.b))
-      print(io, "└── solver: ", summary(inversion.solver))
+function Base.show(io::IO, inv::InversionToolkit)
+    println(io, summary(inv), ":")
+    println(io, "├── B: ", summary(inv.B))
+    println(io, "├── f_wind: ", summary(inv.f_wind))
+    println(io, "├── f_bc: ", summary(inv.f_bc))
+      print(io, "└── solver: ", summary(inv.solver))
 end
 
 """
-    inversion_toolkit = InversionToolkit(arch::AbstractArchitecture, 
-                                         fe_data::FEData, 
-                                         params::Parameters, 
-                                         forcings::Forcings; 
-                                         kwargs...)
+    inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; kwargs...)
 
-Set up the inversion toolkit, which contains the matrices and solvers for the inversion problem.                                    
+Set up the toolkit for inverting the steady PG momentum equations
+
+    -f(ẑ×u) + α²ε² ∇·(2ν ε(u)) - ∇p = (1/α) b ẑ
+    ∇·u = 0
 """
 function InversionToolkit(arch::AbstractArchitecture,
-                          fe_data::FEData, 
-                          params::Parameters, 
-                          forcings::Forcings; 
-                          kwargs...)
-    # build
+                          fe_data::FEData,
+                          params::Parameters,
+                          forcings::Forcings;
+                          atol=1e-6, rtol=1e-6, itmax=0,
+                          memory=20, history=true, verbose=false, restart=true)
     @info "Building inversion system..."
-    A, B, b = build_inversion_system(fe_data, params, forcings)
 
-    # re-order dofs
-    A = A[fe_data.dofs.p_inversion, fe_data.dofs.p_inversion]
-    B = B[fe_data.dofs.p_inversion, :]
-    b = b[fe_data.dofs.p_inversion]
+    A     = build_A_inversion(fe_data, params, forcings.ν)
+    B     = build_B_inversion(fe_data, params)
+    f_wind = build_f_wind(fe_data, params, forcings)
+
+    # apply BCs: modifies A in-place, computes f_bc correction
+    f_bc = zeros(size(A, 1))
+    apply!(A, f_bc, fe_data.ch_up)
 
     # preconditioner
     if typeof(arch) == GPU || forcings.eddy_param.is_on
-        # get resolution
-        p, t = get_p_t(fe_data.mesh.model)
+        p, t = get_p_t(fe_data.mesh)
         edges, _, _ = all_edges(t)
-        hs = [norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i ∈ axes(edges, 1)]
-        sort!(hs)
-        h = hs[length(hs) ÷ 2] # median edge length
-        @debug @sprintf("Median edge length h = %.2e", h)
-        dim = size(t, 2) - 1
-        @debug "Mesh dimension: $dim"
-
-        # use diagonal preconditioner scaled by resolution
-        P = Diagonal(on_architecture(arch, 1/h^dim*ones(size(A, 1))))
+        hs = sort([norm(p[edges[i,1],:] - p[edges[i,2],:]) for i in axes(edges,1)])
+        h  = hs[length(hs) ÷ 2]
+        P  = Diagonal(on_architecture(arch, fill(1/h^3, size(A,1))))
     else
-        # on CPU and fixed ν → can just LU factor
-        @warn "LU-factoring inversion matrix with $(length(fe_data.dofs.p_inversion)) DOFs..."
+        @warn "LU-factoring inversion matrix with $(size(A,1)) DOFs..."
         @time "lu(A_inversion)" P = lu(A)
     end
-    # P = BlockDiagonalPreconditioner(arch, params, fe_data, A)
 
-    # move to arch
-    A = on_architecture(arch, A)
-    B = on_architecture(arch, B)
-    b = on_architecture(arch, b)
+    A      = on_architecture(arch, A)
+    B      = on_architecture(arch, B)
+    f_wind = on_architecture(arch, f_wind)
+    f_bc   = on_architecture(arch, f_bc)
     print_memory_status(arch)
 
-    # setup inversion toolkit
-    inversion_toolkit = InversionToolkit(arch, A, P, B, b; kwargs...)
-
-    return inversion_toolkit
-end
-
-function InversionToolkit(arch::AbstractArchitecture, 
-                          A, P, B, b; 
-                          atol=1e-6, rtol=1e-6, itmax=0, memory=20, history=true, verbose=false, restart=true)
-    # rhs vector for solver
-    N = size(A, 1)
-    T = eltype(A)
-    y = on_architecture(arch, zeros(T, N))
-
-    # use GMRES solver (which requires the `memory` and `restart` parameters)
+    N  = size(A, 1)
+    T  = eltype(A)
+    y  = on_architecture(arch, zeros(T, N))
     VT = vector_type(arch, T)
     workspace = Krylov.GmresWorkspace(N, N, VT; memory)
     workspace.x .= zero(T)
 
-    # set up keyword arguments for iterative solver toolkit
-    verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
-    kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int, :restart=>restart)
+    verbose_int = verbose ? 1 : 0
+    kwargs_dict = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax,
+                       :history=>history, :verbose=>verbose_int, :restart=>restart)
+    solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Inversion")
 
-    solver_inversion = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Inversion") 
-
-    return InversionToolkit(B, b, solver_inversion)
+    return InversionToolkit(B, f_wind, f_bc, fe_data.ch_up, solver)
 end
 
 """
-    invert!(inversion::InversionToolkit, b)
+    invert!(inv_tk, b_vec)
 
-Perform the inversion given buoyancy `b`.
+Solve the inversion system given buoyancy DOF vector `b_vec` (length nb).
+The combined (u,p) solution is stored in `inv_tk.solver.x`.
 """
-function invert!(inversion::InversionToolkit, b)
-    # calculate rhs vector
-    arch = architecture(inversion.B)
-    inversion.solver.y .= inversion.B*on_architecture(arch, b.free_values) .+ inversion.b
-
-    # solve
-    iterative_solve!(inversion.solver)
-
-    return inversion
+function invert!(inv_tk::InversionToolkit, b_vec::AbstractVector)
+    arch = architecture(inv_tk.solver.A)
+    y = on_architecture(CPU(), inv_tk.B) * b_vec .+
+        on_architecture(CPU(), inv_tk.f_wind) .+
+        on_architecture(CPU(), inv_tk.f_bc)
+    apply!(y, inv_tk.ch_up)   # set constrained DOF values (0 for no-slip/periodic)
+    inv_tk.solver.y .= on_architecture(arch, y)
+    iterative_solve!(inv_tk.solver)
+    return inv_tk
 end
 
 ####
-#### Matrix-building functions
+#### Matrix and vector builders
 ####
 
 """
-    A, B, b = build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
+    A = build_A_inversion(fe_data, params, ν)
 
-Build the matrices and vectors for the inversion problem of the PG equations.
+Assemble the LHS matrix for the inversion problem:
+
+    A[(u,v)] = ∫ 2α²ε² ν ε(u):ε(v) dΩ  (viscous)
+             + ∫ f (ẑ×u)·v dΩ            (Coriolis)
+             - ∫ (∇·v) p dΩ              (pressure gradient)
+             + ∫ q (∇·u) dΩ              (divergence-free)
 """
-function build_inversion_system(fe_data::FEData, params::Parameters, forcings::Forcings) 
-    A_inversion = build_A_inversion(fe_data, params, forcings.ν)
-    B_inversion = build_B_inversion(fe_data, params)
-    b_inversion = build_b_inversion(fe_data, params, forcings)
-    return A_inversion, B_inversion, b_inversion
-end
+function build_A_inversion(fe_data::FEData, params::Parameters, ν)
+    dh_up = fe_data.dh_up
+    cv_u, cv_p, _ = make_cell_values(fe_data)
+    n_u   = getnbasefunctions(cv_u)
+    n_p   = getnbasefunctions(cv_p)
+    n_loc = n_u + n_p
+    α²ε²  = params.α^2 * params.ε^2
+    f_cor = params.f   # Coriolis parameter (function of x)
 
-"""
-    A = build_A_inversion(fe_data::FEData, params::Parameters, ν)
+    A   = allocate_inversion_matrix(fe_data)
+    asm = start_assemble(A)
+    Ae  = zeros(n_loc, n_loc)
 
-Assemble the LHS matrix `A` for the inversion problem. 
-"""
-function build_A_inversion(fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
-    # unpack
-    X_trial = fe_data.spaces.X_trial
-    X_test = fe_data.spaces.X_test
-    dΩ = fe_data.mesh.dΩ
-    α²ε² = params.α^2*params.ε^2
-    f = params.f
+    for cc in CellIterator(dh_up)
+        reinit!(cv_u, cc)
+        reinit!(cv_p, cc)
+        coords = getcoordinates(cc)
+        fill!(Ae, 0.0)
 
-    # bilinear form
-    a((u, p), (v, q)) = bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
+        for q in 1:getnquadpoints(cv_u)
+            x  = spatial_coordinate(cv_u, q, coords)
+            ν_q = ν isa Function ? ν(x) : ν
+            f_q = f_cor(x)
+            dΩ  = getdetJdV(cv_u, q)
 
-    # assemble 
-    @time "build inversion system" A = assemble_matrix(a, X_trial, X_test)
+            for i in 1:n_u
+                ε_i    = symmetric(shape_gradient(cv_u, q, i))
+                φᵤ_i   = shape_value(cv_u, q, i)
+                div_i  = tr(shape_gradient(cv_u, q, i))
 
+                for j in 1:n_u
+                    φⱼ = shape_value(cv_u, q, j)
+                    # viscous: 2α²ε² ν ε(u):ε(v)
+                    visc = 2α²ε² * ν_q * dcontract(ε_i, symmetric(shape_gradient(cv_u, q, j)))
+                    # Coriolis: f (ẑ×u)·v,  ẑ×u = (-u₂, u₁, 0)
+                    cori = f_q * (-φⱼ[2] * φᵤ_i[1] + φⱼ[1] * φᵤ_i[2])
+                    Ae[i, j] += (visc + cori) * dΩ
+                end
+
+                for j in 1:n_p
+                    # pressure gradient: -(∇·v) p
+                    Ae[i, n_u + j] -= div_i * shape_value(cv_p, q, j) * dΩ
+                end
+            end
+
+            for i in 1:n_p
+                φ_p_i = shape_value(cv_p, q, i)
+                for j in 1:n_u
+                    # divergence-free: q (∇·u)
+                    Ae[n_u + i, j] += φ_p_i * tr(shape_gradient(cv_u, q, j)) * dΩ
+                end
+            end
+        end
+
+        assemble!(asm, celldofs(cc), Ae)
+    end
     return A
 end
-function build_A_inversion!(A, dup, dvq, assembler,
-                            fe_data::FEData, params::Parameters, ν; friction_only=false, frictionless_only=false) 
-    # unpack
-    X_trial = fe_data.spaces.X_trial
-    X_test = fe_data.spaces.X_test
-    dΩ = fe_data.mesh.dΩ
-    α²ε² = params.α^2*params.ε^2
-    f = params.f
-
-    # bilinear form
-    a((u, p), (v, q)) = bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
-
-    # assemble 
-    @time "build inversion system" begin
-    contribution = a(dup, dvq)
-    matdata = Gridap.FESpaces.collect_cell_matrix(X_trial, X_test, contribution)
-    fill!(A, 0)
-    Gridap.FESpaces.assemble_matrix_add!(A, assembler, matdata)   
-    end
-
-    return A
-end
-
-function bilinear_form((u, p), (v, q), α²ε², f, ν, dΩ; friction_only, frictionless_only)
-    σ = Gridap.symmetric_gradient
-    # for general ν, need full stress tensor
-    if friction_only
-        return ∫( 2*α²ε²*(ν*σ(u)⊙σ(v)) )*dΩ
-    elseif frictionless_only
-        return ∫( -(∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
-    else
-        return ∫( 2*α²ε²*(ν*σ(u)⊙σ(v)) - (∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
-    end
-end
-function bilinear_form((u, p), (v, q), α²ε², f, ν::Real, dΩ; friction_only, frictionless_only)
-    # since ν is constant, we can just use the Laplacian here
-    if friction_only
-        return ∫( α²ε²*(ν*∇(u)⊙∇(v)) )*dΩ
-    elseif frictionless_only
-        return ∫( -(∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
-    else
-        return ∫( α²ε²*(ν*∇(u)⊙∇(v)) - (∇⋅v)*p + q*(∇⋅u) + f*((z⃗×u)⋅v) )*dΩ
-    end
-end
 
 """
-    B = build_B_inversion(fe_data::FEData, params::Parameters)
+    B = build_B_inversion(fe_data, params)
 
-Assemble the RHS matrix for the inversion problem.
+Assemble the buoyancy-to-velocity coupling matrix:
+
+    B[u_i, b_j] = ∫ (1/α) φ_b_j (ẑ·φᵤ_i) dΩ
+
+Returns a sparse matrix of size `(N_up × nb)` where N_up = ndofs(dh_up).
+Only the u-rows are nonzero (pressure rows remain zero).
 """
 function build_B_inversion(fe_data::FEData, params::Parameters)
-    # unpack
-    U_test = fe_data.spaces.X_test[1]
-    B_trial = fe_data.spaces.B_trial
-    dΩ = fe_data.mesh.dΩ
-    α = params.α
+    dh_up = fe_data.dh_up
+    dh_b  = fe_data.dh_b
+    cv_u, _, cv_b = make_cell_values(fe_data)
+    n_u = getnbasefunctions(cv_u)
+    n_b = getnbasefunctions(cv_b)
+    α   = params.α
+    N_up = ndofs(dh_up)
+    nb   = fe_data.nb
 
-    # bilinear form
-    a(b, v) = ∫( 1/α*(b*(z⃗⋅v)) )dΩ
+    rows = Int[]; cols = Int[]; vals = Float64[]
 
-    # assemble
-    B = assemble_matrix(a, B_trial, U_test) 
+    for (cc_up, cc_b) in zip(CellIterator(dh_up), CellIterator(dh_b))
+        reinit!(cv_u, cc_up)
+        reinit!(cv_b, cc_b)
+        dofs_up = celldofs(cc_up)
+        dofs_b  = celldofs(cc_b)
+        Be = zeros(n_u, n_b)
 
-    # convert to N × nb matrix
-    nu, np, nb = get_n_dofs(fe_data.dofs)
-    N = nu + np
-    I, J, V = findnz(B)
-    B = sparse(I, J, V, N, nb)
+        for q in 1:getnquadpoints(cv_u)
+            dΩ = getdetJdV(cv_u, q)
+            for i in 1:n_u
+                z_comp = shape_value(cv_u, q, i)[3]   # ẑ·φᵤ_i
+                iszero(z_comp) && continue
+                for j in 1:n_b
+                    Be[i, j] += (1/α) * shape_value(cv_b, q, j) * z_comp * dΩ
+                end
+            end
+        end
 
-    return B
+        u_range = dof_range(dh_up, :u)
+        for (li, gi) in enumerate(dofs_up[u_range])
+            for (lj, gj) in enumerate(dofs_b)
+                v = Be[li, lj]
+                iszero(v) && continue
+                push!(rows, gi); push!(cols, gj); push!(vals, v)
+            end
+        end
+    end
+
+    return sparse(rows, cols, vals, N_up, nb)
 end
 
 """
-    b = build_b_inversion(mesh::FEData, params::Parameters, forcings::Forcings)
+    f = build_f_wind(fe_data, params, forcings)
 
-Assemble the RHS vector for the inversion problem.
+Assemble the wind-stress surface RHS:
+
+    f_wind[u_i] = ∫_Γ α (τˣ (x̂·φᵤ_i) + τʸ (ŷ·φᵤ_i)) dΓ
+
+Returns a vector of length N_up. Only u-rows on the surface facets are nonzero.
 """
-function build_b_inversion(fe_data::FEData, params::Parameters, forcings::Forcings)
-    # unpack
-    U_test  = fe_data.spaces.X_test[1]
-    b_diri = fe_data.spaces.b_diri
-    dΓ = fe_data.mesh.dΓ
-    dΩ = fe_data.mesh.dΩ
-    α = params.α
-    τˣ = forcings.τˣ
-    τʸ = forcings.τʸ
+function build_f_wind(fe_data::FEData, params::Parameters, forcings::Forcings)
+    dh_up     = fe_data.dh_up
+    fv_u, _   = make_facet_values(fe_data)
+    n_u       = getnbasefunctions(fv_u)
+    α         = params.α
+    τˣ        = forcings.τˣ
+    τʸ        = forcings.τʸ
+    facetset  = fe_data.mesh.grid.facetsets[fe_data.mesh.surface_tag]
+    u_range   = dof_range(dh_up, :u)
 
-    # allocate vector of length N
-    nu, np, nb = get_n_dofs(fe_data.dofs)
-    N = nu + np
-    b = zeros(N)
+    f  = zeros(ndofs(dh_up))
+    fₑ = zeros(n_u)
 
-    # linear form
-    l(v) = ∫( α*(τˣ*(x⃗⋅v) + τʸ*(y⃗⋅v)) )dΓ + # b.c. is α²ε²ν∂z(u) = ατ
-           ∫( 1/α*(b_diri*(z⃗⋅v)) )dΩ        # correction due to Dirichlet boundary condition
-
-    # assemble
-    b[1:nu] .= assemble_vector(l, U_test)
-
-    return b
+    for fc in FacetIterator(dh_up, facetset)
+        reinit!(fv_u, fc)
+        coords = getcoordinates(fc)
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(fv_u)
+            x  = spatial_coordinate(fv_u, q, coords)
+            dΓ = getdetJdV(fv_u, q)
+            for i in 1:n_u
+                φᵤ_i = shape_value(fv_u, q, i)
+                fₑ[i] += α * (τˣ(x) * φᵤ_i[1] + τʸ(x) * φᵤ_i[2]) * dΓ
+            end
+        end
+        f[celldofs(fc)[u_range]] .+= fₑ
+    end
+    return f
 end

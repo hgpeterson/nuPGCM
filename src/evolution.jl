@@ -1,19 +1,12 @@
 struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit}
-# struct EvolutionToolkit{A<:AbstractArchitecture, AS, M, V, VV, S<:IterativeSolverToolkit}
-    arch::A      # architecture (CPU or GPU)
-    # assembler::AS # sparse matrix assembler (Gridap)
-    M::M         # Mass matrix
-    Kₕ::M        # Horiz. stiffness matrix
-    Kᵥ::M        # Vert. stiffness matrix
-    # Kᵥ_cache::M  # cache for Kᵥ rebuilds
-    rhs_diff::V  # rhs vector from diffusion
-    rhs_flux::V  # rhs vector from surface b flux
-    rhsₘ::V      # correction vector to add to rhs due to Dirichlet b.c. in M
-    rhsₕ::V      # correction vector to add to rhs due to Dirichlet b.c. in Kₕ
-    rhsᵥ::V      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
-    # rhsᵥ::VV      # correction vector to add to rhs dur to Dirichlet b.c. in Kᵥ
-    # rhsᵥ_cache::VV # cache for rhsᵥ rebuilds
-    solver::S    # iterative solver toolkit
+    arch::A
+    M::M         # mass matrix (raw, no BCs)
+    Kₕ::M        # horizontal stiffness (raw)
+    Kᵥ::M        # vertical stiffness (raw; rebuilt each step when conv_param is on)
+    rhs_diff::V  # -N² κᵥ ∂z(b) source term
+    rhs_flux::V  # α F surface flux
+    f_bc::V      # RHS correction for inhomogeneous Dirichlet BCs (0 when BCs are homogeneous)
+    solver::S
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -23,146 +16,91 @@ end
 function Base.show(io::IO, evolution::EvolutionToolkit)
     println(io, summary(evolution), ":")
     println(io, "├── arch: ", evolution.arch)
-    # println(io, "├── assembler: ", summary(evolution.assembler))
     println(io, "├── M: ", summary(evolution.M))
     println(io, "├── Kₕ: ", summary(evolution.Kₕ))
     println(io, "├── Kᵥ: ", summary(evolution.Kᵥ))
-    # println(io, "├── Kᵥ_cache: ", summary(evolution.Kᵥ_cache))
     println(io, "├── rhs_diff: ", summary(evolution.rhs_diff))
     println(io, "├── rhs_flux: ", summary(evolution.rhs_flux))
-    println(io, "├── rhsₘ: ", summary(evolution.rhsₘ))
-    println(io, "├── rhsₕ: ", summary(evolution.rhsₕ))
-    println(io, "├── rhsᵥ: ", summary(evolution.rhsᵥ))
-    # println(io, "├── rhsᵥ_cache: ", summary(evolution.rhsᵥ_cache))
+    println(io, "├── f_bc: ", summary(evolution.f_bc))
       print(io, "└── solver: ", summary(evolution.solver))
 end
 
 """
-    evolution_toolkit = EvolutionToolkit(arch::AbstractArchitecture, 
-                                         fe_data::FEData, 
-                                         params::Parameters, 
-                                         forcings::Forcings,
-                                         timestepper::AbstractTimestepper; 
-                                         kwargs...)
-                
-Set up the evolution toolkit, which contains the matrices and solvers for the evolution problem.
+    evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, ts; kwargs...)
 
-The PG buoyancy evolution equation is:
-```math
-μϱ ( ∂ₜb + u·∇b ) = α²ε² [ ∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ∂z b) ].
-```
+Set up the toolkit for the buoyancy evolution equation
+
+    μϱ (∂ₜb + u·∇b) = α²ε² [∇ₕ·(κₕ∇ₕb) + ∂z(κᵥ ∂z b)]
 """
-function EvolutionToolkit(arch::AbstractArchitecture, 
-                          fe_data::FEData, 
-                          params::Parameters, 
+function EvolutionToolkit(arch::AbstractArchitecture,
+                          fe_data::FEData,
+                          params::Parameters,
                           forcings::Forcings,
-                          ts::AbstractTimestepper; 
-                          atol=1e-6, 
-                          rtol=1e-6, 
-                          itmax=0, 
-                          history=true, 
-                          verbose=false)
-    # unpack
-    B_trial = fe_data.spaces.B_trial
-    B_test = fe_data.spaces.B_test
-    b_diri = fe_data.spaces.b_diri
-    dΩ = fe_data.mesh.dΩ
+                          ts::AbstractTimestepper;
+                          atol=1e-6, rtol=1e-6, itmax=0, history=true, verbose=false)
     κₕ = forcings.κₕ
     κᵥ = forcings.κᵥ
 
-    # build
     @info "Building evolution system..."
 
-    # # save sparse assembler for efficient re-building later
-    # assembler = Gridap.SparseMatrixAssembler(B_trial, B_test)
-
-    # build components
-    M, rhsₘ = build_M(B_trial, B_test, dΩ, b_diri)
-    Kₕ, rhsₕ = build_Kₕ(B_trial, B_test, dΩ, b_diri, κₕ)
-    Kᵥ, rhsᵥ = build_Kᵥ(B_trial, B_test, dΩ, b_diri, κᵥ)
+    M        = build_M(fe_data)
+    Kₕ       = build_Kₕ(fe_data, κₕ)
+    Kᵥ       = build_Kᵥ(fe_data, κᵥ)
     rhs_diff = build_rhs_diff(params, fe_data, κᵥ)
     rhs_flux = build_rhs_flux(params, forcings, fe_data)
 
-    # # save caches for rebuilds
-    # Kᵥ_cache = copy(Kᵥ)
-    # rhsᵥ_cache = copy(rhsᵥ)
+    ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[])
+    A, P, f_bc = collect_evolution_LHS(arch, params, forcings, ts1, M, Kₕ, Kᵥ, fe_data.ch_b)
 
-    # re-order dofs
-    perm = fe_data.dofs.p_b
-    M = M[perm, perm]
-    Kₕ = Kₕ[perm, perm]
-    Kᵥ = Kᵥ[perm, perm]
-    rhs_diff = rhs_diff[perm]
-    rhs_flux = rhs_flux[perm]
-    rhsₘ = rhsₘ[perm]
-    rhsₕ = rhsₕ[perm]
-    rhsᵥ = rhsᵥ[perm]
-
-    # put rhs vectors on GPU if needed
     rhs_diff = on_architecture(arch, rhs_diff)
     rhs_flux = on_architecture(arch, rhs_flux)
-    rhsₘ = on_architecture(arch, rhsₘ)
-    rhsₕ = on_architecture(arch, rhsₕ)
-    rhsᵥ = on_architecture(arch, rhsᵥ)
-    # rhsᵥ = on_architecture(arch, rhsᵥ)  # not this one because it gets rebuilt
+    f_bc     = on_architecture(arch, f_bc)
 
-    # combine to make evolution LHS
-    ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[]) # dummy timestepper since we always have to start with a BDF1 step
-    A, P = collect_evolution_LHS(arch, params, forcings, ts1, M, Kₕ, Kᵥ)
-
-    # rhs vector for solver
-    N = size(A, 1)
-    T = eltype(A)
-    y = on_architecture(arch, zeros(T, N))
-
-    # CG solver
+    N  = size(A, 1)
+    T  = eltype(A)
+    y  = on_architecture(arch, zeros(T, N))
     VT = vector_type(arch, T)
     workspace = Krylov.CgWorkspace(N, N, VT)
     workspace.x .= zero(T)
 
-    # setup solver toolkit
-    verbose_int = verbose ? 1 : 0 # I like to have verbose be a Bool but Krylov expects an Int
-    kwargs = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
-    solver = IterativeSolverToolkit(A, P, y, workspace, kwargs, "Evolution")
+    verbose_int = verbose ? 1 : 0
+    kwargs_dict = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
+    solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Evolution")
 
-    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, solver)
-    # return EvolutionToolkit(arch, assembler, M, Kₕ, Kᵥ, Kᵥ_cache, 
-    #                         rhs_diff, rhs_flux, rhsₘ, rhsₕ, rhsᵥ, rhsᵥ_cache, solver, order)
+    return EvolutionToolkit(arch, M, Kₕ, Kᵥ, rhs_diff, rhs_flux, f_bc, solver)
 end
 
-function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters, forcings::Forcings, timestepper::AbstractTimestepper)
+function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters,
+                                 forcings::Forcings, ts::AbstractTimestepper, ch_b)
     arch = evolution.arch
-    M = evolution.M
-    Kₕ = evolution.Kₕ
-    Kᵥ = evolution.Kᵥ
-    A, P = collect_evolution_LHS(arch, params, forcings, timestepper, M, Kₕ, Kᵥ)
+    A, P, f_bc = collect_evolution_LHS(arch, params, forcings, ts,
+                                        evolution.M, evolution.Kₕ, evolution.Kᵥ, ch_b)
     evolution.solver.A = on_architecture(arch, A)
     evolution.solver.P = P
+    evolution.f_bc    .= on_architecture(arch, f_bc)
     return evolution
 end
-function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF1, M, Kₕ, Kᵥ)
-    θ = evolution_parameter(params, timestepper)
-    A = M + θ*(Kₕ + Kᵥ) 
 
-    # preconditioner
-    if typeof(arch) == GPU || forcings.conv_param.is_on || timestepper.adaptive
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
+                                forcings::Forcings, ts::BDF1, M, Kₕ, Kᵥ, ch_b)
+    θ = evolution_parameter(params, ts)
+    A, f_bc = _form_evolution_lhs(θ, M, Kₕ, Kᵥ, ch_b)
+
+    if typeof(arch) == GPU || forcings.conv_param.is_on || ts.adaptive
         P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
     else
         @warn "LU-factoring evolution matrix with $(size(A, 1)) DOFs..."
         @time "lu(A_evol)" P = lu(A)
     end
 
-    # move to arch
     A = on_architecture(arch, A)
-
-    return A, P
+    return A, P, f_bc
 end
-#TODO: Can unify this with BDF1 once adaptive timestepping is implemented for BDF2
-function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, timestepper::BDF2, M, Kₕ, Kᵥ)
-    θ = evolution_parameter(params, timestepper)
-    A = M + θ*(Kₕ + Kᵥ) 
+function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
+                                forcings::Forcings, ts::BDF2, M, Kₕ, Kᵥ, ch_b)
+    θ = evolution_parameter(params, ts)
+    A, f_bc = _form_evolution_lhs(θ, M, Kₕ, Kᵥ, ch_b)
 
-    # preconditioner
     if typeof(arch) == GPU || forcings.conv_param.is_on
         P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
     else
@@ -170,127 +108,201 @@ function collect_evolution_LHS(arch::AbstractArchitecture, params::Parameters, f
         @time "lu(A_evol)" P = lu(A)
     end
 
-    # move to arch
     A = on_architecture(arch, A)
+    return A, P, f_bc
+end
 
-    return A, P
+function _form_evolution_lhs(θ, M, Kₕ, Kᵥ, ch_b)
+    # Start from copy(M) to preserve the BC-augmented sparsity pattern.
+    # M + θ*(Kₕ + Kᵥ) via Julia's sparse + drops structural zeros, breaking apply!.
+    A = copy(M)
+    @. A.nzval = M.nzval + θ * (Kₕ.nzval + Kᵥ.nzval)
+    f_bc = zeros(size(A, 1))
+    apply!(A, f_bc, ch_b)
+    return A, f_bc
 end
 
 """
-    θ = evolution_parameter(p::Parameters, timestepper::AbstractTimestepper)
+    θ = evolution_parameter(params, ts)
 
-Returns the coefficient needed to build the LHS matrix in the evolution problem of the form
-```math
-A = M + θ*(Kₕ + Kᵥ)
-```
+Coefficient θ in `A = M + θ*(Kₕ + Kᵥ)`.
 """
 function evolution_parameter(p::Parameters, ts::BDF1)
     return ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
 function evolution_parameter(p::Parameters, ts::BDF2)
-    #TODO: This assumes fixed Δt.
     return 2/3 * ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
 end
 
 ####
-#### Matrix-building functions
+#### Matrix and vector builders
 ####
 
 """
-    M, rhsₘ = build_M(B, D, dΩ, b_diri)
+    M = build_M(fe_data)
 
-Build FE mass matrix `M` and right-hand-side vector `rhsₘ` correction due to Dirichlet b.c.
-
-`B` and `D` are TrialFESpace and TestFESpace's, respectively. `dΩ` is the Measure, and b_diri is a FEFunction that is 
-equal to the Dirichlet b.c. on the boundary and zero elsewhere.
-
-See also [`build_matrix_vector`](@ref).
+Assemble the buoyancy mass matrix `M = ∫ φᵢ φⱼ dΩ`.
 """
-function build_M(B, D, dΩ, b_diri)
-    aₘ(b, d) = ∫( b*d )dΩ
-    return build_matrix_vector(aₘ, B, D, b_diri)
+function build_M(fe_data::FEData)
+    dh_b  = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b   = getnbasefunctions(cv_b)
+
+    M = allocate_evolution_matrix(fe_data)
+    asm = start_assemble(M)
+    Me  = zeros(n_b, n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        fill!(Me, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            dΩ = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                φᵢ = shape_value(cv_b, q, i)
+                for j in 1:n_b
+                    Me[i, j] += φᵢ * shape_value(cv_b, q, j) * dΩ
+                end
+            end
+        end
+        assemble!(asm, celldofs(cc), Me)
+    end
+    return M
 end
 
 """
-    Kₕ, rhsₕ = build_Kₕ(B, D, dΩ, b_diri, κₕ)
+    Kₕ = build_Kₕ(fe_data, κₕ)
 
-Build FE stiffness matrix `Kₕ` and right-hand-side vector `rhsₕ` correction due to Dirichlet b.c.
-
-`B` and `D` are TrialFESpace and TestFESpace's, respectively. `dΩ` is the Measure, and b_diri is a FEFunction that is 
-equal to the Dirichlet b.c. on the boundary and zero elsewhere. `κₕ` is the horizontal diffusivity.
-
-See also [`build_matrix_vector`](@ref).
+Assemble the horizontal stiffness `Kₕ = ∫ κₕ (∂x φᵢ ∂x φⱼ + ∂y φᵢ ∂y φⱼ) dΩ`.
 """
-function build_Kₕ(B, D, dΩ, b_diri, κₕ)
-    aₕ(b, d) = ∫( κₕ*(∂x(b)*∂x(d) + ∂y(b)*∂y(d)) )dΩ
-    return build_matrix_vector(aₕ, B, D, b_diri)
+function build_Kₕ(fe_data::FEData, κₕ)
+    dh_b  = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b   = getnbasefunctions(cv_b)
+
+    Kₕ = allocate_evolution_matrix(fe_data)
+    asm = start_assemble(Kₕ)
+    Ke  = zeros(n_b, n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        coords = getcoordinates(cc)
+        fill!(Ke, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            x = spatial_coordinate(cv_b, q, coords)
+            κ = κₕ(x)
+            dΩ = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                ∇φᵢ = shape_gradient(cv_b, q, i)
+                for j in 1:n_b
+                    ∇φⱼ = shape_gradient(cv_b, q, j)
+                    Ke[i, j] += κ * (∇φᵢ[1]*∇φⱼ[1] + ∇φᵢ[2]*∇φⱼ[2]) * dΩ
+                end
+            end
+        end
+        assemble!(asm, celldofs(cc), Ke)
+    end
+    return Kₕ
 end
 
 """
-    Kᵥ, rhsᵥ = build_Kᵥ(fe_data::FEData, κᵥ)
-    Kᵥ, rhsᵥ = build_Kᵥ(B, D, dΩ, b_diri, κᵥ)
+    Kᵥ = build_Kᵥ(fe_data, κᵥ)
 
-Build FE stiffness matrix `Kᵥ` and right-hand-side vector `rhsᵥ` correction due to Dirichlet b.c.
-
-`B` and `D` are TrialFESpace and TestFESpace's, respectively. `dΩ` is the Measure, and b_diri is a FEFunction that is 
-equal to the Dirichlet b.c. on the boundary and zero elsewhere. `κᵥ` is the vertical diffusivity.
-
-See also [`build_matrix_vector`](@ref).
+Assemble the vertical stiffness `Kᵥ = ∫ κᵥ ∂z φᵢ ∂z φⱼ dΩ`.
 """
 function build_Kᵥ(fe_data::FEData, κᵥ)
-    return build_Kᵥ(fe_data.spaces.B_trial, fe_data.spaces.B_test, fe_data.mesh.dΩ, fe_data.spaces.b_diri, κᵥ)
-end
-function build_Kᵥ(B, D, dΩ, b_diri, κᵥ)
-    aᵥ(b, d) = ∫( κᵥ*∂z(b)*∂z(d) )dΩ
-    return build_matrix_vector(aᵥ, B, D, b_diri)
+    dh_b  = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b   = getnbasefunctions(cv_b)
+
+    Kᵥ = allocate_evolution_matrix(fe_data)
+    asm = start_assemble(Kᵥ)
+    Ke  = zeros(n_b, n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        coords = getcoordinates(cc)
+        fill!(Ke, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            x = spatial_coordinate(cv_b, q, coords)
+            κ = κᵥ(x)
+            dΩ = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                ∂zφᵢ = shape_gradient(cv_b, q, i)[3]
+                for j in 1:n_b
+                    Ke[i, j] += κ * ∂zφᵢ * shape_gradient(cv_b, q, j)[3] * dΩ
+                end
+            end
+        end
+        assemble!(asm, celldofs(cc), Ke)
+    end
+    return Kᵥ
 end
 
 """
-    A, rhs = build_matrix_vector(a, B, D, b_diri)
+    f = build_rhs_diff(params, fe_data, κᵥ)
 
-Build FE matrix `A` and right-hand-side vector `rhs` correction due to Dirichlet b.c.
-
-`a` defines the bilinear form. `B` and `D` are TrialFESpace and TestFESpace's, respectively. b_diri is a FEFunction that 
-is  equal to the Dirichlet b.c. on the boundary and zero elsewhere.
+Assemble the background-stratification source `f = ∫ -N² κᵥ ∂z φᵢ dΩ`.
 """
-function build_matrix_vector(a, B, D, b_diri)
-    A = assemble_matrix(a, B, D)
-    rhs = assemble_vector(d -> a(b_diri, d), D)
-    return A, rhs
-end
-function build_matrix_vector!(A, rhs, a, assembler, b_diri)
-    Gridap.assemble_matrix!(A, assembler, a)
-    Gridap.assemble_vector!(rhs, assembler, d -> a(b_diri, d))
-end
-
-# RHS: ∫( ∂z( κᵥ [N² + ∂z(b)] ) d )dΩ
-# IBP: ∫( κᵥ [N² + ∂z(b)] d )dΓ - ∫( κᵥ N² ∂z(d) )dΩ - ∫( κᵥ ∂z(b) ∂z(d) )dΩ
-
 function build_rhs_diff(params::Parameters, fe_data::FEData, κᵥ)
-    # unpack
-    N² = params.N²
-    dΩ = fe_data.mesh.dΩ
-    B_test = fe_data.spaces.B_test
+    N²   = params.N²
+    dh_b = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b  = getnbasefunctions(cv_b)
 
-    # rhs vector for nonzero N²
-    l(d) = ∫( -N² * (κᵥ * ∂z(d)) )dΩ
-    return assemble_vector(l, B_test)
+    f  = zeros(fe_data.nb)
+    fₑ = zeros(n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        coords = getcoordinates(cc)
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            x = spatial_coordinate(cv_b, q, coords)
+            κ = κᵥ(x)
+            dΩ = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                fₑ[i] -= N² * κ * shape_gradient(cv_b, q, i)[3] * dΩ
+            end
+        end
+        f[celldofs(cc)] .+= fₑ
+    end
+    return f
 end
 
-function build_rhs_flux(params::Parameters, forcings::Forcings, fe_data::FEData)
-    return build_rhs_flux(params, fe_data, forcings.b_surface_bc)
-end
+"""
+    f = build_rhs_flux(params, forcings, fe_data)
+
+Dispatch on surface boundary condition type.
+"""
+build_rhs_flux(params::Parameters, forcings::Forcings, fe_data::FEData) =
+    build_rhs_flux(params, fe_data, forcings.b_surface_bc)
+
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceFluxBC)
-    # unpack
-    α = params.α
-    dΓ = fe_data.mesh.dΓ
-    B_test = fe_data.spaces.B_test
+    α    = params.α
+    dh_b = fe_data.dh_b
+    _, fv_b = make_facet_values(fe_data)
+    n_b  = getnbasefunctions(fv_b)
+    facetset = fe_data.mesh.grid.facetsets[fe_data.mesh.surface_tag]
 
-    # rhs vector surface buoyancy flux [α²ε²/μϱ κᵥ [N² + ∂z(b)] = α*F]
-    l(d) = ∫( α * (bc.flux * d) )dΓ  
-    return assemble_vector(l, B_test)
+    f  = zeros(fe_data.nb)
+    fₑ = zeros(n_b)
+
+    for fc in FacetIterator(dh_b, facetset)
+        reinit!(fv_b, fc)
+        coords = getcoordinates(fc)
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(fv_b)
+            x = spatial_coordinate(fv_b, q, coords)
+            dΓ = getdetJdV(fv_b, q)
+            for i in 1:n_b
+                fₑ[i] += α * bc.flux(x) * shape_value(fv_b, q, i) * dΓ
+            end
+        end
+        f[celldofs(fc)] .+= fₑ
+    end
+    return f
 end
+
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC)
-    # no flux (Dirichlet b.c.)
-    return zeros(fe_data.dofs.nb)
+    return zeros(fe_data.nb)
 end

@@ -1,17 +1,17 @@
-struct FEData{M<:Mesh, DU, DP, DB, CU, CP, CB}
+struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     mesh::M
-    dh_u::DU          # DofHandler for velocity u
-    dh_p::DP          # DofHandler for pressure p
-    dh_b::DB          # DofHandler for buoyancy b
-    ch_u::CU          # ConstraintHandler for u (Dirichlet + periodic)
-    ch_p::CP          # ConstraintHandler for p (periodic only)
-    ch_b::CB          # ConstraintHandler for b (Dirichlet + periodic)
+    dh_up::DUP        # combined DofHandler for (u, p) -- used for inversion
+    dh_b::DB          # DofHandler for buoyancy b -- used for evolution
+    ch_up::CUP        # ConstraintHandler for (u, p): velocity Dirichlet + periodic
+    ch_b::CB          # ConstraintHandler for b: buoyancy Dirichlet + periodic
+    u_dof_indices::Vector{Int}   # sorted global u DOF indices within dh_up
+    p_dof_indices::Vector{Int}   # sorted global p DOF indices within dh_up
     nu::Int
     np::Int
     nb::Int
     u_order::Int
     b_order::Int
-    p_up::Vector{Int}      # permutation for combined [u; p] system
+    p_up::Vector{Int}      # permutation for (u, p) system
     p_b::Vector{Int}       # permutation for b
     inv_p_up::Vector{Int}  # inverse permutations
     inv_p_b::Vector{Int}
@@ -37,11 +37,16 @@ end
 
 Set up `DofHandler`s, `ConstraintHandler`s, and DOF permutations for the PG model.
 
-Periodic BCs are applied automatically when `"channel_west"` and `"channel_east"`
-facetsets are present in the grid (channel-basin geometry). The periodic translation
-vector is inferred from the east-wall x-coordinate.
+A combined `DofHandler` for (u, p) is used for the inversion problem so that
+Ferrite's `apply!` can correctly handle periodic BCs (which require entries between
+image and mirror DOFs that cross cell boundaries). `u_dof_indices` and `p_dof_indices`
+store the global DOF index sets within `dh_up` for splitting the combined solution.
 
-DOF permutations are identity for now; Cuthill-McKee reordering will be added in
+Periodic BCs are applied automatically when `"channel_west"` and `"channel_east"`
+facetsets are present in the grid. The periodic translation vector is inferred from
+the east-wall x-coordinate.
+
+DOF permutations are identity for now; Cuthill-McKee reordering will be added
 once the mass matrix assembly is in place.
 """
 function FEData(mesh::Mesh;
@@ -60,13 +65,22 @@ function FEData(mesh::Mesh;
 
     @info "Building DofHandlers..."
     @time begin
-    dh_u = DofHandler(grid); add!(dh_u, :u, ip_u); close!(dh_u)
-    dh_p = DofHandler(grid); add!(dh_p, :p, ip_p); close!(dh_p)
-    dh_b = DofHandler(grid); add!(dh_b, :b, ip_b); close!(dh_b)
+    dh_up = DofHandler(grid); add!(dh_up, :u, ip_u); add!(dh_up, :p, ip_p); close!(dh_up)
+    dh_b  = DofHandler(grid); add!(dh_b,  :b, ip_b); close!(dh_b)
     end
 
-    nu = ndofs(dh_u)
-    np = ndofs(dh_p)
+    # collect sorted u and p DOF index sets from the combined DofHandler
+    u_set = Set{Int}()
+    p_set = Set{Int}()
+    for cc in CellIterator(dh_up)
+        dofs = celldofs(cc)
+        union!(u_set, dofs[dof_range(dh_up, :u)])
+        union!(p_set, dofs[dof_range(dh_up, :p)])
+    end
+    u_dof_indices = sort!(collect(u_set))
+    p_dof_indices = sort!(collect(p_set))
+    nu = length(u_dof_indices)
+    np = length(p_dof_indices)
     nb = ndofs(dh_b)
 
     # periodic facet pairs, auto-detected from facetset names
@@ -82,23 +96,21 @@ function FEData(mesh::Mesh;
     @info "Building ConstraintHandlers..."
     @time begin
 
-    ch_u = ConstraintHandler(dh_u)
+    ch_up = ConstraintHandler(dh_up)
     for (i, tag) in enumerate(u_diri_tags)
         components = _mask_to_components(u_diri_masks, i)
         if components === nothing
-            add!(ch_u, Dirichlet(:u, grid.facetsets[tag], (x, t) -> zero(Vec{3, Float64})))
+            add!(ch_up, Dirichlet(:u, grid.facetsets[tag], (x, t) -> zero(Vec{3, Float64})))
         else
-            add!(ch_u, Dirichlet(:u, grid.facetsets[tag], (x, t) -> 0.0, components))
+            add!(ch_up, Dirichlet(:u, grid.facetsets[tag], (x, t) -> 0.0, components))
         end
     end
-    is_periodic && add!(ch_u, PeriodicDirichlet(:u, pfacets))
-    close!(ch_u)
-    update!(ch_u, 0.0)
-
-    ch_p = ConstraintHandler(dh_p)
-    is_periodic && add!(ch_p, PeriodicDirichlet(:p, pfacets))
-    close!(ch_p)
-    update!(ch_p, 0.0)
+    if is_periodic
+        add!(ch_up, PeriodicDirichlet(:u, pfacets))
+        add!(ch_up, PeriodicDirichlet(:p, pfacets))
+    end
+    close!(ch_up)
+    update!(ch_up, 0.0)
 
     ch_b = ConstraintHandler(dh_b)
     for (i, tag) in enumerate(b_diri_tags)
@@ -112,13 +124,16 @@ function FEData(mesh::Mesh;
     end
 
     # identity permutations (Cuthill-McKee reordering not yet implemented)
-    p_up     = collect(1:nu + np)
+    N_up    = ndofs(dh_up)
+    p_up     = collect(1:N_up)
     p_b      = collect(1:nb)
-    inv_p_up = collect(1:nu + np)
+    inv_p_up = collect(1:N_up)
     inv_p_b  = collect(1:nb)
 
-    return FEData(mesh, dh_u, dh_p, dh_b, ch_u, ch_p, ch_b,
-                  nu, np, nb, u_order, b_order, p_up, p_b, inv_p_up, inv_p_b)
+    return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
+                  u_dof_indices, p_dof_indices,
+                  nu, np, nb, u_order, b_order,
+                  p_up, p_b, inv_p_up, inv_p_b)
 end
 
 """

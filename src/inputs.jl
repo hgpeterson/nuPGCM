@@ -188,7 +188,7 @@ function Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param=nothing
     end
     if eddy_param === nothing
         # by default, no `EddyParameterization` (`is_on` == false)
-        eddy_param = EddyParameterization(0, 0, false)
+        eddy_param = EddyParameterization(x -> 0.0, 0.0, 0.0, 10.0, false)
     end
     return Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc, conv_param, eddy_param)
 end
