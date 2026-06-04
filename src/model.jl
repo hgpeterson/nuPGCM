@@ -1,7 +1,7 @@
-struct State{U, P, B}
-    u::U  # flow
-    p::P  # pressure
-    b::B  # buoyancy
+struct State
+    u::Vector{Float64}   # velocity DOFs (length nu)
+    p::Vector{Float64}   # pressure DOFs (length np)
+    b::Vector{Float64}   # buoyancy DOFs (length nb)
 end
 
 function Base.summary(state::State)
@@ -10,20 +10,21 @@ function Base.summary(state::State)
 end
 function Base.show(io::IO, state::State)
     println(io, summary(state), ":")
-    println(io, "├── u: ", state.u, " with ", length(state.u.free_values), " DOFs")
-    println(io, "├── p: ", state.p, " with ", length(state.p.free_values), " DOFs")
-      print(io, "└── b: ", state.b, " with ", length(state.b.free_values), " DOFs")
+    println(io, "├── u: $(length(state.u)) DOFs")
+    println(io, "├── p: $(length(state.p)) DOFs")
+      print(io, "└── b: $(length(state.b)) DOFs")
 end
 
-struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData, 
-             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing}, S<:State, T<:Union{AbstractTimestepper,Nothing}}
+struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData,
+             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing},
+             T<:Union{AbstractTimestepper,Nothing}}
     arch::A
     params::P
     forcings::F
     fe_data::D
     inversion::I
     evolution::E
-    state::S
+    state::State
     timestepper::T
 end
 
@@ -43,167 +44,216 @@ function Base.show(io::IO, model::Model)
       print(io, "└── timestepper: ", summary(model.timestepper))
 end
 
-# inversion model
-function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
+# inversion-only model (no time integration)
+function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings,
                fe_data::FEData, inversion::InversionToolkit)
-    # this model is only used for calculating the inversion, no need for evolution/timestep stuff
-    evolution = nothing 
-    timestepper = nothing
-    state = rest_state(fe_data.spaces)
-    return Model(arch, params, forcings, fe_data, inversion, evolution, state, timestepper)
+    state = rest_state(fe_data)
+    return Model(arch, params, forcings, fe_data, inversion, nothing, state, nothing)
 end
 
-# full model starting from rest
-function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings, 
-               fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit, 
+# full model
+function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings,
+               fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit,
                timestepper::AbstractTimestepper)
-    state = rest_state(fe_data.spaces)
+    state = rest_state(fe_data)
     return Model(arch, params, forcings, fe_data, inversion, evolution, state, timestepper)
 end
 
-function rest_state(spaces::Spaces)
-    # unpack
-    U, P = spaces.X_trial
-    B = spaces.B_trial
-
-    # define FE functions
-    u = interpolate(VectorValue(0, 0, 0), U)
-    p = interpolate(0, P) 
-    b = interpolate(0, B)
-
-    return State(u, p, b)
+function rest_state(fe_data::FEData)
+    nu, np, nb = get_n_dofs(fe_data)
+    return State(zeros(nu), zeros(np), zeros(nb))
 end
 
-function set_b!(model::Model, b::Function)
-    # interpolate function onto FE space
-    b_fe = interpolate(b, model.state.b.fe_space)
+"""
+    set_b!(model, b::Function)
+    set_b!(model, b::AbstractVector)
 
-    model.state.b.free_values .= b_fe.free_values
+Set the buoyancy initial condition via L2 projection of a function or direct
+assignment of a DOF vector.
+"""
+function set_b!(model::Model, b_fn::Function)
+    fe_data = model.fe_data
+    dh_b    = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b  = getnbasefunctions(cv_b)
 
+    # assemble projection RHS:  rhs[i] = ∫ b_fn(x) φ_i dΩ
+    rhs = zeros(fe_data.nb)
+    fₑ  = zeros(n_b)
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        coords = getcoordinates(cc)
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            x  = spatial_coordinate(cv_b, q, coords)
+            dΩ = getdetJdV(cv_b, q)
+            bq = b_fn(x)
+            for i in 1:n_b
+                fₑ[i] += bq * shape_value(cv_b, q, i) * dΩ
+            end
+        end
+        rhs[celldofs(cc)] .+= fₑ
+    end
+
+    # solve M * b = rhs  (L2 projection)
+    M = build_M(fe_data)
+    apply!(M, rhs, fe_data.ch_b)
+    model.state.b .= M \ rhs
     return model
 end
-function set_b!(model::Model, b::AbstractArray)
-    model.state.b.free_values .= b
+function set_b!(model::Model, b::AbstractVector)
+    model.state.b .= b
     return model
+end
+
+####
+#### Time integration
+####
+
+function invert!(model::Model)
+    return invert!(model, model.state.b)
+end
+function invert!(model::Model, b_vec::AbstractVector)
+    invert!(model.inversion, on_architecture(CPU(), b_vec))
+    sync_flow!(model)
+    return model
+end
+
+function sync_flow!(model::Model)
+    x = on_architecture(CPU(), model.inversion.solver.x)
+    model.state.u .= x[model.fe_data.u_dof_indices]
+    model.state.p .= x[model.fe_data.p_dof_indices]
+    return model
+end
+
+function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
+    fe_data    = model.fe_data
+    params     = model.params
+    forcings   = model.forcings
+    timestepper = model.timestepper
+    evolution  = model.evolution
+    arch       = evolution.arch
+    ch_b       = fe_data.ch_b
+
+    if forcings.conv_param.is_on
+        b_cpu = on_architecture(CPU(), model.state.b)
+        @ctime "  build Kᵥ" begin
+            Kᵥ_new = build_Kᵥ_conv(fe_data, params, forcings, b_cpu)
+            evolution.Kᵥ.nzval .= Kᵥ_new.nzval
+        end
+        @ctime "  build rhs_diff" begin
+            rhs_diff_new = build_rhs_diff_conv(params, fe_data, forcings, b_cpu)
+            evolution.rhs_diff .= on_architecture(arch, rhs_diff_new)
+        end
+        collect_evolution_LHS!(evolution, params, forcings, timestepper, ch_b)
+    end
+
+    # assemble advection RHS on CPU (field evaluation requires CPU)
+    # build_rhs_adv needs the velocity DOF vector in the combined dh_up ordering
+    b_cpu      = on_architecture(CPU(), model.state.b)
+    b_prev_cpu = on_architecture(CPU(), b_prev)
+    x_up      = _to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
+    x_up_prev = _to_up_vec(fe_data, on_architecture(CPU(), u_prev))
+
+    @ctime "  build rhs_adv" rhs_adv = build_rhs_adv(fe_data, params,
+                                                        x_up, b_cpu,
+                                                        x_up_prev, b_prev_cpu,
+                                                        timestepper)
+
+    # combine RHS, apply BCs, and solve
+    θ  = evolution_parameter(params, timestepper)
+    Δt = timestepper.Δt[]
+    y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
+         Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
+         on_architecture(CPU(), evolution.f_bc)
+    apply!(y, ch_b)
+    evolution.solver.y .= on_architecture(arch, y)
+
+    @ctime "  solve evol sys" iterative_solve!(evolution.solver)
+
+    model.state.b .= on_architecture(CPU(), evolution.solver.x)
+    return model
+end
+
+# specialise for BDF1 (no u_prev / b_prev needed)
+function evolve!(model::Model, ::Nothing, ::Nothing)
+    return evolve!(model, model.state.u, model.state.b)
 end
 
 function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
-    # unpack
     u = model.state.u
     b = model.state.b
     timestepper = model.timestepper
 
-    @info "Beginning integration with" n_save n_plot n_info 
+    @info "Beginning integration with" n_save n_plot n_info
     status(timestepper)
 
-    # get resolution for CFL
     h_cells = compute_h_cells(model.fe_data.mesh)
-    h_min = minimum(h_cells)
+    h_min   = minimum(h_cells)
 
+    # initial eddy ν sync
     if model.forcings.eddy_param.is_on
-        # cache data needed to re-assemble inversion matrix
-        X_trial = model.fe_data.spaces.X_trial
-        X_test = model.fe_data.spaces.X_test
-        dup = get_trial_fe_basis(X_trial)
-        dvq = get_fe_basis(X_test)
-        assembler = Gridap.SparseMatrixAssembler(X_trial, X_test)
-        perm = model.fe_data.dofs.p_inversion
-        iperm = model.fe_data.dofs.inv_p_inversion
-        A_inversion = on_architecture(CPU(), model.inversion.solver.A)
-        A_inversion = A_inversion[iperm, iperm]
-
-        # # store inversion matrix without friction to speed up re-builds
-        # A_part = build_A_inversion(model.fe_data, model.params, model.forcings.ν; frictionless_only=true) 
-
-        # update ν and inversion matrix (keeping the same preconditioner 1/h^dim)
-        α = model.params.α
-        N² = model.params.N²
-        b = model.state.b
-        αbz = α*(N² + ∂z(b))
-        ν = ν_eddy(model.forcings.eddy_param, αbz)
-        # A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
-        build_A_inversion!(A_inversion, dup, dvq, assembler, model.fe_data, model.params, ν)
-        model.inversion.solver.A = on_architecture(model.arch, A_inversion[perm, perm])
-
-        # invert to sync up
+        _update_eddy_A!(model)
         invert!(model)
     end
 
     if i_start == 0
         save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i_start))
-        save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i_start))
+        save_vtk(model,   ofile=@sprintf("%s/data/state_%016d", out_dir, i_start))
     end
 
-    # store copies of previous and current u, b
-    u_prev = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
-    u_curr = FEFunction(model.fe_data.spaces.X_trial[1], copy(u.free_values))
-    b_prev = FEFunction(model.fe_data.spaces.B_trial, copy(b.free_values))
-    b_curr = FEFunction(model.fe_data.spaces.B_trial, copy(b.free_values))
+    u_prev = copy(u)
+    b_prev = copy(b)
+    u_curr = copy(u)
+    b_curr = copy(b)
 
-    # start timers
     t₀ = t_last_info = time()
-    i = i_start + 1
+    i  = i_start + 1
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
-        update_Δt!(timestepper, u, model.fe_data.mesh.dΩ, h_cells)
+        update_Δt!(timestepper, u, h_cells)
         Δt = timestepper.Δt[]
 
         if i == i_start + 2 && typeof(timestepper) <: BDF2
-            # need to do one step with BDF1, now we can switch to BDF2 if desired
-            collect_evolution_LHS!(model.evolution, model.params, model.forcings, timestepper)
+            collect_evolution_LHS!(model.evolution, model.params, model.forcings,
+                                   timestepper, model.fe_data.ch_b)
         end
 
-        # sync current u, b before they update
-        u_curr.free_values .= u.free_values
-        b_curr.free_values .= b.free_values
+        u_curr .= u
+        b_curr .= b
 
-        # do step
         evolve!(model, u_prev, b_prev)
         invert!(model)
         update_t!(timestepper)
 
-        # blow-up -> stop
-        u_max = maximum(abs.(u.free_values))
-        b_max = maximum(abs.(b.free_values))
-        if maximum([u_max, b_max]) > 1e3 || any(isnan.([u_max, b_max]))
+        u_max = maximum(abs, u)
+        b_max = maximum(abs, b)
+        if max(u_max, b_max) > 1e3 || any(isnan, u) || any(isnan, b)
             throw(ErrorException("Blow-up detected, stopping simulation"))
         end
 
-        # set previous u, b to state before the update
-        u_prev.free_values .= u_curr.free_values
-        b_prev.free_values .= b_curr.free_values
+        u_prev .= u_curr
+        b_prev .= b_curr
 
-        # update ν
         if model.forcings.eddy_param.is_on && advection && mod(i, 10) == 0
-            α = model.params.α
-            N² = model.params.N²
-            b = model.state.b
-            αbz = α*(N² + ∂z(b))
-            ν = ν_eddy(model.forcings.eddy_param, αbz)
-            # A_inversion = A_part + build_A_inversion(model.fe_data, model.params, ν; friction_only=true)
-            build_A_inversion!(A_inversion, dup, dvq, assembler, model.fe_data, model.params, ν)
-            model.inversion.solver.A = on_architecture(model.arch, A_inversion[perm, perm])
-            # note: keeping same preconditioner (1/h^dim)
+            _update_eddy_A!(model)
         end
 
         if mod(i, n_info) == 0
             t₁ = time()
-            t_step = (t₁ - t_last_info)/n_info
+            t_step = (t₁ - t_last_info) / n_info
             @info begin
             msg  = @sprintf("t = %.3e/%.3e (i = %d, Δt = %.3e)\n", timestepper.t[], timestepper.t_stop, i, Δt)
-            msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t₁-t₀)...)
-            if i > n_info  # skip ETR the first time since it will contain compilation time
+            msg *= @sprintf("time elapsed: %02d:%02d:%02d\n", hrs_mins_secs(t₁ - t₀)...)
+            if i > n_info
                 msg *= @sprintf("timestep duration ~ %.3e s\n", t_step)
-                msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n", 
-                                hrs_mins_secs(t_step*Int64((timestepper.t_stop - timestepper.t[]) ÷ Δt))...)
+                msg *= @sprintf("estimated time remaining: %02d:%02d:%02d\n",
+                                hrs_mins_secs(t_step * Int64((timestepper.t_stop - timestepper.t[]) ÷ Δt))...)
             end
-            msg *= @sprintf("|u|ₘₐₓ = %.3e, CFL Δt ≈ %.3e\n", u_max, h_min/u_max)
-            msg *= @sprintf("%.3e ≤ b_free ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n", 
-                            minimum(b.free_values), maximum(b.free_values), 
-                            maximum(abs.(b.free_values - b_prev.free_values)/Δt))
-            # msg *= @sprintf("Memory usage: %.3e / %.3e GB\n", Sys.total_memory()/1e9 - Sys.free_memory()/1e9, Sys.total_memory()/1e9)
-            # msg *= @sprintf("Live heap: %.3e GB\n", Base.gc_live_bytes()/1e9)
+            msg *= @sprintf("|u|ₘₐₓ = %.3e, CFL Δt ≈ %.3e\n", u_max, h_min / u_max)
+            msg *= @sprintf("%.3e ≤ b ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n",
+                            minimum(b), maximum(b), maximum(abs, (b .- b_prev) ./ Δt))
             msg
             end
             t_last_info = t₁
@@ -211,125 +261,36 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
 
         if mod(i, n_save) == 0
             save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i))
-            save_vtk(model, ofile=@sprintf("%s/data/state_%016d.vtu", out_dir, i))
+            save_vtk(model,   ofile=@sprintf("%s/data/state_%016d", out_dir, i))
         end
 
-        if mod(i, n_plot) == 0
-            sim_plots(model, model.state.t)
-        end
-
-        # increment
         i += 1
-
-        flush(stdout)
-        flush(stderr)
+        flush(stdout); flush(stderr)
         end
     end
     return model
 end
 
-function evolve!(model::Model, u_prev, b_prev)
-    # unpack
-    perm = model.fe_data.dofs.p_b
-    inv_perm = model.fe_data.dofs.inv_p_b
-    B_test = model.fe_data.spaces.B_test
-    dΩ = model.fe_data.mesh.dΩ
-    α = model.params.α
-    N² = model.params.N²
-    u = model.state.u
-    b = model.state.b
-    solver = model.evolution.solver
-    arch = architecture(solver.y)
-
-    # coefficient
-    θ = evolution_parameter(model.params, model.timestepper)
-
-    if model.forcings.conv_param.is_on
-        # recompute κᵥ for convection
-        αbz = α*(N² + ∂z(b))
-        κᵥ = κᵥ_convection(model.forcings, αbz)
-
-        # rebuild vertical diffusion components
-        @ctime "  build Kᵥ" Kᵥ, rhsᵥ = build_Kᵥ(model.fe_data, κᵥ)  # TODO: cache
-        # @ctime "  build Kᵥ" build_Kᵥ!(model, κᵥ)
-        @ctime "  build rhs_diff" rhs_diff = build_rhs_diff(model.params, model.fe_data, κᵥ)
-        Kᵥ = Kᵥ[perm, perm]
-        rhsᵥ = rhsᵥ[perm]
-        # model.evolution.Kᵥ .= model.evolution.Kᵥ_cache[perm, perm]
-        # model.evolution.rhsᵥ .= model.evolution.rhsᵥ_cache[perm, perm]
-        rhs_diff = rhs_diff[perm]
-        rhsᵥ = on_architecture(arch, rhsᵥ)
-        rhs_diff = on_architecture(arch, rhs_diff)
-        model.evolution.rhsᵥ .= rhsᵥ
-        model.evolution.rhs_diff .= rhs_diff
-    else
-        Kᵥ = model.evolution.Kᵥ
-    end
-
-    if model.forcings.conv_param.is_on || model.timestepper.adaptive
-        # re-assemble matrix and preconditioner
-        M = model.evolution.M
-        Kₕ = model.evolution.Kₕ
-        A = M + θ*(Kₕ + Kᵥ) 
-        P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
-
-        # update model.evolution
-        model.evolution.solver.A = on_architecture(arch, A)
-        model.evolution.solver.P = P
-    end
-
-    # put together rhs and solve
-    rhs_diff = model.evolution.rhs_diff
-    rhs_flux = model.evolution.rhs_flux
-    rhsₘ = model.evolution.rhsₘ
-    rhsₕ = model.evolution.rhsₕ
-    rhsᵥ = model.evolution.rhsᵥ
-    w = u⋅z⃗
-    w_prev = u_prev⋅z⃗
-    @ctime "  build rhs_adv" rhs_adv = assemble_vector(
-        d -> advection_lform(d, b, b_prev, u, u_prev, w, w_prev, N², dΩ, model.timestepper), 
-        B_test)
-    rhs_adv = rhs_adv[perm]
-    rhs_adv  = on_architecture(arch, rhs_adv)
-    # rhsᵥ  = on_architecture(arch, model.evolution.rhsᵥ)
-    Δt = model.timestepper.Δt[]
-    @. solver.y = rhs_adv + θ*rhs_diff + Δt*rhs_flux - (rhsₘ + θ*(rhsₕ + rhsᵥ))
-    @ctime "  solve evol sys" iterative_solve!(solver)
-
-    # sync buoyancy to state
-    b.free_values .= on_architecture(CPU(), solver.x[inv_perm])
-
-    return model
+function _to_up_vec(fe_data::FEData, u_state::AbstractVector)
+    x = zeros(ndofs(fe_data.dh_up))
+    x[fe_data.u_dof_indices] .= u_state
+    return x
 end
 
-# function build_Kᵥ!(model::Model, κᵥ)
-#     aᵥ(b, d) = ∫( κᵥ*∂z(b)*∂z(d) )dΩ
-#     build_matrix_vector!(model.evolution.Kᵥ_cache, model.evolution.rhsᵥ_cache, aᵥ, model.evolution.assembler, model.fe_data.spaces.b_diri)
-# end
+function _update_eddy_A!(model::Model)
+    A_new = build_A_inversion(model.fe_data, model.params,
+                               model.forcings.eddy_param, model.state.b)
+    f_bc = zeros(size(A_new, 1))
+    apply!(A_new, f_bc, model.fe_data.ch_up)
 
-function advection_lform(d, b, b_prev, u, u_prev, w, w_prev, N², dΩ, ts::BDF1)
-    Δt = ts.Δt[]
-    return ∫( ( b - Δt*( u⋅∇(b) + w*N² ) )*d )dΩ
-end
-#TODO: This assumes fixed Δt
-function advection_lform(d, b, b_prev, u, u_prev, w, w_prev, N², dΩ, ts::BDF2)
-    Δt = ts.Δt[]
-    return ∫( ( 4/3*b - 1/3*b_prev - 2/3*Δt*( (2*u - u_prev)⋅∇(2*b - b_prev) + (2*w - w_prev)*N² ) )*d )dΩ
-end
+    # reuse the same diagonal preconditioner (h-scaled)
+    p, t = get_p_t(model.fe_data.mesh)
+    edges, _, _ = all_edges(t)
+    hs = sort([norm(p[edges[i,1],:] - p[edges[i,2],:]) for i in axes(edges,1)])
+    h  = hs[length(hs) ÷ 2]
+    P  = Diagonal(on_architecture(model.arch, fill(1/h^3, size(A_new,1))))
 
-function invert!(model::Model)
-    return invert!(model, model.state.b)
-end
-function invert!(model::Model, b)
-    invert!(model.inversion, b)
-    sync_flow!(model)
-    return model
-end
-
-function sync_flow!(model::Model)
-    x = on_architecture(CPU(), model.inversion.solver.x[model.fe_data.dofs.inv_p_inversion])
-    nu = model.fe_data.dofs.nu
-    model.state.u.free_values .= x[1:nu]
-    model.state.p.free_values.args[1] .= x[nu+1:end]
+    model.inversion.solver.A = on_architecture(model.arch, A_new)
+    model.inversion.solver.P = P
     return model
 end

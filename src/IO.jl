@@ -1,19 +1,15 @@
 function save_state(model::Model, ofile)
     s = model.state
-    if isnothing(model.timestepper) 
-        t = 0
-    else
-        t = model.timestepper.t[]
-    end
-    jldsave(ofile; u=s.u.free_values, p=s.p.free_values.args[1], b=s.b.free_values, t=t)
+    t = isnothing(model.timestepper) ? 0.0 : model.timestepper.t[]
+    jldsave(ofile; u=s.u, p=s.p, b=s.b, t=t)
     @info "Model state saved to '$ofile'"
 end
 
 function set_state_from_file!(m::Model, ifile)
     d = jldopen(ifile, "r")
-    m.state.u.free_values .= d["u"]
-    m.state.p.free_values.args[1] .= d["p"]
-    m.state.b.free_values .= d["b"]
+    m.state.u .= d["u"]
+    m.state.p .= d["p"]
+    m.state.b .= d["b"]
     if !isnothing(m.timestepper)
         m.timestepper.t[] = d["t"]
     end
@@ -22,38 +18,25 @@ function set_state_from_file!(m::Model, ifile)
     return m
 end
 
-function save_vtk(m::Model; ofile="$out_dir/data/state.vtu")
-    s = m.state
-    α = m.params.α
-    N² = m.params.N²
-    b = m.state.b
-    B_trial = m.fe_data.spaces.B_trial
-    b_full = interpolate_everywhere(x->N²*x[3], B_trial) + b
-    αbz = α*N² + α*∂z(b)
-    if m.forcings.eddy_param.is_on
-        ν = ν_eddy(m.forcings.eddy_param, αbz)
-    else
-        ν = m.forcings.ν
+"""
+    save_vtk(model; ofile="...")
+
+Write the current model state to a VTK file using Ferrite's `VTKGridFile`.
+The file name is `ofile.vtu`.
+"""
+function save_vtk(m::Model; ofile="$out_dir/data/state")
+    fe_data = m.fe_data
+    grid    = fe_data.mesh.grid
+    state   = m.state
+
+    # reassemble the combined (u, p) DOF vector in dh_up ordering
+    x_up = zeros(ndofs(fe_data.dh_up))
+    x_up[fe_data.u_dof_indices] .= state.u
+    x_up[fe_data.p_dof_indices] .= state.p
+
+    VTKGridFile(ofile, grid) do vtk
+        write_solution(vtk, fe_data.dh_up, x_up)
+        write_solution(vtk, fe_data.dh_b,  state.b)
     end
-    if m.forcings.conv_param.is_on
-        κᵥ = κᵥ_convection(m.forcings, αbz)
-    else
-        κᵥ = m.forcings.κᵥ
-    end
-    if isnothing(m.timestepper)
-        t = 0
-    else
-        t = m.timestepper.t[]
-    end
-    # IMPORTANT: must have order = 2 for quadratic velocities!
-    writevtk(m.fe_data.mesh.Ω, ofile, order=2, cellfields=[
-        "u" => s.u, 
-        "p" => s.p, 
-        "b" => b_full,
-        "alpha*b_z" => αbz,
-        "nu" => ν,
-        "kappa_v" => κᵥ,
-        "t" => t,
-    ])
-    @info "VTK state saved to '$ofile'"
+    @info "VTK state saved to '$ofile.vtu'"
 end

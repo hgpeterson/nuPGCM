@@ -92,31 +92,20 @@ function status(ts::AbstractTimestepper)
 end
 
 """
-    update_Δt!(timestepper::AbstractTimestepper, u, dΩ, h_cells; u_min=0.01)
+    update_Δt!(timestepper::AbstractTimestepper, u_vec, h_cells; u_min=0.01)
 
 Update Timestepper's Δt based on the CFL condition.
 
-We use the formula
-```math
-Δt = c \\times \\min_K \\frac{h_K}{|u|_{L^∞(K)}
-```
-where `c = timestepper.CFL_factor`, `h_K = h_cells[k]` is the cell size, and `|u|_{L^∞(K)}` is the maximum velocity in 
-cell K (computed over the quadrature points). `u_min` is a lower bound on velocity to prevent Δt from becoming too large 
-when velocities are small.
+    Δt = CFL_factor × min_K ( h_K / max(|u|_K, u_min) )
+
+`u_vec` is the velocity DOF vector; its element-wise maximum gives a conservative
+upper bound on the flow speed. `u_min` prevents Δt blowing up in stagnant regions.
 """
-# TODO: once BDF2 supports adaptive timestepping, this function should be updated to take a generic AbstractTimestepper
-function update_Δt!(timestepper::BDF1, u, dΩ, h_cells; u_min=0.01)
-    # local L∞ velocity norm: max |u| over quadrature points in each cell
-    q_pts = get_cell_points(dΩ)
-    speed_q = evaluate(Operation(norm)(u), q_pts) # cell array of arrays
-    u_cells = map(maximum, get_array(speed_q))  # one value per cell
-
-    # compute minimum of h / |u| and multiply by CFL factor
-    ratios = h_cells ./ max.(u_cells, u_min)
-    timestepper.Δt[] = timestepper.CFL_factor*minimum(ratios)
-
+function update_Δt!(timestepper::BDF1, u_vec::AbstractVector, h_cells; u_min=0.01)
+    u_max = max(maximum(abs, u_vec), u_min)
+    timestepper.Δt[] = timestepper.CFL_factor * minimum(h_cells) / u_max
     return timestepper
 end
-function update_Δt!(timestepper::BDF2, u, dΩ, h_cells; u_min=0.01)
+function update_Δt!(timestepper::BDF2, u_vec::AbstractVector, h_cells; u_min=0.01)
     return timestepper
 end

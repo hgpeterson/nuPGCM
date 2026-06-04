@@ -70,8 +70,8 @@ include("architectures.jl")
 include("utils.jl")
 include("inputs.jl")
 include("meshes.jl")
-include("spaces.jl")
 include("dofs.jl")
+include("spaces.jl")
 include("iterative_solvers.jl")
 include("preconditioners.jl")
 include("inversion.jl")
@@ -125,7 +125,9 @@ save_state,
 save_vtk,
 set_state_from_file!,
 # plotting.jl
-nan_eval,
+eval_at_points,
+eval_at_point,
+find_H,
 plot_slice,
 plot_profiles,
 sim_plots,

@@ -306,3 +306,175 @@ end
 function build_rhs_flux(params::Parameters, fe_data::FEData, bc::SurfaceDirichletBC)
     return zeros(fe_data.nb)
 end
+
+####
+#### Advection RHS (assembled from current DOF vectors each timestep)
+####
+
+"""
+    f = build_rhs_adv(fe_data, params, u_vec, b_vec, ts::BDF1)
+    f = build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts::BDF2)
+
+Assemble the advection right-hand side.
+
+BDF1: `∫ (b - Δt (u·∇b + w N²)) d dΩ`
+BDF2: `∫ (4/3 b - 1/3 b_prev - 2/3 Δt ((2u-u_prev)·∇(2b-b_prev) + (2w-w_prev) N²)) d dΩ`
+"""
+build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts::BDF1) =
+    build_rhs_adv(fe_data, params, u_vec, b_vec, ts)
+
+function build_rhs_adv(fe_data::FEData, params::Parameters,
+                        u_vec::AbstractVector, b_vec::AbstractVector,
+                        ts::BDF1)
+    Δt  = ts.Δt[]
+    N²  = params.N²
+    dh_up = fe_data.dh_up
+    dh_b  = fe_data.dh_b
+    cv_u, _, cv_b = make_cell_values(fe_data)
+    n_b = getnbasefunctions(cv_b)
+    n_u = getnbasefunctions(cv_u)
+    u_range = dof_range(dh_up, :u)
+
+    f  = zeros(fe_data.nb)
+    fₑ = zeros(n_b)
+
+    for (cc_up, cc_b) in zip(CellIterator(dh_up), CellIterator(dh_b))
+        reinit!(cv_u, cc_up)
+        reinit!(cv_b, cc_b)
+        local_b = b_vec[celldofs(cc_b)]
+        local_u = u_vec[celldofs(cc_up)[u_range]]
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            b_q  = function_value(cv_b, q, local_b)
+            ∇b_q = function_gradient(cv_b, q, local_b)
+            u_q  = function_value(cv_u, q, local_u)
+            adv  = dot(u_q, ∇b_q) + u_q[3] * N²
+            dΩ   = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                fₑ[i] += (b_q - Δt * adv) * shape_value(cv_b, q, i) * dΩ
+            end
+        end
+        f[celldofs(cc_b)] .+= fₑ
+    end
+    return f
+end
+
+function build_rhs_adv(fe_data::FEData, params::Parameters,
+                        u_vec::AbstractVector, b_vec::AbstractVector,
+                        u_prev::AbstractVector, b_prev::AbstractVector,
+                        ts::BDF2)
+    Δt  = ts.Δt[]
+    N²  = params.N²
+    dh_up = fe_data.dh_up
+    dh_b  = fe_data.dh_b
+    cv_u, _, cv_b = make_cell_values(fe_data)
+    n_b = getnbasefunctions(cv_b)
+    u_range = dof_range(dh_up, :u)
+
+    f  = zeros(fe_data.nb)
+    fₑ = zeros(n_b)
+
+    for (cc_up, cc_b) in zip(CellIterator(dh_up), CellIterator(dh_b))
+        reinit!(cv_u, cc_up)
+        reinit!(cv_b, cc_b)
+        local_b      = b_vec[celldofs(cc_b)]
+        local_b_prev = b_prev[celldofs(cc_b)]
+        dofs_u       = celldofs(cc_up)[u_range]
+        local_u      = u_vec[dofs_u]
+        local_u_prev = u_prev[dofs_u]
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            b_q       = function_value(cv_b, q, local_b)
+            b_prev_q  = function_value(cv_b, q, local_b_prev)
+            ∇b_eff_q  = function_gradient(cv_b, q, 2*local_b - local_b_prev)
+            u_q       = function_value(cv_u, q, local_u)
+            u_prev_q  = function_value(cv_u, q, local_u_prev)
+            u_eff_q   = 2*u_q - u_prev_q
+            adv       = dot(u_eff_q, ∇b_eff_q) + u_eff_q[3] * N²
+            rhs_q     = 4/3 * b_q - 1/3 * b_prev_q - 2/3 * Δt * adv
+            dΩ        = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                fₑ[i] += rhs_q * shape_value(cv_b, q, i) * dΩ
+            end
+        end
+        f[celldofs(cc_b)] .+= fₑ
+    end
+    return f
+end
+
+####
+#### Parametrization-aware rebuilds (conv_param: κᵥ depends on ∂z(b))
+####
+
+"""
+    Kᵥ = build_Kᵥ_conv(fe_data, params, forcings, b_vec)
+
+Rebuild `Kᵥ` using the convection parameterization: `κᵥ` is evaluated at each
+quadrature point from `∂z(b)` using the current buoyancy DOF vector.
+"""
+function build_Kᵥ_conv(fe_data::FEData, params::Parameters,
+                         forcings::Forcings, b_vec::AbstractVector)
+    dh_b  = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b   = getnbasefunctions(cv_b)
+    α  = params.α
+    N² = params.N²
+
+    Kᵥ  = allocate_evolution_matrix(fe_data)
+    asm = start_assemble(Kᵥ)
+    Ke  = zeros(n_b, n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        local_b = b_vec[celldofs(cc)]
+        fill!(Ke, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            ∂z_b_q = function_gradient(cv_b, q, local_b)[3]
+            αbz_q  = α * (N² + ∂z_b_q)
+            κ      = κᵥ_convection(forcings, αbz_q)
+            dΩ     = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                ∂zφᵢ = shape_gradient(cv_b, q, i)[3]
+                for j in 1:n_b
+                    Ke[i, j] += κ * ∂zφᵢ * shape_gradient(cv_b, q, j)[3] * dΩ
+                end
+            end
+        end
+        assemble!(asm, celldofs(cc), Ke)
+    end
+    return Kᵥ
+end
+
+"""
+    f = build_rhs_diff_conv(params, fe_data, forcings, b_vec)
+
+Rebuild `rhs_diff` using the convection parameterization.
+"""
+function build_rhs_diff_conv(params::Parameters, fe_data::FEData,
+                              forcings::Forcings, b_vec::AbstractVector)
+    N²   = params.N²
+    α    = params.α
+    dh_b = fe_data.dh_b
+    _, _, cv_b = make_cell_values(fe_data)
+    n_b  = getnbasefunctions(cv_b)
+
+    f  = zeros(fe_data.nb)
+    fₑ = zeros(n_b)
+
+    for cc in CellIterator(dh_b)
+        reinit!(cv_b, cc)
+        local_b = b_vec[celldofs(cc)]
+        fill!(fₑ, 0.0)
+        for q in 1:getnquadpoints(cv_b)
+            ∂z_b_q = function_gradient(cv_b, q, local_b)[3]
+            αbz_q  = α * (N² + ∂z_b_q)
+            κ      = κᵥ_convection(forcings, αbz_q)
+            dΩ     = getdetJdV(cv_b, q)
+            for i in 1:n_b
+                fₑ[i] -= N² * κ * shape_gradient(cv_b, q, i)[3] * dΩ
+            end
+        end
+        f[celldofs(cc)] .+= fₑ
+    end
+    return f
+end

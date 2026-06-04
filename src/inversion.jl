@@ -219,13 +219,77 @@ function build_B_inversion(fe_data::FEData, params::Parameters)
 end
 
 """
+    A = build_A_inversion(fe_data, params, eddy_param, b_vec)
+
+Assemble the inversion LHS with eddy viscosity computed at each quadrature point
+from `∂z(b)` via `ν_eddy(eddy_param, α*(N² + ∂z(b)))`.
+"""
+function build_A_inversion(fe_data::FEData, params::Parameters,
+                            eddy_param::EddyParameterization,
+                            b_vec::AbstractVector)
+    dh_up = fe_data.dh_up
+    dh_b  = fe_data.dh_b
+    cv_u, cv_p, cv_b = make_cell_values(fe_data)
+    n_u   = getnbasefunctions(cv_u)
+    n_p   = getnbasefunctions(cv_p)
+    n_loc = n_u + n_p
+    α²ε²  = params.α^2 * params.ε^2
+    f_cor = params.f
+    α     = params.α
+    N²    = params.N²
+
+    A   = allocate_inversion_matrix(fe_data)
+    asm = start_assemble(A)
+    Ae  = zeros(n_loc, n_loc)
+
+    for (cc_up, cc_b) in zip(CellIterator(dh_up), CellIterator(dh_b))
+        reinit!(cv_u, cc_up)
+        reinit!(cv_p, cc_up)
+        reinit!(cv_b, cc_b)
+        coords  = getcoordinates(cc_up)
+        local_b = b_vec[celldofs(cc_b)]
+        fill!(Ae, 0.0)
+
+        for q in 1:getnquadpoints(cv_u)
+            x       = spatial_coordinate(cv_u, q, coords)
+            ∂z_b_q  = function_gradient(cv_b, q, local_b)[3]
+            αbz_q   = α * (N² + ∂z_b_q)
+            ν_q     = ν_eddy(eddy_param, αbz_q)
+            f_q     = f_cor(x)
+            dΩ      = getdetJdV(cv_u, q)
+
+            for i in 1:n_u
+                ε_i   = symmetric(shape_gradient(cv_u, q, i))
+                φᵤ_i  = shape_value(cv_u, q, i)
+                div_i = tr(shape_gradient(cv_u, q, i))
+                for j in 1:n_u
+                    φⱼ = shape_value(cv_u, q, j)
+                    visc = 2α²ε² * ν_q * dcontract(ε_i, symmetric(shape_gradient(cv_u, q, j)))
+                    cori = f_q * (-φⱼ[2] * φᵤ_i[1] + φⱼ[1] * φᵤ_i[2])
+                    Ae[i, j] += (visc + cori) * dΩ
+                end
+                for j in 1:n_p
+                    Ae[i, n_u + j] -= div_i * shape_value(cv_p, q, j) * dΩ
+                end
+            end
+            for i in 1:n_p
+                φ_p_i = shape_value(cv_p, q, i)
+                for j in 1:n_u
+                    Ae[n_u + i, j] += φ_p_i * tr(shape_gradient(cv_u, q, j)) * dΩ
+                end
+            end
+        end
+        assemble!(asm, celldofs(cc_up), Ae)
+    end
+    return A
+end
+
+"""
     f = build_f_wind(fe_data, params, forcings)
 
 Assemble the wind-stress surface RHS:
-
-    f_wind[u_i] = ∫_Γ α (τˣ (x̂·φᵤ_i) + τʸ (ŷ·φᵤ_i)) dΓ
-
-Returns a vector of length N_up. Only u-rows on the surface facets are nonzero.
+`f[u_i] = ∫_Γ α (τˣ (x̂·φᵤ_i) + τʸ (ŷ·φᵤ_i)) dΓ`.
+Returns a vector of length N_up; only u-rows on the surface facets are nonzero.
 """
 function build_f_wind(fe_data::FEData, params::Parameters, forcings::Forcings)
     dh_up     = fe_data.dh_up

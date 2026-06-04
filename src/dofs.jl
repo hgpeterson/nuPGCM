@@ -110,7 +110,7 @@ function FEData(mesh::Mesh;
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
     end
     close!(ch_up)
-    update!(ch_up, 0.0)
+    Ferrite.update!(ch_up, 0.0)
 
     ch_b = ConstraintHandler(dh_b)
     for (i, tag) in enumerate(b_diri_tags)
@@ -119,7 +119,7 @@ function FEData(mesh::Mesh;
     end
     is_periodic && add!(ch_b, PeriodicDirichlet(:b, pfacets))
     close!(ch_b)
-    update!(ch_b, 0.0)
+    Ferrite.update!(ch_b, 0.0)
 
     end
 
