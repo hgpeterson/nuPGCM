@@ -104,6 +104,8 @@ SurfaceFluxBC,
 Forcings,
 # meshes.jl
 Mesh,
+get_p_t,
+compute_h_cells,
 # dofs.jl
 FEData,
 # inversion.jl
@@ -123,7 +125,6 @@ run!,
 # IO.jl
 save_state,
 save_vtk,
-set_state_from_file!,
 # plotting.jl
 eval_at_points,
 eval_at_point,
