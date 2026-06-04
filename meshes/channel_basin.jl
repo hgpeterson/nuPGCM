@@ -117,7 +117,8 @@ function mesh_channel_basin(h, α; refinement_factor=nothing)
     gmsh.model.addPhysicalGroup(1, [1, 6, 7, 8, 9, 10], 3, "coastline")
     gmsh.model.addPhysicalGroup(2, vcat(1, 3, 6:12), 1, "bottom")
     gmsh.model.addPhysicalGroup(2, [2], 2, "surface")
-    gmsh.model.addPhysicalGroup(2, [4, 5], 4, "interior")
+    gmsh.model.addPhysicalGroup(2, [4], 4, "channel_west")
+    gmsh.model.addPhysicalGroup(2, [5], 5, "channel_east")
     gmsh.model.addPhysicalGroup(3, [1], 4, "interior")
 
     if refinement_factor === nothing

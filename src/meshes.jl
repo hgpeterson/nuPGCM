@@ -1,9 +1,6 @@
-struct Mesh{M, O, DO, G, DG}
-    model::M  # unstructured discrete model
-    Ω::O      # triangulation
-    dΩ::DO    # measure
-    Γ::G      # surface boundary triangulation
-    dΓ::DG    # surface boundary measure
+struct Mesh{G}
+    grid::G
+    surface_tag::String
 end
 
 function Base.summary(mesh::Mesh)
@@ -12,65 +9,50 @@ function Base.summary(mesh::Mesh)
 end
 function Base.show(io::IO, mesh::Mesh)
     println(io, summary(mesh), ":")
-    println(io, "├── model: ", mesh.model)
-    println(io, "├── Ω: ", mesh.Ω)
-    println(io, "├── dΩ: ", mesh.dΩ)
-    println(io, "├── Γ: ", mesh.Γ)
-      print(io, "└── dΓ: ", mesh.dΓ)
+    print(io, "├── grid: ")
+    show(io, MIME"text/plain"(), mesh.grid)
+    println(io)
+      print(io, "└── surface_tag: \"", mesh.surface_tag, "\"")
 end
 
 """
-    m = Mesh(ifile; degree=4, surface_tags=["surface"])
+    mesh = Mesh(ifile; surface_tag="surface")
 
-Build a struct holding mesh-related data.
-
-`degree` is the degree of integration for the measures `dΩ` and `dΓ`.
+Load a Gmsh `.msh` file and return a `Mesh`.
 """
-function Mesh(ifile; degree=4, surface_tags=["surface"])
-    model = GmshDiscreteModel(ifile)
-    @info "Building `Gridap.Triangulation`s and `Gridap.Measure`s..."
-    @time begin
-    Ω = Triangulation(model)
-    dΩ = Measure(Ω, degree)
-    Γ = BoundaryTriangulation(model, tags=surface_tags)
-    dΓ = Measure(Γ, degree)
-    end
-    return Mesh(model, Ω, dΩ, Γ, dΓ)
+function Mesh(ifile; surface_tag="surface")
+    @info "Loading mesh from $ifile..."
+    @time grid = FerriteGmsh.togrid(ifile)
+    return Mesh(grid, surface_tag)
 end
 
-### some utility functions for working with meshes
+### utility functions
 
 """
-    p, t = get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
-    p, t = get_p_t(fname::AbstractString)
+    p, t = get_p_t(grid)
+    p, t = get_p_t(mesh)
+    p, t = get_p_t(fname)
 
-Return the node coordinates `p` and the connectivities `t` of a mesh.
+Return node coordinate matrix `p` (nnodes × sdim) and connectivity matrix `t`
+(ncells × nodes_per_cell).
 """
-function get_p_t(model::Gridap.Geometry.UnstructuredDiscreteModel)
-    # unpack node coords
-    nc = model.grid.node_coordinates
-    np = length(nc)
-    d = length(nc[1])
-    p = [nc[i][j] for i ∈ 1:np, j ∈ 1:d]
-
-    # unpack connectivities
-    cni = model.grid.cell_node_ids
-    nt = length(cni)
-    nn = length(cni[1])
-    t = [cni[i][j] for i ∈ 1:nt, j ∈ 1:nn]
-
+function get_p_t(grid::Ferrite.AbstractGrid)
+    nnodes = getnnodes(grid)
+    sdim = length(grid.nodes[1].x)
+    p = [grid.nodes[i].x[j] for i in 1:nnodes, j in 1:sdim]
+    ncells = getncells(grid)
+    nn = length(grid.cells[1].nodes)
+    t = [grid.cells[k].nodes[j] for k in 1:ncells, j in 1:nn]
     return p, t
 end
-function get_p_t(fname::AbstractString)
-    model = GmshDiscreteModel(fname)
-    return get_p_t(model)
-end
+get_p_t(mesh::Mesh) = get_p_t(mesh.grid)
+get_p_t(fname::AbstractString) = get_p_t(FerriteGmsh.togrid(fname))
 
 """
     p_to_t = get_p_to_t(t, np)
 
-Returns a vector of vectors of vectors `p_to_t` such that p_to_t[i] lists
-all the [k, j] pairs in `t` that point to the ith node of the mesh of size `np`.
+Returns a vector-of-vectors `p_to_t` where `p_to_t[i]` lists all `[k, j]` index
+pairs in `t` that point to the `i`-th node.
 """
 function get_p_to_t(t, np)
     p_to_t = [[] for i ∈ 1:np]
@@ -85,11 +67,9 @@ end
 """
     edges, boundary_indices, emap = all_edges(t)
 
-Find all unique edges in the triangulation `t` (ne x 2 array)
-Second output is indices to the boundary edges.
-Third output emap (nt x 3 array) is a mapping from local triangle edges
-to the global edge list, i.e., emap[it,k] is the global edge number
-for local edge k (1,2,3) in triangle it.
+Find all unique edges in the triangulation `t` (ne × 2 array).
+`boundary_indices` indexes boundary edges; `emap` (nt × 3) maps local triangle
+edges to global edge indices.
 """
 function all_edges(t)
     etag = vcat(t[:,[1,2]], t[:,[2,3]], t[:,[3,1]])
@@ -118,17 +98,14 @@ function boundary_nodes(t)
 end
 
 """
-    h_cells = compute_h_cells(mesh::Mesh)
+    h_cells = compute_h_cells(mesh)
 
-Compute characteristic cell size for each cell in the mesh.
-
-Here we just use the maximum edge length of the cell.
+Return the maximum edge length per cell.
 """
 function compute_h_cells(mesh::Mesh)
-    coords = get_cell_coordinates(mesh.Ω)  # lazy cell array of vertex tuples
-    map(get_array(coords)) do verts
-        maximum(norm(verts[i] - verts[j])
-                for i in 1:length(verts)
-                for j in i+1:length(verts))
-    end
+    grid = mesh.grid
+    return [maximum(norm(grid.nodes[cell.nodes[i]].x - grid.nodes[cell.nodes[j]].x)
+                    for i in 1:length(cell.nodes)
+                    for j in i+1:length(cell.nodes))
+            for cell in grid.cells]
 end

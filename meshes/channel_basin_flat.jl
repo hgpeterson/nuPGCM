@@ -129,7 +129,8 @@ function mesh_channel_basin_flat(h, α)
     gmsh.model.addPhysicalGroup(2, [s_bot, s_basin_east, 
                                     s_basin_west, s_south, s_north], 1, "bottom")
     gmsh.model.addPhysicalGroup(2, [s_sfc], 2, "surface")
-    gmsh.model.addPhysicalGroup(2, [s_channel_east, s_channel_west], 4, "interior")
+    gmsh.model.addPhysicalGroup(2, [s_channel_west], 4, "channel_west")
+    gmsh.model.addPhysicalGroup(2, [s_channel_east], 5, "channel_east")
     gmsh.model.addPhysicalGroup(3, [1], 4, "interior")
 
     # set resolution

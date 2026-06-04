@@ -1,72 +1,86 @@
-struct Spaces{X1, X2, B1, B2, BD}
-    X_trial::X1  # trial space for [u, v, w, p]
-    X_test::X2   # test space for [u, v, w, p]
-    B_trial::B1  # trial space for buoyancy
-    B_test::B2   # test space for buoyancy
-    b_diri::BD   # FEFunction that is b₀ on the dirichlet boundary and 0 elsewhere
-end
+# Default quadrature order for volume and facet integrals on tetrahedra.
+# Order 4 integrates degree-4 polynomials exactly; sufficient for P2 matrix
+const QR_ORDER = 4
 
-function Base.summary(spaces::Spaces)
-    t = typeof(spaces)
-    return "$(parentmodule(t)).$(nameof(t))"
+# Linear geometry interpolation (all meshes are linear tet)
+const IP_GEO = Lagrange{RefTetrahedron, 1}()
+
+"""
+    cv_u, cv_p, cv_b = make_cell_values(fe_data; qr_order=QR_ORDER)
+    cv_u, cv_p, cv_b = make_cell_values(u_order, b_order; qr_order=QR_ORDER)
+
+Return fresh `CellValues` objects for velocity, pressure, and buoyancy assembly.
+Create new instances per assembly call; they are mutable (reinit!-ed per cell).
+"""
+function make_cell_values(u_order::Int, b_order::Int; qr_order=QR_ORDER)
+    qr   = QuadratureRule{RefTetrahedron}(qr_order)
+    ip_u = Lagrange{RefTetrahedron, u_order}()^3
+    ip_p = Lagrange{RefTetrahedron, u_order - 1}()
+    ip_b = Lagrange{RefTetrahedron, b_order}()
+    return CellValues(qr, ip_u, IP_GEO),
+           CellValues(qr, ip_p, IP_GEO),
+           CellValues(qr, ip_b, IP_GEO)
 end
-function Base.show(io::IO, spaces::Spaces)
-    println(io, summary(spaces), ":")
-    println(io, "├── X_trial: ", summary(spaces.X_trial))
-    println(io, "├── X_test: ", summary(spaces.X_test))
-    println(io, "├── B_trial: ", summary(spaces.B_trial))
-    println(io, "├── B_test: ", summary(spaces.B_test))
-      print(io, "└── b_diri: ", summary(spaces.b_diri))
+make_cell_values(fe_data::FEData; kwargs...) =
+    make_cell_values(fe_data.u_order, fe_data.b_order; kwargs...)
+
+"""
+    fv_u, fv_b = make_facet_values(fe_data; qr_order=QR_ORDER)
+    fv_u, fv_b = make_facet_values(u_order, b_order; qr_order=QR_ORDER)
+
+Return fresh `FacetValues` for velocity (wind-stress BC) and buoyancy (surface flux BC).
+"""
+function make_facet_values(u_order::Int, b_order::Int; qr_order=QR_ORDER)
+    fqr  = FacetQuadratureRule{RefTetrahedron}(qr_order)
+    ip_u = Lagrange{RefTetrahedron, u_order}()^3
+    ip_b = Lagrange{RefTetrahedron, b_order}()
+    return FacetValues(fqr, ip_u, IP_GEO),
+           FacetValues(fqr, ip_b, IP_GEO)
+end
+make_facet_values(fe_data::FEData; kwargs...) =
+    make_facet_values(fe_data.u_order, fe_data.b_order; kwargs...)
+
+"""
+    K = allocate_inversion_matrix(fe_data)
+
+Allocate a sparse `(nu+np) × (nu+np)` matrix with the correct sparsity pattern
+for the inversion (Stokes + Coriolis) system. The block layout is:
+
+    [ A_uu  B_up' ]   rows 1:nu    (velocity)
+    [ B_up  0     ]   rows nu+1:nu+np  (pressure)
+
+p DOFs are offset by `nu` so they occupy rows/cols `nu+1 : nu+np`.
+"""
+function allocate_inversion_matrix(fe_data::FEData)
+    nu, np, _ = get_n_dofs(fe_data)
+    N         = nu + np
+    grid      = fe_data.mesh.grid
+    n_cells   = getncells(grid)
+    n_u       = ndofs_per_cell(fe_data.dh_u)
+    n_p       = ndofs_per_cell(fe_data.dh_p)
+    n_loc     = n_u + n_p
+
+    rows = Vector{Int}(undef, n_cells * n_loc^2)
+    cols = Vector{Int}(undef, n_cells * n_loc^2)
+    idx  = 1
+    for k in 1:n_cells
+        dofs = vcat(celldofs(fe_data.dh_u, k),
+                    celldofs(fe_data.dh_p, k) .+ nu)
+        for i in dofs, j in dofs
+            rows[idx] = i
+            cols[idx] = j
+            idx += 1
+        end
+    end
+
+    K = sparse(rows, cols, ones(length(rows)), N, N)
+    fill!(K.nzval, 0.0)
+    return K
 end
 
 """
-    spaces = Spaces(mesh::Mesh, u_diri, v_diri, w_diri, b_diri; u_order=2, b_order=2)
+    M = allocate_evolution_matrix(fe_data)
 
-Setup the trial and test spaces for the velocity, pressure, and buoyancy fields.
-
-`model` is assumed to be an `UnstructuredDiscreteModel` from Gridap. The `X`s are 
-multi-field spaces for (u, v, w, p) while the `B`s are single-field spaces for 
-buoyancy.
+Allocate a sparse `nb × nb` matrix for the buoyancy evolution system.
 """
-function Spaces(mesh::Mesh; u_diri_tags=Int[], u_diri_masks=Int[], u_diri_vals=nothing, 
-                            b_diri_tags=Int[], b_diri_vals=nothing, 
-                            u_order=2, b_order=2)
-    model = mesh.model
-
-    # reference FE 
-    reffe_u = ReferenceFE(lagrangian, VectorValue{3, Float64}, u_order;   space=:P)
-    reffe_p = ReferenceFE(lagrangian, Float64,                 u_order-1; space=:P)
-    reffe_b = ReferenceFE(lagrangian, Float64,                 b_order;   space=:P)
-
-    # test FESpaces
-    @info "Building `Gridap.TestFESpace`s..."
-    @time begin
-    U_test = TestFESpace(model, reffe_u, conformity=:H1, dirichlet_tags=u_diri_tags, dirichlet_masks=u_diri_masks)
-    P_test = TestFESpace(model, reffe_p, conformity=:H1, constraint=:zeromean)
-    X_test = MultiFieldFESpace([U_test, P_test])
-    B_test = TestFESpace(model, reffe_b, conformity=:H1, dirichlet_tags=b_diri_tags)
-    end
-
-    # trial FESpaces with Dirichlet values
-    @info "Building `Gridap.TrialFESpace`s..."
-    @time begin
-    if u_diri_vals !== nothing
-        U_trial = TrialFESpace(U_test, [VectorValue(v) for v in u_diri_vals])
-    else
-        U_trial = TrialFESpace(U_test)
-    end
-    P_trial = TrialFESpace(P_test)
-    X_trial = MultiFieldFESpace([U_trial, P_trial])
-    if b_diri_vals !== nothing
-        B_trial = TrialFESpace(B_test, b_diri_vals)
-    else
-        B_trial = TrialFESpace(B_test)
-    end
-    end
-
-    # a FEFunction that is b₀ on the dirichlet boundary and 0 elsewhere
-    # (needed for assembling matrices)
-    b_diri = interpolate(0, B_trial)
-
-    return Spaces(X_trial, X_test, B_trial, B_test, b_diri)
-end
+allocate_evolution_matrix(fe_data::FEData) = allocate_matrix(fe_data.dh_b)

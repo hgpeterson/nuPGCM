@@ -1,8 +1,7 @@
 module nuPGCM
 
-using Gridap
-using GridapGmsh
-using Gmsh: gmsh
+using Ferrite
+using FerriteGmsh
 using CuthillMcKee
 using JLD2
 using LinearAlgebra
@@ -12,15 +11,10 @@ using KrylovPreconditioners
 using PyPlot
 using Printf
 
-# unit vectors
-x⃗ = VectorValue(1.0, 0.0, 0.0)
-y⃗ = VectorValue(0.0, 1.0, 0.0)
-z⃗ = VectorValue(0.0, 0.0, 1.0)
-
-# gradients 
-∂x(u) = x⃗⋅∇(u)
-∂y(u) = y⃗⋅∇(u)
-∂z(u) = z⃗⋅∇(u)
+# unit vectors (Ferrite uses Tensors.Vec, re-exported by Ferrite)
+const x⃗ = Vec{3, Float64}((1.0, 0.0, 0.0))
+const y⃗ = Vec{3, Float64}((0.0, 1.0, 0.0))
+const z⃗ = Vec{3, Float64}((0.0, 0.0, 1.0))
 
 # directory where the output files will be saved
 global out_dir = "."
@@ -87,13 +81,10 @@ include("model.jl")
 include("IO.jl")
 include("plotting.jl")
 
-export 
+export
 x⃗,
 y⃗,
 z⃗,
-∂x,
-∂y,
-∂z,
 out_dir,
 set_out_dir!,
 ENABLE_TIMING,
@@ -113,8 +104,6 @@ SurfaceFluxBC,
 Forcings,
 # meshes.jl
 Mesh,
-# spaces.jl
-Spaces,
 # dofs.jl
 FEData,
 # inversion.jl

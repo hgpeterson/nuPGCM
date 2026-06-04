@@ -30,8 +30,9 @@ gmsh.model.addPhysicalGroup(1, [1, 3, 4, 5], 1, "bot")
 gmsh.model.addPhysicalGroup(1, [2, 6], 2, "sfc")
 gmsh.model.addPhysicalGroup(2, [2], 1, "bot")
 gmsh.model.addPhysicalGroup(2, [3], 2, "sfc")
-gmsh.model.addPhysicalGroup(2, [1, 4], 3, "int")
-gmsh.model.addPhysicalGroup(3, [1], 3, "int")
+gmsh.model.addPhysicalGroup(2, [1], 3, "channel_west")
+gmsh.model.addPhysicalGroup(2, [4], 4, "channel_east")
+gmsh.model.addPhysicalGroup(3, [1], 3, "interior")
 
 # set resolution
 gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h)
