@@ -1,3 +1,5 @@
+import warnings
+
 import matplotlib
 import matplotlib.pyplot as plt
 import pyvista as pv
@@ -161,9 +163,150 @@ def calculate_overturning_streamfunction_time_mean(dir, n, nx=2**8, ny=2**8, nz=
     return psi_bar, v_int, b_bar, grid, times
 
 
-def calculate_overturning_streamfunction_isopycnal(
-    vtu_file=None, nx=2**8, ny=2**8, nz=2**8, nb=None, printtime=False, *, dataset=None, grid=None, samples=None
+def _twa_snapshot_fields(samples, grid, b_coords):
+    """
+    Compute σ, σv, and ζ on the buoyancy-coordinate grid for one snapshot.
+
+    σ = 1/(α b_z) = ζ_b̃/α is the isopycnal thickness (the aspect ratio α
+    enters through the nondimensionalization). It is computed as ζ_b̃/α from
+    the isopycnal depth ζ(x̃, ỹ, b̃), with ζ clamped to the bottom/surface
+    where an isopycnal outcrops so that σ = 0 in "vacuum" regions
+    (Young 2012). σ and σv are set to 0 over land. The returned ζ is NaN
+    over land and in vacuum, so that averages of ζ are taken only over
+    columns where the isopycnal actually exists (otherwise clamped bottom
+    values would bias ζ̄ shallow over varying bathymetry).
+
+    Returns
+    -------
+    sigma, sigma_v : ndarray, shape (nx, ny, nb)
+    zeta : ndarray, shape (nx, ny, nb)
+    """
+    alpha = -grid.z.min()
+    nb = len(b_coords)
+    b_range = (b_coords[0], b_coords[-1])
+
+    mask = samples["vtkValidPointMask"].reshape(grid.nx, grid.ny, grid.nz).astype(bool)
+    v = samples["u"][:, 1].reshape(grid.nx, grid.ny, grid.nz)
+    b = samples["b"].reshape(grid.nx, grid.ny, grid.nz)
+
+    # pyvista fills fields with 0 outside the mesh; mask to NaN
+    b_masked = np.where(mask, b, np.nan)
+
+    # isopycnal depth ζ(x, y, b) and v in buoyancy coordinates
+    zeta, _ = utils.to_buoyancy_coords(np.where(mask, grid.zz, np.nan), b_masked, nb, b_range=b_range, clamp=True)
+    v_b, _ = utils.to_buoyancy_coords(np.where(mask, v, np.nan), b_masked, nb, b_range=b_range)
+
+    # thickness σ = ζ_b̃/α; vacuum (isopycnal outside the column's buoyancy
+    # range) and land carry zero thickness
+    sigma = np.gradient(zeta, b_coords, axis=2) / alpha
+    vacuum = np.isnan(v_b)
+    sigma = np.where(vacuum, 0.0, sigma)
+    sigma_v = sigma * np.where(vacuum, 0.0, v_b)
+
+    # ζ is only meaningful where the isopycnal exists
+    zeta = np.where(vacuum, np.nan, zeta)
+
+    return sigma, sigma_v, zeta
+
+
+def _twa_streamfunction_from_means(sigma, sigma_v, zeta, grid, b_coords):
+    """
+    Compute the TWA overturning streamfunction from (possibly time-averaged)
+    σ, σv, and ζ on the (x, y, b) grid.
+
+    The TWA meridional velocity is v̂ = ⟨σv⟩/⟨σ⟩ with ⟨·⟩ the average in
+    buoyancy coordinates (here zonal; any time averaging is done by the
+    caller before passing the fields in). The streamfunction follows from
+    ψ(ỹ, b̃) = -∫∫_{b̃_min}^{b̃} ⟨σv⟩ db̃' dx, equivalent to the Cartesian
+    ψ(y, z) = -1/α ∫∫_{-H}^z v dz' dx since dz = α σ db̃. To return to
+    Cartesian coordinates, the mean isopycnal depth ζ̄(ỹ, b̃) is inverted to
+    obtain b♯(y, z) such that b̃ = b♯(y, ζ̄(ỹ, b̃)), and ψ is evaluated at
+    each z via ψ_TWA(y, z) = ψ(y, b♯(y, z)).
+
+    Returns
+    -------
+    psi_b : ndarray, shape (ny, nb)
+        Overturning streamfunction in buoyancy coordinates.
+    v_hat : ndarray, shape (ny, nb)
+        TWA meridional velocity.
+    zeta_bar : ndarray, shape (ny, nb)
+        Zonal-mean isopycnal depth.
+    psi : ndarray, shape (ny, nz)
+        psi_b remapped to Cartesian coordinates via b♯.
+    b_sharp : ndarray, shape (ny, nz)
+        Mean buoyancy field b♯(y, z) from inverting ζ̄.
+    """
+    # zonal integrals in buoyancy coordinates (σ = 0 over land and in vacuum)
+    sigma_int = trapezoid(sigma, x=grid.x, axis=0)  # (ny, nb)
+    sigma_v_int = trapezoid(sigma_v, x=grid.x, axis=0)
+
+    # TWA meridional velocity v̂ = ⟨σv⟩/⟨σ⟩
+    v_hat = np.divide(sigma_v_int, sigma_int, where=sigma_int != 0, out=np.full_like(sigma_int, np.nan))
+
+    # ψ(y, b) = -∫_x ∫_{b_min}^{b} σv db' dx
+    psi_b = -cumulative_trapezoid(sigma_v_int, b_coords, axis=1, initial=0)
+    psi_b[sigma_int == 0] = np.nan
+
+    # zonal-mean isopycnal depth ζ̄(y, b) (land columns are NaN)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)  # all-NaN rows over land
+        zeta_bar = np.nanmean(zeta, axis=0)  # (ny, nb)
+
+    # invert ζ̄ to get b♯(y, z) and remap ψ to Cartesian coordinates
+    psi = np.full((grid.ny, grid.nz), np.nan)
+    b_sharp = np.full((grid.ny, grid.nz), np.nan)
+    for iy in range(grid.ny):
+        zeta_col = zeta_bar[iy, :]
+        valid = ~np.isnan(zeta_col)
+        if valid.sum() >= 2:
+            sort_idx = np.argsort(zeta_col[valid])
+            b_sharp[iy, :] = np.interp(
+                grid.z, zeta_col[valid][sort_idx], b_coords[valid][sort_idx], left=np.nan, right=np.nan
+            )
+        valid_p = valid & ~np.isnan(psi_b[iy, :])
+        if valid_p.sum() >= 2:
+            sort_idx = np.argsort(zeta_col[valid_p])
+            psi[iy, :] = np.interp(
+                grid.z, zeta_col[valid_p][sort_idx], psi_b[iy, valid_p][sort_idx], left=np.nan, right=np.nan
+            )
+
+    return psi_b, v_hat, zeta_bar, psi, b_sharp
+
+
+def calculate_overturning_streamfunction_TWA(
+    vtu_file=None,
+    nx=2**8,
+    ny=2**8,
+    nz=2**8,
+    nb=None,
+    b_range=None,
+    printtime=False,
+    *,
+    dataset=None,
+    grid=None,
+    samples=None,
 ):
+    """
+    Thickness-weighted-average (Young 2012) overturning streamfunction for a
+    single snapshot.
+
+    Returns
+    -------
+    psi_b : ndarray, shape (ny, nb)
+        Streamfunction in buoyancy coordinates.
+    b_coords : ndarray, shape (nb,)
+        Buoyancy coordinate values.
+    psi : ndarray, shape (ny, nz)
+        Streamfunction remapped to Cartesian coordinates via b♯.
+    b_sharp : ndarray, shape (ny, nz)
+        Mean buoyancy b♯(y, z) from inverting the mean isopycnal depth.
+    v_hat : ndarray, shape (ny, nb)
+        TWA meridional velocity.
+    zeta_bar : ndarray, shape (ny, nb)
+        Zonal-mean isopycnal depth.
+    grid : utils.Grid
+    t : float
+    """
     if printtime:
         t0 = time()
 
@@ -177,57 +320,103 @@ def calculate_overturning_streamfunction_isopycnal(
     if samples is None:
         samples = utils.sample_to_grid(dataset, grid)
 
-    nx_g, ny_g, nz_g = len(grid.x), len(grid.y), len(grid.z)
     if nb is None:
-        nb = nz_g
-    alpha = -grid.z.min()
+        nb = grid.nz
+    if b_range is None:
+        mask = samples["vtkValidPointMask"].astype(bool)
+        b_range = (samples["b"][mask].min(), samples["b"][mask].max())
+    b_coords = np.linspace(b_range[0], b_range[1], nb)
 
-    mask = samples["vtkValidPointMask"].reshape(nx_g, ny_g, nz_g).astype(bool)
-    v = samples["u"][:, 1].reshape(nx_g, ny_g, nz_g)
-    b = samples["b"].reshape(nx_g, ny_g, nz_g)
-
-    # pyvista fills b=0 outside the mesh; mask to NaN
-    b_masked = np.where(mask, b, np.nan)
-
-    # zonal mean buoyancy for back-transform to z-space
-    width = utils.zonal_width(samples, grid)
-    b_bar = utils.zonal_mean(b, grid, width)
-
-    # V(x, y, z) = ∫_{-H}^{z} v dz'  (land → 0 before integrating, then re-mask)
-    V = cumulative_trapezoid(np.where(mask, v, 0.0), grid.z, axis=2, initial=0)
-    V_masked = np.where(mask, V, np.nan)
-
-    # remap V to buoyancy coordinates: V_b(x, y, b) = V(x, y, z(x,y,b))
-    V_b, b_coords = utils.to_buoyancy_coords(V_masked, b_masked, nb)
-
-    # psi(y, b) = -1/α ∫_x V_b dx
-    psi_b = -1 / alpha * trapezoid(np.where(np.isnan(V_b), 0.0, V_b), x=grid.x, axis=0)
-    mask_b = np.all(np.isnan(V_b), axis=0)
-    psi_b[mask_b] = np.nan
-
-    # zonal mean isopycnal depth z_bar_b(y, b): transform the z-coordinate
-    # into b-space, then average over x
-    z_b, _ = utils.to_buoyancy_coords(
-        np.where(mask, grid.zz, np.nan), b_masked, nb, b_range=(b_coords[0], b_coords[-1])
-    )
-    z_bar_b = np.nanmean(z_b, axis=0)  # (ny, nb)
-
-    # remap psi_b to z-space: interpolate psi_b(y, b) onto the regular z-grid
-    # using z_bar_b(y, b) as the z-coordinate of each b-level
-    psi = np.full((ny_g, nz_g), np.nan)
-    for iy in range(ny_g):
-        z_col = z_bar_b[iy, :]
-        p_col = psi_b[iy, :]
-        valid = ~np.isnan(z_col) & ~np.isnan(p_col)
-        if valid.sum() < 2:
-            continue
-        sort_idx = np.argsort(z_col[valid])
-        psi[iy, :] = np.interp(grid.z, z_col[valid][sort_idx], p_col[valid][sort_idx], left=np.nan, right=np.nan)
+    sigma, sigma_v, zeta = _twa_snapshot_fields(samples, grid, b_coords)
+    psi_b, v_hat, zeta_bar, psi, b_sharp = _twa_streamfunction_from_means(sigma, sigma_v, zeta, grid, b_coords)
 
     if printtime:
-        print(f"isopycnal psi computed in {time() - t0:.3e} s")
+        print(f"TWA psi computed in {time() - t0:.3e} s")
 
-    return psi_b, b_coords, psi, b_bar, grid, t
+    return psi_b, b_coords, psi, b_sharp, v_hat, zeta_bar, grid, t
+
+
+def calculate_overturning_streamfunction_TWA_time_mean(
+    dir, n, nx=2**8, ny=2**8, nz=2**8, nb=None, b_range=None, printtime=False
+):
+    """
+    Thickness-weighted-average (Young 2012) overturning streamfunction from
+    the time mean over the last `n` VTU output files in a simulation
+    directory. σ, σv, and ζ are averaged in buoyancy coordinates
+    (x̃, ỹ, b̃, t̃) before forming v̂ = ⟨σv⟩/⟨σ⟩ and ψ.
+
+    Parameters
+    ----------
+    dir : Path
+        Simulation directory containing a "data" subdirectory of
+        "state_{i:016d}.vtu" files.
+    n : int
+        Number of output files (from the end) to average over.
+    nx, ny, nz : int, optional
+        Grid resolution for sampling.
+    nb : int, optional
+        Number of buoyancy levels (default: nz).
+    b_range : tuple (b_min, b_max), optional
+        Buoyancy coordinate range (default: range of b in the first file).
+    printtime : bool, optional
+        Print timing information.
+
+    Returns
+    -------
+    Same as calculate_overturning_streamfunction_TWA, but with `times`
+    (ndarray, shape (n,)) in place of `t`.
+    """
+    if printtime:
+        t0 = time()
+
+    vtu_files = sorted((Path(dir) / "data").glob("state_*.vtu"))[-n:]
+
+    grid = None
+    b_coords = None
+    sigma_sum = sigma_v_sum = zeta_sum = None
+    times = np.empty(len(vtu_files))
+    for i, vtu_file in enumerate(vtu_files):
+        dataset = pv.read(vtu_file)
+        times[i] = dataset["t"][0]
+
+        if grid is None:
+            grid = utils.Grid(dataset, nx, ny, nz)
+        samples = utils.sample_to_grid(dataset, grid)
+
+        if b_coords is None:
+            if nb is None:
+                nb = grid.nz
+            if b_range is None:
+                mask = samples["vtkValidPointMask"].astype(bool)
+                b_range = (samples["b"][mask].min(), samples["b"][mask].max())
+            b_coords = np.linspace(b_range[0], b_range[1], nb)
+
+        sigma, sigma_v, zeta = _twa_snapshot_fields(samples, grid, b_coords)
+
+        # ζ is NaN where the isopycnal doesn't exist (vacuum/land), so its
+        # time mean is taken only over the snapshots where it does
+        if sigma_sum is None:
+            sigma_sum, sigma_v_sum = sigma, sigma_v
+            zeta_sum = np.nan_to_num(zeta)
+            zeta_count = np.isfinite(zeta).astype(np.int64)
+        else:
+            sigma_sum += sigma
+            sigma_v_sum += sigma_v
+            zeta_sum += np.nan_to_num(zeta)
+            zeta_count += np.isfinite(zeta)
+
+    sigma_mean = sigma_sum / len(vtu_files)
+    sigma_v_mean = sigma_v_sum / len(vtu_files)
+    zeta_mean = np.divide(zeta_sum, zeta_count, where=zeta_count > 0, out=np.full_like(zeta_sum, np.nan))
+
+    psi_b, v_hat, zeta_bar, psi, b_sharp = _twa_streamfunction_from_means(
+        sigma_mean, sigma_v_mean, zeta_mean, grid, b_coords
+    )
+
+    if printtime:
+        print(f"time-mean TWA psi computed from {len(vtu_files)} files in {time() - t0:.3e} s")
+
+    return psi_b, b_coords, psi, b_sharp, v_hat, zeta_bar, grid, times
 
 
 def plot_barotropic_streamfunction(
@@ -464,16 +653,16 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**8):
 
     # image files
     psi_file = dir / f"images/psi{i:016d}.png"
-    psi_iso_file = dir / f"images/psi_iso{i:016d}.png"
-    psi_iso_remap_file = dir / f"images/psi_iso_remap{i:016d}.png"
+    psi_twa_b_file = dir / f"images/psi_twa_b{i:016d}.png"
+    psi_twa_file = dir / f"images/psi_twa{i:016d}.png"
     baro_file = dir / f"images/psi_baro{i:016d}.png"
     baro_mask_file = dir / f"images/psi_baro_mask{i:016d}.png"
     psi_needed = not psi_file.exists() or overwrite
-    psi_iso_needed = not psi_iso_file.exists() or overwrite
-    psi_iso_remap_needed = not psi_iso_remap_file.exists() or overwrite
+    psi_twa_b_needed = not psi_twa_b_file.exists() or overwrite
+    psi_twa_needed = not psi_twa_file.exists() or overwrite
     baro_needed = not baro_file.exists() or overwrite
     baro_mask_needed = not baro_mask_file.exists() or overwrite
-    if not (psi_needed or psi_iso_needed or baro_needed or baro_mask_needed):
+    if not (psi_needed or psi_twa_b_needed or psi_twa_needed or baro_needed or baro_mask_needed):
         return
 
     # read and sample once, shared by all streamfunction calculations
@@ -501,30 +690,30 @@ def process_vtu(vtu_file, dir, geom, overwrite, n=2**8):
             geometry=geom,
         )
 
-    # isopycnal overturning streamfunction
-    if psi_iso_needed or psi_iso_remap_needed:
-        psi_b, b_coords, psi_iso, b_bar, grid, t = calculate_overturning_streamfunction_isopycnal(
+    # thickness-weighted-average overturning streamfunction
+    if psi_twa_b_needed or psi_twa_needed:
+        psi_b, b_coords, psi_twa, b_sharp, v_hat, zeta_bar, grid, t = calculate_overturning_streamfunction_TWA(
             dataset=dataset,
             grid=grid,
             samples=samples,
             nb=20 * n,
             printtime=True,
         )
-        if psi_iso_needed:
+        if psi_twa_b_needed:
             plot_overturning_streamfunction_isopycnal(
                 psi_b,
                 b_coords,
                 grid,
                 t=t,
-                filename=psi_iso_file,
+                filename=psi_twa_b_file,
             )
-        if psi_iso_remap_needed:
+        if psi_twa_needed:
             plot_overturning_streamfunction(
-                psi_iso,
-                b_bar,
+                psi_twa,
+                b_sharp,
                 grid,
                 t=t,
-                filename=psi_iso_remap_file,
+                filename=psi_twa_file,
                 bmin=-15,
                 bmax=-10,
                 geometry=geom,
@@ -567,14 +756,14 @@ if __name__ == "__main__":
         # ["066c", "box"],
         # ["066d", "box"],
         # ["067", "tub"],
-        ["068", "tub"],
-        ["068a", "tub"],
-        ["069", "box"],
-        ["069a", "box"],
+        # ["068", "tub"],
+        # ["068a", "tub"],
+        # ["069", "box"],
+        # ["069a", "box"],
         ["070", "tub"],
-        ["070a", "tub"],
+        # ["070a", "tub"],
         ["071", "box"],
-        ["071a", "box"],
+        # ["071a", "box"],
     ]
     sims_dir = Path("/resnick/scratch/hppeters")
     for sim, geom in sims:
@@ -583,7 +772,7 @@ if __name__ == "__main__":
 
         vtu_files = sorted((dir / "data").glob("state_*.vtu"))
         for vtu_file in vtu_files:
-            # for vtu_file in [vtu_files[-1]]:
+        # for vtu_file in [vtu_files[-1]]:
             process_vtu(vtu_file, dir, geom, overwrite, n=2**7)
 
         # psi_bar, v_bar, b_bar, grid, times = calculate_overturning_streamfunction_time_mean(dir, n=10, nx=2**7, ny=2**7, nz=2**7)
@@ -592,6 +781,20 @@ if __name__ == "__main__":
         #     b_bar,
         #     grid,
         #     filename=dir / "images/psi_mean.png",
+        #     bmin=-15,
+        #     bmax=-10,
+        #     geometry=geom,
+        # )
+
+        # psi_b, b_coords, psi_twa, b_sharp, v_hat, zeta_bar, grid, times = (
+        #     calculate_overturning_streamfunction_TWA_time_mean(dir, n=10, nx=2**7, ny=2**7, nz=2**7, nb=20 * 2**7)
+        # )
+        # plot_overturning_streamfunction_isopycnal(psi_b, b_coords, grid, filename=dir / "images/psi_twa_b_mean.png")
+        # plot_overturning_streamfunction(
+        #     psi_twa,
+        #     b_sharp,
+        #     grid,
+        #     filename=dir / "images/psi_twa_mean.png",
         #     bmin=-15,
         #     bmax=-10,
         #     geometry=geom,

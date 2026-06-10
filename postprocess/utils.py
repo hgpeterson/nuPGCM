@@ -208,7 +208,7 @@ def zonal_mean(field, grid: Grid, width):
     return np.divide(field_bar, width, where=width != 0, out=np.full_like(field_bar, np.nan))
 
 
-def to_buoyancy_coords(field, b, nb, b_range=None):
+def to_buoyancy_coords(field, b, nb, b_range=None, clamp=False):
     """
     Transform a field from Cartesian (x, y, z) to buoyancy (x, y, b) coordinates.
 
@@ -227,12 +227,18 @@ def to_buoyancy_coords(field, b, nb, b_range=None):
     b_range : tuple (b_min, b_max), optional
         Range of buoyancy values for the output grid. Defaults to the global
         min/max of b.
+    clamp : bool, optional
+        If True, buoyancy levels outside the column's range take the field
+        value at the column's min/max buoyancy instead of NaN. Used, e.g., to
+        pin the isopycnal depth ζ to the bottom/surface where an isopycnal
+        outcrops, so that the thickness σ = ζ_b vanishes there.
 
     Returns
     -------
     field_b : ndarray, shape (nx, ny, nb)
-        Field on the buoyancy coordinate grid. NaN outside b_range or where
-        the column has fewer than 2 valid points.
+        Field on the buoyancy coordinate grid. NaN where the column has fewer
+        than 2 valid points, and (unless `clamp`) outside the column's
+        buoyancy range.
     b_coords : ndarray, shape (nb,)
         Uniform buoyancy coordinate values from b_min to b_max.
     """
@@ -244,6 +250,7 @@ def to_buoyancy_coords(field, b, nb, b_range=None):
     b_coords = np.linspace(b_min, b_max, nb)
     nx, ny, _ = field.shape
     field_b = np.full((nx, ny, nb), np.nan)
+    fill = {} if clamp else {"left": np.nan, "right": np.nan}
 
     for ix in range(nx):
         for iy in range(ny):
@@ -257,52 +264,7 @@ def to_buoyancy_coords(field, b, nb, b_range=None):
                 b_coords,
                 b_col[valid][sort_idx],
                 f_col[valid][sort_idx],
-                left=np.nan,
-                right=np.nan,
+                **fill,
             )
 
     return field_b, b_coords
-
-
-def to_cartesian_coords(field_b, b_coords, b):
-    """
-    Transform a field from buoyancy (x, y, b) back to Cartesian (x, y, z) coordinates.
-
-    For each (x, y) column, evaluates field_b at the local buoyancy values b(x, y, z),
-    inverting the mapping done by to_buoyancy_coords.
-
-    Parameters
-    ----------
-    field_b : ndarray, shape (nx, ny, nb)
-        Field on the buoyancy coordinate grid.
-    b_coords : ndarray, shape (nb,)
-        Uniform buoyancy coordinate values (monotonically increasing).
-    b : ndarray, shape (nx, ny, nz)
-        Buoyancy field on the Cartesian grid, defining the b -> z mapping.
-
-    Returns
-    -------
-    field : ndarray, shape (nx, ny, nz)
-        Field on the Cartesian grid. NaN where b is outside the range of
-        b_coords or where the column has no valid data.
-    """
-    nx, ny, nz = b.shape
-    field = np.full((nx, ny, nz), np.nan)
-
-    for ix in range(nx):
-        for iy in range(ny):
-            b_col = b[ix, iy, :]
-            fb_col = field_b[ix, iy, :]
-            valid_z = ~np.isnan(b_col)
-            valid_b = ~np.isnan(fb_col)
-            if valid_z.sum() < 1 or valid_b.sum() < 2:
-                continue
-            field[ix, iy, valid_z] = np.interp(
-                b_col[valid_z],
-                b_coords[valid_b],
-                fb_col[valid_b],
-                left=np.nan,
-                right=np.nan,
-            )
-
-    return field
