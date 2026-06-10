@@ -66,13 +66,15 @@ if __name__ == "__main__":
     # overwrite = False
     sims_dir = Path("/resnick/scratch/hppeters")
     sims = [
-        "065a", 
-        "065c", 
-        "065d", 
-        "066c", 
-        "066d", 
-        "067"
-        ]
+        "068",
+        "068a",
+        "069",
+        "069a",
+        "070",
+        "070a",
+        "071",
+        "071a",
+    ]
     for sim in sims:
         dir = sims_dir / f"sim{sim}"
         print(f"Processing files in {dir}")

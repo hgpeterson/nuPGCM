@@ -134,10 +134,10 @@ def plot_thermal_wind(
     z = grid.z
     yy = grid.yy[0, :, :]
     zz = grid.zz[0, :, :]
-    
+
     alpha = np.max(np.abs(z))
-    f = yy # hardcode f = y
-    
+    f = yy  # hardcode f = y
+
     u = fields_dict["u"][0, :, :]
     b = fields_dict["b"][0, :, :]
     mask = fields_dict["mask"][0, :, :]
@@ -185,9 +185,7 @@ def plot_thermal_wind(
     vmax = 10
     ax[0].pcolormesh(yy, zz, f * u_z, vmin=-vmax, vmax=vmax, shading="gouraud", cmap="RdBu_r")
     ax[1].pcolormesh(yy, zz, -b_y / alpha, vmin=-vmax, vmax=vmax, shading="gouraud", cmap="RdBu_r")
-    im = ax[2].pcolormesh(
-        yy, zz, f * u_z + b_y / alpha, vmin=-vmax, vmax=vmax, shading="gouraud", cmap="RdBu_r"
-    )
+    im = ax[2].pcolormesh(yy, zz, f * u_z + b_y / alpha, vmin=-vmax, vmax=vmax, shading="gouraud", cmap="RdBu_r")
     levels = np.linspace(np.nanmin(b), np.nanmax(b), 20)
     for a in ax:
         a.contour(
@@ -254,7 +252,7 @@ def plot_surface_b_flux(fields_dict, grid, show_progress=False):
     b = fields_dict["b"][0, :, :]
     kappa_v = fields_dict["kappa_v"][0, :, :]
     alpha = np.max(np.abs(z))
-    
+
     # compute surface b flux using finite difference near surface
     surface_b_flux = np.zeros_like(y)
     dz = np.diff(z[:3])
@@ -328,16 +326,19 @@ if __name__ == "__main__":
         vtu_files = sorted((dir / "data").glob("state_*.vtu"))
 
         # plot_isopycnal_depth(vtu_files, filename=dir / "images/isopycnal_depths.png")
-        plot_isopycnal_depth(vtu_files, bs=[-14, -12, -10, -8, -6, -4, -2], filename=dir / "images/isopycnal_depths.png")
+        plot_isopycnal_depth(
+            vtu_files, bs=[-14, -12, -10, -8, -6, -4, -2], filename=dir / "images/isopycnal_depths.png"
+        )
 
         for vtu_file in vtu_files:
-        # for vtu_file in [vtu_files[-1]]:
+            # for vtu_file in [vtu_files[-1]]:
             print(f"Processing {vtu_file}")
             i = int(vtu_file.stem.split("_")[1])  # assuming file is of the form "/foo/bar/state_{i:016d}.vtu"
 
-
             if not (dir / f"images/nu_{i:016d}.png").exists() or overwrite:
-                plot_tri_field(vtu_file, "nu", label=r"Turbulent viscosity $\nu$", filename=dir / f"images/nu_{i:016d}.png")
+                plot_tri_field(
+                    vtu_file, "nu", label=r"Turbulent viscosity $\nu$", filename=dir / f"images/nu_{i:016d}.png"
+                )
             if not (dir / f"images/kappa_v_{i:016d}.png").exists() or overwrite:
                 plot_tri_field(
                     vtu_file,

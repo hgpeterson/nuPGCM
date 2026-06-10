@@ -2,6 +2,7 @@ import numpy as np
 import pyvista as pv
 from pathlib import Path
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 from scipy.integrate import trapezoid, cumulative_trapezoid
 
 wd = Path(__file__).parent.resolve()
@@ -42,16 +43,21 @@ class SlicePlotter:
     def plot(
         self,
         field_name,
+        vmin=None,
         vmax=None,
         bmin=None,
         bmax=None,
         n_isopycnals=10,
         label_isopycnals=False,
+        cmap="RdBu_r",
+        isopycnal_color="k",
         title=None,
         output_file="image.png",
     ):
-        # slice with plane
-        ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin)
+        # slice with plane and extract triangles from actual mesh connectivity
+        ds_slice = self.dataset.slice(normal=self.normal, origin=self.origin).triangulate()
+        faces = ds_slice.faces.reshape(-1, 4)  # [n_tris, [3, i, j, k]]
+        triangles = faces[:, 1:]
 
         p = ds_slice.points
         if self.direction == "x":
@@ -67,6 +73,8 @@ class SlicePlotter:
             x2 = p[:, 1]
             figsize = (19 / 6 / 1.62, 19 / 6)
 
+        triang = mtri.Triangulation(x1, x2, triangles)
+
         if field_name == "u":
             field = ds_slice["u"][:, 0]
         elif field_name == "v":
@@ -77,17 +85,23 @@ class SlicePlotter:
             field = ds_slice[field_name]
 
         if vmax is None:
-            vmax = np.max(np.abs(field))
+            vmax = field.max() if vmin is not None else np.max(np.abs(field))
             extend = "neither"
         else:
-            if vmax < np.max(np.abs(field)):
+            if vmin is None:
+                vmin_eff = -vmax
+            else:
+                vmin_eff = vmin
+            if vmin_eff > field.min() and vmax < field.max():
                 extend = "both"
             elif vmax < field.max():
                 extend = "max"
-            elif -vmax < field.min():
+            elif vmin_eff > field.min():
                 extend = "min"
             else:
                 extend = "neither"
+        if vmin is None:
+            vmin = -vmax
 
         b = ds_slice["b"]
         if bmax is None:
@@ -97,16 +111,15 @@ class SlicePlotter:
 
         # plot
         fig, ax = plt.subplots(1, figsize=figsize)
-        im = ax.tripcolor(x1, x2, field, vmin=-vmax, vmax=vmax, cmap="RdBu_r", shading="gouraud")
-        plt.colorbar(im, ax=ax, shrink=0.5, ticks=[-vmax, 0, vmax], extend=extend)
+        im = ax.tripcolor(triang, field, vmin=vmin, vmax=vmax, cmap=cmap, shading="gouraud")
+        plt.colorbar(im, ax=ax, shrink=0.5, ticks=[vmin, (vmin + vmax) / 2, vmax], extend=extend)
         if bmin != bmax:
             isopycnals = ax.tricontour(
-                x1,
-                x2,
+                triang,
                 b,
                 levels=np.linspace(bmin, bmax, n_isopycnals),
                 linestyles="-",
-                colors="k",
+                colors=isopycnal_color,
                 alpha=0.3,
                 linewidths=0.5,
             )
@@ -127,81 +140,13 @@ class SlicePlotter:
         ax.spines["bottom"].set_visible(False)
         ax.spines["left"].set_visible(False)
         if title is None:
-            title = rf"${field_name}$ at ${self.direction} = {self.location:0.2f}$"
+            _labels = {"kappa_v": r"\kappa_v", "kappa_h": r"\kappa_h", "nu": r"\nu"}
+            label = _labels.get(field_name, field_name)
+            title = rf"${label}$ at ${self.direction} = {self.location:0.2f}$"
         ax.set_title(title)
         plt.savefig(output_file)
         print(output_file)
         plt.close()
-
-
-def circulation_plot(vtu_file, direction, location, n=2**8, output_file="image.png"):
-    dataset = pv.read(vtu_file)
-    p = dataset.points
-    x_min, x_max = p[:, 0].min(), p[:, 0].max()
-    y_min, y_max = p[:, 1].min(), p[:, 1].max()
-    z_min, z_max = p[:, 2].min(), p[:, 2].max()
-    x = np.linspace(x_min, x_max, n)
-    y = np.linspace(y_min, y_max, n)
-    z = np.linspace(z_min, z_max, n)
-    if direction == "x":
-        x = location
-        x1 = y
-        x2 = z
-        flow_comp = "w"
-        xlabel = r"$y$"
-        ylabel = r"$z$"
-    elif direction == "y":
-        y = location
-        x1 = x
-        x2 = z
-        flow_comp = "w"
-        xlabel = r"$x$"
-        ylabel = r"$z$"
-    elif direction == "z":
-        z = location
-        x1 = x
-        x2 = y
-        flow_comp = "v"
-        xlabel = r"$x$"
-        ylabel = r"$y$"
-    else:
-        ValueError("'direction' must be one of 'x', 'y', or 'z'")
-
-    xx, yy, zz = np.meshgrid(x, y, z, indexing="ij")
-    points = pv.PointSet(np.column_stack([xx.ravel(), yy.ravel(), zz.ravel()]))
-    samples = points.sample(dataset)
-    flow = samples[flow_comp].reshape(n, n)
-
-    # compute circulation as \phi = \int_{x_E}^x v dx = \int_{x_W}^x v dx - \int_{x_W}^{x_E} v dx
-    circ = np.zeros_like(flow)
-    for i in range(n):
-        circ[:, i] = cumulative_trapezoid(flow[:, i], x1, initial=0) - trapezoid(flow[:, i], x1)
-    circ[:, np.where(x2 < -0.5)] = 0
-
-    # plot
-    aspect_ratio = (x2.max() - x2.min()) / (x1.max() - x1.min())
-    width = 19 / 6
-    vmax = np.nanmax(np.abs(circ))
-    fig, ax = plt.subplots(1, figsize=(width, width * aspect_ratio))
-    im = ax.pcolormesh(x1, x2, circ.T, vmin=-vmax, vmax=vmax, cmap="RdBu_r")
-    ax.contour(
-        x1,
-        x2,
-        circ.T,
-        levels=np.linspace(-0.9 * vmax, 0.9 * vmax, 10),
-        colors="k",
-        linestyles="-",
-    )
-    plt.colorbar(im, ax=ax, label=r"$\phi$", shrink=0.5)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.axis("equal")
-    ax.spines["bottom"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    ax.set_title(rf"$z = {z:0.2f}$")
-    plt.savefig(output_file)
-    print(output_file)
-    plt.close()
 
 
 if __name__ == "__main__":
@@ -220,15 +165,23 @@ if __name__ == "__main__":
         # "062",
         # "063",
         # "064",
-        "065a",
+        # "065a",
         # "065b",
-        "065c",
-        "065d",
+        # "065c",
+        # "065d",
         # "066a",
         # "066b",
-        "066c",
-        "066d",
-        "067",
+        # "066c",
+        # "066d",
+        # "067",
+        "068",
+        "068a",
+        "069",
+        "069a",
+        "070",
+        "070a",
+        "071",
+        "071a",
     ]
     xvals = [0.25, 0.5, 0.75]
     yvals = [-0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75]
@@ -262,29 +215,70 @@ if __name__ == "__main__":
             sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_x{i}.png")
             sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_x{i}.png")
             sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_x{i}.png")
+            sp.plot(
+                "kappa_v",
+                vmin=0,
+                vmax=100,
+                cmap="magma",
+                isopycnal_color="w",
+                label_isopycnals=True,
+                output_file=dir / f"images/kappa_v_slice_x{i}.png",
+            )
         for i, y in enumerate(yvals):
             sp.set_slice("y", y)
             sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_y{i}.png")
             sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_y{i}.png")
             sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_y{i}.png")
+            sp.plot(
+                "kappa_v",
+                vmin=0,
+                vmax=100,
+                cmap="magma",
+                isopycnal_color="w",
+                label_isopycnals=True,
+                output_file=dir / f"images/kappa_v_slice_y{i}.png",
+            )
         for i, z in enumerate(zvals):
             sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
             sp.plot("u", label_isopycnals=True, output_file=dir / f"images/u_slice_z{i}.png")
             sp.plot("v", label_isopycnals=True, output_file=dir / f"images/v_slice_z{i}.png")
             sp.plot("w", label_isopycnals=True, output_file=dir / f"images/w_slice_z{i}.png")
+            sp.plot(
+                "kappa_v",
+                vmin=0,
+                vmax=100,
+                cmap="magma",
+                isopycnal_color="w",
+                label_isopycnals=True,
+                output_file=dir / f"images/kappa_v_slice_z{i}.png",
+            )
 
         # diapycnal flow slices
         e_vtu_file = dir / "data/e.vtu"
         if e_vtu_file.exists():
             sp = SlicePlotter(e_vtu_file)
+            for i, x in enumerate(xvals):
+                sp.set_slice("x", x)
+                sp.plot(
+                    "e",
+                    label_isopycnals=True,
+                    output_file=dir / f"images/e_slice_x{i}.png",
+                )
+
             for i, y in enumerate(yvals):
                 sp.set_slice("y", y)
                 sp.plot(
                     "e",
-                    bmin=-15,
-                    bmax=0,
-                    title=rf"Diapycnal flow $\tilde{{e}}$ at $y = {y:0.2f}$",
+                    label_isopycnals=True,
                     output_file=dir / f"images/e_slice_y{i}.png",
+                )
+
+            for i, z in enumerate(zvals):
+                sp.set_slice("z", z * sp.alpha)  # note the alpha scaling
+                sp.plot(
+                    "e",
+                    label_isopycnals=True,
+                    output_file=dir / f"images/e_slice_z{i}.png",
                 )
 
         # create or overwrite "slices_state.txt" file with last used VTU file name

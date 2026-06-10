@@ -146,7 +146,9 @@ if __name__ == "__main__":
     # sims = ["055", "056"]
     # sims = ["057", "058"]
     # sims = ["061", "063"]
-    sims = ["062", "064"]
+    # sims = ["062", "064"]
+    # sims = ["065a", "066a"]
+    sims = ["065b", "066b"]
     sims_dir = Path("/resnick/scratch/hppeters")
     N2_bars_channel = []
     N2_bars_basin = []
