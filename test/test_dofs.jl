@@ -25,9 +25,13 @@
     end
 
     @testset "Constraints" begin
-        # ch_up holds velocity Dirichlet (bottom, surface z) + periodic
+        # ch_up holds velocity Dirichlet (bottom, surface z) + periodic + mean pressure
         @test length(fe_data.ch_up.prescribed_dofs) > 0
         @test length(fe_data.ch_up.prescribed_dofs) < nu + np
+
+        # at least one pressure DOF is constrained in ch_up:
+        # mean pressure AffineConstraint (non-periodic) or periodic image DOFs (periodic)
+        @test !isempty(intersect(fe_data.ch_up.prescribed_dofs, fe_data.p_dof_indices))
 
         # ch_b holds surface Dirichlet + periodic
         @test length(fe_data.ch_b.prescribed_dofs) > 0

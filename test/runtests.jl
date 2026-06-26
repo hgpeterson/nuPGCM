@@ -4,6 +4,7 @@ using Ferrite
 using SparseArrays
 using LinearAlgebra
 using Printf
+using JLD2
 
 # internal assembly functions not part of the public API
 using nuPGCM: build_M, build_Kₕ, build_Kᵥ, build_rhs_diff, build_rhs_flux,
@@ -66,4 +67,10 @@ const FORCINGS = _make_forcings()
     include("test_evolution.jl")
     include("test_inversion.jl")
     include("test_model.jl")
+
+    # regression tests (bowl geometry, CPU only)
+    include("test_bowl_mixing.jl")
+    include("test_bowl_wind.jl")
+    include("test_bowl_dirichlet.jl")
+    include("test_bowl_surface_flux.jl")
 end

@@ -1,19 +1,19 @@
 struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     mesh::M
-    dh_up::DUP        # combined DofHandler for (u, p) -- used for inversion
-    dh_b::DB          # DofHandler for buoyancy b -- used for evolution
-    ch_up::CUP        # ConstraintHandler for (u, p): velocity Dirichlet + periodic
-    ch_b::CB          # ConstraintHandler for b: buoyancy Dirichlet + periodic
-    u_dof_indices::Vector{Int}   # sorted global u DOF indices within dh_up
-    p_dof_indices::Vector{Int}   # sorted global p DOF indices within dh_up
+    dh_up::DUP    # combined DofHandler for (u, p)
+    dh_b::DB      # DofHandler for buoyancy b used for evolution
+    ch_up::CUP    # ConstraintHandler for (u, p)
+    ch_b::CB      # ConstraintHandler for b
+    u_dof_indices::Vector{Int}    # sorted global u DOF indices within dh_up
+    p_dof_indices::Vector{Int}    # sorted global p DOF indices within dh_up
     nu::Int
     np::Int
     nb::Int
     u_order::Int
     b_order::Int
-    p_up::Vector{Int}      # permutation for (u, p) system
-    p_b::Vector{Int}       # permutation for b
-    inv_p_up::Vector{Int}  # inverse permutations
+    p_up::Vector{Int}        # permutation for (u, p) system
+    p_b::Vector{Int}         # permutation for b
+    inv_p_up::Vector{Int}    # inverse permutations
     inv_p_b::Vector{Int}
 end
 
@@ -108,6 +108,11 @@ function FEData(mesh::Mesh;
     if is_periodic
         add!(ch_up, PeriodicDirichlet(:u, pfacets))
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
+    else
+        # Mean pressure constraint: ∫p dΩ = 0. Skipped for periodic meshes because
+        # PeriodicDirichlet already creates AffineConstraints on pressure image DOFs,
+        # and Ferrite does not support nested affine constraints.
+        add!(ch_up, _mean_pressure_constraint(dh_up, u_order - 1))
     end
     close!(ch_up)
     Ferrite.update!(ch_up, 0.0)
@@ -124,7 +129,7 @@ function FEData(mesh::Mesh;
     end
 
     # identity permutations (Cuthill-McKee reordering not yet implemented)
-    N_up    = ndofs(dh_up)
+    N_up     = ndofs(dh_up)
     p_up     = collect(1:N_up)
     p_b      = collect(1:nb)
     inv_p_up = collect(1:N_up)
@@ -163,4 +168,49 @@ function _to_dirichlet_fn(val)
     val === nothing  && return (x, t) -> 0.0
     val isa Function && return (x, t) -> val(x)
     return (x, t) -> val
+end
+
+"""
+    _mean_pressure_constraint(dh_up, p_order) -> AffineConstraint
+
+Build an `AffineConstraint` that enforces ∫p dΩ = 0 by expressing the
+pressure DOF with the largest volume-integral weight as a linear combination
+of all other pressure DOFs.
+
+Assembles the 1×N_p constraint row `C[1, i] = ∫φ_p_i dΩ`, then picks DOF k
+with |C[1,k]| largest as the dependent DOF:
+    p[k] = -∑_{i≠k} (C[1,i]/C[1,k]) p[i]
+"""
+function _mean_pressure_constraint(dh_up, p_order)
+    ip_p    = Lagrange{RefTetrahedron, p_order}()
+    ip_geo  = Lagrange{RefTetrahedron, 1}()
+    qr      = QuadratureRule{RefTetrahedron}(2 * p_order + 1)
+    cv_p    = CellValues(qr, ip_p, ip_geo)
+    n_p     = getnbasefunctions(cv_p)
+    range_p = dof_range(dh_up, :p)
+    Ce      = zeros(1, n_p)
+
+    assembler = Ferrite.COOAssembler()
+    for cc in CellIterator(dh_up)
+        reinit!(cv_p, cc)
+        fill!(Ce, 0.0)
+        for q in 1:getnquadpoints(cv_p)
+            dΩ = getdetJdV(cv_p, q)
+            for i in 1:n_p
+                Ce[1, i] += shape_value(cv_p, q, i) * dΩ
+            end
+        end
+        assemble!(assembler, [1], collect(celldofs(cc)[range_p]), Ce)
+    end
+
+    C, _ = finish_assemble(assembler)
+    _, J, V = findnz(C)
+    _, idx  = findmax(abs2, V)
+    cdof    = J[idx]
+    V     ./= V[idx]
+    return AffineConstraint(
+        cdof,
+        Pair{Int,Float64}[J[i] => -V[i] for i in eachindex(J) if J[i] != cdof],
+        0.0,
+    )
 end

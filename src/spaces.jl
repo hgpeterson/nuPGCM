@@ -1,5 +1,5 @@
 # Default quadrature order for volume and facet integrals on tetrahedra.
-# Order 4 integrates degree-4 polynomials exactly; sufficient for P2 matrix
+# Order 4 integrates degree-4 polynomials exactly; sufficient for P2 mass matrix
 const QR_ORDER = 4
 
 # Linear geometry interpolation (all meshes are linear tet)

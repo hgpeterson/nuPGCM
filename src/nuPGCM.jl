@@ -1,6 +1,7 @@
 module nuPGCM
 
 using Ferrite
+using WriteVTK
 using FerriteGmsh
 using CuthillMcKee
 using JLD2
@@ -121,10 +122,13 @@ State,
 Model,
 set_b!,
 set_state_from_file!,
+evolve!,
+update_t!,
 run!,
 # IO.jl
 save_state,
 save_vtk,
+save_vtk_p2,
 # plotting.jl
 eval_at_points,
 eval_at_point,

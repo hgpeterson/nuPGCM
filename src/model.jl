@@ -135,6 +135,8 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     arch       = evolution.arch
     ch_b       = fe_data.ch_b
 
+    rebuild_lhs = forcings.conv_param.is_on || timestepper.adaptive
+
     if forcings.conv_param.is_on
         b_cpu = on_architecture(CPU(), model.state.b)
         @ctime "  build Kᵥ" begin
@@ -145,6 +147,9 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
             rhs_diff_new = build_rhs_diff_conv(params, fe_data, forcings, b_cpu)
             evolution.rhs_diff .= on_architecture(arch, rhs_diff_new)
         end
+    end
+
+    if rebuild_lhs
         collect_evolution_LHS!(evolution, params, forcings, timestepper, ch_b)
     end
 

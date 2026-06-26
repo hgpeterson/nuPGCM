@@ -413,7 +413,7 @@ Rebuild `Kᵥ` using the convection parameterization: `κᵥ` is evaluated at ea
 quadrature point from `∂z(b)` using the current buoyancy DOF vector.
 """
 function build_Kᵥ_conv(fe_data::FEData, params::Parameters,
-                         forcings::Forcings, b_vec::AbstractVector)
+                       forcings::Forcings, b_vec::AbstractVector)
     dh_b  = fe_data.dh_b
     _, _, cv_b = make_cell_values(fe_data)
     n_b   = getnbasefunctions(cv_b)

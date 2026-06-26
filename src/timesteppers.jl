@@ -102,6 +102,7 @@ Update Timestepper's Δt based on the CFL condition.
 upper bound on the flow speed. `u_min` prevents Δt blowing up in stagnant regions.
 """
 function update_Δt!(timestepper::BDF1, u_vec::AbstractVector, h_cells; u_min=0.01)
+    timestepper.adaptive || return timestepper
     u_max = max(maximum(abs, u_vec), u_min)
     timestepper.Δt[] = timestepper.CFL_factor * minimum(h_cells) / u_max
     return timestepper

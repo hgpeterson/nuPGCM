@@ -71,4 +71,5 @@
         y_cpu = on_architecture(CPU(), inv_tk.solver.y)
         @test norm(A_cpu * x - y_cpu) / norm(y_cpu) < 1e-8
     end
+
 end
