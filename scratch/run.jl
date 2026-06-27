@@ -1,28 +1,26 @@
 using nuPGCM
 using CUDA
-using Gridap
 using JLD2
 using Printf
-using Gridap
 
 ENV["JULIA_DEBUG"] = nuPGCM
 # ENV["JULIA_DEBUG"] = nothing
 ENABLE_TIMING[] = true
 
-PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM"
-SIMS_PATH = "/resnick/scratch/hppeters"
+PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM-ferrite"
+# SIMS_PATH = "/resnick/scratch/hppeters"
+SIMS_PATH = @__DIR__
 
-set_out_dir!(joinpath(SIMS_PATH, "sim069"))
+set_out_dir!(joinpath(SIMS_PATH, "channel_basin_000"))
 
 # geom = :tub
 geom = :box
 
 # for making mesh
 if geom == :tub
-    include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat_round_end.jl"))  
-    # include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat.jl"))  
+    include(joinpath(PROJ_PATH, "meshes/channel_basin_no_flat_round_end.jl"))
 elseif geom == :box
-    include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))  
+    include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))
 end
 
 # architecture
@@ -55,7 +53,7 @@ t₀ = 1/f₀/ϱ  # s
 μϱ = μ*ϱ
 α = 1/4
 # α = 1/8
-N² = 0
+N² = 0.0
 f(x) = x[2]
 function H((x, y, z))
     if geom == :box
@@ -64,10 +62,9 @@ function H((x, y, z))
     L = 2
     W = 1
     L_channel = L/4
-    L_flat_channel = 5L_channel/8 # length of flat part of channel
+    L_flat_channel = 5L_channel/8
     H = α*W
 
-    # parabola that has a maximum of H at x_max and a 0 at x_zero
     parabola(x, x_max, x_zero) = H*(1 - ((x - x_max)/(x_zero - x_max))^2)
 
     function H_basin(x)
@@ -88,7 +85,7 @@ function H((x, y, z))
     elseif y ≤ L/2
         r = √( (x - W/2)^2 + (y - (L/2 - W/2))^2 )
         if r > W/2
-            if r - W/2 < 1e-1 # points on boundary might just need a fudge factor
+            if r - W/2 < 1e-1
                 return 0
             else
                 throw(ArgumentError("(x, y) out of bounds"))
@@ -104,9 +101,9 @@ params = Parameters(; ε, α, μϱ, N², f, H)
 display(params)
 
 # resolution
-# h = 4e-2
+h = 4e-2
 # h = 2e-2
-h = 1e-2
+# h = 1e-2
 
 # forcings
 if geom == :tub
@@ -121,28 +118,20 @@ elseif geom == :box
     # κ_B = 2.834e+01
     # d = 3.881e-01*α
 end
-ν(x) = 1
+ν(x) = 1.0
 κₕ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 κᵥ(x) = κ_I + (κ_B - κ_I)*exp(-(x[3] + H(x))/d)
 τˣ(x) = x[2] > -0.5 ? 0.0 : -0.2/τ₀*(x[2] + 1)*(x[2] + 0.5)/0.25^2
-# τˣ(x) = -0.2/τ₀*sin(π*x[2])*sin(2π*x[2])
-τʸ(x) = 0
+τʸ(x) = 0.0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
-# b_surface(x) = -b₀*x[2]^2
-# b_surface(x) = -b₀*(x[2]^2 - 0.1*x[2])/1.1  # lower b in SO
 b_surface_bc = SurfaceDirichletBC(b_surface)
-conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
-eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3), ν_min=10*h^2/2)
-forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
+forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
 display(forcings)
-display(forcings.conv_param)
-display(forcings.eddy_param)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
 # mesh
 if geom == :tub
     mesh_name = @sprintf("channel_basin_no_flat_h%.2e_a%.2e", h, α)
-    # mesh_name = @sprintf("channel_basin_no_flat_wall_h%.2e_a%.2e", h, α)
 elseif geom == :box
     mesh_name = @sprintf("channel_basin_flat_h%.2e_a%.2e", h, α)
 end
@@ -156,34 +145,28 @@ if !isfile(mesh_file)
 end
 mesh = Mesh(mesh_file)
 
-# # save κ
-# writevtk(mesh.Ω, "$out_dir/data/kappa.vtu", cellfields=["kappa_v" => κᵥ, "kappa_h" => κₕ])
-
 # FE data
-u_diri_tags = ["bottom", "coastline", "surface"]
-u_diri_vals = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
-u_diri_masks = [(true, true, true), (true, true, true), (false, false, true)]
-b_diri_tags = ["coastline", "surface"]
-b_diri_vals = [b_surface, b_surface]
-spaces = Spaces(mesh; u_diri_tags, u_diri_vals, u_diri_masks, b_diri_tags, b_diri_vals, b_order=1) 
-fe_data = FEData(mesh, spaces)
-display(fe_data.dofs)
+fe_data = FEData(mesh;
+    u_diri_tags  = ["bottom", "surface"],
+    u_diri_masks = [(true, true, true), (false, false, true)],
+    b_diri_tags  = ["surface"],
+    b_diri_vals  = [b_surface],
+    b_order = 1)
+display(fe_data)
 
 # setup inversion toolkit
-inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
-# inversion_toolkit = InversionToolkit(arch, fe_data, params, forcings)
-# model = Model(arch, params, forcings, fe_data, inversion_toolkit)
+inv_tk = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
 
 # set timestepper
 Δt = 1*86400/t₀
 t_stop = μϱ/ε^2/κ_I
-timestepper = BDF1(; t_start=0, t_stop=t_stop, Δt=Δt, adaptive=true, CFL_factor=0.8)
+ts = BDF1(; t_start=0.0, t_stop, Δt, adaptive=true, CFL_factor=0.8)
 
-# build evolution system
-evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper) 
+# build evolution toolkit
+evo_tk = EvolutionToolkit(arch, fe_data, params, forcings, ts)
 
 # set up model
-model = Model(arch, params, forcings, fe_data, inversion_toolkit, evolution_toolkit, timestepper)
+model = Model(arch, params, forcings, fe_data, inv_tk, evo_tk, ts)
 
 # set initial buoyancy
 set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/4)))

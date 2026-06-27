@@ -86,7 +86,7 @@ function invert!(inv_tk::InversionToolkit, b_vec::AbstractVector)
     y = on_architecture(CPU(), inv_tk.B) * b_vec .+
         on_architecture(CPU(), inv_tk.f_wind) .+
         on_architecture(CPU(), inv_tk.f_bc)
-    apply!(y, inv_tk.ch_up)   # set constrained DOF values (0 for no-slip/periodic)
+    _condense_rhs!(y, inv_tk.ch_up)  # merge image→mirror, zero all constrained DOFs
     inv_tk.solver.y .= on_architecture(arch, y)
     iterative_solve!(inv_tk.solver)
     return inv_tk

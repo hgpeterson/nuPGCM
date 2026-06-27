@@ -108,10 +108,14 @@ function FEData(mesh::Mesh;
     if is_periodic
         add!(ch_up, PeriodicDirichlet(:u, pfacets))
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
+        # Mean pressure constraint: ∫p dΩ = 0. PeriodicDirichlet(:p, pfacets) makes the
+        # "channel_west" (mirror) pressure DOFs dependent on "channel_east" (image) DOFs,
+        # so the mean constraint must avoid using any "channel_west" DOF as its dependent
+        # DOF or as a term in its affine combination -- otherwise close! raises "nested
+        # affine constraints currently not supported".
+        excluded = _dirichlet_dof_set(dh_up, :p, grid.facetsets["channel_west"])
+        add!(ch_up, _mean_pressure_constraint(dh_up, u_order - 1; excluded))
     else
-        # Mean pressure constraint: ∫p dΩ = 0. Skipped for periodic meshes because
-        # PeriodicDirichlet already creates AffineConstraints on pressure image DOFs,
-        # and Ferrite does not support nested affine constraints.
         add!(ch_up, _mean_pressure_constraint(dh_up, u_order - 1))
     end
     close!(ch_up)
@@ -164,6 +168,33 @@ function _mask_to_components(masks, i)
     return comps
 end
 
+"""
+    _condense_rhs!(y, ch)
+
+Prepare a physics RHS vector `y` for solving against a pre-condensed matrix.
+
+For each affine (periodic) constraint `u_image = s * u_mirror`: merges the image
+DOF's contribution into the mirror DOF (`y[mirror] += s * y[image]`), then zeros
+the image row. Also zeros all pure Dirichlet constrained DOF rows.
+
+This is the correct right-hand-side operation when the stiffness matrix has already
+been condensed by `apply!(K, f_bc, ch)` and the solution will be corrected afterward
+by `apply!(x, ch)`. Unlike `apply!(y, ch)`, this does not set image rows to their
+mirror values (which would corrupt the condensed system's image-row equations).
+"""
+function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
+    for i in eachindex(ch.prescribed_dofs, ch.dofcoefficients)
+        dofcoef = ch.dofcoefficients[i]
+        dofcoef === nothing && continue
+        pdof = ch.prescribed_dofs[i]
+        for (mirror_dof, s) in dofcoef
+            y[mirror_dof] += s * y[pdof]
+        end
+    end
+    y[ch.prescribed_dofs] .= 0.0
+    return y
+end
+
 function _to_dirichlet_fn(val)
     val === nothing  && return (x, t) -> 0.0
     val isa Function && return (x, t) -> val(x)
@@ -171,7 +202,20 @@ function _to_dirichlet_fn(val)
 end
 
 """
-    _mean_pressure_constraint(dh_up, p_order) -> AffineConstraint
+    _dirichlet_dof_set(dh, field, facetset) -> Set{Int}
+
+Return the set of global DOF indices for `field` on `facetset`, using a throwaway
+`ConstraintHandler` to harvest `Dirichlet`'s own facet-to-dof mapping.
+"""
+function _dirichlet_dof_set(dh, field::Symbol, facetset)
+    ch = ConstraintHandler(dh)
+    add!(ch, Dirichlet(field, facetset, (x, t) -> 0.0))
+    close!(ch)
+    return Set(ch.prescribed_dofs)
+end
+
+"""
+    _mean_pressure_constraint(dh_up, p_order; excluded = nothing) -> AffineConstraint
 
 Build an `AffineConstraint` that enforces ∫p dΩ = 0 by expressing the
 pressure DOF with the largest volume-integral weight as a linear combination
@@ -180,8 +224,12 @@ of all other pressure DOFs.
 Assembles the 1×N_p constraint row `C[1, i] = ∫φ_p_i dΩ`, then picks DOF k
 with |C[1,k]| largest as the dependent DOF:
     p[k] = -∑_{i≠k} (C[1,i]/C[1,k]) p[i]
+
+If `excluded` is given, those DOFs are dropped from consideration entirely (neither
+chosen as the dependent DOF `k` nor included as an independent term), so the result
+can coexist with other affine constraints (e.g. periodic) already touching them.
 """
-function _mean_pressure_constraint(dh_up, p_order)
+function _mean_pressure_constraint(dh_up, p_order; excluded = nothing)
     ip_p    = Lagrange{RefTetrahedron, p_order}()
     ip_geo  = Lagrange{RefTetrahedron, 1}()
     qr      = QuadratureRule{RefTetrahedron}(2 * p_order + 1)
@@ -205,6 +253,10 @@ function _mean_pressure_constraint(dh_up, p_order)
 
     C, _ = finish_assemble(assembler)
     _, J, V = findnz(C)
+    if excluded !== nothing
+        keep = [i for i in eachindex(J) if J[i] ∉ excluded]
+        J, V = J[keep], V[keep]
+    end
     _, idx  = findmax(abs2, V)
     cdof    = J[idx]
     V     ./= V[idx]

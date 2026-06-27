@@ -25,41 +25,15 @@ fe_data   = FEData(mesh;
     b_diri_tags  = ["surface"],
     b_diri_vals  = [x -> 0.0])
 
-Δt      = 1e-4 * μϱ / (α*ε)^2
+Δt      = 1e-1
 n_steps = 50
-n_info  = 10
 t_stop  = n_steps * Δt
 
+inv_tk = InversionToolkit(CPU(), fe_data, params, forcings)
 ts     = BDF1(; t_start=0.0, t_stop, Δt)
 evo_tk = EvolutionToolkit(CPU(), fe_data, params, forcings, ts)
-inv_tk = InversionToolkit(CPU(), fe_data, params, forcings)
 model  = Model(CPU(), params, forcings, fe_data, inv_tk, evo_tk, ts)
 
-# set_b!(model, x -> 0)
-# invert!(model)
+set_b!(model, x -> 0)
 
-# save_vtk_p2(model, ofile=joinpath(@__DIR__, "bowl_advection_out/data/state_0000"))
-# @info @sprintf("step %4d  t = %.3e  max|u| = %.3e  max|b| = %.3e",
-#                0, ts.t[], maximum(abs, model.state.u), maximum(abs, model.state.b))
-
-# u_prev = copy(model.state.u)
-# b_prev = copy(model.state.b)
-
-# for i in 1:n_steps
-#     evolve!(model, nothing, nothing)   # BDF1 (ignores u_prev/b_prev)
-#     invert!(model)
-#     update_t!(ts)
-
-#     if any(isnan, model.state.b) || any(isnan, model.state.u) ||
-#        maximum(abs, model.state.b) > 1e3
-#         @warn @sprintf("Blow-up at step %d!", i)
-#         break
-#     end
-
-#     if mod(i, n_info) == 0
-#         @info @sprintf("step %4d  t = %.3e  max|u| = %.3e  max|b| = %.3e",
-#                        i, ts.t[], maximum(abs, model.state.u), maximum(abs, model.state.b))
-#         save_vtk_p2(model, ofile=joinpath(@__DIR__,
-#             @sprintf("bowl_advection_out/data/state_%04d", i)))
-#     end
-# end
+run!(model; n_save=10)

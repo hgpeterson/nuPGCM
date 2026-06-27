@@ -98,7 +98,9 @@ function set_b!(model::Model, b_fn::Function)
     # solve M * b = rhs  (L2 projection)
     M = build_M(fe_data)
     apply!(M, rhs, fe_data.ch_b)
-    model.state.b .= M \ rhs
+    b_sol = M \ rhs
+    apply!(b_sol, fe_data.ch_b)  # recover constrained (mirror) DOFs: b[channel_west] = b[channel_east]
+    model.state.b .= b_sol
     return model
 end
 function set_b!(model::Model, b::AbstractVector)
@@ -121,6 +123,7 @@ end
 
 function sync_flow!(model::Model)
     x = on_architecture(CPU(), model.inversion.solver.x)
+    apply!(x, model.inversion.ch_up)  # recover image DOFs: u[image] = u[mirror]
     model.state.u .= x[model.fe_data.u_dof_indices]
     model.state.p .= x[model.fe_data.p_dof_indices]
     return model
@@ -171,12 +174,14 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
          Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
          on_architecture(CPU(), evolution.f_bc)
-    apply!(y, ch_b)
+    _condense_rhs!(y, ch_b)  # merge image→mirror, zero all constrained DOFs
     evolution.solver.y .= on_architecture(arch, y)
 
     @ctime "  solve evol sys" iterative_solve!(evolution.solver)
 
-    model.state.b .= on_architecture(CPU(), evolution.solver.x)
+    b_cpu = on_architecture(CPU(), evolution.solver.x)
+    apply!(b_cpu, ch_b)      # recover image DOFs and enforce surface Dirichlet BC
+    model.state.b .= b_cpu
     return model
 end
 
