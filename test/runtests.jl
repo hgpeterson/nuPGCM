@@ -67,6 +67,7 @@ const FORCINGS = _make_forcings()
     include("test_evolution.jl")
     include("test_inversion.jl")
     include("test_model.jl")
+    include("test_periodic_box.jl")
 
     # regression tests (bowl geometry, CPU only)
     include("test_bowl_mixing.jl")

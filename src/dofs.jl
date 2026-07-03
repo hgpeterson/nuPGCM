@@ -173,26 +173,76 @@ end
 
 Prepare a physics RHS vector `y` for solving against a pre-condensed matrix.
 
-For each affine (periodic) constraint `u_image = s * u_mirror`: merges the image
-DOF's contribution into the mirror DOF (`y[mirror] += s * y[image]`), then zeros
-the image row. Also zeros all pure Dirichlet constrained DOF rows.
+For each affine constraint `y[constrained] = Σ c * y[free]` (for periodic BCs:
+mirror = constrained, image = free): merges the constrained DOF's row into the
+rows of its coefficient DOFs (`y[free] += c * y[constrained]`), then zeros all
+constrained DOF rows (pure Dirichlet rows included).
 
 This is the correct right-hand-side operation when the stiffness matrix has already
-been condensed by `apply!(K, f_bc, ch)` and the solution will be corrected afterward
-by `apply!(x, ch)`. Unlike `apply!(y, ch)`, this does not set image rows to their
-mirror values (which would corrupt the condensed system's image-row equations).
+been condensed by `condense_system` (or Ferrite's `apply!(K, f_bc, ch)`) and the
+solution will be corrected afterward by `apply!(x, ch)`. Unlike `apply!(y, ch)`, this
+does not overwrite constrained rows with their recovered values (which would corrupt
+the condensed system's equations for those rows).
 """
 function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
     for i in eachindex(ch.prescribed_dofs, ch.dofcoefficients)
         dofcoef = ch.dofcoefficients[i]
         dofcoef === nothing && continue
-        pdof = ch.prescribed_dofs[i]
-        for (mirror_dof, s) in dofcoef
-            y[mirror_dof] += s * y[pdof]
+        cdof = ch.prescribed_dofs[i]
+        for (fdof, c) in dofcoef
+            y[fdof] += c * y[cdof]
         end
     end
     y[ch.prescribed_dofs] .= 0.0
     return y
+end
+
+"""
+    A_cond, f_bc = condense_system(A, ch)
+
+Condense the matrix `A` with the constraints in `ch`: return `CᵀAC + D`, where
+`C` maps reduced to full DOFs (`x_full = C x_reduced + g`, `g` the constraint
+inhomogeneities) and `D` places the mean |diagonal| on constrained rows, plus
+the RHS correction `f_bc = Cᵀ(-A g)` (zero when all constraints are homogeneous).
+
+This replaces Ferrite's `apply!(A, f_bc, ch)`, which mis-places the coupling
+blocks between pairs of constrained DOFs in non-symmetric matrices: with
+constraints `x[c1] = x[f1]` and `x[c2] = x[f2]`, it folds `A[c1, c2]` into the
+transposed position `A[f2, f1]` instead of `A[f1, f2]` (Ferrite ≤ 1.4,
+`_condense!`). With periodic BCs this corrupts the divergence and Coriolis
+blocks across the periodic seam; symmetric matrices (mass, diffusion) are
+unaffected.
+
+At solve time, prepare the RHS with `_condense_rhs!(y, ch)` and recover the
+constrained solution DOFs with `apply!(x, ch)`, as with Ferrite's `apply!`.
+"""
+function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler)
+    N = size(A, 1)
+
+    # RHS correction from inhomogeneous constraint values
+    g = zeros(N)
+    g[ch.prescribed_dofs] .= ch.inhomogeneities
+    f_bc = -(A * g)
+    _condense_rhs!(f_bc, ch)
+
+    # constraint map C: identity on free DOFs, coefficient entries on constrained rows
+    rows = collect(1:N); cols = collect(1:N); vals = ones(N)
+    for (i, cdof) in enumerate(ch.prescribed_dofs)
+        vals[cdof] = 0.0   # no identity row for constrained DOFs
+        dofcoef = ch.dofcoefficients[i]
+        dofcoef === nothing && continue
+        for (fdof, c) in dofcoef
+            push!(rows, cdof); push!(cols, fdof); push!(vals, c)
+        end
+    end
+    C = sparse(rows, cols, vals, N, N)
+
+    # mean |diagonal| keeps constrained rows at a scale comparable to A
+    md = sum(abs, diag(A)) / N
+    D = sparse(ch.prescribed_dofs, ch.prescribed_dofs,
+               fill(md, length(ch.prescribed_dofs)), N, N)
+
+    return C' * A * C + D, f_bc
 end
 
 function _to_dirichlet_fn(val)

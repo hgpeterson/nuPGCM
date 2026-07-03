@@ -38,9 +38,9 @@ function InversionToolkit(arch::AbstractArchitecture,
     B     = build_B_inversion(fe_data, params)
     f_wind = build_f_wind(fe_data, params, forcings)
 
-    # apply BCs: modifies A in-place, computes f_bc correction
-    f_bc = zeros(size(A, 1))
-    apply!(A, f_bc, fe_data.ch_up)
+    # apply BCs: condense A, compute f_bc correction for inhomogeneous BC values
+    # (not Ferrite's apply!, which corrupts non-symmetric matrices; see condense_system)
+    A, f_bc = condense_system(A, fe_data.ch_up)
 
     # preconditioner
     if typeof(arch) == GPU || forcings.eddy_param.is_on
@@ -86,7 +86,7 @@ function invert!(inv_tk::InversionToolkit, b_vec::AbstractVector)
     y = on_architecture(CPU(), inv_tk.B) * b_vec .+
         on_architecture(CPU(), inv_tk.f_wind) .+
         on_architecture(CPU(), inv_tk.f_bc)
-    _condense_rhs!(y, inv_tk.ch_up)  # merge image→mirror, zero all constrained DOFs
+    _condense_rhs!(y, inv_tk.ch_up)  # merge mirror rows into image rows, zero all constrained DOFs
     inv_tk.solver.y .= on_architecture(arch, y)
     iterative_solve!(inv_tk.solver)
     return inv_tk

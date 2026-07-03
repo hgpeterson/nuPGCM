@@ -123,7 +123,7 @@ end
 
 function sync_flow!(model::Model)
     x = on_architecture(CPU(), model.inversion.solver.x)
-    apply!(x, model.inversion.ch_up)  # recover image DOFs: u[image] = u[mirror]
+    apply!(x, model.inversion.ch_up)  # recover constrained (mirror) DOFs: u[mirror] = u[image]
     model.state.u .= x[model.fe_data.u_dof_indices]
     model.state.p .= x[model.fe_data.p_dof_indices]
     return model
@@ -174,7 +174,7 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
          Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
          on_architecture(CPU(), evolution.f_bc)
-    _condense_rhs!(y, ch_b)  # merge image→mirror, zero all constrained DOFs
+    _condense_rhs!(y, ch_b)  # merge mirror rows into image rows, zero all constrained DOFs
     evolution.solver.y .= on_architecture(arch, y)
 
     @ctime "  solve evol sys" iterative_solve!(evolution.solver)
@@ -290,8 +290,7 @@ end
 function _update_eddy_A!(model::Model)
     A_new = build_A_inversion(model.fe_data, model.params,
                                model.forcings.eddy_param, model.state.b)
-    f_bc = zeros(size(A_new, 1))
-    apply!(A_new, f_bc, model.fe_data.ch_up)
+    A_new, _ = condense_system(A_new, model.fe_data.ch_up)
 
     # reuse the same diagonal preconditioner (h-scaled)
     p, t = get_p_t(model.fe_data.mesh)
