@@ -40,7 +40,7 @@ function InversionToolkit(arch::AbstractArchitecture,
 
     # apply BCs: condense A, compute f_bc correction for inhomogeneous BC values
     # (not Ferrite's apply!, which corrupts non-symmetric matrices; see condense_system)
-    A, f_bc = condense_system(A, fe_data.ch_up)
+    A, f_bc = condense_system(A, fe_data.ch_up, fe_data.C_up)
 
     # preconditioner
     if typeof(arch) == GPU || forcings.eddy_param.is_on
@@ -254,7 +254,7 @@ function build_A_inversion(fe_data::FEData, params::Parameters,
             x       = spatial_coordinate(cv_u, q, coords)
             ∂z_b_q  = function_gradient(cv_b, q, local_b)[3]
             αbz_q   = α * (N² + ∂z_b_q)
-            ν_q     = ν_eddy(eddy_param, αbz_q)
+            ν_q     = ν_eddy(eddy_param, eddy_param.f(x), αbz_q)
             f_q     = f_cor(x)
             dΩ      = getdetJdV(cv_u, q)
 

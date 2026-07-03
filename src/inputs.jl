@@ -87,7 +87,7 @@ end
 function κᵥ_convection(conv_param::ConvectionParameterization, κᵥ, αbz)
     κᶜ = conv_param.κᶜ
     N²min = conv_param.N²min
-    return κᵥ + κᶜ*(1 + tanh∘(-(αbz)/N²min))/2
+    return κᵥ + κᶜ*(1 + tanh(-(αbz)/N²min))/2
 end
 
 #### EddyParameterization type ####
@@ -121,9 +121,9 @@ function EddyParameterization(; f, N²min, ν_min=0., smoothing=10.)
 end
 
 """
-    ν = ν_eddy(eddy_param::EddyParameterization, αbz)
+    ν = ν_eddy(eddy_param::EddyParameterization, f, αbz)
 
-Compute ν for eddy parameterization.
+Compute ν for eddy parameterization, given the local Coriolis value `f`.
 
 The parameterization reads
 ```math
@@ -131,14 +131,16 @@ The parameterization reads
 ```
 We also smoothly limit ν_min ≤ ν ≤ f² / N²min.
 """
-function ν_eddy(eddy_param::EddyParameterization, αbz)
-    (; f, N²min, ν_min, smoothing) = eddy_param
+function ν_eddy(eddy_param::EddyParameterization, f::Real, αbz)
+    (; N²min, ν_min, smoothing) = eddy_param
 
     # eddy value → f² / (α ∂_z b) for large stratification and → f² / N²min for low stratification
-    ν = f * (f / (sqrt∘(N²min^2 +  αbz * αbz)))  
+    ν = f * (f / sqrt(N²min^2 + αbz * αbz))
 
     # LogSumExp converges to max(ν, ν_min) as smoothing → ∞
-    return (log∘(exp(smoothing*ν_min) + exp∘(smoothing*ν)) / smoothing)  
+    # (shift by the max so the exponentials cannot overflow)
+    m = max(ν_min, ν)
+    return m + log(exp(smoothing*(ν_min - m)) + exp(smoothing*(ν - m))) / smoothing
 end
 
 #### Forcings type ####

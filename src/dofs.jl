@@ -15,6 +15,8 @@ struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     p_b::Vector{Int}         # permutation for b
     inv_p_up::Vector{Int}    # inverse permutations
     inv_p_b::Vector{Int}
+    cache::AssemblyCache     # mesh-constant data for per-timestep re-assembly
+    C_up::SparseMatrixCSC{Float64, Int}   # constraint map for condense_system
 end
 
 function Base.summary(fe_data::FEData)
@@ -56,7 +58,8 @@ function FEData(mesh::Mesh;
                 b_diri_tags  = String[],
                 b_diri_vals  = nothing,   # function b(x) or constant
                 u_order = 2,
-                b_order = 2)
+                b_order = 2,
+                pressure_gauge = :mean)   # :mean (∫p dΩ = 0), :pin (one DOF = 0), :none
     grid = mesh.grid
 
     ip_u = Lagrange{RefTetrahedron, u_order}()^3
@@ -108,15 +111,25 @@ function FEData(mesh::Mesh;
     if is_periodic
         add!(ch_up, PeriodicDirichlet(:u, pfacets))
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
-        # Mean pressure constraint: ∫p dΩ = 0. PeriodicDirichlet(:p, pfacets) makes the
+    end
+    if pressure_gauge != :none
+        # Pressure gauge. With periodic BCs, PeriodicDirichlet(:p, pfacets) makes the
         # "channel_west" (mirror) pressure DOFs dependent on "channel_east" (image) DOFs,
-        # so the mean constraint must avoid using any "channel_west" DOF as its dependent
+        # so the gauge constraint must avoid using any "channel_west" DOF as its dependent
         # DOF or as a term in its affine combination -- otherwise close! raises "nested
         # affine constraints currently not supported".
-        excluded = _dirichlet_dof_set(dh_up, :p, grid.facetsets["channel_west"])
-        add!(ch_up, _mean_pressure_constraint(dh_up, u_order - 1; excluded))
-    else
-        add!(ch_up, _mean_pressure_constraint(dh_up, u_order - 1))
+        excluded = is_periodic ?
+            _dirichlet_dof_set(dh_up, :p, grid.facetsets["channel_west"]) : nothing
+        gauge = _mean_pressure_constraint(dh_up, u_order - 1; excluded)
+        if pressure_gauge == :pin
+            # pin the same DOF the mean constraint would eliminate: p[cdof] = 0.
+            # Sparse and iterative-solver friendly; pressure is then determined up to
+            # the gauge instead of having zero mean.
+            gauge = AffineConstraint(gauge.constrained_dof, Pair{Int, Float64}[], 0.0)
+        elseif pressure_gauge != :mean
+            throw(ArgumentError("pressure_gauge must be :mean, :pin, or :none"))
+        end
+        add!(ch_up, gauge)
     end
     close!(ch_up)
     Ferrite.update!(ch_up, 0.0)
@@ -139,10 +152,18 @@ function FEData(mesh::Mesh;
     inv_p_up = collect(1:N_up)
     inv_p_b  = collect(1:nb)
 
+    @info "Building assembly cache..."
+    @time begin
+    K_b   = allocate_matrix(dh_b, ch_b)   # evolution pattern for the nzval index map
+    cache = AssemblyCache(dh_up, dh_b, K_b, u_order, b_order)
+    C_up  = _constraint_matrix(ch_up, N_up)
+    end
+
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
                   u_dof_indices, p_dof_indices,
                   nu, np, nb, u_order, b_order,
-                  p_up, p_b, inv_p_up, inv_p_b)
+                  p_up, p_b, inv_p_up, inv_p_b,
+                  cache, C_up)
 end
 
 """
@@ -215,8 +236,12 @@ unaffected.
 
 At solve time, prepare the RHS with `_condense_rhs!(y, ch)` and recover the
 constrained solution DOFs with `apply!(x, ch)`, as with Ferrite's `apply!`.
+
+The constraint map `C` is built from `ch` when not supplied; pass the cached
+`fe_data.C_up` to avoid rebuilding it on repeated condensations.
 """
-function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler)
+function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler,
+                         C::SparseMatrixCSC = _constraint_matrix(ch, size(A, 1)))
     N = size(A, 1)
 
     # RHS correction from inhomogeneous constraint values
@@ -225,7 +250,21 @@ function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler)
     f_bc = -(A * g)
     _condense_rhs!(f_bc, ch)
 
-    # constraint map C: identity on free DOFs, coefficient entries on constrained rows
+    # mean |diagonal| keeps constrained rows at a scale comparable to A
+    md = sum(abs, diag(A)) / N
+    D = sparse(ch.prescribed_dofs, ch.prescribed_dofs,
+               fill(md, length(ch.prescribed_dofs)), N, N)
+
+    return C' * A * C + D, f_bc
+end
+
+"""
+    C = _constraint_matrix(ch, N)
+
+Build the sparse constraint map `C` such that `x_full = C * x_reduced (+ g)`:
+identity on free DOFs, coefficient entries on constrained rows.
+"""
+function _constraint_matrix(ch::ConstraintHandler, N::Int)
     rows = collect(1:N); cols = collect(1:N); vals = ones(N)
     for (i, cdof) in enumerate(ch.prescribed_dofs)
         vals[cdof] = 0.0   # no identity row for constrained DOFs
@@ -235,14 +274,7 @@ function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler)
             push!(rows, cdof); push!(cols, fdof); push!(vals, c)
         end
     end
-    C = sparse(rows, cols, vals, N, N)
-
-    # mean |diagonal| keeps constrained rows at a scale comparable to A
-    md = sum(abs, diag(A)) / N
-    D = sparse(ch.prescribed_dofs, ch.prescribed_dofs,
-               fill(md, length(ch.prescribed_dofs)), N, N)
-
-    return C' * A * C + D, f_bc
+    return sparse(rows, cols, vals, N, N)
 end
 
 function _to_dirichlet_fn(val)

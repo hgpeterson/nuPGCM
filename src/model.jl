@@ -142,18 +142,18 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
 
     if forcings.conv_param.is_on
         b_cpu = on_architecture(CPU(), model.state.b)
-        @ctime "  build Kᵥ" begin
-            Kᵥ_new = build_Kᵥ_conv(fe_data, params, forcings, b_cpu)
-            evolution.Kᵥ.nzval .= Kᵥ_new.nzval
-        end
+        @ctime "  build Kᵥ" build_Kᵥ_conv!(evolution.Kᵥ, evolution.Kᵥ⁰, fe_data, params,
+                                           forcings.conv_param, b_cpu)
         @ctime "  build rhs_diff" begin
-            rhs_diff_new = build_rhs_diff_conv(params, fe_data, forcings, b_cpu)
+            rhs_diff_new = build_rhs_diff_conv!(zeros(fe_data.nb), evolution.rhs_diff⁰,
+                                                fe_data, params, forcings.conv_param, b_cpu)
             evolution.rhs_diff .= on_architecture(arch, rhs_diff_new)
         end
     end
 
     if rebuild_lhs
-        collect_evolution_LHS!(evolution, params, forcings, timestepper, ch_b)
+        collect_evolution_LHS!(evolution, params, forcings, timestepper, ch_b;
+                               Kᵥ_changed=forcings.conv_param.is_on)
     end
 
     # assemble advection RHS on CPU (field evaluation requires CPU)
@@ -227,7 +227,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
 
         if i == i_start + 2 && typeof(timestepper) <: BDF2
             collect_evolution_LHS!(model.evolution, model.params, model.forcings,
-                                   timestepper, model.fe_data.ch_b)
+                                   timestepper, model.fe_data.ch_b; Kᵥ_changed=false)
         end
 
         u_curr .= u
@@ -290,7 +290,7 @@ end
 function _update_eddy_A!(model::Model)
     A_new = build_A_inversion(model.fe_data, model.params,
                                model.forcings.eddy_param, model.state.b)
-    A_new, _ = condense_system(A_new, model.fe_data.ch_up)
+    A_new, _ = condense_system(A_new, model.fe_data.ch_up, model.fe_data.C_up)
 
     # reuse the same diagonal preconditioner (h-scaled)
     p, t = get_p_t(model.fe_data.mesh)
