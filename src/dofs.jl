@@ -263,6 +263,16 @@ end
 
 Build the sparse constraint map `C` such that `x_full = C * x_reduced (+ g)`:
 identity on free DOFs, coefficient entries on constrained rows.
+
+Coefficient entries that reference a DOF which is itself prescribed (e.g. a
+periodic mirror whose image lies on a Dirichlet boundary -- a "junction" DOF
+where the seam meets a wall or the surface) are dropped: their contribution is
+a known value, already folded into `ch.inhomogeneities` by Ferrite's `update!`
+and hence carried by `g` in `condense_system`. Keeping such an entry would
+leave the folded mirror equation in the prescribed image row of `CᵀAC` and
+retain couplings from free rows to the image column, corrupting the system at
+exactly those junction DOFs (Ferrite's own `apply!` avoids this by explicitly
+zeroing all prescribed rows/columns after condensing).
 """
 function _constraint_matrix(ch::ConstraintHandler, N::Int)
     rows = collect(1:N); cols = collect(1:N); vals = ones(N)
@@ -271,6 +281,7 @@ function _constraint_matrix(ch::ConstraintHandler, N::Int)
         dofcoef = ch.dofcoefficients[i]
         dofcoef === nothing && continue
         for (fdof, c) in dofcoef
+            haskey(ch.dofmapping, fdof) && continue   # prescribed: value lives in g
             push!(rows, cdof); push!(cols, fdof); push!(vals, c)
         end
     end

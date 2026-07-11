@@ -170,6 +170,7 @@ model = Model(arch, params, forcings, fe_data, inv_tk, evo_tk, ts)
 
 # set initial buoyancy
 set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/4)))
+invert!(model)
 # i_start = 11700
 # set_state_from_file!(model, joinpath(out_dir, @sprintf("data/state_%016d.jld2", i_start)))
 
