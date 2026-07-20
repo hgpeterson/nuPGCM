@@ -11,10 +11,6 @@ struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     nb::Int
     u_order::Int
     b_order::Int
-    p_up::Vector{Int}        # permutation for (u, p) system
-    p_b::Vector{Int}         # permutation for b
-    inv_p_up::Vector{Int}    # inverse permutations
-    inv_p_b::Vector{Int}
     cache::AssemblyCache     # mesh-constant data for per-timestep re-assembly
     C_up::SparseMatrixCSC{Float64, Int}   # constraint map for condense_system
 end
@@ -33,28 +29,24 @@ end
 
 """
     fe_data = FEData(mesh;
-                     u_diri_tags, u_diri_masks, u_diri_vals,
+                     u_diri_tags, u_diri_masks,
                      b_diri_tags, b_diri_vals,
-                     u_order, b_order)
+                     u_order, b_order, pressure_gauge)
 
-Set up `DofHandler`s, `ConstraintHandler`s, and DOF permutations for the PG model.
+Set up `DofHandler`s and `ConstraintHandler`s for the PG model.
 
 A combined `DofHandler` for (u, p) is used for the inversion problem so that
-Ferrite's `apply!` can correctly handle periodic BCs (which require entries between
-image and mirror DOFs that cross cell boundaries). `u_dof_indices` and `p_dof_indices`
-store the global DOF index sets within `dh_up` for splitting the combined solution.
+periodic BCs (which couple image and mirror DOFs across cell boundaries) can be
+condensed consistently. `u_dof_indices` and `p_dof_indices` store the global DOF
+index sets within `dh_up` for splitting the combined solution.
 
 Periodic BCs are applied automatically when `"channel_west"` and `"channel_east"`
 facetsets are present in the grid. The periodic translation vector is inferred from
-the east-wall x-coordinate.
-
-DOF permutations are identity for now; Cuthill-McKee reordering will be added
-once the mass matrix assembly is in place.
+the east-wall x-coordinate. Dirichlet values for `u` are always zero.
 """
 function FEData(mesh::Mesh;
                 u_diri_tags  = String[],
                 u_diri_masks = nothing,   # e.g. [(true,true,true), (false,false,true)]
-                u_diri_vals  = nothing,   # currently unused (always zero for u)
                 b_diri_tags  = String[],
                 b_diri_vals  = nothing,   # function b(x) or constant
                 u_order = 2,
@@ -145,12 +137,7 @@ function FEData(mesh::Mesh;
 
     end
 
-    # identity permutations (Cuthill-McKee reordering not yet implemented)
-    N_up     = ndofs(dh_up)
-    p_up     = collect(1:N_up)
-    p_b      = collect(1:nb)
-    inv_p_up = collect(1:N_up)
-    inv_p_b  = collect(1:nb)
+    N_up = ndofs(dh_up)
 
     @info "Building assembly cache..."
     @time begin
@@ -162,7 +149,6 @@ function FEData(mesh::Mesh;
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
                   u_dof_indices, p_dof_indices,
                   nu, np, nb, u_order, b_order,
-                  p_up, p_b, inv_p_up, inv_p_b,
                   cache, C_up)
 end
 
@@ -264,15 +250,11 @@ end
 Build the sparse constraint map `C` such that `x_full = C * x_reduced (+ g)`:
 identity on free DOFs, coefficient entries on constrained rows.
 
-Coefficient entries that reference a DOF which is itself prescribed (e.g. a
-periodic mirror whose image lies on a Dirichlet boundary -- a "junction" DOF
-where the seam meets a wall or the surface) are dropped: their contribution is
-a known value, already folded into `ch.inhomogeneities` by Ferrite's `update!`
-and hence carried by `g` in `condense_system`. Keeping such an entry would
-leave the folded mirror equation in the prescribed image row of `CᵀAC` and
-retain couplings from free rows to the image column, corrupting the system at
-exactly those junction DOFs (Ferrite's own `apply!` avoids this by explicitly
-zeroing all prescribed rows/columns after condensing).
+Coefficient entries that reference a DOF which is itself prescribed (a
+"junction" DOF, e.g. a periodic mirror whose image lies on a Dirichlet
+boundary) are dropped: their value is already folded into `ch.inhomogeneities`
+by Ferrite's `update!` and hence carried by `g` in [`condense_system`](@ref).
+Keeping such an entry corrupts the condensed system at exactly those DOFs.
 """
 function _constraint_matrix(ch::ConstraintHandler, N::Int)
     rows = collect(1:N); cols = collect(1:N); vals = ones(N)

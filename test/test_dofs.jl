@@ -37,11 +37,4 @@
         @test length(fe_data.ch_b.prescribed_dofs) > 0
         @test length(fe_data.ch_b.prescribed_dofs) < nb
     end
-
-    @testset "Permutations (identity)" begin
-        @test fe_data.p_up    == collect(1:nu+np)
-        @test fe_data.p_b     == collect(1:nb)
-        @test fe_data.inv_p_up == collect(1:nu+np)
-        @test fe_data.inv_p_b  == collect(1:nb)
-    end
 end

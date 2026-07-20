@@ -67,9 +67,8 @@
         ts  = BDF1(; t_start=0.0, t_stop=1e-2, Δt=1e-3)
         evo = EvolutionToolkit(CPU(), fe_data, params, forcings, ts)
 
-        @test size(evo.M)  == (nb, nb)
-        @test size(evo.Kₕ) == (nb, nb)
         @test size(evo.Kᵥ) == (nb, nb)
+        @test size(evo.Kᵥ⁰) == (nb, nb)
         @test length(evo.rhs_diff) == nb
         @test length(evo.rhs_flux) == nb
         @test length(evo.f_bc)     == nb

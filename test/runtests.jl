@@ -28,6 +28,7 @@ function ensure_test_mesh()
 end
 
 ensure_test_mesh()
+include("periodic_common.jl")
 
 # ---------------------------------------------------------------------------
 # Shared fixtures (created once; available in every included test file)

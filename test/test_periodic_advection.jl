@@ -21,29 +21,13 @@
     α = 0.5
     W_box = 1.0
     H₀ = α*W_box
-    box_file = joinpath(@__DIR__, @sprintf("../meshes/periodic_box_h%.2e_a%.2e.msh", h, α))
-    if !isfile(box_file)
-        include(joinpath(@__DIR__, "../meshes/periodic_box.jl"))
-        mesh_periodic_box(h, α; W=W_box, L=1.0)
-    end
-    mesh = Mesh(box_file)
+    mesh = Mesh(ensure_periodic_box_mesh(h, α; W=W_box))
 
     # fixture without b-Dirichlet (periodic-only ch_b), production b_order = 1
     fe_free = FEData(mesh;
         u_diri_tags  = ["bottom", "surface", "wall"],
         u_diri_masks = [(true,true,true), (false,false,true), (false,false,true)],
         b_order = 1)
-
-    fill_u(fe_data, fn) = begin
-        x = zeros(ndofs(fe_data.dh_up))
-        apply_analytical!(x, fe_data.dh_up, :u, fn)
-        x
-    end
-    fill_b(fe_data, fn) = begin
-        b = zeros(fe_data.nb)
-        apply_analytical!(b, fe_data.dh_b, :b, fn)
-        b
-    end
 
     # reference advection RHS: independent CellValues-based assembly of the
     # same integral as the cached kernel (same quadrature order)

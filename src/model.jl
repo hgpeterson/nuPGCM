@@ -138,27 +138,11 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     arch       = evolution.arch
     ch_b       = fe_data.ch_b
 
-    rebuild_lhs = forcings.conv_param.is_on || timestepper.adaptive
-
-    if forcings.conv_param.is_on
-        b_cpu = on_architecture(CPU(), model.state.b)
-        @ctime "  build Kᵥ" build_Kᵥ_conv!(evolution.Kᵥ, evolution.Kᵥ⁰, fe_data, params,
-                                           forcings.conv_param, b_cpu)
-        @ctime "  build rhs_diff" begin
-            rhs_diff_new = build_rhs_diff_conv!(zeros(fe_data.nb), evolution.rhs_diff⁰,
-                                                fe_data, params, forcings.conv_param, b_cpu)
-            evolution.rhs_diff .= on_architecture(arch, rhs_diff_new)
-        end
-    end
-
-    if rebuild_lhs
-        collect_evolution_LHS!(evolution, params, forcings, timestepper, ch_b;
-                               Kᵥ_changed=forcings.conv_param.is_on)
-    end
+    b_cpu = on_architecture(CPU(), model.state.b)
+    update_evolution_LHS!(evolution, fe_data, params, forcings, timestepper, b_cpu)
 
     # assemble advection RHS on CPU (field evaluation requires CPU)
     # build_rhs_adv needs the velocity DOF vector in the combined dh_up ordering
-    b_cpu      = on_architecture(CPU(), model.state.b)
     b_prev_cpu = on_architecture(CPU(), b_prev)
     x_up      = _to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
     x_up_prev = _to_up_vec(fe_data, on_architecture(CPU(), u_prev))

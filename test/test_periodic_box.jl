@@ -50,11 +50,7 @@ end
     W_box = 1.0   # channel length (periodic in x)
     L_box = 1.0   # channel width
     H₀ = α*W_box
-    box_file = joinpath(@__DIR__, @sprintf("../meshes/periodic_box_h%.2e_a%.2e.msh", h, α))
-    if !isfile(box_file)
-        include(joinpath(@__DIR__, "../meshes/periodic_box.jl"))
-        mesh_periodic_box(h, α; W=W_box, L=L_box)
-    end
+    box_file = ensure_periodic_box_mesh(h, α; W=W_box, L=L_box)
 
     ε   = 0.5
     ν₀  = 1.0

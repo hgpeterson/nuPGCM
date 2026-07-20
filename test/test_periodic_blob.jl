@@ -13,11 +13,7 @@
     α = 0.5
     W_box = 1.0
     H₀ = α*W_box
-    box_file = joinpath(@__DIR__, @sprintf("../meshes/periodic_box_h%.2e_a%.2e.msh", h, α))
-    if !isfile(box_file)
-        include(joinpath(@__DIR__, "../meshes/periodic_box.jl"))
-        mesh_periodic_box(h, α; W=W_box, L=1.0)
-    end
+    box_file = ensure_periodic_box_mesh(h, α; W=W_box)
 
     params = Parameters(; ε=0.5, α, μϱ=1.0, N²=0.0, f=x->1.0, H=x->H₀)
     forcings = Forcings(1.0, x->1e-8, x->1e-8, x->0.0, x->0.0, SurfaceFluxBC(x->0.0))
