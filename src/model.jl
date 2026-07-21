@@ -206,7 +206,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
-        update_Δt!(timestepper, u, h_cells)
+        update_Δt!(timestepper, model.fe_data, u, h_cells)
         Δt = timestepper.Δt[]
 
         if i == i_start + 2 && typeof(timestepper) <: BDF2
@@ -287,7 +287,7 @@ function _update_eddy_A!(model::Model)
     lhs = model.inversion.lhs_cache
     @ctime "  build A_visc" build_A_visc!(lhs.A, lhs.A⁰, model.fe_data, model.params,
                                           model.forcings.eddy_param, model.state.b, lhs.nzidx_up)
-    @ctime "  condense A" refresh_A_cond!(lhs, model.fe_data.ch_up)   # writes lhs.A_cond in place
+    @ctime "  condense A" refresh_A_cond!(lhs)   # writes lhs.A_cond in place
     @ctime "  update solver.A" update_A!(model.inversion.solver.A, lhs.A_cond, lhs.gpu_perm)
     return model
 end

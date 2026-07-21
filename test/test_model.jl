@@ -48,6 +48,34 @@
         @test !any(isnan, model.state.b)
     end
 
+    @testset "update_Δt!" begin
+        h_cells = compute_h_cells(fe_data.mesh)
+        nu = get_n_dofs(fe_data)[1]
+
+        # zero velocity: |u|_k = 0 everywhere, so the u_min floor sets the rate
+        u_zero = zeros(nu)
+        @test all(iszero, nuPGCM.max_cell_speeds(fe_data, u_zero))
+        ts_a = BDF1(; t_start=0.0, t_stop=1.0, Δt=1.0, adaptive=true, CFL_factor=0.5)
+        nuPGCM.update_Δt!(ts_a, fe_data, u_zero, h_cells; u_min=0.01)
+        @test ts_a.Δt[] ≈ 0.5 * minimum(h_cells) / 0.01
+
+        # uniform velocity field: |u|_k is the same in every cell, so the CFL
+        # timestep reduces to CFL_factor * min_k h_k / |u|
+        x_up = nuPGCM._to_up_vec(fe_data, zeros(nu))
+        apply_analytical!(x_up, fe_data.dh_up, :u, x -> Vec{3}((3.0, 4.0, 0.0)))
+        u_uniform = x_up[fe_data.u_dof_indices]
+        speeds = nuPGCM.max_cell_speeds(fe_data, u_uniform)
+        @test length(speeds) == getncells(fe_data.mesh.grid)
+        @test all(s -> isapprox(s, 5.0; atol=1e-8), speeds)   # |(3,4,0)| = 5
+        nuPGCM.update_Δt!(ts_a, fe_data, u_uniform, h_cells; u_min=0.01)
+        @test ts_a.Δt[] ≈ 0.5 * minimum(h_cells) / 5.0
+
+        # non-adaptive timestepper leaves Δt untouched
+        ts_fixed = BDF1(; t_start=0.0, t_stop=1.0, Δt=0.123, adaptive=false)
+        nuPGCM.update_Δt!(ts_fixed, fe_data, u_uniform, h_cells)
+        @test ts_fixed.Δt[] == 0.123
+    end
+
     @testset "IO" begin
         ofile = "/tmp/nuPGCM_test_state.jld2"
         save_state(model, ofile)

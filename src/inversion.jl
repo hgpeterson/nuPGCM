@@ -135,15 +135,34 @@ function InversionLHSCache(A⁰::SparseMatrixCSC, fe_data::FEData)
 end
 
 """
-    A_cond, f_bc = refresh_A_cond!(lhs, ch)
+    _sum_abs_diag(A::SparseMatrixCSC) -> Float64
 
-Recombine `lhs.A_cond` from the current `lhs.A` (call [`build_A_visc!`](@ref)
-first to refresh its viscous block) via the cached scatter map — no new
-sparse matrix allocated. Returns the condensed matrix and the RHS correction
-`f_bc = C'(-A g)` (zero for the homogeneous velocity BCs this model uses, but
-computed in general).
+`sum(abs, diag(A))` without allocating the dense diagonal: walk each column's
+stored rows for the `(i, i)` entry. Assumes a square matrix.
 """
-function refresh_A_cond!(lhs::InversionLHSCache, ch::ConstraintHandler)
+function _sum_abs_diag(A::SparseMatrixCSC)
+    s = 0.0
+    rowval, nzval, colptr = A.rowval, A.nzval, A.colptr
+    @inbounds for j in 1:size(A, 2)
+        p = searchsortedfirst(rowval, j, colptr[j], colptr[j+1] - 1, Base.Order.Forward)
+        if p < colptr[j+1] && rowval[p] == j
+            s += abs(nzval[p])
+        end
+    end
+    return s
+end
+
+"""
+    refresh_A_cond!(lhs)
+
+Recombine `lhs.A_cond` (in place) from the current `lhs.A` (call
+[`build_A_visc!`](@ref) first to refresh its viscous block) via the cached
+scatter map. Allocation-free: no dense diagonal, no `f_bc` matvec. The RHS
+correction `f_bc` is computed separately by [`condense_f_bc`](@ref) only when
+needed (once at construction; it does not change the eddy-refresh hot path,
+where `f_bc` is unused and `inv_tk.f_bc` keeps its construction value).
+"""
+function refresh_A_cond!(lhs::InversionLHSCache)
     A, A_cond = lhs.A, lhs.A_cond
     N = size(A, 1)
 
@@ -151,14 +170,25 @@ function refresh_A_cond!(lhs::InversionLHSCache, ch::ConstraintHandler)
     @inbounds for t in eachindex(lhs.ks)
         A_cond.nzval[lhs.dests[t]] += lhs.coeffs[t] * A.nzval[lhs.ks[t]]
     end
-    md = sum(abs, diag(A)) / N
+    md = _sum_abs_diag(A) / N
     @inbounds for pos in lhs.diag_dests
         A_cond.nzval[pos] += md
     end
+    return A_cond
+end
 
-    f_bc = -(A * lhs.g)
+"""
+    condense_f_bc(lhs, ch) -> f_bc
+
+RHS correction `f_bc = C'(-A g)` for inhomogeneous constraint values (zero for
+the homogeneous velocity BCs this model uses). Fixed once `lhs.A`'s pattern is
+set; recomputing it per eddy refresh is wasteful, so it lives outside
+[`refresh_A_cond!`](@ref).
+"""
+function condense_f_bc(lhs::InversionLHSCache, ch::ConstraintHandler)
+    f_bc = -(lhs.A * lhs.g)
     _condense_rhs!(f_bc, ch)
-    return A_cond, f_bc
+    return f_bc
 end
 
 struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit, L}
@@ -212,7 +242,8 @@ function InversionToolkit(arch::AbstractArchitecture,
         lhs_cache = InversionLHSCache(A⁰, fe_data)
         build_A_visc!(lhs_cache.A, lhs_cache.A⁰, fe_data, params,
                       forcings.eddy_param, zeros(fe_data.nb), lhs_cache.nzidx_up)
-        A, f_bc = refresh_A_cond!(lhs_cache, fe_data.ch_up)
+        A    = refresh_A_cond!(lhs_cache)
+        f_bc = condense_f_bc(lhs_cache, fe_data.ch_up)
     else
         A = build_A_inversion(fe_data, params, forcings.ν)
         # apply BCs: condense A, compute f_bc correction for inhomogeneous BC values

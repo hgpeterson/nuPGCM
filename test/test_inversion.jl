@@ -87,7 +87,8 @@
             A_cond_ref, f_bc_ref = condense_system(A_ref, fe_data.ch_up, fe_data.C_up)
 
             build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b_vec, lhs.nzidx_up)
-            A_cond_test, f_bc_test = refresh_A_cond!(lhs, fe_data.ch_up)
+            A_cond_test = refresh_A_cond!(lhs)
+            f_bc_test   = condense_f_bc(lhs, fe_data.ch_up)
 
             @test norm(A_cond_test - A_cond_ref) / max(norm(A_cond_ref), eps()) < 1e-9
             @test norm(f_bc_test - f_bc_ref) < 1e-9
@@ -96,11 +97,10 @@
         # update_A! refreshes a same-pattern buffer in place (CPU: exact nzval copy)
         b1, b2 = randn(nb), randn(nb)
         build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b1, lhs.nzidx_up)
-        A_cond1, _ = refresh_A_cond!(lhs, fe_data.ch_up)
-        solver_A = copy(A_cond1)
+        solver_A = copy(refresh_A_cond!(lhs))
 
         build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b2, lhs.nzidx_up)
-        A_cond2, _ = refresh_A_cond!(lhs, fe_data.ch_up)
+        A_cond2 = refresh_A_cond!(lhs)
         update_A!(solver_A, A_cond2, Ref{Any}(nothing))
         @test solver_A.nzval == A_cond2.nzval
     end
