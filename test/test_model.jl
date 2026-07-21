@@ -60,4 +60,40 @@
         @test model2.state.u ≈ model.state.u
         @test model2.state.b ≈ model.state.b
     end
+
+    @testset "run! with eddy parameterization" begin
+        # exercises _update_eddy_A! (cached viscous-block rebuild), including
+        # the initial pre-loop sync in run! and the every-10-step refresh
+        eddy_param = EddyParameterization(f=x->1.0, N²min=1e-3, ν_min=0.1)
+        forcings_eddy = Forcings(1.0, x->1e-2, x->1e-2, x->0.05, x->0.0,
+                                 SurfaceDirichletBC(x->0.0); eddy_param)
+
+        inv_tk_eddy = InversionToolkit(CPU(), fe_data, params, forcings_eddy)
+        @test inv_tk_eddy.lhs_cache !== nothing
+
+        evo_tk_eddy = EvolutionToolkit(CPU(), fe_data, params, forcings_eddy, ts)
+        model_eddy  = Model(CPU(), params, forcings_eddy, fe_data,
+                            inv_tk_eddy, evo_tk_eddy, ts)
+
+        set_b!(model_eddy, x -> 0.05 * x[3])
+        nuPGCM.set_out_dir!("/tmp/nuPGCM_test_run_eddy")
+        run!(model_eddy; n_info=typemax(Int), n_save=Inf, n_plot=Inf)
+
+        @test norm(model_eddy.state.u) > 0
+        @test !any(isnan, model_eddy.state.u)
+        @test !any(isnan, model_eddy.state.b)
+
+        # the cached A must still solve consistently after the eddy refresh.
+        # Check via a bare InversionToolkit invert! (not Model.invert!, whose
+        # sync_flow! calls apply!(x, ch_up) afterward to recover periodic
+        # mirror DOFs -- that intentionally leaves x no longer satisfying
+        # Ax=y for the *condensed* system, so the residual must be read off
+        # solver.x/.y right after invert!, before any such recovery).
+        b_vec = randn(nb)
+        invert!(model_eddy.inversion, b_vec)
+        A_cpu = on_architecture(CPU(), model_eddy.inversion.solver.A)
+        x_cpu = on_architecture(CPU(), model_eddy.inversion.solver.x)
+        y_cpu = on_architecture(CPU(), model_eddy.inversion.solver.y)
+        @test norm(A_cpu * x_cpu - y_cpu) / norm(y_cpu) < 1e-6
+    end
 end

@@ -8,6 +8,11 @@ combination `A.nzval = M_c.nzval + θ (Kₕ_c.nzval + Kᵥ_c.nzval)` (and likewi
 refreshed via `_refresh_Kᵥ!` whenever `Kᵥ` changes. Ferrite's `apply!` is used
 here (not `condense_system`) because these operators are symmetric, where it
 is exact and condenses in place.
+
+`nzidx_b` is the sparsity index map into the raw (uncondensed) `Kᵥ` pattern,
+used by [`build_Kᵥ_conv!`](@ref) to scatter local blocks straight into
+`Kᵥ.nzval`; it depends on that matrix's pattern, hence lives here rather than
+in the matrix-independent [`AssemblyCache`](@ref).
 """
 struct EvolutionLHSCache
     M_c::SparseMatrixCSC{Float64, Int}
@@ -17,9 +22,11 @@ struct EvolutionLHSCache
     f_bc_Kₕ::Vector{Float64}
     f_bc_Kᵥ::Vector{Float64}
     A::SparseMatrixCSC{Float64, Int}   # CPU combination buffer (same pattern)
+    nzidx_b::Matrix{Int}               # local-block → Kᵥ.nzval index map
 end
 
-function EvolutionLHSCache(M, Kₕ, Kᵥ, ch_b)
+function EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data::FEData)
+    ch_b = fe_data.ch_b
     condense(K) = begin
         K_c = copy(K)
         f_bc = zeros(size(K, 1))
@@ -29,7 +36,8 @@ function EvolutionLHSCache(M, Kₕ, Kᵥ, ch_b)
     M_c,  f_bc_M  = condense(M)
     Kₕ_c, f_bc_Kₕ = condense(Kₕ)
     Kᵥ_c, f_bc_Kᵥ = condense(Kᵥ)
-    return EvolutionLHSCache(M_c, Kₕ_c, Kᵥ_c, f_bc_M, f_bc_Kₕ, f_bc_Kᵥ, copy(M_c))
+    nzidx_b = build_nzidx_map(Kᵥ, fe_data.cache.dofs_b)
+    return EvolutionLHSCache(M_c, Kₕ_c, Kᵥ_c, f_bc_M, f_bc_Kₕ, f_bc_Kᵥ, copy(M_c), nzidx_b)
 end
 
 function _refresh_Kᵥ!(lhs::EvolutionLHSCache, Kᵥ::SparseMatrixCSC, ch_b)
@@ -49,6 +57,7 @@ struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit
     rhs_flux::V  # α F surface flux
     f_bc::V      # RHS correction for inhomogeneous Dirichlet BCs (0 when BCs are homogeneous)
     solver::S
+    gpu_perm::Ref{Any}   # scratch for in-place solver.A updates (see update_A!); nothing on CPU
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -87,14 +96,15 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     Kₕ       = build_Kₕ(fe_data, κₕ)
     Kᵥ⁰      = build_Kᵥ(fe_data, κᵥ)
     Kᵥ       = copy(Kᵥ⁰)
-    lhs      = EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data.ch_b)
+    lhs      = EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data)
     rhs_diff⁰ = build_rhs_diff(params, fe_data, κᵥ)
     rhs_diff = copy(rhs_diff⁰)
     rhs_flux = build_rhs_flux(params, forcings, fe_data)
 
     # θ from a BDF1 startup step, but the preconditioner type must match the real
-    # timestepper: adaptive runs later rebuild with a Diagonal preconditioner, and
-    # the solver's parametric type is fixed by this first assignment.
+    # timestepper: the solver is immutable and later rebuilds refresh P in place,
+    # so P must be built here with the type the run will keep (Diagonal when
+    # adaptive/conv/GPU; see _use_diag_precond).
     ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[])
     A, P, f_bc = _combine_evolution_LHS(arch, params, forcings, ts1, lhs;
                                         use_diag=_use_diag_precond(arch, forcings, ts))
@@ -114,7 +124,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     kwargs_dict = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax, :history=>history, :verbose=>verbose_int)
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Evolution")
 
-    return EvolutionToolkit(arch, Kᵥ, Kᵥ⁰, lhs, rhs_diff, rhs_diff⁰, rhs_flux, f_bc, solver)
+    return EvolutionToolkit(arch, Kᵥ, Kᵥ⁰, lhs, rhs_diff, rhs_diff⁰, rhs_flux, f_bc, solver,
+                            Ref{Any}(nothing))
 end
 
 """
@@ -129,11 +140,16 @@ function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters,
                                  forcings::Forcings, ts::AbstractTimestepper, ch_b;
                                  Kᵥ_changed::Bool = true)
     arch = evolution.arch
+    solver = evolution.solver
     Kᵥ_changed && _refresh_Kᵥ!(evolution.lhs, evolution.Kᵥ, ch_b)
-    A, P, f_bc = _combine_evolution_LHS(arch, params, forcings, ts, evolution.lhs)
-    evolution.solver.A = A
-    evolution.solver.P = P
-    evolution.f_bc    .= on_architecture(arch, f_bc)
+
+    # combine the cached condensed operators into the CPU buffer lhs.A, then
+    # push into the (immutable) solver in place: same-pattern A refresh plus an
+    # in-place preconditioner refresh (Diagonal vector or sparse lu! refactor).
+    A_cpu, f_bc = _combine_evolution_LHS!(evolution.lhs, params, ts)
+    update_A!(solver.A, A_cpu, evolution.gpu_perm)
+    update_P!(solver.P, A_cpu, arch)
+    evolution.f_bc .= on_architecture(arch, f_bc)
     return evolution
 end
 
@@ -150,7 +166,7 @@ function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
     conv_on = forcings.conv_param.is_on
     if conv_on
         @ctime "  build Kᵥ" build_Kᵥ_conv!(evolution.Kᵥ, evolution.Kᵥ⁰, fe_data, params,
-                                           forcings.conv_param, b_cpu)
+                                           forcings.conv_param, b_cpu, evolution.lhs.nzidx_b)
         @ctime "  build rhs_diff" begin
             rhs_diff_new = build_rhs_diff_conv!(zeros(fe_data.nb), evolution.rhs_diff⁰,
                                                 fe_data, params, forcings.conv_param, b_cpu)
@@ -164,14 +180,23 @@ function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
     return evolution
 end
 
-function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
-                                 forcings::Forcings, ts::AbstractTimestepper,
-                                 lhs::EvolutionLHSCache;
-                                 use_diag = _use_diag_precond(arch, forcings, ts))
+# Combine the cached condensed operators into the CPU buffer `lhs.A` for the
+# current θ; returns (lhs.A, f_bc). Allocation-free apart from f_bc.
+function _combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
+                                 ts::AbstractTimestepper)
     θ = evolution_parameter(params, ts)
     A = lhs.A
     @. A.nzval = lhs.M_c.nzval + θ * (lhs.Kₕ_c.nzval + lhs.Kᵥ_c.nzval)
     f_bc = @. lhs.f_bc_M + θ * (lhs.f_bc_Kₕ + lhs.f_bc_Kᵥ)
+    return A, f_bc
+end
+
+# Construction-time variant: also builds the preconditioner and moves A to `arch`.
+function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
+                                 forcings::Forcings, ts::AbstractTimestepper,
+                                 lhs::EvolutionLHSCache;
+                                 use_diag = _use_diag_precond(arch, forcings, ts))
+    A, f_bc = _combine_evolution_LHS!(lhs, params, ts)
 
     if use_diag
         P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
@@ -500,12 +525,13 @@ index map; `Kᵥ` and `Kᵥ⁰` must both have the evolution pattern.
 function build_Kᵥ_conv(fe_data::FEData, params::Parameters,
                        forcings::Forcings, b_vec::AbstractVector)
     Kᵥ⁰ = build_Kᵥ(fe_data, forcings.κᵥ)
-    return build_Kᵥ_conv!(copy(Kᵥ⁰), Kᵥ⁰, fe_data, params, forcings.conv_param, b_vec)
+    nzidx_b = build_nzidx_map(Kᵥ⁰, fe_data.cache.dofs_b)
+    return build_Kᵥ_conv!(copy(Kᵥ⁰), Kᵥ⁰, fe_data, params, forcings.conv_param, b_vec, nzidx_b)
 end
 
 function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_data::FEData,
                         params::Parameters, conv_param::ConvectionParameterization,
-                        b_vec::AbstractVector)
+                        b_vec::AbstractVector, nzidx_b::Matrix{Int})
     cache = fe_data.cache
     nq   = length(cache.w)
     n_b  = size(cache.phi_b, 2)
@@ -541,7 +567,7 @@ function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_da
             end
         end
         for j in 1:n_b, i in 1:n_b
-            Kᵥ.nzval[cache.nzidx_b[n_b*(j - 1) + i, c]] += Ke[i, j]
+            Kᵥ.nzval[nzidx_b[n_b*(j - 1) + i, c]] += Ke[i, j]
         end
     end
     return Kᵥ

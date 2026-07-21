@@ -230,7 +230,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
         u_prev .= u_curr
         b_prev .= b_curr
 
-        if model.forcings.eddy_param.is_on && advection && mod(i, 10) == 0
+        if model.forcings.eddy_param.is_on && advection
             _update_eddy_A!(model)
         end
 
@@ -271,19 +271,23 @@ function _to_up_vec(fe_data::FEData, u_state::AbstractVector)
     return x
 end
 
+"""
+    _update_eddy_A!(model)
+
+Refresh the inversion LHS for the current eddy viscosity `ν(b)`. Only the
+viscous block changes; the static Coriolis/pressure/divergence blocks, the
+condensation scatter map, and the diagonal preconditioner's mesh scale `h`
+are all reused from `model.inversion.lhs_cache` (built once in
+`InversionToolkit`), so this touches only `nzval` arrays — no sparse matrix
+is (re)allocated. `f_bc` is left untouched: it is a fixed function of the
+velocity Dirichlet inhomogeneities (all zero for this model, see
+`InversionLHSCache`'s `g`), independent of `ν`.
+"""
 function _update_eddy_A!(model::Model)
-    A_new = build_A_inversion(model.fe_data, model.params,
-                               model.forcings.eddy_param, model.state.b)
-    A_new, _ = condense_system(A_new, model.fe_data.ch_up, model.fe_data.C_up)
-
-    # reuse the same diagonal preconditioner (h-scaled)
-    p, t = get_p_t(model.fe_data.mesh)
-    edges, _, _ = all_edges(t)
-    hs = sort([norm(p[edges[i,1],:] - p[edges[i,2],:]) for i in axes(edges,1)])
-    h  = hs[length(hs) ÷ 2]
-    P  = Diagonal(on_architecture(model.arch, fill(1/h^3, size(A_new,1))))
-
-    model.inversion.solver.A = on_architecture(model.arch, A_new)
-    model.inversion.solver.P = P
+    lhs = model.inversion.lhs_cache
+    @ctime "  build A_visc" build_A_visc!(lhs.A, lhs.A⁰, model.fe_data, model.params,
+                                          model.forcings.eddy_param, model.state.b, lhs.nzidx_up)
+    @ctime "  condense A" refresh_A_cond!(lhs, model.fe_data.ch_up)   # writes lhs.A_cond in place
+    @ctime "  update solver.A" update_A!(model.inversion.solver.A, lhs.A_cond, lhs.gpu_perm)
     return model
 end

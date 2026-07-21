@@ -141,8 +141,7 @@ function FEData(mesh::Mesh;
 
     @info "Building assembly cache..."
     @time begin
-    K_b   = allocate_matrix(dh_b, ch_b)   # evolution pattern for the nzval index map
-    cache = AssemblyCache(dh_up, dh_b, K_b, u_order, b_order)
+    cache = AssemblyCache(dh_up, dh_b, u_order, b_order)
     C_up  = _constraint_matrix(ch_up, N_up)
     end
 

@@ -9,7 +9,9 @@ using JLD2
 # internal assembly functions not part of the public API
 using nuPGCM: build_M, build_Kₕ, build_Kᵥ, build_rhs_diff, build_rhs_flux,
               collect_evolution_LHS!,
-              build_A_inversion, build_B_inversion, build_f_wind,
+              build_A_inversion, build_A_inversion_static, build_A_visc!,
+              build_B_inversion, build_f_wind,
+              condense_system, InversionLHSCache, refresh_A_cond!, update_A!,
               make_cell_values, make_facet_values,
               allocate_inversion_matrix, allocate_evolution_matrix,
               κᵥ_convection, ν_eddy, get_n_dofs
