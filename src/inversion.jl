@@ -1,35 +1,34 @@
 """
     InversionLHSCache
 
-Precomputed data for allocation-free rebuilds of the condensed inversion LHS
-`A_cond = C'AC + D` when only the viscous block of the uncondensed `A`
-changes (the eddy-viscosity parameterization: `ν` depends on `b`, everything
-else is fixed). Analogous to `EvolutionLHSCache` for the buoyancy system, but
-`condense_system`'s `C'AC` product (unlike Ferrite's symmetric-only `apply!`)
-is not linear in a way that preserves a *fixed* sparsity pattern from one
-`A` to the next: coincidental numeric cancellation can drop an entry from
-`C'AC`'s realized pattern for one `ν` field but not another. `M_pattern` is
-therefore built *structurally* — the union of every `(i,j)` destination that
-any nonzero of `A` could possibly reach through `C` — so it is guaranteed to
-contain every entry any `ν` field can produce; see `scratch/verify_condense_map.jl`
-for the numerical check against `condense_system`'s brute-force output.
+Precomputed data for allocation-free rebuilds of the reduced inversion LHS
+`A_cond = C'AC` (size `N_free × N_free`) when only the viscous block of the
+uncondensed `A` changes (the eddy-viscosity parameterization: `ν` depends on
+`b`, everything else is fixed). Analogous to `EvolutionLHSCache` for the
+buoyancy system, but `condense_system`'s `C'AC` product (unlike Ferrite's
+symmetric-only `apply!`) is not linear in a way that preserves a *fixed*
+sparsity pattern from one `A` to the next: coincidental numeric cancellation
+can drop an entry from `C'AC`'s realized pattern for one `ν` field but not
+another. `M_pattern` is therefore built *structurally* — the union of every
+`(i,j)` destination that any nonzero of `A` could possibly reach through `C` —
+so it is guaranteed to contain every entry any `ν` field can produce; see
+`scratch/verify_condense_map.jl` for the numerical check against
+`condense_system`'s brute-force output.
 
 Refresh (`refresh_A_cond!`) is then a sparse scatter: for each nonzero of the
 (rebuilt) uncondensed `A` at linear index `k`, add `coeffs[t] * A.nzval[k]`
-to `A_cond.nzval[dests[t]]` for every `t` with `ks[t] == k`, then add the
-constrained-row mean-|diagonal| `D` at `diag_dests`. No new sparse matrix is
-allocated.
+to `A_cond.nzval[dests[t]]` for every `t` with `ks[t] == k`. No new sparse
+matrix is allocated.
 
 Fields:
-- `A⁰`: static (ν-independent) uncondensed inversion matrix
+- `A⁰`: static (ν-independent) uncondensed inversion matrix (`N × N`)
 - `A`: reusable uncondensed buffer (`A⁰` + current viscous block)
-- `A_cond`: reusable condensed buffer, laid out on `M_pattern`
+- `A_cond`: reusable reduced buffer (`N_free × N_free`), laid out on `M_pattern`
 - `g`: full-length constraint-inhomogeneity vector (for `f_bc = C'(-A g)`)
 - `nzidx_up`: local u-u block → `A.nzval` index map for [`build_A_visc!`](@ref);
   depends on the (uncondensed) inversion pattern, hence lives here rather than
   in the matrix-independent [`AssemblyCache`](@ref)
 - `ks`, `dests`, `coeffs`: scatter map from `A.nzval` into `A_cond.nzval`
-- `diag_dests`: positions of the constrained-row entries of `D` in `A_cond.nzval`
 - `gpu_perm`: lazily-populated, architecture-specific scratch cache for
   in-place `solver.A` updates (see [`update_A!`](@ref) and
   `ext/nuPGCMCUDAExt.jl`); unused (stays `nothing`) on CPU
@@ -43,7 +42,6 @@ struct InversionLHSCache
     ks::Vector{Int}
     dests::Vector{Int}
     coeffs::Vector{Float64}
-    diag_dests::Vector{Int}
     gpu_perm::Ref{Any}
 end
 
@@ -53,22 +51,23 @@ function Base.summary(lhs::InversionLHSCache)
 end
 
 """
-    ks, dests, coeffs, diag_dests, M_pattern = _condense_scatter_map(A, C, ch)
+    ks, dests, coeffs, M_pattern = _condense_scatter_map(A, C)
 
 Build the scatter map described in [`InversionLHSCache`](@ref): for each
 nonzero `A[p,q]` (CSC linear index `k`) and each pair of nonzeros `C[p,i]`,
 `C[q,j]`, register a contribution `C[p,i]*C[q,j] * A.nzval[k]` to destination
-`(i,j)`. `M_pattern` is the structural union of all such `(i,j)` (values are
-placeholders; only the sparsity layout is used), together with the
-constrained diagonal `(cdof, cdof)` entries for `D`.
+`(i,j)` in the reduced matrix. `M_pattern` is the structural union of all such
+`(i,j)` (values are placeholders; only the sparsity layout is used). `C` is 
+`N × N_free`, so `i` and `j` are reduced indices (prescribed DOFs never appear).
 """
-function _condense_scatter_map(A::SparseMatrixCSC, C::SparseMatrixCSC, ch::ConstraintHandler)
-    N = size(A, 1)
+function _condense_scatter_map(A::SparseMatrixCSC, C::SparseMatrixCSC)
+    N     = size(A, 1)
+    N_red = size(C, 2)
 
     # row-wise nonzeros of C: Crows[p] = [(i, C[p,i]) for i with C[p,i] != 0]
     Crows    = [Int[] for _ in 1:N]
     Crowsval = [Float64[] for _ in 1:N]
-    for i in 1:N
+    for i in 1:N_red
         for idx in C.colptr[i]:(C.colptr[i+1]-1)
             p = C.rowval[idx]
             push!(Crows[p], i)
@@ -89,15 +88,10 @@ function _condense_scatter_map(A::SparseMatrixCSC, C::SparseMatrixCSC, ch::Const
             end
         end
     end
-    # register D's constrained-diagonal entries as structural nonzeros too
-    n_edge = length(Is)
-    for cdof in ch.prescribed_dofs
-        push!(Is, cdof); push!(Js, cdof)
-    end
 
     # structural pattern: boolean OR combiner, so no candidate is dropped to
     # an accidental zero the way `+`-accumulation in a real C'AC product could
-    M_pattern = sparse(Is, Js, trues(length(Is)), N, N, |)
+    M_pattern = sparse(Is, Js, trues(length(Is)), N_red, N_red, |)
     rowval_M  = M_pattern.rowval
     colptr_M  = M_pattern.colptr
 
@@ -108,6 +102,7 @@ function _condense_scatter_map(A::SparseMatrixCSC, C::SparseMatrixCSC, ch::Const
         pos
     end
 
+    n_edge = length(Is)
     ks     = Vector{Int}(undef, n_edge)
     dests  = Vector{Int}(undef, n_edge)
     coeffs = Vector{Float64}(undef, n_edge)
@@ -117,39 +112,19 @@ function _condense_scatter_map(A::SparseMatrixCSC, C::SparseMatrixCSC, ch::Const
         dests[t]  = _dest(Is[t], Js[t])
     end
 
-    diag_dests = [_dest(cdof, cdof) for cdof in ch.prescribed_dofs]
-
-    return ks, dests, coeffs, diag_dests, M_pattern
+    return ks, dests, coeffs, M_pattern
 end
 
 function InversionLHSCache(A⁰::SparseMatrixCSC, fe_data::FEData)
     ch, C = fe_data.ch_up, fe_data.C_up
-    ks, dests, coeffs, diag_dests, M_pattern = _condense_scatter_map(A⁰, C, ch)
+    ks, dests, coeffs, M_pattern = _condense_scatter_map(A⁰, C)
     A_cond = SparseMatrixCSC(M_pattern.m, M_pattern.n, M_pattern.colptr,
                              M_pattern.rowval, zeros(length(M_pattern.nzval)))
     g = zeros(size(A⁰, 1))
     g[ch.prescribed_dofs] .= ch.inhomogeneities
     nzidx_up = build_nzidx_map(A⁰, fe_data.cache.dofs_u)
     return InversionLHSCache(A⁰, copy(A⁰), A_cond, g, nzidx_up,
-                             ks, dests, coeffs, diag_dests, Ref{Any}(nothing))
-end
-
-"""
-    _sum_abs_diag(A::SparseMatrixCSC) -> Float64
-
-`sum(abs, diag(A))` without allocating the dense diagonal: walk each column's
-stored rows for the `(i, i)` entry. Assumes a square matrix.
-"""
-function _sum_abs_diag(A::SparseMatrixCSC)
-    s = 0.0
-    rowval, nzval, colptr = A.rowval, A.nzval, A.colptr
-    @inbounds for j in 1:size(A, 2)
-        p = searchsortedfirst(rowval, j, colptr[j], colptr[j+1] - 1, Base.Order.Forward)
-        if p < colptr[j+1] && rowval[p] == j
-            s += abs(nzval[p])
-        end
-    end
-    return s
+                             ks, dests, coeffs, Ref{Any}(nothing))
 end
 
 """
@@ -157,47 +132,36 @@ end
 
 Recombine `lhs.A_cond` (in place) from the current `lhs.A` (call
 [`build_A_visc!`](@ref) first to refresh its viscous block) via the cached
-scatter map. Allocation-free: no dense diagonal, no `f_bc` matvec. The RHS
-correction `f_bc` is computed separately by [`condense_f_bc`](@ref) only when
-needed (once at construction; it does not change the eddy-refresh hot path,
-where `f_bc` is unused and `inv_tk.f_bc` keeps its construction value).
+scatter map. The RHS correction `f_bc` is computed separately by 
+[`condense_f_bc`](@ref) once at construction.
 """
 function refresh_A_cond!(lhs::InversionLHSCache)
     A, A_cond = lhs.A, lhs.A_cond
-    N = size(A, 1)
-
     fill!(A_cond.nzval, 0.0)
     @inbounds for t in eachindex(lhs.ks)
         A_cond.nzval[lhs.dests[t]] += lhs.coeffs[t] * A.nzval[lhs.ks[t]]
-    end
-    md = _sum_abs_diag(A) / N
-    @inbounds for pos in lhs.diag_dests
-        A_cond.nzval[pos] += md
     end
     return A_cond
 end
 
 """
-    condense_f_bc(lhs, ch) -> f_bc
+    condense_f_bc(lhs, C) -> f_bc
 
-RHS correction `f_bc = C'(-A g)` for inhomogeneous constraint values (zero for
-the homogeneous velocity BCs this model uses). Fixed once `lhs.A`'s pattern is
-set; recomputing it per eddy refresh is wasteful, so it lives outside
-[`refresh_A_cond!`](@ref).
+Reduced RHS correction `f_bc = C'(-A g)` for inhomogeneous constraint values
+(zero for the homogeneous velocity BCs this model uses). Fixed once `lhs.A`'s
+pattern is set.
 """
-function condense_f_bc(lhs::InversionLHSCache, ch::ConstraintHandler)
-    f_bc = -(lhs.A * lhs.g)
-    _condense_rhs!(f_bc, ch)
-    return f_bc
-end
+condense_f_bc(lhs::InversionLHSCache, C::SparseMatrixCSC) = C' * (-(lhs.A * lhs.g))
 
 struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit, L}
-    B::B       # RHS coupling matrix (N_up × nb): maps buoyancy DOFs to (u,p) DOFs
-    f_wind::V  # RHS from wind-stress surface integral
-    f_bc::V    # RHS correction for inhomogeneous BCs (0 for homogeneous)
+    B::B       # reduced RHS coupling matrix (N_free × nb): buoyancy DOFs → reduced (u,p)
+    f_wind::V  # reduced RHS from wind-stress surface integral
+    f_bc::V    # reduced RHS correction for inhomogeneous BCs (0 for homogeneous)
+    b_arch::V  # scratch: `b_vec` on the solver's architecture (see invert!)
     ch_up::CUP # ConstraintHandler for setting constrained DOF values in invert!
     solver::S
     lhs_cache::L   # InversionLHSCache when eddy_param is on, `nothing` otherwise
+    x_full::Vector{Float64}   # scratch: reduced solution scattered to N_up (see sync_flow!)
 end
 
 function Base.summary(inv::InversionToolkit)
@@ -228,8 +192,12 @@ function InversionToolkit(arch::AbstractArchitecture,
                           memory=20, history=true, verbose=false, restart=true)
     @info "Building inversion system..."
 
-    B      = build_B_inversion(fe_data, params)
-    f_wind = build_f_wind(fe_data, params, forcings)
+    C = fe_data.C_up   # N_up × N_free constraint map
+
+    # project the RHS builders onto the reduced system once, so `invert!` never
+    # touches a full-length vector: C'(B b + f_wind) == (C'B) b + C'f_wind
+    B      = C' * build_B_inversion(fe_data, params)
+    f_wind = C' * build_f_wind(fe_data, params, forcings)
 
     eddy_on = forcings.eddy_param.is_on
     lhs_cache = nothing
@@ -243,12 +211,13 @@ function InversionToolkit(arch::AbstractArchitecture,
         build_A_visc!(lhs_cache.A, lhs_cache.A⁰, fe_data, params,
                       forcings.eddy_param, zeros(fe_data.nb), lhs_cache.nzidx_up)
         A    = refresh_A_cond!(lhs_cache)
-        f_bc = condense_f_bc(lhs_cache, fe_data.ch_up)
+        f_bc = condense_f_bc(lhs_cache, C)
     else
         A = build_A_inversion(fe_data, params, forcings.ν)
-        # apply BCs: condense A, compute f_bc correction for inhomogeneous BC values
-        # (not Ferrite's apply!, which corrupts non-symmetric matrices; see condense_system)
-        A, f_bc = condense_system(A, fe_data.ch_up, fe_data.C_up)
+        # apply BCs: eliminate prescribed DOFs, compute f_bc correction for
+        # inhomogeneous BC values (not Ferrite's apply!, which corrupts
+        # non-symmetric matrices; see condense_system)
+        A, f_bc = condense_system(A, fe_data.ch_up, C)
     end
 
     # preconditioner
@@ -281,22 +250,35 @@ function InversionToolkit(arch::AbstractArchitecture,
                        :history=>history, :verbose=>verbose_int, :restart=>restart)
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Inversion")
 
-    return InversionToolkit(B, f_wind, f_bc, fe_data.ch_up, solver, lhs_cache)
+    b_arch = on_architecture(arch, zeros(fe_data.nb))
+
+    return InversionToolkit(B, f_wind, f_bc, b_arch, fe_data.ch_up, solver, lhs_cache,
+                            zeros(ndofs(fe_data.dh_up)))
 end
 
 """
     invert!(inv_tk, b_vec)
 
 Solve the inversion system given buoyancy DOF vector `b_vec` (length nb).
-The combined (u,p) solution is stored in `inv_tk.solver.x`.
+The *reduced* (u,p) solution is stored in `inv_tk.solver.x`; scatter it back to
+full length at `fe_data.free_dofs` and `apply!` the ConstraintHandler to recover
+the constrained DOFs (see `sync_flow!`).
+
+`B`, `f_wind`, and `f_bc` are already projected onto the reduced system, so no
+full-length vector is formed here.
+
+Runs entirely on the solver's architecture: `b_vec` is copied into the `b_arch`
+scratch buffer and the `B * b` product is accumulated straight into `solver.y`
+with 5-argument `mul!`. The only host↔device traffic is the `nb`-length copy of
+`b_vec` itself. (Previously this pulled `B`, `f_wind` and `f_bc` back to the CPU
+every call — on GPU that meant converting a `CuSparseMatrixCSR` to
+`SparseMatrixCSC` per timestep and doing the matvec on the host.)
 """
 function invert!(inv_tk::InversionToolkit, b_vec::AbstractVector)
-    arch = architecture(inv_tk.solver.A)
-    y = on_architecture(CPU(), inv_tk.B) * b_vec .+
-        on_architecture(CPU(), inv_tk.f_wind) .+
-        on_architecture(CPU(), inv_tk.f_bc)
-    _condense_rhs!(y, inv_tk.ch_up)  # merge mirror rows into image rows, zero all constrained DOFs
-    inv_tk.solver.y .= on_architecture(arch, y)
+    y = inv_tk.solver.y
+    copyto!(inv_tk.b_arch, b_vec)
+    y .= inv_tk.f_wind .+ inv_tk.f_bc
+    mul!(y, inv_tk.B, inv_tk.b_arch, 1.0, 1.0)   # y += B * b
     iterative_solve!(inv_tk.solver)
     return inv_tk
 end

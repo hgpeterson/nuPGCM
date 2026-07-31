@@ -116,16 +116,30 @@ function invert!(model::Model)
     return invert!(model, model.state.b)
 end
 function invert!(model::Model, b_vec::AbstractVector)
-    invert!(model.inversion, on_architecture(CPU(), b_vec))
+    invert!(model.inversion, b_vec)
     sync_flow!(model)
     return model
 end
 
+"""
+    sync_flow!(model)
+
+Copy the solver's *reduced* solution into `model.state.u` and `model.state.p`.
+
+The solve is over free DOFs only (see [`condense_system`](@ref)), so the result
+is first scattered into a full-length `N_up` buffer at `fe_data.free_dofs`; then
+`apply!` reconstructs the constrained DOFs from their affine combinations plus
+inhomogeneities (for periodic BCs: `u[mirror] = u[image]`), and the full vector
+is split into the u and p fields.
+"""
 function sync_flow!(model::Model)
-    x = on_architecture(CPU(), model.inversion.solver.x)
-    apply!(x, model.inversion.ch_up)  # recover constrained (mirror) DOFs: u[mirror] = u[image]
-    model.state.u .= x[model.fe_data.u_dof_indices]
-    model.state.p .= x[model.fe_data.p_dof_indices]
+    x_red  = on_architecture(CPU(), model.inversion.solver.x)
+    x_full = model.inversion.x_full
+    fill!(x_full, 0.0)
+    x_full[model.fe_data.free_dofs] .= x_red
+    apply!(x_full, model.inversion.ch_up)  # recover constrained (mirror) DOFs
+    model.state.u .= x_full[model.fe_data.u_dof_indices]
+    model.state.p .= x_full[model.fe_data.p_dof_indices]
     return model
 end
 

@@ -3,7 +3,8 @@
     params   = PARAMS
     forcings = FORCINGS
     nu, np, nb = get_n_dofs(fe_data)
-    N_up = ndofs(fe_data.dh_up)
+    N_up   = ndofs(fe_data.dh_up)
+    N_free = length(fe_data.free_dofs)
 
     rel_asymm(K) = norm(K - K') / norm(K)
 
@@ -53,11 +54,13 @@
     @testset "InversionToolkit" begin
         inv_tk = InversionToolkit(CPU(), fe_data, params, forcings)
 
-        @test size(inv_tk.B)     == (N_up, nb)
-        @test length(inv_tk.f_wind) == N_up
-        @test length(inv_tk.f_bc)   == N_up
+        # B, f_wind and f_bc are pre-projected onto the reduced system
+        @test size(inv_tk.B) == (N_free, nb)
+        @test length(inv_tk.f_wind) == N_free
+        @test length(inv_tk.f_bc) == N_free
         @test norm(inv_tk.f_bc) == 0   # homogeneous velocity BCs
-        @test size(inv_tk.solver.A) == (N_up, N_up)
+        @test size(inv_tk.solver.A) == (N_free, N_free)
+        @test N_free == N_up - length(fe_data.ch_up.prescribed_dofs)
         @test inv_tk.solver.P isa Factorization
 
         # invert! produces a nonzero solution
@@ -88,7 +91,7 @@
 
             build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b_vec, lhs.nzidx_up)
             A_cond_test = refresh_A_cond!(lhs)
-            f_bc_test   = condense_f_bc(lhs, fe_data.ch_up)
+            f_bc_test   = condense_f_bc(lhs, fe_data.C_up)
 
             @test norm(A_cond_test - A_cond_ref) / max(norm(A_cond_ref), eps()) < 1e-9
             @test norm(f_bc_test - f_bc_ref) < 1e-9

@@ -108,7 +108,10 @@ end
             ch = fe_data.ch_up
             for (i, pdof) in enumerate(ch.prescribed_dofs)
                 dofcoef = ch.dofcoefficients[i]
-                dofcoef === nothing && continue
+                # `nothing` is a pure Dirichlet constraint; an *empty* coefficient
+                # list is the :pin pressure gauge (p[cdof] = 0). Neither is a
+                # periodic link, so both are skipped here.
+                (dofcoef === nothing || isempty(dofcoef)) && continue
                 val = sum(s * x_up[d] for (d, s) in dofcoef)
                 @test x_up[pdof] ≈ val atol=1e-12
             end

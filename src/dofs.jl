@@ -6,13 +6,14 @@ struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     ch_b::CB      # ConstraintHandler for b
     u_dof_indices::Vector{Int}    # sorted global u DOF indices within dh_up
     p_dof_indices::Vector{Int}    # sorted global p DOF indices within dh_up
+    free_dofs::Vector{Int}        # sorted unconstrained DOF indices within dh_up
     nu::Int
     np::Int
     nb::Int
     u_order::Int
     b_order::Int
     cache::AssemblyCache     # mesh-constant data for per-timestep re-assembly
-    C_up::SparseMatrixCSC{Float64, Int}   # constraint map for condense_system
+    C_up::SparseMatrixCSC{Float64, Int}   # N_up × N_free constraint map (see condense_system)
 end
 
 function Base.summary(fe_data::FEData)
@@ -38,11 +39,21 @@ Set up `DofHandler`s and `ConstraintHandler`s for the PG model.
 A combined `DofHandler` for (u, p) is used for the inversion problem so that
 periodic BCs (which couple image and mirror DOFs across cell boundaries) can be
 condensed consistently. `u_dof_indices` and `p_dof_indices` store the global DOF
-index sets within `dh_up` for splitting the combined solution.
+index sets within `dh_up` for splitting the combined solution; `free_dofs` stores
+the unconstrained DOFs, which are the ones actually solved for (see
+[`condense_system`](@ref)).
 
 Periodic BCs are applied automatically when `"channel_west"` and `"channel_east"`
 facetsets are present in the grid. The periodic translation vector is inferred from
 the east-wall x-coordinate. Dirichlet values for `u` are always zero.
+
+`pressure_gauge` defaults to `:pin`. `:mean` is correct but expensive: its
+constraint expresses one pressure DOF as a dense combination of *all* the others,
+which makes Ferrite's `allocate_matrix(dh, ch)` fire its "double-distribute"
+branch and insert ~`np²` entries (88.7M vs 17.0M nonzeros, 3.4 GiB vs 780 MiB of
+GPU memory at h=4e-2; the block grows as `np²`). `:pin` fixes a single DOF instead,
+leaving pressure determined up to a constant — subtract the mean at output time if
+a zero-mean field is wanted. See `scratch/diagnose_gauge_nnz.jl`.
 """
 function FEData(mesh::Mesh;
                 u_diri_tags  = String[],
@@ -51,7 +62,7 @@ function FEData(mesh::Mesh;
                 b_diri_vals  = nothing,   # function b(x) or constant
                 u_order = 2,
                 b_order = 2,
-                pressure_gauge = :mean)   # :mean (∫p dΩ = 0), :pin (one DOF = 0), :none
+                pressure_gauge = :pin)    # :pin (one DOF = 0), :mean (∫p dΩ = 0), :none
     grid = mesh.grid
 
     ip_u = Lagrange{RefTetrahedron, u_order}()^3
@@ -137,16 +148,19 @@ function FEData(mesh::Mesh;
 
     end
 
-    N_up = ndofs(dh_up)
+    N_up      = ndofs(dh_up)
+    free_dofs = setdiff(1:N_up, ch_up.prescribed_dofs)
+    @info @sprintf("Inversion DOFs: %d total, %d prescribed, %d solved for",
+                   N_up, length(ch_up.prescribed_dofs), length(free_dofs))
 
     @info "Building assembly cache..."
     @time begin
     cache = AssemblyCache(dh_up, dh_b, u_order, b_order)
-    C_up  = _constraint_matrix(ch_up, N_up)
+    C_up  = _constraint_matrix(ch_up, N_up, free_dofs)
     end
 
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
-                  u_dof_indices, p_dof_indices,
+                  u_dof_indices, p_dof_indices, free_dofs,
                   nu, np, nb, u_order, b_order,
                   cache, C_up)
 end
@@ -204,14 +218,24 @@ function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
 end
 
 """
-    A_cond, f_bc = condense_system(A, ch)
+    A_red, f_bc = condense_system(A, ch, C)
 
-Condense the matrix `A` with the constraints in `ch`: return `CᵀAC + D`, where
-`C` maps reduced to full DOFs (`x_full = C x_reduced + g`, `g` the constraint
-inhomogeneities) and `D` places the mean |diagonal| on constrained rows, plus
-the RHS correction `f_bc = Cᵀ(-A g)` (zero when all constraints are homogeneous).
+Reduce the `N × N` matrix `A` to the `N_free × N_free` system actually solved,
+using the constraint map `C` (`N × N_free`, from [`_constraint_matrix`](@ref)):
 
-This replaces Ferrite's `apply!(A, f_bc, ch)`, which mis-places the coupling
+    A_red = CᵀAC,   f_bc = Cᵀ(-A g)
+
+where `x_full = C x_red + g` and `g` carries the constraint inhomogeneities
+(`f_bc` is zero when all constraints are homogeneous, as for this model's
+velocity BCs).
+
+Prescribed DOFs are *eliminated*, not retained: `C` has no column for them, so
+they contribute no row or column to `A_red`. This is what Gridap does at
+assembly time on `main` (`assemble_matrix` over a `TrialFESpace` emits the free
+block directly, with the Dirichlet contribution as a separate RHS lift); here
+the same reduced system is reached by projection after assembling the full one.
+
+This also replaces Ferrite's `apply!(A, f_bc, ch)`, which mis-places the coupling
 blocks between pairs of constrained DOFs in non-symmetric matrices: with
 constraints `x[c1] = x[f1]` and `x[c2] = x[f2]`, it folds `A[c1, c2]` into the
 transposed position `A[f2, f1]` instead of `A[f1, f2]` (Ferrite ≤ 1.4,
@@ -219,35 +243,33 @@ transposed position `A[f2, f1]` instead of `A[f1, f2]` (Ferrite ≤ 1.4,
 blocks across the periodic seam; symmetric matrices (mass, diffusion) are
 unaffected.
 
-At solve time, prepare the RHS with `_condense_rhs!(y, ch)` and recover the
-constrained solution DOFs with `apply!(x, ch)`, as with Ferrite's `apply!`.
-
-The constraint map `C` is built from `ch` when not supplied; pass the cached
-`fe_data.C_up` to avoid rebuilding it on repeated condensations.
+At solve time, map the RHS with [`condense_rhs`](@ref), solve for `x_red`, then
+scatter back into a full-length vector at `fe_data.free_dofs` and call
+`apply!(x_full, ch)` to recover the constrained DOFs.
 """
-function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler,
-                         C::SparseMatrixCSC = _constraint_matrix(ch, size(A, 1)))
-    N = size(A, 1)
-
-    # RHS correction from inhomogeneous constraint values
-    g = zeros(N)
+function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler, C::SparseMatrixCSC)
+    g = zeros(size(A, 1))
     g[ch.prescribed_dofs] .= ch.inhomogeneities
-    f_bc = -(A * g)
-    _condense_rhs!(f_bc, ch)
-
-    # mean |diagonal| keeps constrained rows at a scale comparable to A
-    md = sum(abs, diag(A)) / N
-    D = sparse(ch.prescribed_dofs, ch.prescribed_dofs,
-               fill(md, length(ch.prescribed_dofs)), N, N)
-
-    return C' * A * C + D, f_bc
+    return C' * A * C, C' * (-(A * g))
 end
 
 """
-    C = _constraint_matrix(ch, N)
+    y_red = condense_rhs(y, C)
 
-Build the sparse constraint map `C` such that `x_full = C * x_reduced (+ g)`:
-identity on free DOFs, coefficient entries on constrained rows.
+Map a full-length physics RHS onto the reduced system: `y_red = Cᵀ y`.
+
+Equivalent to [`_condense_rhs!`](@ref) followed by keeping only the free rows —
+each constrained DOF's row is merged into the rows of its coefficient DOFs, and
+the constrained rows themselves are dropped rather than zeroed.
+"""
+condense_rhs(y::AbstractVector, C::SparseMatrixCSC) = C' * y
+
+"""
+    C = _constraint_matrix(ch, N, free_dofs)
+
+Build the `N × N_free` sparse constraint map `C` such that `x_full = C x_red + g`:
+column `j` corresponds to `free_dofs[j]`, carrying a 1 on its own row plus the
+coefficient of that DOF in every constrained DOF's affine combination.
 
 Coefficient entries that reference a DOF which is itself prescribed (a
 "junction" DOF, e.g. a periodic mirror whose image lies on a Dirichlet
@@ -255,18 +277,25 @@ boundary) are dropped: their value is already folded into `ch.inhomogeneities`
 by Ferrite's `update!` and hence carried by `g` in [`condense_system`](@ref).
 Keeping such an entry corrupts the condensed system at exactly those DOFs.
 """
-function _constraint_matrix(ch::ConstraintHandler, N::Int)
-    rows = collect(1:N); cols = collect(1:N); vals = ones(N)
+function _constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int})
+    # reduced index of each DOF (0 for prescribed DOFs, which have no column)
+    red = zeros(Int, N)
+    for (j, i) in enumerate(free_dofs)
+        red[i] = j
+    end
+
+    rows = copy(free_dofs)
+    cols = collect(1:length(free_dofs))
+    vals = ones(length(free_dofs))
     for (i, cdof) in enumerate(ch.prescribed_dofs)
-        vals[cdof] = 0.0   # no identity row for constrained DOFs
         dofcoef = ch.dofcoefficients[i]
         dofcoef === nothing && continue
         for (fdof, c) in dofcoef
             haskey(ch.dofmapping, fdof) && continue   # prescribed: value lives in g
-            push!(rows, cdof); push!(cols, fdof); push!(vals, c)
+            push!(rows, cdof); push!(cols, red[fdof]); push!(vals, c)
         end
     end
-    return sparse(rows, cols, vals, N, N)
+    return sparse(rows, cols, vals, N, length(free_dofs))
 end
 
 function _to_dirichlet_fn(val)

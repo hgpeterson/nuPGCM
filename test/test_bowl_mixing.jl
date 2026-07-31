@@ -29,18 +29,30 @@
     @testset "mean pressure constraint (bowl)" begin
         # Bowl mesh is non-periodic: the mean pressure AffineConstraint is active.
         # After invert!, ∫p dΩ must be zero to within solver tolerance.
-        b_vec = randn(fe_data.nb)
-        invert!(inv_tk, b_vec)
-        x_sol = on_architecture(CPU(), inv_tk.solver.x)
+        # Needs an explicit :mean handler -- the default gauge is :pin, which
+        # leaves pressure determined only up to a constant.
+        fe_data_mean = FEData(mesh;
+            u_diri_tags  = ["bottom", "surface"],
+            u_diri_masks = [(true,true,true), (false,false,true)],
+            b_diri_tags  = ["surface"],
+            b_diri_vals  = [x -> 0.0],
+            pressure_gauge = :mean)
+        inv_tk_mean = InversionToolkit(CPU(), fe_data_mean, params, forcings)
 
-        _, cv_p, _ = make_cell_values(fe_data)
-        p_range    = dof_range(fe_data.dh_up, :p)
-        x_up       = zeros(ndofs(fe_data.dh_up))
-        x_up[fe_data.p_dof_indices] .= x_sol[fe_data.p_dof_indices]
+        b_vec = randn(fe_data_mean.nb)
+        invert!(inv_tk_mean, b_vec)
+
+        # the solve is over free DOFs only: scatter back and recover the rest
+        x_up = zeros(ndofs(fe_data_mean.dh_up))
+        x_up[fe_data_mean.free_dofs] .= on_architecture(CPU(), inv_tk_mean.solver.x)
+        apply!(x_up, fe_data_mean.ch_up)
+
+        _, cv_p, _ = make_cell_values(fe_data_mean)
+        p_range    = dof_range(fe_data_mean.dh_up, :p)
 
         p_integral = 0.0
         vol        = 0.0
-        for cc in CellIterator(fe_data.dh_up)
+        for cc in CellIterator(fe_data_mean.dh_up)
             reinit!(cv_p, cc)
             local_p = x_up[celldofs(cc)[p_range]]
             for q in 1:getnquadpoints(cv_p)

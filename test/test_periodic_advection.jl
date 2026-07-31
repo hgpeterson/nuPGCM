@@ -218,24 +218,48 @@
         @test njunction > 0
 
         # condensation must eliminate every prescribed row and column exactly:
-        # anything left beyond the placed diagonal couples the reduced system
-        # to constrained DOFs whose solve values are meaningless. This is the
-        # defect mode of folding a mirror equation into a prescribed image DOF.
+        # anything left couples the reduced system to constrained DOFs whose
+        # solve values are meaningless. This is the defect mode of folding a
+        # mirror equation into a prescribed image DOF.
         A_raw = allocate_inversion_matrix(fe_diri)
         A_raw.nzval .= sin.(1.0:length(A_raw.nzval))   # deterministic, non-symmetric
         A_c, _ = nuPGCM.condense_system(A_raw, ch, fe_diri.C_up)
-        md = sum(abs, diag(A_raw)) / size(A_raw, 1)
-        pd = ch.prescribed_dofs
+        pd   = ch.prescribed_dofs
+        free = fe_diri.free_dofs
+        N    = size(A_raw, 1)
 
-        I1, J1, V1 = findnz(A_c[pd, :])
-        off_rows = [abs(V1[k]) for k in eachindex(V1) if J1[k] != pd[I1[k]]]
-        @test isempty(off_rows) || maximum(off_rows) < 1e-12 * md
+        # prescribed DOFs are eliminated outright: C has no column for them, so
+        # they contribute no row, no column, and no placed diagonal
+        @test size(A_c) == (length(free), length(free))
+        @test length(free) == N - length(pd)
 
-        I2, J2, V2 = findnz(A_c[:, pd])
-        off_cols = [abs(V2[k]) for k in eachindex(V2) if I2[k] != pd[J2[k]]]
-        @test isempty(off_cols) || maximum(off_cols) < 1e-12 * md
+        # the junction rule: a coefficient pointing at a DOF that is itself
+        # prescribed must be dropped from C (its value lives in `g` instead).
+        # Row `cdof` of C therefore holds exactly its *free* coefficients.
+        Ct = sparse(fe_diri.C_up')      # columns of Cᵀ are rows of C
+        for (i, cdof) in enumerate(pd)
+            coef = ch.dofcoefficients[i]
+            coef === nothing && continue
+            n_free_coef = count(!haskey(ch.dofmapping, d) for (d, _) in coef)
+            @test Ct.colptr[cdof+1] - Ct.colptr[cdof] == n_free_coef
+        end
 
-        @test maximum(abs, diag(A_c)[pd] .- md) < 1e-12 * md
+        # equivalence with the square-C projection, whose prescribed rows and
+        # columns must vanish identically
+        rows = copy(free); cols = copy(free); vals = ones(length(free))
+        for (i, cdof) in enumerate(pd)
+            coef = ch.dofcoefficients[i]
+            coef === nothing && continue
+            for (d, c) in coef
+                haskey(ch.dofmapping, d) && continue
+                push!(rows, cdof); push!(cols, d); push!(vals, c)
+            end
+        end
+        C_sq = sparse(rows, cols, vals, N, N)
+        M    = C_sq' * A_raw * C_sq
+        @test nnz(M[pd, :]) == 0
+        @test nnz(M[:, pd]) == 0
+        @test norm(A_c - M[free, free]) < 1e-12 * norm(M[free, free])
     end
 
     @testset "junction DOFs: Dirichlet + periodic constraints" begin
