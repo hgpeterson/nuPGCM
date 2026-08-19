@@ -98,6 +98,21 @@ function boundary_nodes(t)
 end
 
 """
+    h = median_edge_length(mesh)
+
+Median length over all unique mesh edges. This is the `h` behind the `1/h³`
+diagonal preconditioner (the scaling that makes the residual mesh-independent for
+a 3D mass-matrix-like operator), and the reference length for reporting how well
+the Ekman layer `δ ≈ √2 α ε √ν` is resolved.
+"""
+function median_edge_length(mesh::Mesh)
+    p, t = get_p_t(mesh)
+    edges, _, _ = all_edges(t)
+    hs = sort([norm(p[edges[i, 1], :] - p[edges[i, 2], :]) for i in axes(edges, 1)])
+    return hs[length(hs) ÷ 2]
+end
+
+"""
     h_cells = compute_h_cells(mesh)
 
 Return the maximum edge length per cell.

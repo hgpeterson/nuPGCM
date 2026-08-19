@@ -75,6 +75,7 @@ include("cache.jl")
 include("dofs.jl")
 include("spaces.jl")
 include("iterative_solvers.jl")
+include("pressure_operators.jl")
 include("preconditioners.jl")
 include("inversion.jl")
 include("timesteppers.jl")
@@ -108,8 +109,40 @@ Forcings,
 Mesh,
 get_p_t,
 compute_h_cells,
+median_edge_length,
 # dofs.jl
 FEData,
+n_free_up,
+block_ranges,
+# pressure_operators.jl
+PressureOperators,
+build_pressure_operators,
+build_velocity_mass_lumped,
+# preconditioners.jl
+Preconditioner,
+ScaledIdentity,
+BlockDiagonalPreconditioner,
+BlockTriangularPreconditioner,
+NullspaceProjected,
+FactorInverse,
+DiagInverse,
+KrylovInverse,
+HostInverse,
+ProjectedInverse,
+RefreshablePreconditioner,
+FunctionInverse,
+InversionBlocks,
+split_blocks,
+augment_system,
+velocity_inverse,
+build_preconditioner,
+schur_mass,
+schur_stiffness,
+schur_cahouet_chabard,
+schur_geostrophic,
+schur_lsc,
+schur_augmented_lagrangian,
+schur_exact,
 # inversion.jl
 InversionToolkit,
 invert!,
@@ -124,6 +157,7 @@ Model,
 set_b!,
 set_state_from_file!,
 evolve!,
+rebuild_preconditioner!,
 update_t!,
 run!,
 # IO.jl

@@ -6,7 +6,10 @@ struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     ch_b::CB      # ConstraintHandler for b
     u_dof_indices::Vector{Int}    # sorted global u DOF indices within dh_up
     p_dof_indices::Vector{Int}    # sorted global p DOF indices within dh_up
-    free_dofs::Vector{Int}        # sorted unconstrained DOF indices within dh_up
+    free_dofs::Vector{Int}        # unconstrained DOF indices within dh_up (see `dof_order`)
+    u_free_red::Vector{Int}       # positions of the u DOFs within the reduced vector
+    p_free_red::Vector{Int}       # positions of the p DOFs within the reduced vector
+    dof_order::Symbol             # :sorted or :blocked (see FEData docstring)
     nu::Int
     np::Int
     nb::Int
@@ -54,6 +57,28 @@ branch and insert ~`np²` entries (88.7M vs 17.0M nonzeros, 3.4 GiB vs 780 MiB o
 GPU memory at h=4e-2; the block grows as `np²`). `:pin` fixes a single DOF instead,
 leaving pressure determined up to a constant — subtract the mean at output time if
 a zero-mean field is wanted. See `scratch/diagnose_gauge_nnz.jl`.
+
+`:none` leaves the constant-pressure mode in the system. The resulting matrix is
+singular but *range-symmetric* (`N(𝒜) = N(𝒜ᵀ) = span{(0, 1_p)}`) and the RHS is
+consistent, so a Krylov method converges provided the constant is projected out of
+the iterates — see [`NullspaceProjector`](@ref). This is preferable to `:pin` for
+iterative solves: pinning removes the exact null mode but leaves a *near*-null mode
+("constant everywhere except the pinned DOF") whose spuriously tiny Schur
+eigenvalue slows GMRES down. A direct solve never notices the difference.
+
+`dof_order` controls the ordering of `free_dofs`, i.e. of the reduced system that
+is actually solved:
+- `:sorted` (default) keeps Ferrite's global numbering, in which u and p DOFs are
+  interleaved cell-by-cell.
+- `:blocked` puts all free u DOFs first, then all free p DOFs, so the reduced
+  system has the `[A -Bᵀ; B 0]` 2×2 block structure laid out contiguously. This is
+  required by every block preconditioner in `preconditioners.jl` (contiguous views
+  instead of gather/scatter, which matters a lot on GPU). It changes the sparsity
+  pattern, hence LU fill-in, so it is opt-in.
+
+Both orderings are handled transparently downstream: `_constraint_matrix` builds
+`C` column-by-column from `free_dofs` in whatever order it is given, and
+`sync_flow!` scatters back with `x_full[free_dofs] .= x_red`.
 """
 function FEData(mesh::Mesh;
                 u_diri_tags  = String[],
@@ -62,7 +87,10 @@ function FEData(mesh::Mesh;
                 b_diri_vals  = nothing,   # function b(x) or constant
                 u_order = 2,
                 b_order = 2,
-                pressure_gauge = :pin)    # :pin (one DOF = 0), :mean (∫p dΩ = 0), :none
+                pressure_gauge = :pin,    # :pin (one DOF = 0), :mean (∫p dΩ = 0), :none
+                dof_order = :sorted)      # :sorted (Ferrite numbering) or :blocked (u then p)
+    dof_order in (:sorted, :blocked) ||
+        throw(ArgumentError("dof_order must be :sorted or :blocked, got $dof_order"))
     grid = mesh.grid
 
     ip_u = Lagrange{RefTetrahedron, u_order}()^3
@@ -149,9 +177,20 @@ function FEData(mesh::Mesh;
     end
 
     N_up      = ndofs(dh_up)
-    free_dofs = setdiff(1:N_up, ch_up.prescribed_dofs)
-    @info @sprintf("Inversion DOFs: %d total, %d prescribed, %d solved for",
-                   N_up, length(ch_up.prescribed_dofs), length(free_dofs))
+    free_sorted = setdiff(1:N_up, ch_up.prescribed_dofs)
+    is_u        = falses(N_up)
+    is_u[u_dof_indices] .= true
+    if dof_order == :blocked
+        free_dofs = vcat(filter(i ->  is_u[i], free_sorted),
+                         filter(i -> !is_u[i], free_sorted))
+    else
+        free_dofs = free_sorted
+    end
+    u_free_red = findall(i ->  is_u[i], free_dofs)
+    p_free_red = findall(i -> !is_u[i], free_dofs)
+    @info @sprintf("Inversion DOFs: %d total, %d prescribed, %d solved for (%d u, %d p, %s)",
+                   N_up, length(ch_up.prescribed_dofs), length(free_dofs),
+                   length(u_free_red), length(p_free_red), dof_order)
 
     @info "Building assembly cache..."
     @time begin
@@ -161,8 +200,31 @@ function FEData(mesh::Mesh;
 
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
                   u_dof_indices, p_dof_indices, free_dofs,
+                  u_free_red, p_free_red, dof_order,
                   nu, np, nb, u_order, b_order,
                   cache, C_up)
+end
+
+"""
+    nu_free, np_free = n_free_up(fe_data)
+
+Number of free velocity and pressure DOFs in the reduced (condensed) system.
+"""
+n_free_up(fe_data::FEData) = length(fe_data.u_free_red), length(fe_data.p_free_red)
+
+"""
+    u_rng, p_rng = block_ranges(fe_data)
+
+Contiguous `UnitRange`s of the velocity and pressure blocks within the reduced
+solution vector. Requires `dof_order = :blocked`; throws otherwise, since with
+`:sorted` the two fields are interleaved and no such ranges exist.
+"""
+function block_ranges(fe_data::FEData)
+    fe_data.dof_order == :blocked || throw(ArgumentError(
+        "block_ranges requires FEData(...; dof_order = :blocked); got :$(fe_data.dof_order). " *
+        "Block preconditioners need the reduced system laid out as [u; p]."))
+    nu_free, np_free = n_free_up(fe_data)
+    return 1:nu_free, (nu_free + 1):(nu_free + np_free)
 end
 
 """

@@ -94,13 +94,30 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
     end
 
     # solve
-    Krylov.krylov_solve!(workspace, A, y, x; M=P, kwargs...)
+    #
+    # `precond_side` decides whether P enters as a left (M) or right (N)
+    # preconditioner. It matters for more than convergence:
+    #
+    #   - Krylov.jl's residual is ‖M(b - Ax)‖, so with a *left* preconditioner the
+    #     stopping criterion is measured in P's own norm, not the true residual.
+    #     Right preconditioning makes `atol`/`rtol` mean what they say.
+    #   - A preconditioner containing a truncated inner Krylov solve is nonlinear,
+    #     and only the flexible (right-preconditioned FGMRES) variant is valid then.
+    #
+    # Left is the default for backwards compatibility with the plain `Diagonal`
+    # preconditioner, where the two differ only by a scalar.
+    side = get(kwargs, :precond_side, :left)
+    kw   = Dict(k => v for (k, v) in pairs(kwargs) if k !== :precond_side)
+    pkw  = side === :right ? (; N=P) : (; M=P)
+    Krylov.krylov_solve!(workspace, A, y, x; pkw..., kw...)
 
     @debug begin 
         solved = workspace.stats.solved
         niter = workspace.stats.niter 
         time = workspace.stats.timer
-        @sprintf("%s iterative solve: solved=%s, niter=%d, time=%.3e", label, solved, niter, time) 
+        residual₁ = workspace.stats.residuals[1]
+        residualₑ = workspace.stats.residuals[end]
+        @sprintf("%s iterative solve: solved=%s, niter=%d, resid[1]=%.3e, resid[end]=%.3e, time=%.3e", label, solved, niter, residual₁, residualₑ, time) 
     end
 
     return solver_tk

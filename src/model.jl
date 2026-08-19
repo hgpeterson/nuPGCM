@@ -188,7 +188,8 @@ function evolve!(model::Model, ::Nothing, ::Nothing)
     return evolve!(model, model.state.u, model.state.b)
 end
 
-function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advection=true)
+function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advection=true,
+              n_precond=50, precond_growth=1.4)
     u = model.state.u
     b = model.state.b
     timestepper = model.timestepper
@@ -202,6 +203,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
     # initial eddy ν sync
     if model.forcings.eddy_param.is_on
         _update_eddy_A!(model)
+        rebuild_preconditioner!(model)   # P was built at b = 0; resync it with the real ν(b)
         invert!(model)
     end
 
@@ -209,6 +211,10 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
         save_state(model, @sprintf("%s/data/state_%016d.jld2", out_dir, i_start))
         save_vtk(model,   ofile=@sprintf("%s/data/state_%016d", out_dir, i_start))
     end
+
+    # iteration count of the first solve after the most recent preconditioner
+    # rebuild; 0 means "not yet measured" (see the refresh block in the loop)
+    niter_ref = 0
 
     u_prev = copy(u)
     b_prev = copy(b)
@@ -246,6 +252,34 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
 
         if model.forcings.eddy_param.is_on && advection
             _update_eddy_A!(model)
+            # Preconditioner refresh cadence.
+            #
+            # A fixed interval alone does not work. The staleness measurement behind
+            # `n_precond` was made on a spun-up state, where b drifts slowly; during
+            # the initial adjustment ν(b) moves fast enough to blow past `itmax`
+            # within a few steps, and each such failure costs a full itmax solve
+            # (~20 s) against a ~1.3 s rebuild.
+            #
+            # So drive it off the iteration count instead: remember what the solver
+            # needed on the first solve after the last rebuild, and rebuild again
+            # once it has grown by `precond_growth`, or if a solve outright failed.
+            # The fixed interval stays as a backstop.
+            stats  = model.inversion.solver.workspace.stats
+            niter  = stats.niter
+            solved = stats.solved
+            grown  = niter_ref > 0 && niter > precond_growth * niter_ref
+            if !solved || grown || (n_precond < Inf && mod(i, n_precond) == 0)
+                @debug begin
+                    why = !solved ? "solve failed" :
+                          grown   ? @sprintf("iterations grew %d → %d", niter_ref, niter) :
+                                    "periodic"
+                    "rebuilding inversion preconditioner ($why)"
+                end
+                @ctime "  rebuild precond" rebuild_preconditioner!(model)
+                niter_ref = 0        # next successful solve sets the new baseline
+            elseif niter_ref == 0 && solved
+                niter_ref = niter
+            end
         end
 
         if mod(i, n_info) == 0
@@ -283,6 +317,39 @@ function _to_up_vec(fe_data::FEData, u_state::AbstractVector)
     x = zeros(ndofs(fe_data.dh_up))
     x[fe_data.u_dof_indices] .= u_state
     return x
+end
+
+"""
+    rebuild_preconditioner!(model)
+
+Rebuild the inversion preconditioner from the current `ν(b)`.
+
+`_update_eddy_A!` refreshes the *operator* every timestep but not the
+preconditioner, which is correct for the constant `Diagonal(1/h³)` and wrong for
+anything built from `ν`. Cahouet--Chabard's `Mν = ∫pq/(2α²ε²ν)` is exactly such a
+thing (its other term, `Kf = ∫(1/|f|)∇p·∇q`, is ν-independent and needs no
+refresh, but the whole preconditioner is rebuilt here for simplicity — setup is
+~1.3 s at `h = 4e-2`).
+
+No-op unless `InversionToolkit` was given a `NamedTuple` preconditioner spec and
+the eddy parameterization is on (with fixed `ν` the operator never changes, so
+neither does the preconditioner).
+
+Call frequency is set by `run!`'s `n_precond`; see [`RefreshablePreconditioner`](@ref)
+for the measured staleness that motivates the default of 50.
+"""
+function rebuild_preconditioner!(model::Model)
+    inv_tk = model.inversion
+    spec   = inv_tk.precond_spec
+    spec === nothing && return model
+    inv_tk.lhs_cache === nothing && return model    # ν fixed ⇒ nothing to refresh
+    P = inv_tk.solver.P
+    P isa RefreshablePreconditioner || return model
+    P_new, _ = build_preconditioner(spec, model.arch, model.fe_data, model.params,
+                                    model.forcings, inv_tk.lhs_cache.A_cond, nothing;
+                                    b_vec = model.state.b, h = inv_tk.h_med)
+    P.inner = P_new
+    return model
 end
 
 """

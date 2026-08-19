@@ -11,7 +11,7 @@ PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM-ferrite"
 # SIMS_PATH = "/resnick/scratch/hppeters"
 SIMS_PATH = @__DIR__
 
-set_out_dir!(joinpath(SIMS_PATH, "channel_basin_000"))
+set_out_dir!(joinpath(SIMS_PATH, "channel_basin_006"))
 
 # geom = :tub
 geom = :box
@@ -125,7 +125,9 @@ end
 τʸ(x) = 0.0
 b_surface(x) = x[2] > 0 ? 0.0 : -b₀*x[2]^2
 b_surface_bc = SurfaceDirichletBC(b_surface)
-forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc)
+conv_param = ConvectionParameterization(κᶜ=0.2/κ₀, N²min=1e-3)
+eddy_param = EddyParameterization(f=f, N²min=sqrt(1e-3), ν_min=0.1)
+forcings = Forcings(ν, κₕ, κᵥ, τˣ, τʸ, b_surface_bc; conv_param, eddy_param)
 display(forcings)
 @info @sprintf("Diffusion timescale: %.2e", (κ_B * ε^2 / μϱ)^-1)
 
@@ -160,7 +162,7 @@ inv_tk = InversionToolkit(arch, fe_data, params, forcings; itmax=1000)
 # set timestepper
 Δt = 1*86400/t₀
 t_stop = μϱ/ε^2/κ_I
-ts = BDF1(; t_start=0.0, t_stop, Δt, adaptive=true, CFL_factor=0.8)
+ts = BDF1(; t_start=0.0, t_stop, Δt, adaptive=true, CFL_factor=0.5)
 
 # build evolution toolkit
 evo_tk = EvolutionToolkit(arch, fe_data, params, forcings, ts)
@@ -176,6 +178,6 @@ invert!(model)
 
 # solve
 @info @sprintf("Diffusion timescales: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
-n_save = 100
+n_save = 10
 run!(model; n_save)
 # run!(model; i_start, n_save)

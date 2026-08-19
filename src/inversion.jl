@@ -153,7 +153,7 @@ pattern is set.
 """
 condense_f_bc(lhs::InversionLHSCache, C::SparseMatrixCSC) = C' * (-(lhs.A * lhs.g))
 
-struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit, L}
+struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit, L, SP}
     B::B       # reduced RHS coupling matrix (N_free × nb): buoyancy DOFs → reduced (u,p)
     f_wind::V  # reduced RHS from wind-stress surface integral
     f_bc::V    # reduced RHS correction for inhomogeneous BCs (0 for homogeneous)
@@ -162,6 +162,8 @@ struct InversionToolkit{B, V, CUP, S<:IterativeSolverToolkit, L}
     solver::S
     lhs_cache::L   # InversionLHSCache when eddy_param is on, `nothing` otherwise
     x_full::Vector{Float64}   # scratch: reduced solution scattered to N_up (see sync_flow!)
+    precond_spec::SP  # NamedTuple spec, so `rebuild_preconditioner!` can rebuild P as ν(b) drifts
+    h_med::Float64    # median edge length (the `1/h³` scale, and a `build_preconditioner` input)
 end
 
 function Base.summary(inv::InversionToolkit)
@@ -183,13 +185,29 @@ Set up the toolkit for inverting the steady PG momentum equations
 
     -f(ẑ×u) + α²ε² ∇·(2ν ε(u)) - ∇p = (1/α) b ẑ
     ∇·u = 0
+
+`preconditioner` selects the preconditioner:
+- `nothing` (default) — legacy behaviour: `Diagonal(1/h³)` on GPU or when the eddy
+  parameterization is on, otherwise a direct `lu`.
+- a `NamedTuple` — passed to [`build_preconditioner`](@ref); requires
+  `FEData(...; dof_order = :blocked)`. A `γ_augment` field additionally applies the
+  augmented-Lagrangian reformulation to the system matrix (see
+  [`augment_system`](@ref); solution-preserving).
+- any object supporting `mul!` (or a `Factorization`) — used as-is.
+
+`precond_side` is `:left` (GMRES, backwards-compatible) or `:right` (FGMRES).
+Use `:right` with any block preconditioner: it makes `atol`/`rtol` measure the
+true residual instead of `‖P(b - Ax)‖`, and it is *required* for correctness when
+the preconditioner contains a truncated inner Krylov solve (such a `P` is
+nonlinear, and only the flexible variant is valid).
 """
 function InversionToolkit(arch::AbstractArchitecture,
                           fe_data::FEData,
                           params::Parameters,
                           forcings::Forcings;
                           atol=1e-6, rtol=1e-6, itmax=0,
-                          memory=20, history=true, verbose=false, restart=true)
+                          memory=20, history=true, verbose=false, restart=true,
+                          preconditioner=nothing, precond_side=:left)
     @info "Building inversion system..."
 
     C = fe_data.C_up   # N_up × N_free constraint map
@@ -220,13 +238,28 @@ function InversionToolkit(arch::AbstractArchitecture,
         A, f_bc = condense_system(A, fe_data.ch_up, C)
     end
 
+    # optional augmented-Lagrangian reformulation of the system itself (see
+    # `augment_system`: solution-preserving, because the pressure-row RHS is zero)
+    γ = preconditioner isa NamedTuple ? get(preconditioner, :γ_augment, 0.0) : 0.0
+    if γ != 0
+        blocks = split_blocks(A, fe_data)
+        po_aug = build_pressure_operators(fe_data, params, forcings)
+        A = augment_system(A, blocks, po_aug.Mlump, γ)
+        @info @sprintf("Augmented-Lagrangian reformulation with γ = %.3e", γ)
+    end
+
     # preconditioner
-    if typeof(arch) == GPU || eddy_on
-        p, t = get_p_t(fe_data.mesh)
-        edges, _, _ = all_edges(t)
-        hs = sort([norm(p[edges[i,1],:] - p[edges[i,2],:]) for i in axes(edges,1)])
-        h  = hs[length(hs) ÷ 2]
-        P  = Diagonal(on_architecture(arch, fill(1/h^3, size(A,1))))
+    h = median_edge_length(fe_data.mesh)
+    if preconditioner isa NamedTuple
+        P, pmeta = build_preconditioner(preconditioner, arch, fe_data, params, forcings,
+                                        A, nothing; h)
+        @info @sprintf("Preconditioner %s: setup %.3f s", preconditioner, pmeta.setup_total)
+        # wrap so `rebuild_preconditioner!` can swap it as ν(b) drifts
+        P = RefreshablePreconditioner{Any}(P, size(A, 1))
+    elseif preconditioner !== nothing
+        P = preconditioner
+    elseif typeof(arch) == GPU || eddy_on
+        P = Diagonal(on_architecture(arch, fill(1/h^3, size(A,1))))
     else
         @warn "LU-factoring inversion matrix with $(size(A,1)) DOFs..."
         @time "lu(A_inversion)" P = lu(A)
@@ -242,18 +275,25 @@ function InversionToolkit(arch::AbstractArchitecture,
     T  = eltype(A)
     y  = on_architecture(arch, zeros(T, N))
     VT = vector_type(arch, T)
-    workspace = Krylov.GmresWorkspace(N, N, VT; memory)
+    # Right preconditioning needs the flexible variant: block preconditioners whose
+    # velocity solve is a truncated inner Krylov iteration are nonlinear operators,
+    # for which plain GMRES is not valid. It also makes `atol`/`rtol` refer to the
+    # true residual rather than ‖P(b - Ax)‖ (see `iterative_solve!`).
+    workspace = precond_side === :right ? Krylov.FgmresWorkspace(N, N, VT; memory) :
+                                          Krylov.GmresWorkspace(N, N, VT; memory)
     workspace.x .= zero(T)
 
     verbose_int = verbose ? 1 : 0
     kwargs_dict = Dict(:atol=>atol, :rtol=>rtol, :itmax=>itmax,
-                       :history=>history, :verbose=>verbose_int, :restart=>restart)
+                       :history=>history, :verbose=>verbose_int, :restart=>restart,
+                       :precond_side=>precond_side)
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Inversion")
 
     b_arch = on_architecture(arch, zeros(fe_data.nb))
 
     return InversionToolkit(B, f_wind, f_bc, b_arch, fe_data.ch_up, solver, lhs_cache,
-                            zeros(ndofs(fe_data.dh_up)))
+                            zeros(ndofs(fe_data.dh_up)),
+                            preconditioner isa NamedTuple ? preconditioner : nothing, h)
 end
 
 """
