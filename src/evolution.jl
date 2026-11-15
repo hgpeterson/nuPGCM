@@ -1,18 +1,10 @@
 """
-    EvolutionLHSCache
+    EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data)
 
-Pre-condensed evolution operators. Condensation is linear and pattern-
-preserving, so the BC-condensed LHS for any θ is the allocation-free
-combination `A.nzval = M_c.nzval + θ (Kₕ_c.nzval + Kᵥ_c.nzval)` (and likewise
-`f_bc`), instead of a `copy(M)` + full `apply!` per timestep. `Kᵥ_c` must be
-refreshed via `_refresh_Kᵥ!` whenever `Kᵥ` changes. Ferrite's `apply!` is used
-here (not `condense_system`) because these operators are symmetric, where it
-is exact and condenses in place.
-
-`nzidx_b` is the sparsity index map into the raw (uncondensed) `Kᵥ` pattern,
-used by [`build_Kᵥ_conv!`](@ref) to scatter local blocks straight into
-`Kᵥ.nzval`; it depends on that matrix's pattern, hence lives here rather than
-in the matrix-independent [`AssemblyCache`](@ref).
+The evolution operators with boundary conditions applied (`M_c`, `Kₕ_c`, `Kᵥ_c`)
+and their right-hand-side corrections (`f_bc_M`, `f_bc_Kₕ`, `f_bc_Kᵥ`), from which
+the left-hand side `A = M_c + θ (Kₕ_c + Kᵥ_c)` is formed for any `θ`.
+`nzidx_b` is `build_nzidx_map(Kᵥ, fe_data.cache.dofs_b)`.
 """
 struct EvolutionLHSCache
     M_c::SparseMatrixCSC{Float64, Int}
@@ -21,8 +13,8 @@ struct EvolutionLHSCache
     f_bc_M::Vector{Float64}
     f_bc_Kₕ::Vector{Float64}
     f_bc_Kᵥ::Vector{Float64}
-    A::SparseMatrixCSC{Float64, Int}   # CPU combination buffer (same pattern)
-    nzidx_b::Matrix{Int}               # local-block → Kᵥ.nzval index map
+    A::SparseMatrixCSC{Float64, Int}
+    nzidx_b::Matrix{Int}
 end
 
 function EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data::FEData)
@@ -30,7 +22,7 @@ function EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data::FEData)
     condense(K) = begin
         K_c = copy(K)
         f_bc = zeros(size(K, 1))
-        apply!(K_c, f_bc, ch_b)   # symmetric matrices: Ferrite's apply! is exact
+        apply!(K_c, f_bc, ch_b)
         K_c, f_bc
     end
     M_c,  f_bc_M  = condense(M)
@@ -49,15 +41,15 @@ end
 
 struct EvolutionToolkit{A<:AbstractArchitecture, M, V, S<:IterativeSolverToolkit}
     arch::A
-    Kᵥ::M        # vertical stiffness (raw; rebuilt each step when conv_param is on)
-    Kᵥ⁰::M       # static κᵥ part of Kᵥ (Kᵥ = Kᵥ⁰ + convection augmentation)
+    Kᵥ::M        # vertical stiffness, Kᵥ⁰ plus the convection parameterization
+    Kᵥ⁰::M       # vertical stiffness for the background κᵥ
     lhs::EvolutionLHSCache
     rhs_diff::V  # -N² κᵥ ∂z(b) source term
-    rhs_diff⁰::Vector{Float64}   # static κᵥ part of rhs_diff (CPU)
+    rhs_diff⁰::Vector{Float64}   # rhs_diff for the background κᵥ
     rhs_flux::V  # α F surface flux
-    f_bc::V      # RHS correction for inhomogeneous Dirichlet BCs (0 when BCs are homogeneous)
+    f_bc::V      # RHS correction for inhomogeneous Dirichlet BCs
     solver::S
-    gpu_perm::Ref{Any}   # scratch for in-place solver.A updates (see update_A!); nothing on CPU
+    gpu_perm::Ref{Any}   # cache for update_A! on the GPU
 end
 
 function Base.summary(evolution::EvolutionToolkit)
@@ -101,10 +93,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     rhs_diff = copy(rhs_diff⁰)
     rhs_flux = build_rhs_flux(params, forcings, fe_data)
 
-    # θ from a BDF1 startup step, but the preconditioner type must match the real
-    # timestepper: the solver is immutable and later rebuilds refresh P in place,
-    # so P must be built here with the type the run will keep (Diagonal when
-    # adaptive/conv/GPU; see _use_diag_precond).
+    # the first step is BDF1, but P is updated in place later, so its type is
+    # chosen for the timestepper of the run
     ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[])
     A, P, f_bc = _combine_evolution_LHS(arch, params, forcings, ts1, lhs;
                                         use_diag=_use_diag_precond(arch, forcings, ts))
@@ -131,10 +121,9 @@ end
 """
     collect_evolution_LHS!(evolution, params, forcings, ts, ch_b; Kᵥ_changed=true)
 
-Re-form the evolution LHS `A = M + θ(Kₕ + Kᵥ)` (BC-condensed) for the current
-`Δt` by combining the cached condensed operators. Pass `Kᵥ_changed=false` when
-`Kᵥ` is unchanged (e.g. adaptive-Δt rebuilds without the convection
-parameterization) to skip re-condensing it.
+Update the evolution LHS `A = M + θ(Kₕ + Kᵥ)`, its preconditioner and `f_bc`
+for the current `Δt`. Pass `Kᵥ_changed=false` if `Kᵥ` has not changed since the
+last call.
 """
 function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters,
                                  forcings::Forcings, ts::AbstractTimestepper, ch_b;
@@ -143,9 +132,6 @@ function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters,
     solver = evolution.solver
     Kᵥ_changed && _refresh_Kᵥ!(evolution.lhs, evolution.Kᵥ, ch_b)
 
-    # combine the cached condensed operators into the CPU buffer lhs.A, then
-    # push into the (immutable) solver in place: same-pattern A refresh plus an
-    # in-place preconditioner refresh (Diagonal vector or sparse lu! refactor).
     A_cpu, f_bc = _combine_evolution_LHS!(evolution.lhs, params, ts)
     update_A!(solver.A, A_cpu, evolution.gpu_perm)
     update_P!(solver.P, A_cpu, arch)
@@ -156,9 +142,8 @@ end
 """
     update_evolution_LHS!(evolution, fe_data, params, forcings, ts, b_cpu)
 
-Per-step operator refresh: when the convection parameterization is on, rebuild
-`Kᵥ` and `rhs_diff` from the current buoyancy, then re-form the condensed LHS
-if anything invalidated it (`Kᵥ` changed or `Δt` is adaptive).
+Update `Kᵥ` and `rhs_diff` for the buoyancy `b_cpu` if the convection
+parameterization is on, then the LHS if `Kᵥ` or `Δt` changed.
 """
 function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
                                params::Parameters, forcings::Forcings,
@@ -180,8 +165,7 @@ function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
     return evolution
 end
 
-# Combine the cached condensed operators into the CPU buffer `lhs.A` for the
-# current θ; returns (lhs.A, f_bc). Allocation-free apart from f_bc.
+# Form `lhs.A` and `f_bc` for the current θ.
 function _combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
                                  ts::AbstractTimestepper)
     θ = evolution_parameter(params, ts)
@@ -191,7 +175,7 @@ function _combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
     return A, f_bc
 end
 
-# Construction-time variant: also builds the preconditioner and moves A to `arch`.
+# As above, and also build the preconditioner and move `A` to `arch`.
 function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
                                  forcings::Forcings, ts::AbstractTimestepper,
                                  lhs::EvolutionLHSCache;
@@ -208,8 +192,7 @@ function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
     return on_architecture(arch, A), P, f_bc
 end
 
-# adaptive Δt, per-step Kᵥ rebuilds, and GPU runs all preclude a one-time LU
-# (BDF2.adaptive is currently always false)
+# LU is only worthwhile on the CPU when the LHS never changes
 _use_diag_precond(arch, forcings, ts) =
     typeof(arch) == GPU || forcings.conv_param.is_on || ts.adaptive
 
@@ -410,9 +393,6 @@ Assemble the advection right-hand side.
 
 BDF1: `∫ (b - Δt (u·∇b + w N²)) d dΩ`
 BDF2: `∫ (4/3 b - 1/3 b_prev - 2/3 Δt ((2u-u_prev)·∇(2b-b_prev) + (2w-w_prev) N²)) d dΩ`
-
-Runs on the `AssemblyCache` (reference shape tables + per-cell geometry/DOF maps),
-so the per-step cost is a tight allocation-free loop with no `reinit!`.
 """
 build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts::BDF1) =
     build_rhs_adv(fe_data, params, u_vec, b_vec, ts)
@@ -442,9 +422,8 @@ end
     _rhs_adv_kernel!(f, cache, N², b_comb, b_eff, u_eff, Δt_fac, Δt,
                      u_vec, b_vec, u_prev, b_prev)
 
-Shared advection-RHS kernel: accumulates
-`∫ (b_comb(b, b_prev) - Δt_fac Δt (u_eff·∇(b_eff) + w_eff N²)) φᵢ dΩ`
-with the pointwise combinations `b_comb`, `b_eff`, `u_eff` supplied per scheme.
+Add `∫ (b_comb(b, b_prev) - Δt_fac Δt (u_eff·∇(b_eff) + w_eff N²)) φᵢ dΩ` to `f`,
+where `b_comb`, `b_eff` and `u_eff` combine the current and previous fields.
 """
 function _rhs_adv_kernel!(f::Vector{Float64}, cache::AssemblyCache, N²,
                           b_comb::F1, b_eff::F2, u_eff::F3, Δt_fac, Δt,
@@ -452,47 +431,46 @@ function _rhs_adv_kernel!(f::Vector{Float64}, cache::AssemblyCache, N²,
                           u_prev::AbstractVector, b_prev::AbstractVector) where {F1, F2, F3}
     nq   = length(cache.w)
     n_b  = size(cache.phi_b, 2)
-    n_su = size(cache.phi_u, 2)
+    n_nodes = size(cache.phi_u, 2)
     ncells = length(cache.detJ)
 
-    lb  = zeros(n_b)        # b
-    lbp = zeros(n_b)        # b_prev
-    U   = zeros(3, n_su)    # effective velocity at scalar-basis nodes
+    b_cell      = zeros(n_b)
+    b_prev_cell = zeros(n_b)
+    u_cell      = zeros(3, n_nodes)   # u_eff at the velocity nodes
     fₑ  = zeros(n_b)
 
     @inbounds for c in 1:ncells
         for i in 1:n_b
             d = cache.dofs_b[i, c]
-            lb[i]  = b_vec[d]
-            lbp[i] = b_prev[d]
+            b_cell[i]      = b_vec[d]
+            b_prev_cell[i] = b_prev[d]
         end
-        for j in 1:n_su, k in 1:3
+        for j in 1:n_nodes, k in 1:3
             d = cache.dofs_u[3*(j - 1) + k, c]
-            U[k, j] = u_eff(u_vec[d], u_prev[d])
+            u_cell[k, j] = u_eff(u_vec[d], u_prev[d])
         end
-        Jᵀ = cache.Jinv_t[c]
+        J⁻ᵀ = cache.Jinv_t[c]
         dJ = cache.detJ[c]
         fill!(fₑ, 0.0)
         for q in 1:nq
-            # b, b_prev, and reference gradient of b_eff
+            # b, b_prev, and the reference-space gradient of b_eff
             b_q = 0.0; bp_q = 0.0
             g1 = 0.0; g2 = 0.0; g3 = 0.0
             for i in 1:n_b
-                b_q  += cache.phi_b[q, i] * lb[i]
-                bp_q += cache.phi_b[q, i] * lbp[i]
-                beff  = b_eff(lb[i], lbp[i])
+                b_q  += cache.phi_b[q, i] * b_cell[i]
+                bp_q += cache.phi_b[q, i] * b_prev_cell[i]
+                beff  = b_eff(b_cell[i], b_prev_cell[i])
                 g1 += cache.dphi_b[1, i, q] * beff
                 g2 += cache.dphi_b[2, i, q] * beff
                 g3 += cache.dphi_b[3, i, q] * beff
             end
-            ∇b1 = _∂ᵣ(Jᵀ, 1, g1, g2, g3)
-            ∇b2 = _∂ᵣ(Jᵀ, 2, g1, g2, g3)
-            ∇b3 = _∂ᵣ(Jᵀ, 3, g1, g2, g3)
-            # effective velocity
+            ∇b1 = _∂ᵣ(J⁻ᵀ, 1, g1, g2, g3)
+            ∇b2 = _∂ᵣ(J⁻ᵀ, 2, g1, g2, g3)
+            ∇b3 = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
             u1 = 0.0; u2 = 0.0; u3 = 0.0
-            for j in 1:n_su
+            for j in 1:n_nodes
                 φ = cache.phi_u[q, j]
-                u1 += φ * U[1, j]; u2 += φ * U[2, j]; u3 += φ * U[3, j]
+                u1 += φ * u_cell[1, j]; u2 += φ * u_cell[2, j]; u3 += φ * u_cell[3, j]
             end
             adv   = u1*∇b1 + u2*∇b2 + u3*∇b3 + u3*N²
             rhs_q = (b_comb(b_q, bp_q) - Δt_fac * Δt * adv) * cache.w[q] * dJ
@@ -508,27 +486,15 @@ function _rhs_adv_kernel!(f::Vector{Float64}, cache::AssemblyCache, N²,
 end
 
 ####
-#### Parametrization-aware rebuilds (conv_param: κᵥ depends on ∂z(b))
+#### Convection parameterization (κᵥ depends on ∂z b)
 ####
 
 """
-    Kᵥ = build_Kᵥ_conv(fe_data, params, forcings, b_vec)
-    build_Kᵥ_conv!(Kᵥ, Kᵥ⁰, fe_data, params, conv_param, b_vec)
+    build_Kᵥ_conv!(Kᵥ, Kᵥ⁰, fe_data, params, conv_param, b_vec, nzidx_b)
 
-Rebuild `Kᵥ` with the convection parameterization: `Kᵥ = Kᵥ⁰ + Kᶜ(b)`, where
-`Kᵥ⁰` is the static background-`κᵥ` stiffness and `Kᶜ` uses the augmentation
-`_κ_conv_extra` evaluated from `∂z(b)` at each quadrature point. The split
-means the (possibly space-dependent) background `κᵥ` is never re-evaluated.
-The in-place version scatters directly into `Kᵥ.nzval` via the cached sparsity
-index map; `Kᵥ` and `Kᵥ⁰` must both have the evolution pattern.
+Set `Kᵥ = Kᵥ⁰ + ∫ κᶜ ∂z φᵢ ∂z φⱼ dΩ`, with the convective diffusivity `κᶜ` evaluated
+from `α(N² + ∂z b)`. `nzidx_b` is `build_nzidx_map(Kᵥ, fe_data.cache.dofs_b)`.
 """
-function build_Kᵥ_conv(fe_data::FEData, params::Parameters,
-                       forcings::Forcings, b_vec::AbstractVector)
-    Kᵥ⁰ = build_Kᵥ(fe_data, forcings.κᵥ)
-    nzidx_b = build_nzidx_map(Kᵥ⁰, fe_data.cache.dofs_b)
-    return build_Kᵥ_conv!(copy(Kᵥ⁰), Kᵥ⁰, fe_data, params, forcings.conv_param, b_vec, nzidx_b)
-end
-
 function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_data::FEData,
                         params::Parameters, conv_param::ConvectionParameterization,
                         b_vec::AbstractVector, nzidx_b::Matrix{Int})
@@ -540,27 +506,27 @@ function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_da
     N² = params.N²
 
     Kᵥ.nzval .= Kᵥ⁰.nzval
-    lb  = zeros(n_b)
+    b_cell  = zeros(n_b)
     ∂zφ = zeros(n_b)
     Ke  = zeros(n_b, n_b)
 
     @inbounds for c in 1:ncells
         for i in 1:n_b
-            lb[i] = b_vec[cache.dofs_b[i, c]]
+            b_cell[i] = b_vec[cache.dofs_b[i, c]]
         end
-        Jᵀ = cache.Jinv_t[c]
+        J⁻ᵀ = cache.Jinv_t[c]
         dJ = cache.detJ[c]
         fill!(Ke, 0.0)
         for q in 1:nq
             g1 = 0.0; g2 = 0.0; g3 = 0.0
             for i in 1:n_b
-                g1 += cache.dphi_b[1, i, q] * lb[i]
-                g2 += cache.dphi_b[2, i, q] * lb[i]
-                g3 += cache.dphi_b[3, i, q] * lb[i]
-                ∂zφ[i] = _∂ᵣ(Jᵀ, 3, cache.dphi_b[1, i, q], cache.dphi_b[2, i, q],
+                g1 += cache.dphi_b[1, i, q] * b_cell[i]
+                g2 += cache.dphi_b[2, i, q] * b_cell[i]
+                g3 += cache.dphi_b[3, i, q] * b_cell[i]
+                ∂zφ[i] = _∂ᵣ(J⁻ᵀ, 3, cache.dphi_b[1, i, q], cache.dphi_b[2, i, q],
                              cache.dphi_b[3, i, q])
             end
-            ∂z_b_q = _∂ᵣ(Jᵀ, 3, g1, g2, g3)
+            ∂z_b_q = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
             κdΩ = _κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
             for j in 1:n_b, i in 1:n_b
                 Ke[i, j] += κdΩ * ∂zφ[i] * ∂zφ[j]
@@ -574,19 +540,11 @@ function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_da
 end
 
 """
-    f = build_rhs_diff_conv(params, fe_data, forcings, b_vec)
-    f = build_rhs_diff_conv!(f, rhs_diff⁰, fe_data, params, conv_param, b_vec)
+    build_rhs_diff_conv!(f, rhs_diff⁰, fe_data, params, conv_param, b_vec)
 
-Rebuild `rhs_diff` with the convection parameterization, as the static
-background part plus the `_κ_conv_extra` augmentation (cached kernel).
+Set `f = rhs_diff⁰ - ∫ N² κᶜ ∂z φᵢ dΩ`, with the convective diffusivity `κᶜ`
+evaluated from `α(N² + ∂z b)`.
 """
-function build_rhs_diff_conv(params::Parameters, fe_data::FEData,
-                              forcings::Forcings, b_vec::AbstractVector)
-    rhs_diff⁰ = build_rhs_diff(params, fe_data, forcings.κᵥ)
-    return build_rhs_diff_conv!(zeros(fe_data.nb), rhs_diff⁰, fe_data, params,
-                                forcings.conv_param, b_vec)
-end
-
 function build_rhs_diff_conv!(f::Vector{Float64}, rhs_diff⁰::Vector{Float64},
                               fe_data::FEData, params::Parameters,
                               conv_param::ConvectionParameterization,
@@ -599,27 +557,27 @@ function build_rhs_diff_conv!(f::Vector{Float64}, rhs_diff⁰::Vector{Float64},
     N² = params.N²
 
     f .= rhs_diff⁰
-    lb = zeros(n_b)
+    b_cell = zeros(n_b)
     fₑ = zeros(n_b)
 
     @inbounds for c in 1:ncells
         for i in 1:n_b
-            lb[i] = b_vec[cache.dofs_b[i, c]]
+            b_cell[i] = b_vec[cache.dofs_b[i, c]]
         end
-        Jᵀ = cache.Jinv_t[c]
+        J⁻ᵀ = cache.Jinv_t[c]
         dJ = cache.detJ[c]
         fill!(fₑ, 0.0)
         for q in 1:nq
             g1 = 0.0; g2 = 0.0; g3 = 0.0
             for i in 1:n_b
-                g1 += cache.dphi_b[1, i, q] * lb[i]
-                g2 += cache.dphi_b[2, i, q] * lb[i]
-                g3 += cache.dphi_b[3, i, q] * lb[i]
+                g1 += cache.dphi_b[1, i, q] * b_cell[i]
+                g2 += cache.dphi_b[2, i, q] * b_cell[i]
+                g3 += cache.dphi_b[3, i, q] * b_cell[i]
             end
-            ∂z_b_q = _∂ᵣ(Jᵀ, 3, g1, g2, g3)
+            ∂z_b_q = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
             κdΩ = _κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
             for i in 1:n_b
-                ∂zφᵢ = _∂ᵣ(Jᵀ, 3, cache.dphi_b[1, i, q], cache.dphi_b[2, i, q],
+                ∂zφᵢ = _∂ᵣ(J⁻ᵀ, 3, cache.dphi_b[1, i, q], cache.dphi_b[2, i, q],
                            cache.dphi_b[3, i, q])
                 fₑ[i] -= N² * κdΩ * ∂zφᵢ
             end

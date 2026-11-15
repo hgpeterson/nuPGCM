@@ -12,7 +12,7 @@ using KrylovPreconditioners
 using PyPlot
 using Printf
 
-# unit vectors (Ferrite uses Tensors.Vec, re-exported by Ferrite)
+# unit vectors
 const x⃗ = Vec{3, Float64}((1.0, 0.0, 0.0))
 const y⃗ = Vec{3, Float64}((0.0, 1.0, 0.0))
 const z⃗ = Vec{3, Float64}((0.0, 0.0, 1.0))
@@ -75,7 +75,6 @@ include("cache.jl")
 include("dofs.jl")
 include("spaces.jl")
 include("iterative_solvers.jl")
-include("pressure_operators.jl")
 include("preconditioners.jl")
 include("inversion.jl")
 include("timesteppers.jl")
@@ -113,37 +112,6 @@ compute_h_cells,
 median_edge_length,
 # dofs.jl
 FEData,
-n_free_up,
-block_ranges,
-# pressure_operators.jl
-PressureOperators,
-build_pressure_operators,
-build_velocity_mass_lumped,
-# preconditioners.jl
-Preconditioner,
-ScaledIdentity,
-BlockDiagonalPreconditioner,
-BlockTriangularPreconditioner,
-NullspaceProjected,
-FactorInverse,
-DiagInverse,
-KrylovInverse,
-HostInverse,
-ProjectedInverse,
-RefreshablePreconditioner,
-FunctionInverse,
-InversionBlocks,
-split_blocks,
-augment_system,
-velocity_inverse,
-build_preconditioner,
-schur_mass,
-schur_stiffness,
-schur_cahouet_chabard,
-schur_geostrophic,
-schur_lsc,
-schur_augmented_lagrangian,
-schur_exact,
 # inversion.jl
 InversionToolkit,
 invert!,
@@ -173,9 +141,6 @@ plot_zonal_integral,
 eval_at_points,
 eval_at_point,
 find_H,
-plot_slice,
-plot_profiles,
-sim_plots,
 plot_sparsity_pattern
 
 end # module

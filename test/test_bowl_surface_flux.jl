@@ -28,7 +28,7 @@
     evo_tk = EvolutionToolkit(CPU(), fe_data, params, forcings, ts)
     model = Model(CPU(), params, forcings, fe_data, inv_tk, evo_tk, ts)
     set_out_dir!("/tmp/nuPGCM_regression")
-    run!(model; n_info=typemax(Int), n_save=Inf, n_plot=Inf)
+    run!(model; n_info=typemax(Int), n_save=Inf)
 
     datafile = joinpath(@__DIR__, "data/bowl_surface_flux.jld2")
     if !isfile(datafile)

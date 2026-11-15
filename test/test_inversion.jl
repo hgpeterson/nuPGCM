@@ -54,11 +54,9 @@
     @testset "InversionToolkit" begin
         inv_tk = InversionToolkit(CPU(), fe_data, params, forcings)
 
-        # B, f_wind and f_bc are pre-projected onto the reduced system
+        # B and f_wind are projected onto the free DOFs
         @test size(inv_tk.B) == (N_free, nb)
         @test length(inv_tk.f_wind) == N_free
-        @test length(inv_tk.f_bc) == N_free
-        @test norm(inv_tk.f_bc) == 0   # homogeneous velocity BCs
         @test size(inv_tk.solver.A) == (N_free, N_free)
         @test N_free == N_up - length(fe_data.ch_up.prescribed_dofs)
         @test inv_tk.solver.P isa Factorization
@@ -75,26 +73,32 @@
         @test norm(A_cpu * x - y_cpu) / norm(y_cpu) < 1e-8
     end
 
+    @testset "BlockTriangularPreconditioner" begin
+        # preconditioned FGMRES reproduces the direct solve
+        inv_tk = InversionToolkit(CPU(), fe_data, params, forcings)
+        invert!(inv_tk, randn(nb))
+        A, y, x_direct = inv_tk.solver.A, inv_tk.solver.y, inv_tk.solver.x
+
+        P = BlockTriangularPreconditioner(CPU(), fe_data, params, forcings, A, zeros(nb))
+        x, stats = Krylov.fgmres(A, y; N=P, memory=100, atol=0.0, rtol=1e-10, itmax=500)
+        @test stats.solved
+        @test norm(x - x_direct) / norm(x_direct) < 1e-6
+    end
+
     @testset "eddy viscosity cache" begin
-        # build_A_visc! + InversionLHSCache must reproduce the reference
-        # (full-assembly + brute-force condense_system) path for arbitrary b,
-        # since ν(b) varies the viscous block only. This is what lets
-        # _update_eddy_A! avoid reassembling A from scratch every few steps.
+        # build_A_visc! and InversionLHSCache against full assembly and CᵀAC, for
+        # quadratic b, whose ∂z b is known at every quadrature point
         eddy_param = EddyParameterization(f=x->1.0, N²min=1e-3, ν_min=0.1)
+        C   = fe_data.C_up
+        lhs = InversionLHSCache(build_A_inversion(fe_data, params, 0.0), fe_data)
 
-        A⁰  = build_A_inversion_static(fe_data, params)
-        lhs = InversionLHSCache(A⁰, fe_data)
-
-        for b_vec in (zeros(nb), randn(nb), 10 .* randn(nb))
-            A_ref = build_A_inversion(fe_data, params, eddy_param, b_vec)
-            A_cond_ref, f_bc_ref = condense_system(A_ref, fe_data.ch_up, fe_data.C_up)
+        for c in (0.0, 1.0, -10.0)
+            b_vec = fill_b(fe_data, x -> c * (x[3]^2 + x[1]*x[2]))
+            ν = x -> ν_eddy(eddy_param, eddy_param.f(x), params.α * (params.N² + 2c*x[3]))
+            A_ref = C' * build_A_inversion(fe_data, params, ν) * C
 
             build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b_vec, lhs.nzidx_up)
-            A_cond_test = refresh_A_cond!(lhs)
-            f_bc_test   = condense_f_bc(lhs, fe_data.C_up)
-
-            @test norm(A_cond_test - A_cond_ref) / max(norm(A_cond_ref), eps()) < 1e-9
-            @test norm(f_bc_test - f_bc_ref) < 1e-9
+            @test norm(refresh_A_cond!(lhs) - A_ref) / norm(A_ref) < 1e-9
         end
 
         # update_A! refreshes a same-pattern buffer in place (CPU: exact nzval copy)

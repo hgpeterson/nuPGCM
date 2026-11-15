@@ -100,10 +100,7 @@ end
 """
     h = median_edge_length(mesh)
 
-Median length over all unique mesh edges. This is the `h` behind the `1/h³`
-diagonal preconditioner (the scaling that makes the residual mesh-independent for
-a 3D mass-matrix-like operator), and the reference length for reporting how well
-the Ekman layer `δ ≈ √2 α ε √ν` is resolved.
+Median length of the mesh edges.
 """
 function median_edge_length(mesh::Mesh)
     p, t = get_p_t(mesh)

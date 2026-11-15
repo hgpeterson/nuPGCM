@@ -99,7 +99,7 @@ function set_b!(model::Model, b_fn::Function)
     M = build_M(fe_data)
     apply!(M, rhs, fe_data.ch_b)
     b_sol = M \ rhs
-    apply!(b_sol, fe_data.ch_b)  # recover constrained (mirror) DOFs: b[channel_west] = b[channel_east]
+    apply!(b_sol, fe_data.ch_b)  # set the constrained DOFs
     model.state.b .= b_sol
     return model
 end
@@ -124,22 +124,17 @@ end
 """
     sync_flow!(model)
 
-Copy the solver's *reduced* solution into `model.state.u` and `model.state.p`.
-
-The solve is over free DOFs only (see [`condense_system`](@ref)), so the result
-is first scattered into a full-length `N_up` buffer at `fe_data.free_dofs`; then
-`apply!` reconstructs the constrained DOFs from their affine combinations plus
-inhomogeneities (for periodic BCs: `u[mirror] = u[image]`), and the full vector
-is split into the u and p fields.
+Copy the inversion solution on the free DOFs into `model.state.u` and
+`model.state.p`, filling in the constrained DOFs.
 """
 function sync_flow!(model::Model)
-    x_red  = on_architecture(CPU(), model.inversion.solver.x)
-    x_full = model.inversion.x_full
+    fe_data = model.fe_data
+    x_full  = model.inversion.x_full
     fill!(x_full, 0.0)
-    x_full[model.fe_data.free_dofs] .= x_red
-    apply!(x_full, model.inversion.ch_up)  # recover constrained (mirror) DOFs
-    model.state.u .= x_full[model.fe_data.u_dof_indices]
-    model.state.p .= x_full[model.fe_data.p_dof_indices]
+    x_full[fe_data.free_dofs] .= on_architecture(CPU(), model.inversion.solver.x)
+    apply!(x_full, fe_data.ch_up)
+    model.state.u .= x_full[fe_data.u_dof_indices]
+    model.state.p .= x_full[fe_data.p_dof_indices]
     return model
 end
 
@@ -155,8 +150,7 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     b_cpu = on_architecture(CPU(), model.state.b)
     update_evolution_LHS!(evolution, fe_data, params, forcings, timestepper, b_cpu)
 
-    # assemble advection RHS on CPU (field evaluation requires CPU)
-    # build_rhs_adv needs the velocity DOF vector in the combined dh_up ordering
+    # the advection RHS is assembled on the CPU, from velocities in dh_up ordering
     b_prev_cpu = on_architecture(CPU(), b_prev)
     x_up      = _to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
     x_up_prev = _to_up_vec(fe_data, on_architecture(CPU(), u_prev))
@@ -166,19 +160,18 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
                                                         x_up_prev, b_prev_cpu,
                                                         timestepper)
 
-    # combine RHS, apply BCs, and solve
     θ  = evolution_parameter(params, timestepper)
     Δt = timestepper.Δt[]
     y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
          Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
          on_architecture(CPU(), evolution.f_bc)
-    _condense_rhs!(y, ch_b)  # merge mirror rows into image rows, zero all constrained DOFs
+    _condense_rhs!(y, ch_b)
     evolution.solver.y .= on_architecture(arch, y)
 
     @ctime "  solve evol sys" iterative_solve!(evolution.solver)
 
     b_cpu = on_architecture(CPU(), evolution.solver.x)
-    apply!(b_cpu, ch_b)      # recover image DOFs and enforce surface Dirichlet BC
+    apply!(b_cpu, ch_b)      # set the constrained DOFs
     model.state.b .= b_cpu
     return model
 end
@@ -188,29 +181,38 @@ function evolve!(model::Model, ::Nothing, ::Nothing)
     return evolve!(model, model.state.u, model.state.b)
 end
 
-function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advection=true,
+"""
+    run!(model; i_start=0, n_info=10, n_save=Inf, advection=true,
+         n_precond=50, precond_growth=1.4)
+
+Integrate `model` to `t_stop`, printing a status every `n_info` steps and saving
+the state every `n_save` steps.
+
+With the eddy parameterization on, the inversion preconditioner is rebuilt every
+`n_precond` steps, and whenever a solve fails or takes `precond_growth` times the
+iterations of the first solve after the last rebuild.
+"""
+function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
               n_precond=50, precond_growth=1.4)
     u = model.state.u
     b = model.state.b
     timestepper = model.timestepper
 
-    @info "Beginning integration with" n_save n_plot n_info
+    @info "Beginning integration with" n_save n_info
     status(timestepper)
 
     h_cells = compute_h_cells(model.fe_data.mesh)
     h_min   = minimum(h_cells)
 
-    # `b` is the buoyancy *perturbation*; the total buoyancy B = b + N²z is what
-    # carries the physical bounds (for advection-diffusion with no interior
-    # source, B stays within the range set by its initial and boundary values),
-    # so that is what gets reported.
+    # for reporting the range of the total buoyancy b + N²z
     z_b    = b_dof_z(model.fe_data)
     b_full = similar(b)
 
-    # initial eddy ν sync
-    if model.forcings.eddy_param.is_on
+    eddy_on   = model.forcings.eddy_param.is_on
+    iterative = model.inversion.solver.P isa BlockTriangularPreconditioner
+    if eddy_on
         _update_eddy_A!(model)
-        rebuild_preconditioner!(model)   # P was built at b = 0; resync it with the real ν(b)
+        iterative && rebuild_preconditioner!(model)
         invert!(model)
     end
 
@@ -219,8 +221,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
         save_vtk(model,   ofile=@sprintf("%s/data/state_%016d", out_dir, i_start))
     end
 
-    # iteration count of the first solve after the most recent preconditioner
-    # rebuild; 0 means "not yet measured" (see the refresh block in the loop)
+    # iterations of the first inversion after the last preconditioner rebuild (0: not yet known)
     niter_ref = 0
 
     u_prev = copy(u)
@@ -257,35 +258,17 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
         u_prev .= u_curr
         b_prev .= b_curr
 
-        if model.forcings.eddy_param.is_on && advection
+        if eddy_on && advection
             _update_eddy_A!(model)
-            # Preconditioner refresh cadence.
-            #
-            # A fixed interval alone does not work. The staleness measurement behind
-            # `n_precond` was made on a spun-up state, where b drifts slowly; during
-            # the initial adjustment ν(b) moves fast enough to blow past `itmax`
-            # within a few steps, and each such failure costs a full itmax solve
-            # (~20 s) against a ~1.3 s rebuild.
-            #
-            # So drive it off the iteration count instead: remember what the solver
-            # needed on the first solve after the last rebuild, and rebuild again
-            # once it has grown by `precond_growth`, or if a solve outright failed.
-            # The fixed interval stays as a backstop.
-            stats  = model.inversion.solver.workspace.stats
-            niter  = stats.niter
-            solved = stats.solved
-            grown  = niter_ref > 0 && niter > precond_growth * niter_ref
-            if !solved || grown || (n_precond < Inf && mod(i, n_precond) == 0)
-                @debug begin
-                    why = !solved ? "solve failed" :
-                          grown   ? @sprintf("iterations grew %d → %d", niter_ref, niter) :
-                                    "periodic"
-                    "rebuilding inversion preconditioner ($why)"
+            if iterative
+                stats = model.inversion.solver.workspace.stats
+                grown = niter_ref > 0 && stats.niter > precond_growth * niter_ref
+                if !stats.solved || grown || mod(i, n_precond) == 0
+                    @ctime "  rebuild precond" rebuild_preconditioner!(model)
+                    niter_ref = 0
+                elseif niter_ref == 0
+                    niter_ref = stats.niter
                 end
-                @ctime "  rebuild precond" rebuild_preconditioner!(model)
-                niter_ref = 0        # next successful solve sets the new baseline
-            elseif niter_ref == 0 && solved
-                niter_ref = niter
             end
         end
 
@@ -329,53 +312,28 @@ end
 """
     rebuild_preconditioner!(model)
 
-Rebuild the inversion preconditioner from the current `ν(b)`.
-
-`_update_eddy_A!` refreshes the *operator* every timestep but not the
-preconditioner, which is correct for the constant `Diagonal(1/h³)` and wrong for
-anything built from `ν`. Cahouet--Chabard's `Mν = ∫pq/(2α²ε²ν)` is exactly such a
-thing (its other term, `Kf = ∫(1/|f|)∇p·∇q`, is ν-independent and needs no
-refresh, but the whole preconditioner is rebuilt here for simplicity — setup is
-~1.3 s at `h = 4e-2`).
-
-No-op unless `InversionToolkit` was given a `NamedTuple` preconditioner spec and
-the eddy parameterization is on (with fixed `ν` the operator never changes, so
-neither does the preconditioner).
-
-Call frequency is set by `run!`'s `n_precond`; see [`RefreshablePreconditioner`](@ref)
-for the measured staleness that motivates the default of 50.
+Rebuild the inversion preconditioner for the current eddy viscosity `ν(b)`.
 """
 function rebuild_preconditioner!(model::Model)
-    inv_tk = model.inversion
-    spec   = inv_tk.precond_spec
-    spec === nothing && return model
-    inv_tk.lhs_cache === nothing && return model    # ν fixed ⇒ nothing to refresh
-    P = inv_tk.solver.P
-    P isa RefreshablePreconditioner || return model
-    P_new, _ = build_preconditioner(spec, model.arch, model.fe_data, model.params,
-                                    model.forcings, inv_tk.lhs_cache.A_cond, nothing;
-                                    b_vec = model.state.b, h = inv_tk.h_med)
-    P.inner = P_new
+    inversion = model.inversion
+    inversion.solver.P = BlockTriangularPreconditioner(model.arch, model.fe_data, model.params,
+                                                       model.forcings, inversion.lhs_cache.A_cond,
+                                                       model.state.b)
     return model
 end
 
 """
     _update_eddy_A!(model)
 
-Refresh the inversion LHS for the current eddy viscosity `ν(b)`. Only the
-viscous block changes; the static Coriolis/pressure/divergence blocks, the
-condensation scatter map, and the diagonal preconditioner's mesh scale `h`
-are all reused from `model.inversion.lhs_cache` (built once in
-`InversionToolkit`), so this touches only `nzval` arrays — no sparse matrix
-is (re)allocated. `f_bc` is left untouched: it is a fixed function of the
-velocity Dirichlet inhomogeneities (all zero for this model, see
-`InversionLHSCache`'s `g`), independent of `ν`.
+Update the inversion matrix in place for the current eddy viscosity `ν(b)`.
 """
 function _update_eddy_A!(model::Model)
     lhs = model.inversion.lhs_cache
     @ctime "  build A_visc" build_A_visc!(lhs.A, lhs.A⁰, model.fe_data, model.params,
                                           model.forcings.eddy_param, model.state.b, lhs.nzidx_up)
-    @ctime "  condense A" refresh_A_cond!(lhs)   # writes lhs.A_cond in place
-    @ctime "  update solver.A" update_A!(model.inversion.solver.A, lhs.A_cond, lhs.gpu_perm)
+    @ctime "  condense A" refresh_A_cond!(lhs)
+    solver = model.inversion.solver
+    @ctime "  update solver.A" update_A!(solver.A, lhs.A_cond, lhs.gpu_perm)
+    solver.P isa Factorization && lu!(solver.P, lhs.A_cond)
     return model
 end

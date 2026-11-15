@@ -40,7 +40,7 @@
     @testset "run!" begin
         set_b!(model, zeros(nb))
         nuPGCM.set_out_dir!("/tmp/nuPGCM_test_run")
-        run!(model; n_info=typemax(Int), n_save=Inf, n_plot=Inf)
+        run!(model; n_info=typemax(Int), n_save=Inf)
         # wind stress should have driven some flow and buoyancy change
         @test norm(model.state.u) > 0
         @test norm(model.state.b) >= 0   # may stay zero with Dirichlet b BC
@@ -105,7 +105,7 @@
 
         set_b!(model_eddy, x -> 0.05 * x[3])
         nuPGCM.set_out_dir!("/tmp/nuPGCM_test_run_eddy")
-        run!(model_eddy; n_info=typemax(Int), n_save=Inf, n_plot=Inf)
+        run!(model_eddy; n_info=typemax(Int), n_save=Inf)
 
         @test norm(model_eddy.state.u) > 0
         @test !any(isnan, model_eddy.state.u)

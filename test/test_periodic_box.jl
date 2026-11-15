@@ -19,9 +19,9 @@
 # Any defect in the periodic constraint machinery (facet pairing, mirror/image
 # convention, matrix condensation, RHS condensation) breaks the analytic match
 # and the x-invariance of the solution along the periodic direction. In
-# particular this test catches the Ferrite ≤ 1.4 `apply!` bug that folds
-# couplings between pairs of constrained DOFs into transposed positions (fixed
-# by `condense_system`), which corrupted periodic inversions by O(1).
+# particular this test catches the Ferrite < 1.6 `apply!` bug that folds
+# couplings between pairs of constrained DOFs into transposed positions, which
+# corrupted periodic inversions by O(1).
 #
 # Tolerance note: the solution is not exact to machine precision because the
 # mean-pressure constraint is redundant here (the wall natural BC already sets

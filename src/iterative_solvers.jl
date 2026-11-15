@@ -1,7 +1,4 @@
-# Immutable: `A`, `P`, `x`, and `y` are all containers updated in place
-# (`update_A!` for A, `P.diag .= …` for the Diagonal preconditioner, and
-# broadcast into x/y), so no field is ever reassigned after construction.
-struct IterativeSolverToolkit{A, P, V, S, K}
+mutable struct IterativeSolverToolkit{A, P, V, S, K}
     A::A           # LHS matrix
     P::P           # preconditioner for A
     x::V           # solution vector
@@ -34,15 +31,9 @@ end
 """
     update_A!(solver_A, A_new::SparseMatrixCSC, gpu_perm)
 
-Refresh `solver_A`'s values in place from `A_new`, which must share `solver_A`'s
-sparsity pattern (only nonzero *values* differ). `gpu_perm` is an
-architecture-specific scratch `Ref` (see [`InversionLHSCache`](@ref)); the CPU
-method below ignores it, the CUDA extension's method uses it to cache the
-CSC→CSR nonzero-order permutation (`CuSparseMatrixCSR` stores nonzeros in a
-different order than `SparseMatrixCSC`, so a raw `nzval` copy would silently
-scramble the matrix).
-
-No new sparse matrix is allocated, unlike `solver.A = on_architecture(arch, A_new)`.
+Overwrite the values of `solver_A` with those of `A_new`, which has the same
+sparsity pattern. `gpu_perm` caches the CSC → CSR permutation of the nonzeros on
+the GPU and is unused on the CPU.
 """
 function update_A!(solver_A::SparseMatrixCSC, A_new::SparseMatrixCSC, gpu_perm)
     solver_A.nzval .= A_new.nzval
@@ -52,11 +43,8 @@ end
 """
     update_P!(P, A_cpu, arch)
 
-Refresh the preconditioner `P` in place from the (CPU) LHS `A_cpu`, so the
-solver's `P` field never needs reassigning. A `Diagonal` gets its wrapped
-vector overwritten with `1 ./ diag(A_cpu)` (on `arch`); a sparse UMFPACK
-`Factorization` is refactorized in place via `lu!` (reusing its symbolic
-factorization). Both cases require `A_cpu`'s pattern to be unchanged.
+Recompute the preconditioner `P` in place for the matrix `A_cpu`: the Jacobi
+diagonal `1 ./ diag(A_cpu)` for a `Diagonal`, the LU factors for a `Factorization`.
 """
 function update_P!(P::Diagonal, A_cpu::SparseMatrixCSC, arch)
     P.diag .= on_architecture(arch, Vector(1 ./ diag(A_cpu)))
@@ -93,25 +81,10 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
         return solver_tk
     end
 
-    # solve
-    #
-    # `precond_side` decides whether P enters as a left (M) or right (N)
-    # preconditioner. It matters for more than convergence:
-    #
-    #   - Krylov.jl's residual is ‖M(b - Ax)‖, so with a *left* preconditioner the
-    #     stopping criterion is measured in P's own norm, not the true residual.
-    #     Right preconditioning makes `atol`/`rtol` mean what they say.
-    #   - A preconditioner containing a truncated inner Krylov solve is nonlinear,
-    #     and only the flexible (right-preconditioned FGMRES) variant is valid then.
-    #
-    # Left is the default for backwards compatibility with the plain `Diagonal`
-    # preconditioner, where the two differ only by a scalar.
-    side = get(kwargs, :precond_side, :left)
-    kw   = Dict(k => v for (k, v) in pairs(kwargs) if k !== :precond_side)
-    pkw  = side === :right ? (; N=P) : (; M=P)
-    Krylov.krylov_solve!(workspace, A, y, x; pkw..., kw...)
+    # FGMRES preconditions on the right, so that its residual is ‖y - Ax‖
+    preconditioner = workspace isa Krylov.FgmresWorkspace ? (; N=P) : (; M=P)
+    Krylov.krylov_solve!(workspace, A, y, x; preconditioner..., kwargs...)
 
-    # a failed solve is otherwise accepted silently and the model steps on with it
     if !workspace.stats.solved
         r = workspace.stats.residuals
         @warn @sprintf("%s iterative solve did not converge: niter=%d, resid[1]=%.3e, resid[end]=%.3e",

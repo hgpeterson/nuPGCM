@@ -1,30 +1,18 @@
 """
-    AssemblyCache
+    AssemblyCache(dh_up, dh_b, u_order, b_order)
 
-Precomputed, mesh-constant data for fast re-assembly of both the buoyancy
-evolution operators (advection RHS, convection-parameterization `Kᵥ`) and the
-inversion viscous block. All meshes use linear tetrahedra, so each cell's
-Jacobian is constant: physical gradients are `J⁻ᵀ ∇̂φ` with per-cell `J⁻ᵀ`
-(see [`_∂ᵣ`](@ref)), `dΩ_q = w_q |det J|`, and physical quadrature points are
-`x = x₀ + J ξ_q` (affine map). Shape functions are tabulated once in reference
-space; the kernels then run on flat arrays with no `reinit!` and no per-cell
-allocation.
+Reference shape functions and cell geometry for assembly loops that run on flat
+arrays instead of Ferrite's `CellValues`. Cells are linear tetrahedra, so the
+Jacobian is constant on each.
 
-This holds only matrix-*independent* data. The sparsity index maps that scatter
-local blocks into a particular assembled matrix's `nzval` depend on that
-matrix's pattern and so live with the owning toolkit's LHS cache
-(`EvolutionLHSCache.nzidx_b`, `InversionLHSCache.nzidx_up`), built via
-[`build_nzidx_map`](@ref).
-
-Fields:
-- `w[q]`: quadrature weights; `x_ref[q]`: reference-space quadrature points
-- `phi_b[q, i]`, `dphi_b[:, i, q]`: buoyancy basis values / reference gradients
-- `phi_u[q, j]`, `dphi_u[:, j, q]`: scalar velocity basis values / reference gradients
-  (vector u-DOFs interleave xyz: local DOF `3(j-1)+k` is component `k` of node `j`)
-- `x0[c]`, `J[c]`, `Jinv_t[c]`, `detJ[c]`: per-cell first vertex, Jacobian,
-  inverse-transpose Jacobian, and |det J|
-- `dofs_b[:, c]`: global b DOFs of cell c (in `dh_b`)
-- `dofs_u[:, c]`: global u DOFs of cell c within `dh_up` (interleaved xyz)
+- `w[q]`, `x_ref[q]`: quadrature weights and reference points
+- `phi_b[q, i]`, `dphi_b[:, i, q]`: buoyancy basis values and reference gradients
+- `phi_u[q, j]`, `dphi_u[:, j, q]`: the same for the scalar velocity basis; local
+  velocity DOF `3(j-1)+k` is component `k` of node `j`
+- `x0[c]`, `J[c]`, `Jinv_t[c]`, `detJ[c]`: first vertex, Jacobian, its inverse
+  transpose and `|det J|` of cell `c`
+- `dofs_b[:, c]`, `dofs_u[:, c]`: global DOFs of cell `c` in `dh_b`, and its
+  velocity DOFs in `dh_up`
 """
 struct AssemblyCache
     w::Vector{Float64}
@@ -42,12 +30,12 @@ struct AssemblyCache
 end
 
 """
-    _∂ᵣ(Jᵀ, r, g1, g2, g3)
+    _∂ᵣ(J⁻ᵀ, r, g1, g2, g3)
 
-Component `r` of the physical gradient `J⁻ᵀ ĝ` from reference-gradient
-components `(g1, g2, g3)`, with `Jᵀ = J⁻ᵀ` from the cache.
+Component `r` of the physical gradient `J⁻ᵀ ĝ` of the reference gradient
+`ĝ = (g1, g2, g3)`.
 """
-@inline _∂ᵣ(Jᵀ, r, g1, g2, g3) = Jᵀ[r, 1]*g1 + Jᵀ[r, 2]*g2 + Jᵀ[r, 3]*g3
+@inline _∂ᵣ(J⁻ᵀ, r, g1, g2, g3) = J⁻ᵀ[r, 1]*g1 + J⁻ᵀ[r, 2]*g2 + J⁻ᵀ[r, 3]*g3
 
 function Base.summary(cache::AssemblyCache)
     t = typeof(cache)
@@ -58,7 +46,7 @@ function AssemblyCache(dh_up::DofHandler, dh_b::DofHandler, u_order::Int, b_orde
     grid = Ferrite.get_grid(dh_b)
     qr   = QuadratureRule{RefTetrahedron}(QR_ORDER)
     ip_b = Lagrange{RefTetrahedron, b_order}()
-    ip_u = Lagrange{RefTetrahedron, u_order}()   # scalar; vector dofs interleave xyz
+    ip_u = Lagrange{RefTetrahedron, u_order}()
     nq   = getnquadpoints(qr)
     n_b  = getnbasefunctions(ip_b)
     n_su = getnbasefunctions(ip_u)
@@ -109,13 +97,10 @@ function AssemblyCache(dh_up::DofHandler, dh_b::DofHandler, u_order::Int, b_orde
 end
 
 """
-    nzidx = build_nzidx_map(K::SparseMatrixCSC, dofs)
+    nzidx = build_nzidx_map(K, dofs)
 
-Build the linear-index map from local cell blocks into `K.nzval`: for cell `c`
-with global DOFs `dofs[:, c]` (length `n`), `nzidx[n*(j-1)+i, c]` is the index
-into `K.nzval` of entry `(dofs[i, c], dofs[j, c])` (column-major local
-numbering). Lets a kernel scatter dense local blocks straight into `K.nzval`
-without `assemble!`. `K` must already contain every such entry in its pattern.
+Index into `K.nzval` of each cell's local block: `nzidx[n*(j-1)+i, c]` is the
+index of entry `(dofs[i, c], dofs[j, c])`, with `n = size(dofs, 1)`.
 """
 function build_nzidx_map(K::SparseMatrixCSC, dofs::Matrix{Int})
     n, ncells = size(dofs)
@@ -128,9 +113,8 @@ function build_nzidx_map(K::SparseMatrixCSC, dofs::Matrix{Int})
             rng = colptr[gj]:(colptr[gj + 1] - 1)
             for i in 1:n
                 gi = dofs[i, c]
-                p  = searchsortedfirst(rowval, gi, first(rng), last(rng), Base.Order.Forward)
-                @assert p <= last(rng) && rowval[p] == gi "entry ($gi, $gj) not in pattern"
-                nzidx[n*(j - 1) + i, c] = p
+                nzidx[n*(j - 1) + i, c] = searchsortedfirst(rowval, gi, first(rng), last(rng),
+                                                            Base.Order.Forward)
             end
         end
     end

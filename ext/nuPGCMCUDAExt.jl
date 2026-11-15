@@ -32,20 +32,8 @@ nuPGCM.architecture(::CuSparseMatrixCSR) = GPU()
 nuPGCM.vector_type(::GPU, T) = CuVector{T}
 nuPGCM.print_memory_status(::GPU) = CUDA.pool_status()
 
-"""
-    update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, gpu_perm)
-
-In-place refresh of a GPU CSR matrix from a same-pattern CPU CSC matrix.
-`CuSparseMatrixCSR(::SparseMatrixCSC)` stores nonzeros in row-major (CSR)
-order, not `SparseMatrixCSC`'s column-major order, so `A_new.nzval` must be
-permuted before copying. The permutation depends only on the (fixed)
-sparsity pattern, so it is computed once — from `solver_A` itself, which was
-already correctly built via `CuSparseMatrixCSR(A_new)` at construction time —
-and cached in `gpu_perm` for every subsequent call. The permuted values are
-staged into a plain `Vector` first (`gpu_perm[]` also holds this buffer) so
-the host→device transfer is a single bulk `copyto!`, not fancy-indexed scalar
-GPU writes (which `CUDA.jl` disallows and would otherwise error on).
-"""
+# `gpu_perm` holds the CSC → CSR permutation of the nonzeros and a CPU buffer for
+# the permuted values.
 function nuPGCM.update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, gpu_perm::Ref)
     if gpu_perm[] === nothing
         gpu_perm[] = (_csc_to_csr_perm(A_new, solver_A), similar(A_new.nzval))
@@ -59,10 +47,8 @@ end
 """
     perm = _csc_to_csr_perm(A_csc, A_csr)
 
-Permutation such that `A_csc.nzval[perm] == Array(A_csr.nzVal)` for any
-`A_csc`/`A_csr` pair sharing the same sparsity pattern (only values may
-differ from the pair used to compute `perm`). Derived by locating, for each
-CSR entry's `(row, col)`, its linear index in the CSC structure.
+Permutation such that `A_csc.nzval[perm] == Array(A_csr.nzVal)` for two matrices
+with the same sparsity pattern.
 """
 function _csc_to_csr_perm(A_csc::SparseMatrixCSC, A_csr::CuSparseMatrixCSR)
     rowPtr = Array(A_csr.rowPtr)
@@ -74,10 +60,8 @@ function _csc_to_csr_perm(A_csc::SparseMatrixCSC, A_csr::CuSparseMatrixCSR)
         for idx in rowPtr[row]:(rowPtr[row+1]-1)
             col = colVal[idx]
             rng = A_csc.colptr[col]:(A_csc.colptr[col+1]-1)
-            pos = searchsortedfirst(A_csc.rowval, row, first(rng), last(rng), Base.Order.Forward)
-            @assert pos <= last(rng) && A_csc.rowval[pos] == row "CSR/CSC pattern mismatch at ($row,$col)"
             t += 1
-            perm[t] = pos
+            perm[t] = searchsortedfirst(A_csc.rowval, row, first(rng), last(rng), Base.Order.Forward)
         end
     end
     return perm

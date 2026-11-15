@@ -9,7 +9,7 @@ Some highlights of the planetary geostrophic circulation model ($\nu$PGCM):
 
 ## Installation
 
-If you don't have Julia installed already, [download it here](https://julialang.org/downloads/) (currently, the package environment is built with Julia version 1.10).
+If you don't have Julia installed already, [download it here](https://julialang.org/downloads/) (currently, the package environment is built with Julia version 1.13).
 
 The model is still in active development and has not yet been added to the official Julia package registry.
 To try it out, manually download the repository:

@@ -1,22 +1,21 @@
 struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     mesh::M
     dh_up::DUP    # combined DofHandler for (u, p)
-    dh_b::DB      # DofHandler for buoyancy b used for evolution
+    dh_b::DB      # DofHandler for buoyancy b
     ch_up::CUP    # ConstraintHandler for (u, p)
     ch_b::CB      # ConstraintHandler for b
     u_dof_indices::Vector{Int}    # sorted global u DOF indices within dh_up
     p_dof_indices::Vector{Int}    # sorted global p DOF indices within dh_up
-    free_dofs::Vector{Int}        # unconstrained DOF indices within dh_up (see `dof_order`)
-    u_free_red::Vector{Int}       # positions of the u DOFs within the reduced vector
-    p_free_red::Vector{Int}       # positions of the p DOFs within the reduced vector
-    dof_order::Symbol             # :sorted or :blocked (see FEData docstring)
+    free_dofs::Vector{Int}        # unconstrained DOFs of dh_up: velocity first, then pressure
+    free_u::UnitRange{Int}        # positions of the velocity DOFs within free_dofs
+    free_p::UnitRange{Int}        # positions of the pressure DOFs within free_dofs
     nu::Int
     np::Int
     nb::Int
     u_order::Int
     b_order::Int
-    cache::AssemblyCache     # mesh-constant data for per-timestep re-assembly
-    C_up::SparseMatrixCSC{Float64, Int}   # N_up × N_free constraint map (see condense_system)
+    cache::AssemblyCache
+    C_up::SparseMatrixCSC{Float64, Int}   # constraint map, x_full = C_up * x_free
 end
 
 function Base.summary(fe_data::FEData)
@@ -32,65 +31,30 @@ function Base.show(io::IO, fe_data::FEData)
 end
 
 """
-    fe_data = FEData(mesh;
-                     u_diri_tags, u_diri_masks,
-                     b_diri_tags, b_diri_vals,
+    fe_data = FEData(mesh; u_diri_tags, u_diri_masks, b_diri_tags, b_diri_vals,
                      u_order, b_order, pressure_gauge)
 
-Set up `DofHandler`s and `ConstraintHandler`s for the PG model.
+Set up the `DofHandler`s and `ConstraintHandler`s of the PG model: a combined one
+for `(u, p)` and one for `b`.
 
-A combined `DofHandler` for (u, p) is used for the inversion problem so that
-periodic BCs (which couple image and mirror DOFs across cell boundaries) can be
-condensed consistently. `u_dof_indices` and `p_dof_indices` store the global DOF
-index sets within `dh_up` for splitting the combined solution; `free_dofs` stores
-the unconstrained DOFs, which are the ones actually solved for (see
-[`condense_system`](@ref)).
+- `u_diri_tags`: facetsets where `u = 0`. `u_diri_masks[i]` selects the components
+  constrained on `u_diri_tags[i]`, e.g. `(false, false, true)` for `w = 0` only.
+- `b_diri_tags`, `b_diri_vals`: facetsets where `b` is prescribed, and its value on
+  each (a function of `x` or a constant).
+- `pressure_gauge`: `:pin` sets one pressure DOF to zero; `:mean` enforces
+  `∫p dΩ = 0`, which couples one DOF to all the others and adds ~`np²` matrix
+  entries; `:none` leaves the constant pressure mode in the system.
 
-Periodic BCs are applied automatically when `"channel_west"` and `"channel_east"`
-facetsets are present in the grid. The periodic translation vector is inferred from
-the east-wall x-coordinate. Dirichlet values for `u` are always zero.
-
-`pressure_gauge` defaults to `:pin`. `:mean` is correct but expensive: its
-constraint expresses one pressure DOF as a dense combination of *all* the others,
-which makes Ferrite's `allocate_matrix(dh, ch)` fire its "double-distribute"
-branch and insert ~`np²` entries (88.7M vs 17.0M nonzeros, 3.4 GiB vs 780 MiB of
-GPU memory at h=4e-2; the block grows as `np²`). `:pin` fixes a single DOF instead,
-leaving pressure determined up to a constant — subtract the mean at output time if
-a zero-mean field is wanted. See `scratch/diagnose_gauge_nnz.jl`.
-
-`:none` leaves the constant-pressure mode in the system. The resulting matrix is
-singular but *range-symmetric* (`N(𝒜) = N(𝒜ᵀ) = span{(0, 1_p)}`) and the RHS is
-consistent, so a Krylov method converges provided the constant is projected out of
-the iterates — see [`NullspaceProjector`](@ref). This is preferable to `:pin` for
-iterative solves: pinning removes the exact null mode but leaves a *near*-null mode
-("constant everywhere except the pinned DOF") whose spuriously tiny Schur
-eigenvalue slows GMRES down. A direct solve never notices the difference.
-
-`dof_order` controls the ordering of `free_dofs`, i.e. of the reduced system that
-is actually solved:
-- `:sorted` (default) keeps Ferrite's global numbering, in which u and p DOFs are
-  interleaved cell-by-cell.
-- `:blocked` puts all free u DOFs first, then all free p DOFs, so the reduced
-  system has the `[A -Bᵀ; B 0]` 2×2 block structure laid out contiguously. This is
-  required by every block preconditioner in `preconditioners.jl` (contiguous views
-  instead of gather/scatter, which matters a lot on GPU). It changes the sparsity
-  pattern, hence LU fill-in, so it is opt-in.
-
-Both orderings are handled transparently downstream: `_constraint_matrix` builds
-`C` column-by-column from `free_dofs` in whatever order it is given, and
-`sync_flow!` scatters back with `x_full[free_dofs] .= x_red`.
+The mesh is periodic in `x` if it has `"channel_west"` and `"channel_east"` facetsets.
 """
 function FEData(mesh::Mesh;
                 u_diri_tags  = String[],
-                u_diri_masks = nothing,   # e.g. [(true,true,true), (false,false,true)]
+                u_diri_masks = nothing,
                 b_diri_tags  = String[],
-                b_diri_vals  = nothing,   # function b(x) or constant
+                b_diri_vals  = nothing,
                 u_order = 2,
                 b_order = 2,
-                pressure_gauge = :pin,    # :pin (one DOF = 0), :mean (∫p dΩ = 0), :none
-                dof_order = :sorted)      # :sorted (Ferrite numbering) or :blocked (u then p)
-    dof_order in (:sorted, :blocked) ||
-        throw(ArgumentError("dof_order must be :sorted or :blocked, got $dof_order"))
+                pressure_gauge = :pin)
     grid = mesh.grid
 
     ip_u = Lagrange{RefTetrahedron, u_order}()^3
@@ -144,18 +108,12 @@ function FEData(mesh::Mesh;
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
     end
     if pressure_gauge != :none
-        # Pressure gauge. With periodic BCs, PeriodicDirichlet(:p, pfacets) makes the
-        # "channel_west" (mirror) pressure DOFs dependent on "channel_east" (image) DOFs,
-        # so the gauge constraint must avoid using any "channel_west" DOF as its dependent
-        # DOF or as a term in its affine combination -- otherwise close! raises "nested
-        # affine constraints currently not supported".
+        # the gauge must avoid the "channel_west" pressure DOFs, which the periodic
+        # constraint already eliminates
         excluded = is_periodic ?
             _dirichlet_dof_set(dh_up, :p, grid.facetsets["channel_west"]) : nothing
         gauge = _mean_pressure_constraint(dh_up, u_order - 1; excluded)
         if pressure_gauge == :pin
-            # pin the same DOF the mean constraint would eliminate: p[cdof] = 0.
-            # Sparse and iterative-solver friendly; pressure is then determined up to
-            # the gauge instead of having zero mean.
             gauge = AffineConstraint(gauge.constrained_dof, Pair{Int, Float64}[], 0.0)
         elseif pressure_gauge != :mean
             throw(ArgumentError("pressure_gauge must be :mean, :pin, or :none"))
@@ -176,21 +134,17 @@ function FEData(mesh::Mesh;
 
     end
 
-    N_up      = ndofs(dh_up)
-    free_sorted = setdiff(1:N_up, ch_up.prescribed_dofs)
-    is_u        = falses(N_up)
-    is_u[u_dof_indices] .= true
-    if dof_order == :blocked
-        free_dofs = vcat(filter(i ->  is_u[i], free_sorted),
-                         filter(i -> !is_u[i], free_sorted))
-    else
-        free_dofs = free_sorted
-    end
-    u_free_red = findall(i ->  is_u[i], free_dofs)
-    p_free_red = findall(i -> !is_u[i], free_dofs)
-    @info @sprintf("Inversion DOFs: %d total, %d prescribed, %d solved for (%d u, %d p, %s)",
+    N_up    = ndofs(dh_up)
+    is_free = trues(N_up)
+    is_free[ch_up.prescribed_dofs] .= false
+    free_u_dofs = filter(i -> is_free[i], u_dof_indices)
+    free_p_dofs = filter(i -> is_free[i], p_dof_indices)
+    free_dofs   = vcat(free_u_dofs, free_p_dofs)
+    free_u      = 1:length(free_u_dofs)
+    free_p      = length(free_u_dofs) .+ (1:length(free_p_dofs))
+    @info @sprintf("Inversion DOFs: %d total, %d prescribed, %d solved for (%d u, %d p)",
                    N_up, length(ch_up.prescribed_dofs), length(free_dofs),
-                   length(u_free_red), length(p_free_red), dof_order)
+                   length(free_u), length(free_p))
 
     @info "Building assembly cache..."
     @time begin
@@ -199,32 +153,9 @@ function FEData(mesh::Mesh;
     end
 
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
-                  u_dof_indices, p_dof_indices, free_dofs,
-                  u_free_red, p_free_red, dof_order,
+                  u_dof_indices, p_dof_indices, free_dofs, free_u, free_p,
                   nu, np, nb, u_order, b_order,
                   cache, C_up)
-end
-
-"""
-    nu_free, np_free = n_free_up(fe_data)
-
-Number of free velocity and pressure DOFs in the reduced (condensed) system.
-"""
-n_free_up(fe_data::FEData) = length(fe_data.u_free_red), length(fe_data.p_free_red)
-
-"""
-    u_rng, p_rng = block_ranges(fe_data)
-
-Contiguous `UnitRange`s of the velocity and pressure blocks within the reduced
-solution vector. Requires `dof_order = :blocked`; throws otherwise, since with
-`:sorted` the two fields are interleaved and no such ranges exist.
-"""
-function block_ranges(fe_data::FEData)
-    fe_data.dof_order == :blocked || throw(ArgumentError(
-        "block_ranges requires FEData(...; dof_order = :blocked); got :$(fe_data.dof_order). " *
-        "Block preconditioners need the reduced system laid out as [u; p]."))
-    nu_free, np_free = n_free_up(fe_data)
-    return 1:nu_free, (nu_free + 1):(nu_free + np_free)
 end
 
 """
@@ -253,18 +184,9 @@ end
 """
     _condense_rhs!(y, ch)
 
-Prepare a physics RHS vector `y` for solving against a pre-condensed matrix.
-
-For each affine constraint `y[constrained] = Σ c * y[free]` (for periodic BCs:
-mirror = constrained, image = free): merges the constrained DOF's row into the
-rows of its coefficient DOFs (`y[free] += c * y[constrained]`), then zeros all
-constrained DOF rows (pure Dirichlet rows included).
-
-This is the correct right-hand-side operation when the stiffness matrix has already
-been condensed by `condense_system` (or Ferrite's `apply!(K, f_bc, ch)`) and the
-solution will be corrected afterward by `apply!(x, ch)`. Unlike `apply!(y, ch)`, this
-does not overwrite constrained rows with their recovered values (which would corrupt
-the condensed system's equations for those rows).
+Fold the entries of the right-hand side `y` at constrained DOFs into the entries of
+the DOFs they depend on, then zero them. This is what `apply!(K, f, ch)` does to
+`f`, for a matrix that has already been condensed.
 """
 function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
     for i in eachindex(ch.prescribed_dofs, ch.dofcoefficients)
@@ -280,68 +202,17 @@ function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
 end
 
 """
-    A_red, f_bc = condense_system(A, ch, C)
-
-Reduce the `N × N` matrix `A` to the `N_free × N_free` system actually solved,
-using the constraint map `C` (`N × N_free`, from [`_constraint_matrix`](@ref)):
-
-    A_red = CᵀAC,   f_bc = Cᵀ(-A g)
-
-where `x_full = C x_red + g` and `g` carries the constraint inhomogeneities
-(`f_bc` is zero when all constraints are homogeneous, as for this model's
-velocity BCs).
-
-Prescribed DOFs are *eliminated*, not retained: `C` has no column for them, so
-they contribute no row or column to `A_red`. This is what Gridap does at
-assembly time on `main` (`assemble_matrix` over a `TrialFESpace` emits the free
-block directly, with the Dirichlet contribution as a separate RHS lift); here
-the same reduced system is reached by projection after assembling the full one.
-
-This also replaces Ferrite's `apply!(A, f_bc, ch)`, which keeps the prescribed
-DOFs in the system. (In Ferrite < 1.6 it was also wrong for non-symmetric
-matrices: `_condense!` folded the coupling `A[c1, c2]` between two constrained
-DOFs into the transposed position, corrupting the divergence and Coriolis
-blocks across the periodic seam. Fixed upstream in Ferrite 1.6.0, PR #1426.)
-
-At solve time, map the RHS with [`condense_rhs`](@ref), solve for `x_red`, then
-scatter back into a full-length vector at `fe_data.free_dofs` and call
-`apply!(x_full, ch)` to recover the constrained DOFs.
-"""
-function condense_system(A::SparseMatrixCSC, ch::ConstraintHandler, C::SparseMatrixCSC)
-    g = zeros(size(A, 1))
-    g[ch.prescribed_dofs] .= ch.inhomogeneities
-    return C' * A * C, C' * (-(A * g))
-end
-
-"""
-    y_red = condense_rhs(y, C)
-
-Map a full-length physics RHS onto the reduced system: `y_red = Cᵀ y`.
-
-Equivalent to [`_condense_rhs!`](@ref) followed by keeping only the free rows —
-each constrained DOF's row is merged into the rows of its coefficient DOFs, and
-the constrained rows themselves are dropped rather than zeroed.
-"""
-condense_rhs(y::AbstractVector, C::SparseMatrixCSC) = C' * y
-
-"""
     C = _constraint_matrix(ch, N, free_dofs)
 
-Build the `N × N_free` sparse constraint map `C` such that `x_full = C x_red + g`:
-column `j` corresponds to `free_dofs[j]`, carrying a 1 on its own row plus the
-coefficient of that DOF in every constrained DOF's affine combination.
-
-Coefficient entries that reference a DOF which is itself prescribed (a
-"junction" DOF, e.g. a periodic mirror whose image lies on a Dirichlet
-boundary) are dropped: their value is already folded into `ch.inhomogeneities`
-by Ferrite's `update!` and hence carried by `g` in [`condense_system`](@ref).
-Keeping such an entry corrupts the condensed system at exactly those DOFs.
+Sparse `N × N_free` map from the free DOFs to all `N` DOFs of a handler with
+homogeneous constraints, `x_full = C x_free`. Column `j` has a 1 on row
+`free_dofs[j]`, plus the coefficient of that DOF on the row of every constrained
+DOF that depends on it.
 """
 function _constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int})
-    # reduced index of each DOF (0 for prescribed DOFs, which have no column)
-    red = zeros(Int, N)
+    column = zeros(Int, N)   # column of each free DOF
     for (j, i) in enumerate(free_dofs)
-        red[i] = j
+        column[i] = j
     end
 
     rows = copy(free_dofs)
@@ -351,8 +222,8 @@ function _constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int
         dofcoef = ch.dofcoefficients[i]
         dofcoef === nothing && continue
         for (fdof, c) in dofcoef
-            haskey(ch.dofmapping, fdof) && continue   # prescribed: value lives in g
-            push!(rows, cdof); push!(cols, red[fdof]); push!(vals, c)
+            haskey(ch.dofmapping, fdof) && continue   # itself prescribed, to zero
+            push!(rows, cdof); push!(cols, column[fdof]); push!(vals, c)
         end
     end
     return sparse(rows, cols, vals, N, length(free_dofs))
@@ -365,10 +236,9 @@ function _to_dirichlet_fn(val)
 end
 
 """
-    _dirichlet_dof_set(dh, field, facetset) -> Set{Int}
+    dofs = _dirichlet_dof_set(dh, field, facetset)
 
-Return the set of global DOF indices for `field` on `facetset`, using a throwaway
-`ConstraintHandler` to harvest `Dirichlet`'s own facet-to-dof mapping.
+Set of global DOF indices of `field` on `facetset`.
 """
 function _dirichlet_dof_set(dh, field::Symbol, facetset)
     ch = ConstraintHandler(dh)
@@ -378,19 +248,10 @@ function _dirichlet_dof_set(dh, field::Symbol, facetset)
 end
 
 """
-    _mean_pressure_constraint(dh_up, p_order; excluded = nothing) -> AffineConstraint
+    constraint = _mean_pressure_constraint(dh_up, p_order; excluded = nothing)
 
-Build an `AffineConstraint` that enforces ∫p dΩ = 0 by expressing the
-pressure DOF with the largest volume-integral weight as a linear combination
-of all other pressure DOFs.
-
-Assembles the 1×N_p constraint row `C[1, i] = ∫φ_p_i dΩ`, then picks DOF k
-with |C[1,k]| largest as the dependent DOF:
-    p[k] = -∑_{i≠k} (C[1,i]/C[1,k]) p[i]
-
-If `excluded` is given, those DOFs are dropped from consideration entirely (neither
-chosen as the dependent DOF `k` nor included as an independent term), so the result
-can coexist with other affine constraints (e.g. periodic) already touching them.
+`AffineConstraint` enforcing `∫p dΩ = 0`, written as the pressure DOF with the
+largest weight `∫φᵢ dΩ` in terms of all the others. DOFs in `excluded` are left out.
 """
 function _mean_pressure_constraint(dh_up, p_order; excluded = nothing)
     ip_p    = Lagrange{RefTetrahedron, p_order}()

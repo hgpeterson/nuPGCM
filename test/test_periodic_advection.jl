@@ -223,7 +223,7 @@
         # mirror equation into a prescribed image DOF.
         A_raw = allocate_inversion_matrix(fe_diri)
         A_raw.nzval .= sin.(1.0:length(A_raw.nzval))   # deterministic, non-symmetric
-        A_c, _ = nuPGCM.condense_system(A_raw, ch, fe_diri.C_up)
+        A_c = fe_diri.C_up' * A_raw * fe_diri.C_up
         pd   = ch.prescribed_dofs
         free = fe_diri.free_dofs
         N    = size(A_raw, 1)
@@ -234,7 +234,7 @@
         @test length(free) == N - length(pd)
 
         # the junction rule: a coefficient pointing at a DOF that is itself
-        # prescribed must be dropped from C (its value lives in `g` instead).
+        # prescribed must be dropped from C.
         # Row `cdof` of C therefore holds exactly its *free* coefficients.
         Ct = sparse(fe_diri.C_up')      # columns of Cᵀ are rows of C
         for (i, cdof) in enumerate(pd)
