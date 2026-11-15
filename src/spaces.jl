@@ -41,6 +41,34 @@ make_facet_values(fe_data::FEData; kwargs...) =
     make_facet_values(fe_data.u_order, fe_data.b_order; kwargs...)
 
 """
+    z_b = b_dof_z(fe_data)
+
+The `z` coordinate of every buoyancy DOF, so that the *total* buoyancy
+`b + N² z` can be formed on the buoyancy basis. Exact for any `b_order`: the
+geometry is linear, so `z ∈ P1` is represented exactly in `P_b`.
+
+Evaluating the geometry at the Lagrange reference points makes each quadrature
+point coincide with one DOF's physical position, which is what lets the loop
+below write straight into `z_b[dofs[q]]`.
+"""
+function b_dof_z(fe_data::FEData)
+    ip_b    = Lagrange{RefTetrahedron, fe_data.b_order}()
+    ref_pts = Ferrite.reference_coordinates(ip_b)
+    qr_pt   = QuadratureRule{RefTetrahedron}(zeros(length(ref_pts)), ref_pts)
+    cv_b    = CellValues(qr_pt, ip_b, IP_GEO)
+    z_b     = zeros(fe_data.nb)
+    for cc in CellIterator(fe_data.dh_b)
+        reinit!(cv_b, cc)
+        coords = getcoordinates(cc)
+        dofs   = celldofs(cc)
+        for q in 1:getnquadpoints(cv_b)
+            z_b[dofs[q]] = spatial_coordinate(cv_b, q, coords)[3]
+        end
+    end
+    return z_b
+end
+
+"""
     K = allocate_inversion_matrix(fe_data)
 
 Allocate a sparse matrix for the inversion (Stokes + Coriolis) system using

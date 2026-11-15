@@ -82,6 +82,7 @@ include("timesteppers.jl")
 include("evolution.jl")
 include("model.jl")
 include("IO.jl")
+include("diagnostics.jl")
 include("plotting.jl")
 
 export
@@ -164,7 +165,11 @@ run!,
 save_state,
 save_vtk,
 save_vtk_p2,
+# diagnostics.jl
+zonal_integral,
+overturning_streamfunction,
 # plotting.jl
+plot_zonal_integral,
 eval_at_points,
 eval_at_point,
 find_H,

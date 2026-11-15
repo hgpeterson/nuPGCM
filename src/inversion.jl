@@ -206,7 +206,11 @@ function InversionToolkit(arch::AbstractArchitecture,
                           params::Parameters,
                           forcings::Forcings;
                           atol=1e-6, rtol=1e-6, itmax=0,
-                          memory=20, history=true, verbose=false, restart=true,
+                          # FGMRES(20) stagnates outright on warm-started bowl solves
+                          # (residual flat for 400 iterations, 98% velocity error in the
+                          # equatorial band); FGMRES(100) converges in ~108 and costs
+                          # 2×100 n-vectors. See scratch/diag_bowl_inversion.jl.
+                          memory=100, history=true, verbose=false, restart=true,
                           preconditioner=nothing, precond_side=:left)
     @info "Building inversion system..."
 

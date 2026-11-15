@@ -136,21 +136,7 @@ function save_vtk(m::Model; ofile="$out_dir/data/state", vtk_kwargs...)
     x_up[fe_data.u_dof_indices] .= state.u
     x_up[fe_data.p_dof_indices] .= state.p
 
-    # compute z-coordinate of each b DOF via P2 reference coordinates
-    ip_b    = Lagrange{RefTetrahedron, fe_data.b_order}()
-    ref_pts = Ferrite.reference_coordinates(ip_b)
-    qr_pt   = QuadratureRule{RefTetrahedron}(zeros(length(ref_pts)), ref_pts)
-    cv_b    = CellValues(qr_pt, ip_b, IP_GEO)
-    z_b     = zeros(fe_data.nb)
-    for cc in CellIterator(fe_data.dh_b)
-        reinit!(cv_b, cc)
-        coords = getcoordinates(cc)
-        dofs   = celldofs(cc)
-        for q in 1:getnquadpoints(cv_b)
-            z_b[dofs[q]] = spatial_coordinate(cv_b, q, coords)[3]
-        end
-    end
-    b_full = state.b .+ m.params.N² .* z_b
+    b_full = state.b .+ m.params.N² .* b_dof_z(fe_data)
 
     VTKGridFile(ofile, grid; append=false, vtk_kwargs...) do vtk
         write_solution(vtk, fe_data.dh_up, x_up)

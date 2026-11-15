@@ -17,6 +17,7 @@
 *.pyc
 *.npz
 *.nsys-rep
+*.sbatch
 sims/
 docs/build/
 docs/src/literated/

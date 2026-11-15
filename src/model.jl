@@ -200,6 +200,13 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
     h_cells = compute_h_cells(model.fe_data.mesh)
     h_min   = minimum(h_cells)
 
+    # `b` is the buoyancy *perturbation*; the total buoyancy B = b + N²z is what
+    # carries the physical bounds (for advection-diffusion with no interior
+    # source, B stays within the range set by its initial and boundary values),
+    # so that is what gets reported.
+    z_b    = b_dof_z(model.fe_data)
+    b_full = similar(b)
+
     # initial eddy ν sync
     if model.forcings.eddy_param.is_on
         _update_eddy_A!(model)
@@ -294,8 +301,8 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, n_plot=Inf, advect
                                 hrs_mins_secs(t_step * Int64((timestepper.t_stop - timestepper.t[]) ÷ Δt))...)
             end
             msg *= @sprintf("|u|ₘₐₓ = %.3e, CFL Δt ≈ %.3e\n", u_max, h_min / u_max)
-            msg *= @sprintf("%.3e ≤ b ≤ %.3e, |db/dt|ₘₐₓ = %.3e\n",
-                            minimum(b), maximum(b), maximum(abs, (b .- b_prev) ./ Δt))
+            @. b_full = b + model.params.N² * z_b
+            msg *= @sprintf("%.3e ≤ b + N²z ≤ %.3e\n", minimum(b_full), maximum(b_full))
             msg
             end
             t_last_info = t₁

@@ -111,6 +111,14 @@ function iterative_solve!(solver_tk::IterativeSolverToolkit)
     pkw  = side === :right ? (; N=P) : (; M=P)
     Krylov.krylov_solve!(workspace, A, y, x; pkw..., kw...)
 
+    # a failed solve is otherwise accepted silently and the model steps on with it
+    if !workspace.stats.solved
+        r = workspace.stats.residuals
+        @warn @sprintf("%s iterative solve did not converge: niter=%d, resid[1]=%.3e, resid[end]=%.3e",
+                       label, workspace.stats.niter,
+                       isempty(r) ? NaN : r[1], isempty(r) ? NaN : r[end])
+    end
+
     @debug begin 
         solved = workspace.stats.solved
         niter = workspace.stats.niter 
