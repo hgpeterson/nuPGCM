@@ -26,12 +26,14 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 nuPGCMCUDAExt = "CUDA"
 
 [compat]
-CUDA = "5.11.0"
+CUDA = "6.4"
 CuthillMcKee = "0.1.0"
+Ferrite = "1.7"
+FerriteGmsh = "1.5"
 Gmsh = "0.3.1"
 JLD2 = "0.6.4"
 Krylov = "0.10.6"
-KrylovPreconditioners = "0.3.7"
+KrylovPreconditioners = "0.3.8, 0.4"
 ProgressMeter = "1.11.0"
 PyCall = "1.96.4"
 PyPlot = "2.11.6"
@@ -41,6 +43,7 @@ WriteVTK = "1.21.2"
 julia = "1.10"
 
 [extras]
+CUDA_Compiler_jll = "d1e2174e-dfdc-576e-b43e-73b79eb1aca8"
 CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 

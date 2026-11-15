@@ -2,7 +2,7 @@ module nuPGCMCUDAExt
 
 using nuPGCM
 using CUDA
-using CUDA.CUSPARSE
+using CUDA.cuSPARSE
 using SparseArrays
 
 function __init__()

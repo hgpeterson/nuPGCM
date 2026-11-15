@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12.6'
+          version: '1.13'
       - uses: julia-actions/cache@v2
       - name: Install dependencies
         shell: julia --color=yes --project=docs {0}
@@ -35,7 +35,6 @@ jobs:
           Pkg.build("PyCall")
           Pkg.build("PyPlot")
           Pkg.build("Gmsh")
-          Pkg.build("GridapGmsh")
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
           Pkg.precompile()

@@ -297,13 +297,11 @@ assembly time on `main` (`assemble_matrix` over a `TrialFESpace` emits the free
 block directly, with the Dirichlet contribution as a separate RHS lift); here
 the same reduced system is reached by projection after assembling the full one.
 
-This also replaces Ferrite's `apply!(A, f_bc, ch)`, which mis-places the coupling
-blocks between pairs of constrained DOFs in non-symmetric matrices: with
-constraints `x[c1] = x[f1]` and `x[c2] = x[f2]`, it folds `A[c1, c2]` into the
-transposed position `A[f2, f1]` instead of `A[f1, f2]` (Ferrite ≤ 1.4,
-`_condense!`). With periodic BCs this corrupts the divergence and Coriolis
-blocks across the periodic seam; symmetric matrices (mass, diffusion) are
-unaffected.
+This also replaces Ferrite's `apply!(A, f_bc, ch)`, which keeps the prescribed
+DOFs in the system. (In Ferrite < 1.6 it was also wrong for non-symmetric
+matrices: `_condense!` folded the coupling `A[c1, c2]` between two constrained
+DOFs into the transposed position, corrupting the divergence and Coriolis
+blocks across the periodic seam. Fixed upstream in Ferrite 1.6.0, PR #1426.)
 
 At solve time, map the RHS with [`condense_rhs`](@ref), solve for `x_red`, then
 scatter back into a full-length vector at `fe_data.free_dofs` and call

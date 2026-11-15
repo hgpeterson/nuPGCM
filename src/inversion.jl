@@ -6,7 +6,7 @@ Precomputed data for allocation-free rebuilds of the reduced inversion LHS
 uncondensed `A` changes (the eddy-viscosity parameterization: `ν` depends on
 `b`, everything else is fixed). Analogous to `EvolutionLHSCache` for the
 buoyancy system, but `condense_system`'s `C'AC` product (unlike Ferrite's
-symmetric-only `apply!`) is not linear in a way that preserves a *fixed*
+in-place `apply!`) is not linear in a way that preserves a *fixed*
 sparsity pattern from one `A` to the next: coincidental numeric cancellation
 can drop an entry from `C'AC`'s realized pattern for one `ν` field but not
 another. `M_pattern` is therefore built *structurally* — the union of every
@@ -237,8 +237,8 @@ function InversionToolkit(arch::AbstractArchitecture,
     else
         A = build_A_inversion(fe_data, params, forcings.ν)
         # apply BCs: eliminate prescribed DOFs, compute f_bc correction for
-        # inhomogeneous BC values (not Ferrite's apply!, which corrupts
-        # non-symmetric matrices; see condense_system)
+        # inhomogeneous BC values (not Ferrite's apply!, which retains the
+        # prescribed DOFs; see condense_system)
         A, f_bc = condense_system(A, fe_data.ch_up, C)
     end
 
