@@ -140,8 +140,22 @@ F(\mathbf{u}, \mathbf{b})_i = \mathbf{u}_k \mathbf{b}_j \int_\mathcal{D} (\vec{\
 which must be explicitly re-computed as the solution evolves. 
 
 In previous versions of the model, we employed a timestepping scheme based on Strang splitting.
-Currently, we have moved to a BDF scheme similar to that in [this deal.II tutorial](https://dealii.org/developer/doxygen/deal.II/step_31.html).
-Hopefully more documentation to come. 
+Currently, we use the implicit-explicit BDF scheme of [this deal.II tutorial](https://dealii.org/current/doxygen/deal.II/step_31.html), which treats diffusion implicitly and advection explicitly.
+For a timestep $\Delta t_n = t_n - t_{n-1}$ and step ratio $\omega = \Delta t_n / \Delta t_{n-1}$, the second-order scheme (`BDF2`) is
+```math
+\mathbf{M} \left( \frac{1 + 2\omega}{1 + \omega} \mathbf{b}^n - (1 + \omega) \mathbf{b}^{n-1} + \frac{\omega^2}{1 + \omega} \mathbf{b}^{n-2} \right) + \Delta t_n F(\mathbf{u}^\star, \mathbf{b}^\star) + \Delta t_n \theta \mathbf{K} \mathbf{b}^n = \Delta t_n \mathbf{f},
+```
+where $(\cdot)^\star = (1 + \omega) (\cdot)^{n-1} - \omega (\cdot)^{n-2}$ is the second-order extrapolation to $t_n$.
+Setting $\omega = 0$ gives the first-order scheme (`BDF1`), which is also the first step of `BDF2`.
+
+With `adaptive=true`, the timestep is chosen every step as
+```math
+\Delta t_n = \min \left( \Delta t_{\max}, \; \frac{1}{1.7 \, d \sqrt{d}} \frac{1}{q} \frac{h_{\min}}{|\vec{u}|_{\max}} \right),
+```
+where $d = 3$ is the dimension, $q$ is the order of the buoyancy elements, $h_{\min}$ is the smallest cell diameter, and $\Delta t_{\max}$ is the `Δt` given to the timestepper.
+The CFL limit alone does not make the scheme stable.
+Since $\vec{u}$ is diagnosed from $b$, the explicit term $F$ also carries the adjustment of $b$ by the flow that it induces, which is fastest near the equator and has a rate that is independent of $|\vec{u}|$.
+The maximum timestep $\Delta t_{\max}$ must resolve this adjustment.
 
 A key advantage of solving the PG equations as opposed to the full Boussinesq system is that they filter out fast-timescale dynamics, allowing for large timesteps.
 For a typical global-scale simulation, a dimensional timestep of $\Delta t / (f_0 \varrho) \sim O(10 \text{ days})$ is possible. 

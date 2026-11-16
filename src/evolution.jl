@@ -4,6 +4,7 @@
 The evolution operators with boundary conditions applied (`M_c`, `Kₕ_c`, `Kᵥ_c`)
 and their right-hand-side corrections (`f_bc_M`, `f_bc_Kₕ`, `f_bc_Kᵥ`), from which
 the left-hand side `A = M_c + θ (Kₕ_c + Kᵥ_c)` is formed for any `θ`.
+`θ` is the value `A` was last formed for.
 `nzidx_b` is `build_nzidx_map(Kᵥ, fe_data.cache.dofs_b)`.
 """
 struct EvolutionLHSCache
@@ -14,6 +15,7 @@ struct EvolutionLHSCache
     f_bc_Kₕ::Vector{Float64}
     f_bc_Kᵥ::Vector{Float64}
     A::SparseMatrixCSC{Float64, Int}
+    θ::Base.RefValue{Float64}
     nzidx_b::Matrix{Int}
 end
 
@@ -29,7 +31,8 @@ function EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data::FEData)
     Kₕ_c, f_bc_Kₕ = condense(Kₕ)
     Kᵥ_c, f_bc_Kᵥ = condense(Kᵥ)
     nzidx_b = build_nzidx_map(Kᵥ, fe_data.cache.dofs_b)
-    return EvolutionLHSCache(M_c, Kₕ_c, Kᵥ_c, f_bc_M, f_bc_Kₕ, f_bc_Kᵥ, copy(M_c), nzidx_b)
+    return EvolutionLHSCache(M_c, Kₕ_c, Kᵥ_c, f_bc_M, f_bc_Kₕ, f_bc_Kᵥ, copy(M_c), Ref(NaN),
+                             nzidx_b)
 end
 
 function refresh_Kᵥ!(lhs::EvolutionLHSCache, Kᵥ::SparseMatrixCSC, ch_b)
@@ -93,11 +96,7 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     rhs_diff = copy(rhs_diff⁰)
     rhs_flux = build_rhs_flux(params, forcings, fe_data)
 
-    # the first step is BDF1, but P is updated in place later, so its type is
-    # chosen for the timestepper of the run
-    ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[])
-    A, P, f_bc = combine_evolution_LHS(arch, params, forcings, ts1, lhs;
-                                       use_diag=use_diag_precond(arch, forcings, ts))
+    A, P, f_bc = combine_evolution_LHS(arch, params, forcings, ts, lhs)
 
     rhs_diff = on_architecture(arch, rhs_diff)
     rhs_flux = on_architecture(arch, rhs_flux)
@@ -143,7 +142,7 @@ end
     update_evolution_LHS!(evolution, fe_data, params, forcings, ts, b_cpu)
 
 Update `Kᵥ` and `rhs_diff` for the buoyancy `b_cpu` if the convection
-parameterization is on, then the LHS if `Kᵥ` or `Δt` changed.
+parameterization is on, then the LHS if `Kᵥ` or `θ` changed.
 """
 function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
                                params::Parameters, forcings::Forcings,
@@ -158,7 +157,7 @@ function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
             evolution.rhs_diff .= on_architecture(evolution.arch, rhs_diff_new)
         end
     end
-    if conv_on || ts.adaptive
+    if conv_on || evolution_parameter(params, ts) != evolution.lhs.θ[]
         collect_evolution_LHS!(evolution, params, forcings, ts, fe_data.ch_b;
                                Kᵥ_changed=conv_on)
     end
@@ -168,7 +167,7 @@ end
 # Form `lhs.A` and `f_bc` for the current θ.
 function combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
                                 ts::AbstractTimestepper)
-    θ = evolution_parameter(params, ts)
+    θ = lhs.θ[] = evolution_parameter(params, ts)
     A = lhs.A
     @. A.nzval = lhs.M_c.nzval + θ * (lhs.Kₕ_c.nzval + lhs.Kᵥ_c.nzval)
     f_bc = @. lhs.f_bc_M + θ * (lhs.f_bc_Kₕ + lhs.f_bc_Kᵥ)
@@ -178,11 +177,10 @@ end
 # As above, and also build the preconditioner and move `A` to `arch`.
 function combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
                                forcings::Forcings, ts::AbstractTimestepper,
-                               lhs::EvolutionLHSCache;
-                               use_diag = use_diag_precond(arch, forcings, ts))
+                               lhs::EvolutionLHSCache)
     A, f_bc = combine_evolution_LHS!(lhs, params, ts)
 
-    if use_diag
+    if use_diag_precond(arch, forcings, ts)
         P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
     else
         @warn "LU-factoring evolution matrix with $(size(A, 1)) DOFs..."
@@ -201,12 +199,8 @@ use_diag_precond(arch, forcings, ts) =
 
 Coefficient θ in `A = M + θ*(Kₕ + Kᵥ)`.
 """
-function evolution_parameter(p::Parameters, ts::BDF1)
-    return ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
-end
-function evolution_parameter(p::Parameters, ts::BDF2)
-    return 2/3 * ts.Δt[] * p.α^2 * p.ε^2 / p.μϱ
-end
+evolution_parameter(p::Parameters, ts::AbstractTimestepper) =
+    effective_timestep(ts) * p.α^2 * p.ε^2 / p.μϱ
 
 ####
 #### Matrix and vector builders
@@ -386,35 +380,26 @@ end
 ####
 
 """
-    f = build_rhs_adv(fe_data, params, u_vec, b_vec, ts::BDF1)
-    f = build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts::BDF2)
+    f = build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts)
 
-Assemble the advection right-hand side.
+Assemble the advection right-hand side
 
-BDF1: `∫ (b - Δt (u·∇b + w N²)) d dΩ`
-BDF2: `∫ (4/3 b - 1/3 b_prev - 2/3 Δt ((2u-u_prev)·∇(2b-b_prev) + (2w-w_prev) N²)) d dΩ`
+    ∫ (((1 + ω) b - ω²/(1 + ω) b_prev) / a - Δt/a (u⋆·∇b⋆ + w⋆ N²)) φᵢ dΩ
+
+where `ω = step_ratio(ts)`, `a = (1 + 2ω)/(1 + ω)` and `⋆` marks the extrapolation
+`(1 + ω) b - ω b_prev`.
 """
-build_rhs_adv(fe_data, params, u_vec, b_vec, u_prev, b_prev, ts::BDF1) =
-    build_rhs_adv(fe_data, params, u_vec, b_vec, ts)
-
-function build_rhs_adv(fe_data::FEData, params::Parameters,
-                        u_vec::AbstractVector, b_vec::AbstractVector,
-                        ts::BDF1)
-    f = zeros(fe_data.nb)
-    rhs_adv_kernel!(f, fe_data.cache, params.N²,
-                    (b, bp) -> b, (b, bp) -> b, (u, up) -> u, 1.0, ts.Δt[],
-                    u_vec, b_vec, u_vec, b_vec)
-    return f
-end
-
 function build_rhs_adv(fe_data::FEData, params::Parameters,
                         u_vec::AbstractVector, b_vec::AbstractVector,
                         u_prev::AbstractVector, b_prev::AbstractVector,
-                        ts::BDF2)
+                        ts::AbstractTimestepper)
+    ω = step_ratio(ts)
+    a = (1 + 2ω) / (1 + ω)
     f = zeros(fe_data.nb)
     rhs_adv_kernel!(f, fe_data.cache, params.N²,
-                    (b, bp) -> 4/3*b - 1/3*bp, (b, bp) -> 2*b - bp, (u, up) -> 2*u - up,
-                    2/3, ts.Δt[], u_vec, b_vec, u_prev, b_prev)
+                    (b, bp) -> ((1 + ω)*b - ω^2/(1 + ω)*bp) / a,
+                    (b, bp) -> (1 + ω)*b - ω*bp, (u, up) -> (1 + ω)*u - ω*up,
+                    1/a, ts.Δt[], u_vec, b_vec, u_prev, b_prev)
     return f
 end
 

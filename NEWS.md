@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added 
 
 - New `AbstractTimestepper` type with `BDF1` and `BDF2` implementations to handle timestepping
-- Adaptive timestepping for `BDF1`
+- Adaptive timestepping for `BDF1` and `BDF2` (variable-step BDF, CFL limit capped by the timestepper's `Δt`)
 
 ### Changed
 

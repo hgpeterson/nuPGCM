@@ -161,7 +161,7 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
                                                         timestepper)
 
     θ  = evolution_parameter(params, timestepper)
-    Δt = timestepper.Δt[]
+    Δt = effective_timestep(timestepper)
     y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
          Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
          on_architecture(CPU(), evolution.f_bc)
@@ -174,11 +174,6 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     apply!(b_cpu, ch_b)      # set the constrained DOFs
     model.state.b .= b_cpu
     return model
-end
-
-# specialise for BDF1 (no u_prev / b_prev needed)
-function evolve!(model::Model, ::Nothing, ::Nothing)
-    return evolve!(model, model.state.u, model.state.b)
 end
 
 """
@@ -201,8 +196,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     @info "Beginning integration with" n_save n_info
     status(timestepper)
 
-    h_cells = compute_h_cells(model.fe_data.mesh)
-    h_min   = minimum(h_cells)
+    h_min = minimum(compute_h_cells(model.fe_data.mesh))
 
     # for reporting the range of the total buoyancy b + N²z
     z_b    = b_dof_z(model.fe_data)
@@ -234,13 +228,8 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
-        update_Δt!(timestepper, model.fe_data, u, h_cells)
+        update_Δt!(timestepper, model.fe_data, u, h_min)
         Δt = timestepper.Δt[]
-
-        if i == i_start + 2 && typeof(timestepper) <: BDF2
-            collect_evolution_LHS!(model.evolution, model.params, model.forcings,
-                                   timestepper, model.fe_data.ch_b; Kᵥ_changed=false)
-        end
 
         u_curr .= u
         b_curr .= b

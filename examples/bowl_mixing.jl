@@ -164,9 +164,8 @@ save_vtk(model, ofile="$out_dir/data/state.vtu")
 # Here we want to see how the flow and buoyancy evolve in time, however, so 
 # we need to set up a timestepper and build the evolution system. We currently
 # support the BDF1 and BDF2 implicit-explicit time stepping schemes. For adaptive
-# time stepping based on the CFL condition, set `adaptive=true` and choose a 
-# `CFL_factor` (currently only for the BDF1 scheme). For this example, we'll 
-# just use a fixed time step.
+# time stepping based on the CFL condition, set `adaptive=true`; `Δt` is then the
+# maximum time step. For this example, we'll just use a fixed time step.
 
 timestepper = BDF2(; t_start=0, t_stop=0.1*μϱ/ε^2, Δt=1e-3)
 evolution_toolkit = EvolutionToolkit(arch, fe_data, params, forcings, timestepper)

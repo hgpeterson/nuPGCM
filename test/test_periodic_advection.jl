@@ -25,13 +25,14 @@
 
     # reference advection RHS: independent CellValues-based assembly of the
     # same integral as the cached kernel (same quadrature order)
-    function ref_rhs_adv(fe_data, N², Δt, x_up, b_vec, x_up_prev, b_prev; bdf2::Bool)
+    function ref_rhs_adv(fe_data, N², Δt, x_up, b_vec, x_up_prev, b_prev; ω)
         cv_u, _, cv_b = make_cell_values(fe_data)
         dh_up = fe_data.dh_up
         u_range = dof_range(dh_up, :u)
         n_b = getnbasefunctions(cv_b)
         f  = zeros(fe_data.nb)
         fₑ = zeros(n_b)
+        a  = (1 + 2ω) / (1 + ω)
         for (cc_up, cc_b) in zip(CellIterator(dh_up), CellIterator(fe_data.dh_b))
             reinit!(cv_u, cc_up)
             reinit!(cv_b, cc_b)
@@ -45,20 +46,15 @@
                 u   = function_value(cv_u, q, uₑ)
                 b   = function_value(cv_b, q, bₑ)
                 ∇b  = function_gradient(cv_b, q, bₑ)
-                if bdf2
-                    u_prev = function_value(cv_u, q, uₑ_prev)
-                    b_prev_q = function_value(cv_b, q, bₑ_prev)
-                    ∇b_prev  = function_gradient(cv_b, q, bₑ_prev)
-                    u_eff  = 2*u - u_prev
-                    ∇b_eff = 2*∇b - ∇b_prev
-                    b_comb = 4/3*b - 1/3*b_prev_q
-                    fac    = 2/3
-                else
-                    u_eff = u; ∇b_eff = ∇b; b_comb = b; fac = 1.0
-                end
+                u_prev = function_value(cv_u, q, uₑ_prev)
+                b_prev_q = function_value(cv_b, q, bₑ_prev)
+                ∇b_prev  = function_gradient(cv_b, q, bₑ_prev)
+                u_eff  = (1 + ω)*u - ω*u_prev
+                ∇b_eff = (1 + ω)*∇b - ω*∇b_prev
+                b_comb = ((1 + ω)*b - ω^2/(1 + ω)*b_prev_q) / a
                 adv = u_eff[1]*∇b_eff[1] + u_eff[2]*∇b_eff[2] + u_eff[3]*(∇b_eff[3] + N²)
                 for i in 1:n_b
-                    fₑ[i] += (b_comb - fac*Δt*adv) * shape_value(cv_b, q, i) * dΩ
+                    fₑ[i] += (b_comb - Δt/a*adv) * shape_value(cv_b, q, i) * dΩ
                 end
             end
             f[b_dofs] .+= fₑ
@@ -82,14 +78,50 @@
         x_upp = fill_u(fe_free, up_fn); b_prev = fill_b(fe_free, bp_fn)
 
         ts1 = BDF1(; t_start=0.0, t_stop=1.0, Δt)
-        f1  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, ts1)
-        r1  = ref_rhs_adv(fe_free, N², Δt, x_up, b_vec, x_up, b_vec; bdf2=false)
+        f1  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts1)
+        r1  = ref_rhs_adv(fe_free, N², Δt, x_up, b_vec, x_upp, b_prev; ω=0)
         @test norm(f1 - r1) < 1e-12 * norm(r1)
 
+        # the first BDF2 step is a BDF1 step
         ts2 = BDF2(; t_start=0.0, t_stop=1.0, Δt)
         f2  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts2)
-        r2  = ref_rhs_adv(fe_free, N², Δt, x_up, b_vec, x_upp, b_prev; bdf2=true)
+        @test f2 == f1
+
+        update_t!(ts2)
+        ts2.Δt[] = 0.7Δt
+        f2  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts2)
+        r2  = ref_rhs_adv(fe_free, N², 0.7Δt, x_up, b_vec, x_upp, b_prev; ω=0.7)
         @test norm(f2 - r2) < 1e-12 * norm(r2)
+    end
+
+    @testset "variable-step BDF2 is exact for quadratics in time" begin
+        # uniform w = t and uniform b: ∂ₜb = -N² w, so b = -N² t²/2
+        N² = 1.3
+        params   = Parameters(; ε=0.5, α, μϱ=1.0, N², f=x->1.0, H=x->H₀)
+        forcings = Forcings(1.0, x->0.0, x->0.0, x->0.0, x->0.0, SurfaceFluxBC(x->0.0))
+        ts = BDF2(; t_start=0.0, t=0.22, t_stop=1.0, Δt=0.08)
+        update_t!(ts)
+
+        inv_tk = InversionToolkit(CPU(), fe_free, params, forcings)
+        evo_tk = EvolutionToolkit(CPU(), fe_free, params, forcings, ts; atol=1e-13, rtol=1e-13)
+        model  = Model(CPU(), params, forcings, fe_free, inv_tk, evo_tk, ts)
+
+        w(t) = fill_u(fe_free, x -> Vec{3}((0.0, 0.0, t)))[fe_free.u_dof_indices]
+        b(t) = fill(-N²*t^2/2, fe_free.nb)
+        u_prev = w(0.22)
+        b_prev = b(0.22)
+        model.state.u .= w(ts.t[])
+        model.state.b .= b(ts.t[])
+        for Δt in (0.05, 0.11, 0.02, 0.04)
+            ts.Δt[] = Δt
+            u_curr = copy(model.state.u)
+            b_curr = copy(model.state.b)
+            evolve!(model, u_prev, b_prev)
+            update_t!(ts)
+            u_prev, b_prev = u_curr, b_curr
+            model.state.u .= w(ts.t[])
+            @test model.state.b ≈ b(ts.t[]) rtol=1e-10
+        end
     end
 
     @testset "seam skew-symmetry and mass neutrality" begin
@@ -106,7 +138,7 @@
 
         M  = build_M(fe_free)
         ts = BDF1(; t_start=0.0, t_stop=1.0, Δt=1.0)
-        adv(x) = M*b_vec - nuPGCM.build_rhs_adv(fe_free, params0, x, b_vec, ts)
+        adv(x) = M*b_vec - nuPGCM.build_rhs_adv(fe_free, params0, x, b_vec, x, b_vec, ts)
 
         a = adv(x_up)
         scale = dot(abs.(b_vec), abs.(a))

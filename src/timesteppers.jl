@@ -1,76 +1,73 @@
 abstract type AbstractTimestepper end
 
-####
-#### Backward Difference Formula order 1
-####
+"""
+    BDF1(; t_start, t=t_start, t_stop, Δt, adaptive=false, CFL_factor=1/(1.7*3*√3))
+    BDF2(; t_start, t=t_start, t_stop, Δt, adaptive=false, CFL_factor=1/(1.7*3*√3))
 
-struct BDF1{RT, T, DT, CF} <: AbstractTimestepper
+Implicit-explicit backward difference formula of order 1 or 2 with variable timestep.
+The first step of `BDF2` is a `BDF1` step.
+
+With `adaptive=true`, `Δt` is the maximum timestep, and the timestep of every step is
+the smaller of `Δt` and the CFL limit `CFL_factor / q × h / |u|ₘₐₓ`, where `q` is the
+order of the buoyancy elements and `h` is the smallest cell diameter.
+"""
+struct BDF{order, RT, T, CF} <: AbstractTimestepper
     t::RT           # Ref to current time
     t_start::T      # start time
     t_stop::T       # stop time
-    Δt::DT          # Ref to current timestep
-    adaptive::Bool  # whether to use adaptive timestep
-    CFL_factor::CF  # factor to multiply by CFL timestep
+    Δt::RT                 # Ref to current timestep
+    previous_timestep::RT  # Ref, Inf before the first step
+    maximum_timestep::T
+    adaptive::Bool         # whether to use adaptive timestep
+    CFL_factor::CF         # factor to multiply by CFL timestep
 end
 
-function Base.show(io::IO, ts::BDF1)
+const BDF1 = BDF{1}
+const BDF2 = BDF{2}
+
+function BDF{order}(; t_start, t=t_start, t_stop, Δt, adaptive=false,
+                    CFL_factor=1/(1.7*3*√3)) where order
+    t_start, t, t_stop, Δt, previous_timestep = promote(t_start, t, t_stop, Δt, Inf)
+    return BDF{order, typeof(Ref(t)), typeof(t), typeof(CFL_factor)}(
+        Ref(t), t_start, t_stop, Ref(Δt), Ref(previous_timestep), Δt, adaptive,
+        CFL_factor)
+end
+
+function Base.show(io::IO, ts::BDF{order}) where order
     println(io, summary(ts), ":")
+    println(io, "├── order: ", order)
     println(io, "├── t: ", ts.t[])
     println(io, "├── t_start: ", ts.t_start)
     println(io, "├── t_stop: ", ts.t_stop)
     println(io, "├── Δt: ", ts.Δt[])
+    println(io, "├── maximum_timestep: ", ts.maximum_timestep)
     println(io, "├── adaptive: ", ts.adaptive)
       print(io, "└── CFL_factor: ", ts.CFL_factor)
 end
-
-function BDF1(; t_start, t=t_start, t_stop, Δt, adaptive=false, CFL_factor=0.8)
-    t_start, t, t_stop, Δt = promote(t_start, t, t_stop, Δt)
-   return BDF1(Ref(t), t_start, t_stop, Ref(Δt), adaptive, CFL_factor) 
-end
-
-####
-#### Backward Difference Formula order 2
-####
-
-# NOTE: Adaptive timestepping with BDF2 is not currently implemented, but should be supported in the future
-struct BDF2{RT, T, DT} <: AbstractTimestepper
-    t::RT           # Ref to current time
-    t_start::T      # start time
-    t_stop::T       # stop time
-    Δt::DT          # Ref to current timestep
-end
-
-# TODO: this overload will not be needed once BDF2 supports adaptive timestepping
-function Base.getproperty(ts::BDF2, sym::Symbol)
-    if sym == :adaptive
-        return false
-    else
-        return getfield(ts, sym)
-    end
-end
-
-function Base.show(io::IO, ts::BDF2)
-    println(io, summary(ts), ":")
-    println(io, "├── t: ", ts.t[])
-    println(io, "├── t_start: ", ts.t_start)
-    println(io, "├── t_stop: ", ts.t_stop)
-      print(io, "└── Δt: ", ts.Δt[])
-end
-
-function BDF2(; t_start, t=t_start, t_stop, Δt)
-    t_start, t, t_stop, Δt = promote(t_start, t, t_stop, Δt)
-   return BDF2(Ref(t), t_start, t_stop, Ref(Δt)) 
-end
-
-####
-#### Generic timestepper functions
-####
 
 function Base.summary(ts::AbstractTimestepper)
     t = typeof(ts)
     return "$(parentmodule(t)).$(nameof(t))"
 end
 
+"""
+    ω = step_ratio(ts)
+
+Ratio of the current to the previous timestep, zero for `BDF1` and for
+the first step of `BDF2`.
+"""
+step_ratio(ts::BDF{order}) where order = order == 1 ? 0.0 : ts.Δt[] / ts.previous_timestep[]
+
+"""
+    effective_timestep(ts)
+
+`Δt (1 + ω) / (1 + 2ω)`, the factor multiplying the right-hand side of `∂ₜb = R` once
+the BDF formula is normalized by the coefficient of the new `b`.
+"""
+function effective_timestep(ts::BDF)
+    ω = step_ratio(ts)
+    return ts.Δt[] * (1 + ω) / (1 + 2ω)
+end
 
 """
     update_t!(ts::AbstractTimestepper)
@@ -79,6 +76,7 @@ Advance the time in the timestepper by the current Δt.
 """
 function update_t!(ts::AbstractTimestepper)
     ts.t[] += ts.Δt[]
+    ts.previous_timestep[] = ts.Δt[]
     return ts
 end
 
@@ -92,33 +90,17 @@ function status(ts::AbstractTimestepper)
 end
 
 """
-    update_Δt!(timestepper::AbstractTimestepper, fe_data, u_vec, h_cells; u_min=0.01)
+    update_Δt!(ts, fe_data, u_vec, h_min)
 
-Update Timestepper's Δt based on the CFL condition:
-
-```math
-Δt = CFL_factor × min_k ( h_k / max(|u|_k, u_min) )
-```
-
-where ``k`` is the cell index. ``h_k`` = h_cells[k]` is some measure of the cell width
-(see [compute_h_cells](@ref)). ``|u|_k`` is the maximum speed within a cell, computed
-over quadrature points.
-
-`u_min` prevents Δt blowing up for ``u ∼ 0``.
+Set the timestep of an adaptive timestepper to
+`min(maximum_timestep, CFL_factor / q × h_min / |u|ₘₐₓ)`, where `q` is the order of the buoyancy
+elements and `|u|ₘₐₓ` is the maximum speed over the quadrature points.
 """
-function update_Δt!(timestepper::BDF1, fe_data::FEData, u_vec::AbstractVector, h_cells;
-                    u_min=0.01)
-    timestepper.adaptive || return timestepper
-    Δt = Inf
-    for (k, u_k) in enumerate(max_cell_speeds(fe_data, u_vec))
-        Δt = min(Δt, h_cells[k] / max(u_k, u_min))
-    end
-    timestepper.Δt[] = timestepper.CFL_factor * Δt
-    return timestepper
-end
-function update_Δt!(timestepper::BDF2, fe_data::FEData, u_vec::AbstractVector, h_cells;
-                    u_min=0.01)
-    return timestepper
+function update_Δt!(ts::BDF, fe_data::FEData, u_vec::AbstractVector, h_min)
+    ts.adaptive || return ts
+    u_max = maximum(max_cell_speeds(fe_data, u_vec))
+    ts.Δt[] = min(ts.maximum_timestep, ts.CFL_factor / fe_data.b_order * h_min / u_max)
+    return ts
 end
 
 """

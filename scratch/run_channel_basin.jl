@@ -82,15 +82,16 @@ display(fe_data)
 # of a miss (run! rebuilds a stale preconditioner on the next step)
 inv_tk = InversionToolkit(arch, fe_data, params, forcings; itmax=400)
 
-# Fixed Δt: the adaptive CFL rule is unstable for f = y (see simlog.txt). 8e-4
-# blew up at step ~50; 4e-4, 2e-4 and 1e-4 agree to 0.4% at matched t.
+# Adaptive Δt capped at 4e-4: the CFL limit alone is unstable for f = y (see
+# simlog.txt). Fixed BDF1 blew up at 8e-4 by step ~50; 4e-4, 2e-4 and 1e-4 agree
+# to 0.4% at matched t.
 Δt = 4e-4
 t_stop = μϱ/ε^2/κ_I
 if haskey(ENV, "NUPGCM_NSTEPS")
     t_stop = Δt*parse(Int, ENV["NUPGCM_NSTEPS"])
     @warn "NUPGCM_NSTEPS set: short run, t_stop = $t_stop"
 end
-ts = BDF1(; t_start=0.0, t_stop, Δt)
+ts = BDF2(; t_start=0.0, t_stop, Δt, adaptive=true)
 
 evo_tk = EvolutionToolkit(arch, fe_data, params, forcings, ts)
 model = Model(arch, params, forcings, fe_data, inv_tk, evo_tk, ts)
