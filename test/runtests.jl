@@ -16,7 +16,7 @@ using nuPGCM: build_M, build_Kₕ, build_Kᵥ, build_rhs_diff, build_rhs_flux, b
               BlockTriangularPreconditioner,
               make_cell_values, make_facet_values,
               allocate_inversion_matrix, allocate_evolution_matrix,
-              κᵥ_convection, ν_eddy, get_n_dofs
+              ν_eddy, get_n_dofs
 
 # ---------------------------------------------------------------------------
 # Shared test mesh
@@ -73,12 +73,6 @@ const FORCINGS = _make_forcings()
     include("test_inversion.jl")
     include("test_model.jl")
     include("test_periodic_box.jl")
-    include("test_periodic_blob.jl")
     include("test_periodic_advection.jl")
-
-    # regression tests (bowl geometry, CPU only)
-    include("test_bowl_mixing.jl")
-    include("test_bowl_wind.jl")
-    include("test_bowl_dirichlet.jl")
-    include("test_bowl_surface_flux.jl")
+    include("test_bowl.jl")
 end

@@ -1,5 +1,4 @@
-# Shared fixtures for the periodic-box test files
-# (test_periodic_box.jl, test_periodic_blob.jl, test_periodic_advection.jl).
+# Shared fixtures for test_periodic_box.jl and test_periodic_advection.jl.
 
 """
     box_file = ensure_periodic_box_mesh(h, α; W=1.0, L=1.0)

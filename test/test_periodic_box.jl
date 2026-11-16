@@ -1,33 +1,17 @@
 # Periodic box with uniform wind stress, constant f and ν, b = 0, and a flat
 # bottom. BCs: no-slip bottom, w = 0 + wind stress at the surface, and w = 0 on
-# the y-walls (natural BCs for the wall-tangential components). The exact
-# solution of the full 3D problem is then the 1D Ekman column
+# the y-walls. The exact solution of the full 3D problem is the 1D Ekman column
 #
-#     -f v = A u'',  f u = A v'',  A = α²ε²ν,
-#     u = v = 0 at z = -H,  A u' = ατˣ, A v' = ατʸ at z = 0,
-#     w = 0, p = 0,
+#     W(z) = u + iv = (ατ/(Aγ)) sinh(γ(z + H)) / cosh(γH),
+#     A = α²ε²ν,  γ = √(if/A),  τ = τˣ + iτʸ,  w = 0,  p = 0,
 #
-# which in complex form W = u + iv, γ = √(if/A), τ = τˣ + iτʸ reads
-#
-#     W(z) = (ατ/(Aγ)) sinh(γ(z + H)) / cosh(γH),
-#
-# and for f = 0 degenerates to the linear Couette profile u = (ατˣ/A)(z + H).
-# One can check that this satisfies the natural BCs exactly: at the walls the
-# x- and y-traction components ν(∂y u + ∂x v) and 2ν ∂y v - p vanish
-# identically for any u(z), v(z), p = 0.
+# which for f = 0 degenerates to the Couette profile u = (ατˣ/A)(z + H).
 #
 # Any defect in the periodic constraint machinery (facet pairing, mirror/image
-# convention, matrix condensation, RHS condensation) breaks the analytic match
-# and the x-invariance of the solution along the periodic direction. In
-# particular this test catches the Ferrite < 1.6 `apply!` bug that folds
-# couplings between pairs of constrained DOFs into transposed positions, which
-# corrupted periodic inversions by O(1).
-#
-# Tolerance note: the solution is not exact to machine precision because the
-# mean-pressure constraint is redundant here (the wall natural BC already sets
-# the pressure gauge), which leaves one near-singular pressure direction in the
-# condensed system; velocity errors are ~1e-3 at h = 0.1 and the pressure check
-# is correspondingly loose.
+# convention, matrix or RHS condensation) breaks the analytic match and the
+# x-invariance of the solution. Velocity errors are ~1e-3 at h = 0.1; the
+# pressure gauge is redundant with the wall natural BC, which leaves a
+# near-singular pressure direction, so the pressure check is loose.
 
 function periodic_box_setup(box_file; f₀, ν₀, τˣ₀, τʸ₀, ε, α)
     params = Parameters(; ε, α, μϱ=1.0, N²=0.0, f=x->f₀, H=x->α)
@@ -90,7 +74,7 @@ end
             @test err_v / u_scale < tol
             @test err_w / u_scale < tol
 
-            # pressure is zero for the exact solution (loose check, see note above)
+            # pressure is zero for the exact solution (loose, see header)
             p_up = zeros(ndofs(fe_data.dh_up))
             p_up[fe_data.p_dof_indices] .= model.state.p
             p_vals = eval_at_points(model, fe_data.dh_up, p_up, :p, points)
@@ -108,9 +92,7 @@ end
             ch = fe_data.ch_up
             for (i, pdof) in enumerate(ch.prescribed_dofs)
                 dofcoef = ch.dofcoefficients[i]
-                # `nothing` is a pure Dirichlet constraint; an *empty* coefficient
-                # list is the :pin pressure gauge (p[cdof] = 0). Neither is a
-                # periodic link, so both are skipped here.
+                # skip Dirichlet (`nothing`) and the :pin pressure gauge (empty)
                 (dofcoef === nothing || isempty(dofcoef)) && continue
                 val = sum(s * x_up[d] for (d, s) in dofcoef)
                 @test x_up[pdof] ≈ val atol=1e-12
@@ -136,7 +118,7 @@ end
         n_periodic = 0
         for (i, s) in enumerate(ch.prescribed_dofs)
             dofcoef = ch.dofcoefficients[i]
-            (dofcoef === nothing || length(dofcoef) != 1) && continue   # skip Dirichlet + mean pressure
+            (dofcoef === nothing || length(dofcoef) != 1) && continue   # skip Dirichlet + pressure gauge
             m, c = dofcoef[1]
             n_periodic += 1
             @test c ≈ 1.0

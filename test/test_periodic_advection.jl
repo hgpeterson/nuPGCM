@@ -1,21 +1,15 @@
-# Sharper periodic-advection tests than the uniform-velocity blob circuit.
+# Periodic-box tests of the buoyancy advection and of the constraint handling at
+# "junction" DOFs, where Dirichlet and periodic constraints meet (wall∩seam for
+# u, surface∩seam for b) -- the production channel configuration.
 #
-# The uniform blob test cannot detect (a) DOF-map or component mixups in the
-# cached advection kernel that happen to be invisible for spatially constant
-# velocity, (b) seam errors that only appear when u·n varies along the periodic
-# boundary, or (c) constraint conflicts at "junction" DOFs where Dirichlet and
-# periodic constraints meet (wall∩seam for u, surface∩seam for b with an
-# inhomogeneous surface value) -- the production channel configuration.
+# The seam testset exploits an exact discrete identity: for the Galerkin
+# advection operator with an exactly divergence-free P2 velocity (u·n = 0 on
+# walls, periodic at the seam) and a periodic buoyancy interpolant,
 #
-# Testset 2 exploits an exact discrete identity: for the Galerkin advection
-# operator with an exactly divergence-free P2 velocity (u·n = 0 on walls,
-# periodic traces at the seam) and a periodic buoyancy interpolant,
+#     ∫ (u·∇b_h) b_h dΩ = 0   and   ∫ u·∇b_h dΩ = 0,
 #
-#     ∫ (u·∇b_h) b_h dΩ = ∮_seam u·n b_h²/2 (east) - (west) = 0
-#     ∫  u·∇b_h      dΩ = ∮_seam u·n b_h    (east) - (west) = 0
-#
-# and both integrals are quadrature-exact (degree 3 ≤ QR_ORDER = 4 for P1 b),
-# so any mishandling of mirror/image DOFs shows up at O(1), not O(h).
+# both quadrature-exact for P1 b, so any mishandling of mirror/image DOFs shows
+# up at O(1), not O(h).
 @testset "Periodic box: advection" begin
     h = 0.1
     α = 0.5
@@ -182,13 +176,9 @@
         @test errs[end] < 0.3
         # no localized error jump when the blob crosses the seam
         @test maximum(abs, diff(errs)) < 0.03
-        # the advection term is explicit (BDF2 with extrapolated ∇(2b - b_prev)),
-        # which is only weakly stable for pure advection: with κ ≈ 0 the energy
-        # grows secularly at ~0.05%/step (measured; scheme-intrinsic, seam-
-        # independent). A seam defect instead injects energy at O(1) rates (cf.
-        # the corrupted-mirror check above) and breaks the per-step mass
-        # conservation asserted in the loop, so cap total and per-step growth
-        # with an order of magnitude of headroom.
+        # explicit BDF2 advection is only weakly stable with κ ≈ 0: energy grows
+        # ~0.05%/step (scheme-intrinsic). A seam defect injects energy at O(1)
+        # rates, so cap total and per-step growth with 10x headroom.
         @test energies[end] < 1.05 * E0
         @test maximum(diff(energies)[3:end]) < 0.005 * E0
         @test maximum(abs, model.state.b) < 1.3
@@ -209,18 +199,14 @@
     @testset "junction DOFs: condensed inversion system structure" begin
         ch = fe_diri.ch_up
 
-        # the seam must actually meet Dirichlet boundaries: periodic mirror
-        # DOFs whose image is itself prescribed (wall/bottom/surface Dirichlet)
+        # the fixture must have junction DOFs: mirrors whose image is prescribed
         njunction = count(eachindex(ch.prescribed_dofs)) do i
             ch.dofcoefficients[i] !== nothing &&
                 any(haskey(ch.dofmapping, d) for (d, _) in ch.dofcoefficients[i])
         end
         @test njunction > 0
 
-        # condensation must eliminate every prescribed row and column exactly:
-        # anything left couples the reduced system to constrained DOFs whose
-        # solve values are meaningless. This is the defect mode of folding a
-        # mirror equation into a prescribed image DOF.
+        # condensation must eliminate every prescribed row and column exactly
         A_raw = allocate_inversion_matrix(fe_diri)
         A_raw.nzval .= sin.(1.0:length(A_raw.nzval))   # deterministic, non-symmetric
         A_c = fe_diri.C_up' * A_raw * fe_diri.C_up
@@ -228,14 +214,11 @@
         free = fe_diri.free_dofs
         N    = size(A_raw, 1)
 
-        # prescribed DOFs are eliminated outright: C has no column for them, so
-        # they contribute no row, no column, and no placed diagonal
         @test size(A_c) == (length(free), length(free))
         @test length(free) == N - length(pd)
 
-        # the junction rule: a coefficient pointing at a DOF that is itself
-        # prescribed must be dropped from C.
-        # Row `cdof` of C therefore holds exactly its *free* coefficients.
+        # junction rule: a coefficient pointing at a prescribed DOF is dropped
+        # from C, so row `cdof` of C holds exactly its free coefficients
         Ct = sparse(fe_diri.C_up')      # columns of Cᵀ are rows of C
         for (i, cdof) in enumerate(pd)
             coef = ch.dofcoefficients[i]
@@ -271,9 +254,8 @@
                            (0.25 - x[2]^2)*x[3]*(x[3] + H₀)*sin(2π*x[1]/W_box)))
         g_p = x -> cos(2π*x[1]/W_box) + x[2]*x[3]
 
-        # b: apply! must be the identity on a BC-satisfying field, and must
-        # recover corrupted prescribed DOFs exactly (catches wrong constraint
-        # resolution where surface Dirichlet meets the periodic seam)
+        # b: apply! must be the identity on a BC-satisfying field and must
+        # recover corrupted prescribed DOFs exactly
         v = fill_b(fe_diri, g_b)
         v_id = copy(v)
         apply!(v_id, fe_diri.ch_b)
@@ -297,10 +279,8 @@
         apply!(x_rec, fe_diri.ch_up)
         @test maximum(abs, x_rec - x_up) < 1e-12
 
-        # smoke test: evolve b with the inhomogeneous surface Dirichlet BC and
-        # a shear flow through the seam (the crash configuration minus the
-        # inversion). Pure advection + Dirichlet preserves the data bounds, so
-        # any junction-DOF corruption shows up as a localized spike.
+        # evolve b with the inhomogeneous surface Dirichlet BC and a shear flow
+        # through the seam: junction-DOF corruption shows up as a localized spike
         params   = Parameters(; ε=0.5, α, μϱ=1.0, N²=0.0, f=x->1.0, H=x->H₀)
         forcings = Forcings(1.0, x->1e-8, x->1e-8, x->0.0, x->0.0,
                             SurfaceDirichletBC(x -> b_surf(x)))

@@ -31,26 +31,22 @@
     @testset "invert!" begin
         set_b!(model, x -> 0.01 * x[3])
         invert!(model)
-        # wind stress drives flow: u should be nonzero
+        # wind stress drives flow
         @test norm(model.state.u) > 0
-        # pressure should also be nonzero
         @test norm(model.state.p) > 0
     end
 
     @testset "run!" begin
         set_b!(model, zeros(nb))
-        nuPGCM.set_out_dir!("/tmp/nuPGCM_test_run")
+        set_out_dir!(mktempdir())
         run!(model; n_info=typemax(Int), n_save=Inf)
-        # wind stress should have driven some flow and buoyancy change
         @test norm(model.state.u) > 0
-        @test norm(model.state.b) >= 0   # may stay zero with Dirichlet b BC
-        @test !any(isnan, model.state.u)
-        @test !any(isnan, model.state.b)
+        @test all(isfinite, model.state.u)
+        @test all(isfinite, model.state.b)
     end
 
     @testset "update_Δt!" begin
         h_cells = compute_h_cells(fe_data.mesh)
-        nu = get_n_dofs(fe_data)[1]
 
         # zero velocity: |u|_k = 0 everywhere, so the u_min floor sets the rate
         u_zero = zeros(nu)
@@ -77,11 +73,8 @@
     end
 
     @testset "IO" begin
-        ofile = "/tmp/nuPGCM_test_state.jld2"
+        ofile = joinpath(mktempdir(), "state.jld2")
         save_state(model, ofile)
-        @test isfile(ofile)
-
-        # round-trip: save then load
         model2 = Model(CPU(), params, forcings, fe_data, inv_tk, evo_tk,
                        BDF1(; t_start=0.0, t_stop=2Δt, Δt))
         set_state_from_file!(model2, ofile)
@@ -90,8 +83,7 @@
     end
 
     @testset "run! with eddy parameterization" begin
-        # exercises _update_eddy_A! (cached viscous-block rebuild), including
-        # the initial pre-loop sync in run! and the every-10-step refresh
+        # exercises the cached viscous-block rebuild (_update_eddy_A!)
         eddy_param = EddyParameterization(f=x->1.0, N²min=1e-3, ν_min=0.1)
         forcings_eddy = Forcings(1.0, x->1e-2, x->1e-2, x->0.05, x->0.0,
                                  SurfaceDirichletBC(x->0.0); eddy_param)
@@ -104,19 +96,13 @@
                             inv_tk_eddy, evo_tk_eddy, ts)
 
         set_b!(model_eddy, x -> 0.05 * x[3])
-        nuPGCM.set_out_dir!("/tmp/nuPGCM_test_run_eddy")
         run!(model_eddy; n_info=typemax(Int), n_save=Inf)
 
         @test norm(model_eddy.state.u) > 0
-        @test !any(isnan, model_eddy.state.u)
-        @test !any(isnan, model_eddy.state.b)
+        @test all(isfinite, model_eddy.state.u)
+        @test all(isfinite, model_eddy.state.b)
 
-        # the cached A must still solve consistently after the eddy refresh.
-        # Check via a bare InversionToolkit invert! (not Model.invert!, whose
-        # sync_flow! calls apply!(x, ch_up) afterward to recover periodic
-        # mirror DOFs -- that intentionally leaves x no longer satisfying
-        # Ax=y for the *condensed* system, so the residual must be read off
-        # solver.x/.y right after invert!, before any such recovery).
+        # the cached A must still solve consistently after the eddy refresh
         b_vec = randn(nb)
         invert!(model_eddy.inversion, b_vec)
         A_cpu = on_architecture(CPU(), model_eddy.inversion.solver.A)
