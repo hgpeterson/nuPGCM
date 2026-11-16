@@ -9,6 +9,10 @@
     @test length(mesh.grid.facetsets["channel_west"]) ==
           length(mesh.grid.facetsets["channel_east"])
 
+    # the channel's west wall is the periodic master of its east wall
+    @test Set(pair.mirror for pair in mesh.periodic_facets) == mesh.grid.facetsets["channel_west"]
+    @test Set(pair.image  for pair in mesh.periodic_facets) == mesh.grid.facetsets["channel_east"]
+
     p, t = get_p_t(mesh)
     @test size(p) == (getnnodes(mesh.grid), 3)
     @test size(t) == (getncells(mesh.grid), 4)   # tetrahedra

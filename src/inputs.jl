@@ -85,17 +85,17 @@ function ConvectionParameterization(; κᶜ, N²min)
 end
 
 """
-    κᶜ = _κ_conv_extra(conv_param, αbz)
+    κᶜ = κ_conv_extra(conv_param, αbz)
 
 Convection augmentation of the vertical diffusivity: κᶜ where the stratification
 `αbz` is unstable, tapering to 0 over the scale `N²min`.
 """
-function _κ_conv_extra(conv_param::ConvectionParameterization, αbz)
+function κ_conv_extra(conv_param::ConvectionParameterization, αbz)
     return conv_param.κᶜ*(1 + tanh(-(αbz)/conv_param.N²min))/2
 end
 
 function κᵥ_convection(conv_param::ConvectionParameterization, κᵥ, αbz)
-    return κᵥ + _κ_conv_extra(conv_param, αbz)
+    return κᵥ + κ_conv_extra(conv_param, αbz)
 end
 
 #### EddyParameterization type ####

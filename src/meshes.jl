@@ -1,6 +1,7 @@
 struct Mesh{G}
     grid::G
     surface_tag::String
+    periodic_facets::Vector{PeriodicFacetPair}
 end
 
 function Base.summary(mesh::Mesh)
@@ -12,18 +13,81 @@ function Base.show(io::IO, mesh::Mesh)
     print(io, "├── grid: ")
     show(io, MIME"text/plain"(), mesh.grid)
     println(io)
-      print(io, "└── surface_tag: \"", mesh.surface_tag, "\"")
+    println(io, "├── surface_tag: \"", mesh.surface_tag, "\"")
+      print(io, "└── periodic facet pairs: ", length(mesh.periodic_facets))
 end
 
 """
     mesh = Mesh(ifile; surface_tag="surface")
 
-Load a Gmsh `.msh` file and return a `Mesh`.
+Load a Gmsh `.msh` file and return a `Mesh`. Every boundary entity that Gmsh meshed
+as the periodic copy of a master entity is paired with it facet by facet: the master
+facets are the Ferrite mirror (constrained) facets and the copy facets the images.
 """
 function Mesh(ifile; surface_tag="surface")
     @info "Loading mesh from $ifile..."
-    @time grid = FerriteGmsh.togrid(ifile)
-    return Mesh(grid, surface_tag)
+    should_finalize = FerriteGmsh.Gmsh.initialize()
+    @time begin
+    gmsh.open(ifile)
+    grid = FerriteGmsh.togrid()
+    periodic_facets = read_periodic_facets(grid)
+    end
+    should_finalize && FerriteGmsh.Gmsh.finalize()
+    return Mesh(grid, surface_tag, periodic_facets)
+end
+
+"""
+    pairs = read_periodic_facets(grid)
+
+Periodic facet pairs of `grid`, built by `FerriteGmsh.togrid()` from the model open
+in Gmsh.
+"""
+function read_periodic_facets(grid)
+    dim  = Int(gmsh.model.getDimension())
+    tags = [tag for (_, tag) in gmsh.model.getEntities(dim - 1)]
+    masters = gmsh.model.mesh.getPeriodic(dim - 1, tags)
+    pairs = PeriodicFacetPair[]
+    any(masters .!= tags) || return pairs
+
+    lookup = Dict{NTuple{dim, Int}, FacetIndex}()
+    for (ci, cell) in enumerate(grid.cells), (fi, fnodes) in enumerate(Ferrite.facets(cell))
+        lookup[facet_key(Val(dim), fnodes)] = FacetIndex(ci, fi)
+    end
+
+    for (tag, master) in zip(tags, masters)
+        master == tag && continue
+        # Gmsh stores x_copy = R x_master + t (row-major 4×4); Ferrite wants the map copy → master
+        affine = reshape(gmsh.model.mesh.getPeriodicNodes(dim - 1, tag)[4], 4, 4)'
+        R⁻¹ = inv(Tensor{2, dim}((i, j) -> affine[i, j]))
+        t   = Vec{dim}(i -> affine[i, 4])
+        mirror = entity_facets(dim - 1, master, lookup)
+        image  = entity_facets(dim - 1, tag, lookup)
+        collect_periodic_facets!(pairs, grid, mirror, image, x -> R⁻¹ ⋅ (x - t))
+        @info "Periodic boundary: Gmsh entity $tag is a copy of entity $master"
+    end
+    return pairs
+end
+
+function facet_key(::Val{dim}, fnodes) where {dim}
+    vertices = sort!([Int(fnodes[i]) for i in 1:dim])
+    return ntuple(i -> vertices[i], Val(dim))
+end
+
+"""
+    facets = entity_facets(fdim, tag, lookup)
+
+Grid facets on the Gmsh entity `(fdim, tag)`.
+"""
+function entity_facets(fdim, tag, lookup::Dict{NTuple{dim, Int}, FacetIndex}) where {dim}
+    facets = Set{FacetIndex}()
+    types, _, nodetags = gmsh.model.mesh.getElements(fdim, tag)
+    for (type, element_nodes) in zip(types, nodetags)
+        nnodes = gmsh.model.mesh.getElementProperties(type)[4]
+        for k in 1:nnodes:length(element_nodes)
+            push!(facets, lookup[facet_key(Val(dim), @view element_nodes[k:k+nnodes-1])])
+        end
+    end
+    return facets
 end
 
 ### utility functions

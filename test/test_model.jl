@@ -57,7 +57,7 @@
 
         # uniform velocity field: |u|_k is the same in every cell, so the CFL
         # timestep reduces to CFL_factor * min_k h_k / |u|
-        x_up = nuPGCM._to_up_vec(fe_data, zeros(nu))
+        x_up = nuPGCM.to_up_vec(fe_data, zeros(nu))
         apply_analytical!(x_up, fe_data.dh_up, :u, x -> Vec{3}((3.0, 4.0, 0.0)))
         u_uniform = x_up[fe_data.u_dof_indices]
         speeds = nuPGCM.max_cell_speeds(fe_data, u_uniform)
@@ -83,7 +83,7 @@
     end
 
     @testset "run! with eddy parameterization" begin
-        # exercises the cached viscous-block rebuild (_update_eddy_A!)
+        # exercises the cached viscous-block rebuild (update_eddy_A!)
         eddy_param = EddyParameterization(f=x->1.0, N²min=1e-3, ν_min=0.1)
         forcings_eddy = Forcings(1.0, x->1e-2, x->1e-2, x->0.05, x->0.0,
                                  SurfaceDirichletBC(x->0.0); eddy_param)

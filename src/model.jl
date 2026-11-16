@@ -152,8 +152,8 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
 
     # the advection RHS is assembled on the CPU, from velocities in dh_up ordering
     b_prev_cpu = on_architecture(CPU(), b_prev)
-    x_up      = _to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
-    x_up_prev = _to_up_vec(fe_data, on_architecture(CPU(), u_prev))
+    x_up      = to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
+    x_up_prev = to_up_vec(fe_data, on_architecture(CPU(), u_prev))
 
     @ctime "  build rhs_adv" rhs_adv = build_rhs_adv(fe_data, params,
                                                         x_up, b_cpu,
@@ -165,7 +165,7 @@ function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
     y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
          Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
          on_architecture(CPU(), evolution.f_bc)
-    _condense_rhs!(y, ch_b)
+    condense_rhs!(y, ch_b)
     evolution.solver.y .= on_architecture(arch, y)
 
     @ctime "  solve evol sys" iterative_solve!(evolution.solver)
@@ -211,7 +211,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     eddy_on   = model.forcings.eddy_param.is_on
     iterative = model.inversion.solver.P isa BlockTriangularPreconditioner
     if eddy_on
-        _update_eddy_A!(model)
+        update_eddy_A!(model)
         iterative && rebuild_preconditioner!(model)
         invert!(model)
     end
@@ -259,7 +259,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
         b_prev .= b_curr
 
         if eddy_on && advection
-            _update_eddy_A!(model)
+            update_eddy_A!(model)
             if iterative
                 stats = model.inversion.solver.workspace.stats
                 grown = niter_ref > 0 && stats.niter > precond_growth * niter_ref
@@ -303,7 +303,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     return model
 end
 
-function _to_up_vec(fe_data::FEData, u_state::AbstractVector)
+function to_up_vec(fe_data::FEData, u_state::AbstractVector)
     x = zeros(ndofs(fe_data.dh_up))
     x[fe_data.u_dof_indices] .= u_state
     return x
@@ -323,11 +323,11 @@ function rebuild_preconditioner!(model::Model)
 end
 
 """
-    _update_eddy_A!(model)
+    update_eddy_A!(model)
 
 Update the inversion matrix in place for the current eddy viscosity `ν(b)`.
 """
-function _update_eddy_A!(model::Model)
+function update_eddy_A!(model::Model)
     lhs = model.inversion.lhs_cache
     @ctime "  build A_visc" build_A_visc!(lhs.A, lhs.A⁰, model.fe_data, model.params,
                                           model.forcings.eddy_param, model.state.b, lhs.nzidx_up)

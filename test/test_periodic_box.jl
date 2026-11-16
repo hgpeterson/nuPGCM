@@ -61,7 +61,7 @@ end
                 z -> α*(τˣ₀ + im*τʸ₀)/(A*γ) * sinh(γ*(z + H₀))/cosh(γ*H₀)
             end
 
-            x_up = nuPGCM._to_up_vec(fe_data, model.state.u)
+            x_up = nuPGCM.to_up_vec(fe_data, model.state.u)
             u_vals = eval_at_points(model, fe_data.dh_up, x_up, :u, points)
             @test all(v -> v isa Vec{3}, u_vals)   # all points found in the domain
 

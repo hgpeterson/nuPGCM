@@ -37,7 +37,7 @@ include("periodic_common.jl")
 # ---------------------------------------------------------------------------
 # Shared fixtures (created once; available in every included test file)
 # ---------------------------------------------------------------------------
-function _make_fe_data()
+function make_fe_data()
     mesh = Mesh(MESH_FILE)
     return FEData(mesh;
         u_diri_tags  = ["bottom", "surface"],
@@ -46,11 +46,11 @@ function _make_fe_data()
         b_diri_vals  = [x -> 0.0])
 end
 
-function _make_params()
+function make_params()
     Parameters(; ε=0.2, α=0.5, μϱ=10.0, N²=2.0, f=x->1.0, H=x->1.0)
 end
 
-function _make_forcings()
+function make_forcings()
     Forcings(1.0,
              x -> 1e-2 + 1e-3*x[3]^2,
              x -> 1e-2 + 1e-3*x[3]^2,
@@ -58,9 +58,9 @@ function _make_forcings()
              SurfaceDirichletBC(x -> 0.0))
 end
 
-const FE_DATA  = _make_fe_data()
-const PARAMS   = _make_params()
-const FORCINGS = _make_forcings()
+const FE_DATA  = make_fe_data()
+const PARAMS   = make_params()
+const FORCINGS = make_forcings()
 
 # ---------------------------------------------------------------------------
 # Test suite

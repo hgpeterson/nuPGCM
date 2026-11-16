@@ -45,7 +45,7 @@ for `(u, p)` and one for `b`.
   `∫p dΩ = 0`, which couples one DOF to all the others and adds ~`np²` matrix
   entries; `:none` leaves the constant pressure mode in the system.
 
-The mesh is periodic in `x` if it has `"channel_west"` and `"channel_east"` facetsets.
+`u`, `p`, and `b` are periodic across `mesh.periodic_facets`.
 """
 function FEData(mesh::Mesh;
                 u_diri_tags  = String[],
@@ -81,38 +81,31 @@ function FEData(mesh::Mesh;
     np = length(p_dof_indices)
     nb = ndofs(dh_b)
 
-    # periodic facet pairs, auto-detected from facetset names
-    is_periodic = haskey(grid.facetsets, "channel_west") &&
-                  haskey(grid.facetsets, "channel_east")
-    if is_periodic
-        W = _channel_width(grid)
-        pfacets = collect_periodic_facets(grid, "channel_west", "channel_east",
-                                          x -> x - Vec{3}((W, 0.0, 0.0)))
-        @info @sprintf("Periodic mesh: channel width W = %.4f, %d face pairs", W, length(pfacets))
-    end
+    pfacets  = mesh.periodic_facets
+    periodic = !isempty(pfacets)
 
     @info "Building ConstraintHandlers..."
     @time begin
 
     ch_up = ConstraintHandler(dh_up)
     for (i, tag) in enumerate(u_diri_tags)
-        components = _mask_to_components(u_diri_masks, i)
+        components = mask_to_components(u_diri_masks, i)
         if components === nothing
             add!(ch_up, Dirichlet(:u, grid.facetsets[tag], (x, t) -> zero(Vec{3, Float64})))
         else
             add!(ch_up, Dirichlet(:u, grid.facetsets[tag], (x, t) -> 0.0, components))
         end
     end
-    if is_periodic
+    if periodic
         add!(ch_up, PeriodicDirichlet(:u, pfacets))
         add!(ch_up, PeriodicDirichlet(:p, pfacets))
     end
     if pressure_gauge != :none
-        # the gauge must avoid the "channel_west" pressure DOFs, which the periodic
-        # constraint already eliminates
-        excluded = is_periodic ?
-            _dirichlet_dof_set(dh_up, :p, grid.facetsets["channel_west"]) : nothing
-        gauge = _mean_pressure_constraint(dh_up, u_order - 1; excluded)
+        # the gauge must avoid the pressure DOFs on the mirror facets, which the
+        # periodic constraint already eliminates
+        excluded = periodic ?
+            dirichlet_dof_set(dh_up, :p, Set(pair.mirror for pair in pfacets)) : nothing
+        gauge = mean_pressure_constraint(dh_up, u_order - 1; excluded)
         if pressure_gauge == :pin
             gauge = AffineConstraint(gauge.constrained_dof, Pair{Int, Float64}[], 0.0)
         elseif pressure_gauge != :mean
@@ -125,10 +118,10 @@ function FEData(mesh::Mesh;
 
     ch_b = ConstraintHandler(dh_b)
     for (i, tag) in enumerate(b_diri_tags)
-        f = _to_dirichlet_fn(b_diri_vals !== nothing ? b_diri_vals[i] : nothing)
+        f = to_dirichlet_fn(b_diri_vals !== nothing ? b_diri_vals[i] : nothing)
         add!(ch_b, Dirichlet(:b, grid.facetsets[tag], f))
     end
-    is_periodic && add!(ch_b, PeriodicDirichlet(:b, pfacets))
+    periodic && add!(ch_b, PeriodicDirichlet(:b, pfacets))
     close!(ch_b)
     Ferrite.update!(ch_b, 0.0)
 
@@ -149,7 +142,7 @@ function FEData(mesh::Mesh;
     @info "Building assembly cache..."
     @time begin
     cache = AssemblyCache(dh_up, dh_b, u_order, b_order)
-    C_up  = _constraint_matrix(ch_up, N_up, free_dofs)
+    C_up  = constraint_matrix(ch_up, N_up, free_dofs)
     end
 
     return FEData(mesh, dh_up, dh_b, ch_up, ch_b,
@@ -165,15 +158,7 @@ get_n_dofs(fe_data::FEData) = fe_data.nu, fe_data.np, fe_data.nb
 
 ### helpers
 
-function _channel_width(grid)
-    return maximum(
-        grid.nodes[n].x[1]
-        for fi in grid.facetsets["channel_east"]
-        for n in Ferrite.facets(grid.cells[fi[1]])[fi[2]]
-    )
-end
-
-function _mask_to_components(masks, i)
+function mask_to_components(masks, i)
     masks === nothing && return nothing
     mask = masks[i]
     comps = [j for j in 1:3 if mask[j]]
@@ -182,13 +167,13 @@ function _mask_to_components(masks, i)
 end
 
 """
-    _condense_rhs!(y, ch)
+    condense_rhs!(y, ch)
 
 Fold the entries of the right-hand side `y` at constrained DOFs into the entries of
 the DOFs they depend on, then zero them. This is what `apply!(K, f, ch)` does to
 `f`, for a matrix that has already been condensed.
 """
-function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
+function condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
     for i in eachindex(ch.prescribed_dofs, ch.dofcoefficients)
         dofcoef = ch.dofcoefficients[i]
         dofcoef === nothing && continue
@@ -202,14 +187,14 @@ function _condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
 end
 
 """
-    C = _constraint_matrix(ch, N, free_dofs)
+    C = constraint_matrix(ch, N, free_dofs)
 
 Sparse `N × N_free` map from the free DOFs to all `N` DOFs of a handler with
 homogeneous constraints, `x_full = C x_free`. Column `j` has a 1 on row
 `free_dofs[j]`, plus the coefficient of that DOF on the row of every constrained
 DOF that depends on it.
 """
-function _constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int})
+function constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int})
     column = zeros(Int, N)   # column of each free DOF
     for (j, i) in enumerate(free_dofs)
         column[i] = j
@@ -229,18 +214,18 @@ function _constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int
     return sparse(rows, cols, vals, N, length(free_dofs))
 end
 
-function _to_dirichlet_fn(val)
+function to_dirichlet_fn(val)
     val === nothing  && return (x, t) -> 0.0
     val isa Function && return (x, t) -> val(x)
     return (x, t) -> val
 end
 
 """
-    dofs = _dirichlet_dof_set(dh, field, facetset)
+    dofs = dirichlet_dof_set(dh, field, facetset)
 
 Set of global DOF indices of `field` on `facetset`.
 """
-function _dirichlet_dof_set(dh, field::Symbol, facetset)
+function dirichlet_dof_set(dh, field::Symbol, facetset)
     ch = ConstraintHandler(dh)
     add!(ch, Dirichlet(field, facetset, (x, t) -> 0.0))
     close!(ch)
@@ -248,12 +233,12 @@ function _dirichlet_dof_set(dh, field::Symbol, facetset)
 end
 
 """
-    constraint = _mean_pressure_constraint(dh_up, p_order; excluded = nothing)
+    constraint = mean_pressure_constraint(dh_up, p_order; excluded = nothing)
 
 `AffineConstraint` enforcing `∫p dΩ = 0`, written as the pressure DOF with the
 largest weight `∫φᵢ dΩ` in terms of all the others. DOFs in `excluded` are left out.
 """
-function _mean_pressure_constraint(dh_up, p_order; excluded = nothing)
+function mean_pressure_constraint(dh_up, p_order; excluded = nothing)
     ip_p    = Lagrange{RefTetrahedron, p_order}()
     ip_geo  = Lagrange{RefTetrahedron, 1}()
     qr      = QuadratureRule{RefTetrahedron}(2 * p_order + 1)

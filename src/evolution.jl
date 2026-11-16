@@ -32,7 +32,7 @@ function EvolutionLHSCache(M, Kₕ, Kᵥ, fe_data::FEData)
     return EvolutionLHSCache(M_c, Kₕ_c, Kᵥ_c, f_bc_M, f_bc_Kₕ, f_bc_Kᵥ, copy(M_c), nzidx_b)
 end
 
-function _refresh_Kᵥ!(lhs::EvolutionLHSCache, Kᵥ::SparseMatrixCSC, ch_b)
+function refresh_Kᵥ!(lhs::EvolutionLHSCache, Kᵥ::SparseMatrixCSC, ch_b)
     lhs.Kᵥ_c.nzval .= Kᵥ.nzval
     fill!(lhs.f_bc_Kᵥ, 0.0)
     apply!(lhs.Kᵥ_c, lhs.f_bc_Kᵥ, ch_b)
@@ -96,8 +96,8 @@ function EvolutionToolkit(arch::AbstractArchitecture,
     # the first step is BDF1, but P is updated in place later, so its type is
     # chosen for the timestepper of the run
     ts1 = BDF1(; ts.t_start, t_stop=ts.t_stop, Δt=ts.Δt[])
-    A, P, f_bc = _combine_evolution_LHS(arch, params, forcings, ts1, lhs;
-                                        use_diag=_use_diag_precond(arch, forcings, ts))
+    A, P, f_bc = combine_evolution_LHS(arch, params, forcings, ts1, lhs;
+                                       use_diag=use_diag_precond(arch, forcings, ts))
 
     rhs_diff = on_architecture(arch, rhs_diff)
     rhs_flux = on_architecture(arch, rhs_flux)
@@ -130,9 +130,9 @@ function collect_evolution_LHS!(evolution::EvolutionToolkit, params::Parameters,
                                  Kᵥ_changed::Bool = true)
     arch = evolution.arch
     solver = evolution.solver
-    Kᵥ_changed && _refresh_Kᵥ!(evolution.lhs, evolution.Kᵥ, ch_b)
+    Kᵥ_changed && refresh_Kᵥ!(evolution.lhs, evolution.Kᵥ, ch_b)
 
-    A_cpu, f_bc = _combine_evolution_LHS!(evolution.lhs, params, ts)
+    A_cpu, f_bc = combine_evolution_LHS!(evolution.lhs, params, ts)
     update_A!(solver.A, A_cpu, evolution.gpu_perm)
     update_P!(solver.P, A_cpu, arch)
     evolution.f_bc .= on_architecture(arch, f_bc)
@@ -166,8 +166,8 @@ function update_evolution_LHS!(evolution::EvolutionToolkit, fe_data::FEData,
 end
 
 # Form `lhs.A` and `f_bc` for the current θ.
-function _combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
-                                 ts::AbstractTimestepper)
+function combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
+                                ts::AbstractTimestepper)
     θ = evolution_parameter(params, ts)
     A = lhs.A
     @. A.nzval = lhs.M_c.nzval + θ * (lhs.Kₕ_c.nzval + lhs.Kᵥ_c.nzval)
@@ -176,11 +176,11 @@ function _combine_evolution_LHS!(lhs::EvolutionLHSCache, params::Parameters,
 end
 
 # As above, and also build the preconditioner and move `A` to `arch`.
-function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
-                                 forcings::Forcings, ts::AbstractTimestepper,
-                                 lhs::EvolutionLHSCache;
-                                 use_diag = _use_diag_precond(arch, forcings, ts))
-    A, f_bc = _combine_evolution_LHS!(lhs, params, ts)
+function combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
+                               forcings::Forcings, ts::AbstractTimestepper,
+                               lhs::EvolutionLHSCache;
+                               use_diag = use_diag_precond(arch, forcings, ts))
+    A, f_bc = combine_evolution_LHS!(lhs, params, ts)
 
     if use_diag
         P = Diagonal(on_architecture(arch, Vector(1 ./ diag(A))))
@@ -193,7 +193,7 @@ function _combine_evolution_LHS(arch::AbstractArchitecture, params::Parameters,
 end
 
 # LU is only worthwhile on the CPU when the LHS never changes
-_use_diag_precond(arch, forcings, ts) =
+use_diag_precond(arch, forcings, ts) =
     typeof(arch) == GPU || forcings.conv_param.is_on || ts.adaptive
 
 """
@@ -401,9 +401,9 @@ function build_rhs_adv(fe_data::FEData, params::Parameters,
                         u_vec::AbstractVector, b_vec::AbstractVector,
                         ts::BDF1)
     f = zeros(fe_data.nb)
-    _rhs_adv_kernel!(f, fe_data.cache, params.N²,
-                     (b, bp) -> b, (b, bp) -> b, (u, up) -> u, 1.0, ts.Δt[],
-                     u_vec, b_vec, u_vec, b_vec)
+    rhs_adv_kernel!(f, fe_data.cache, params.N²,
+                    (b, bp) -> b, (b, bp) -> b, (u, up) -> u, 1.0, ts.Δt[],
+                    u_vec, b_vec, u_vec, b_vec)
     return f
 end
 
@@ -412,23 +412,23 @@ function build_rhs_adv(fe_data::FEData, params::Parameters,
                         u_prev::AbstractVector, b_prev::AbstractVector,
                         ts::BDF2)
     f = zeros(fe_data.nb)
-    _rhs_adv_kernel!(f, fe_data.cache, params.N²,
-                     (b, bp) -> 4/3*b - 1/3*bp, (b, bp) -> 2*b - bp, (u, up) -> 2*u - up,
-                     2/3, ts.Δt[], u_vec, b_vec, u_prev, b_prev)
+    rhs_adv_kernel!(f, fe_data.cache, params.N²,
+                    (b, bp) -> 4/3*b - 1/3*bp, (b, bp) -> 2*b - bp, (u, up) -> 2*u - up,
+                    2/3, ts.Δt[], u_vec, b_vec, u_prev, b_prev)
     return f
 end
 
 """
-    _rhs_adv_kernel!(f, cache, N², b_comb, b_eff, u_eff, Δt_fac, Δt,
-                     u_vec, b_vec, u_prev, b_prev)
+    rhs_adv_kernel!(f, cache, N², b_comb, b_eff, u_eff, Δt_fac, Δt,
+                    u_vec, b_vec, u_prev, b_prev)
 
 Add `∫ (b_comb(b, b_prev) - Δt_fac Δt (u_eff·∇(b_eff) + w_eff N²)) φᵢ dΩ` to `f`,
 where `b_comb`, `b_eff` and `u_eff` combine the current and previous fields.
 """
-function _rhs_adv_kernel!(f::Vector{Float64}, cache::AssemblyCache, N²,
-                          b_comb::F1, b_eff::F2, u_eff::F3, Δt_fac, Δt,
-                          u_vec::AbstractVector, b_vec::AbstractVector,
-                          u_prev::AbstractVector, b_prev::AbstractVector) where {F1, F2, F3}
+function rhs_adv_kernel!(f::Vector{Float64}, cache::AssemblyCache, N²,
+                         b_comb::F1, b_eff::F2, u_eff::F3, Δt_fac, Δt,
+                         u_vec::AbstractVector, b_vec::AbstractVector,
+                         u_prev::AbstractVector, b_prev::AbstractVector) where {F1, F2, F3}
     nq   = length(cache.w)
     n_b  = size(cache.phi_b, 2)
     n_nodes = size(cache.phi_u, 2)
@@ -527,7 +527,7 @@ function build_Kᵥ_conv!(Kᵥ::SparseMatrixCSC, Kᵥ⁰::SparseMatrixCSC, fe_da
                              cache.dphi_b[3, i, q])
             end
             ∂z_b_q = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
-            κdΩ = _κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
+            κdΩ = κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
             for j in 1:n_b, i in 1:n_b
                 Ke[i, j] += κdΩ * ∂zφ[i] * ∂zφ[j]
             end
@@ -575,7 +575,7 @@ function build_rhs_diff_conv!(f::Vector{Float64}, rhs_diff⁰::Vector{Float64},
                 g3 += cache.dphi_b[3, i, q] * b_cell[i]
             end
             ∂z_b_q = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
-            κdΩ = _κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
+            κdΩ = κ_conv_extra(conv_param, α * (N² + ∂z_b_q)) * cache.w[q] * dJ
             for i in 1:n_b
                 ∂zφᵢ = _∂ᵣ(J⁻ᵀ, 3, cache.dphi_b[1, i, q], cache.dphi_b[2, i, q],
                            cache.dphi_b[3, i, q])

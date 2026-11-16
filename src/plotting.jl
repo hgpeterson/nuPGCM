@@ -69,7 +69,7 @@ end
 ####
 
 # smallest of 1, 2, 2.5, 5 × 10ᵏ that is ≥ x > 0
-function _nice_ceil(x)
+function nice_ceil(x)
     e = 10.0^floor(log10(x))
     for m in (1, 2, 2.5, 5, 10)
         m*e ≥ x*(1 - 1e-12) && return m*e
@@ -106,7 +106,7 @@ function plot_zonal_integral(res;
 
     if vmax === nothing
         vmax = maximum(x -> isnan(x) ? -Inf : abs(x), Q)
-        vmax = vmax > 0 ? _nice_ceil(vmax) : 1.0
+        vmax = vmax > 0 ? nice_ceil(vmax) : 1.0
     end
 
     fig, ax = subplots(1, 1; figsize)

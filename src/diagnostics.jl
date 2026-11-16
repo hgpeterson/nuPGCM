@@ -1,9 +1,9 @@
 """
-    lims = _grid_bbox(grid, dim)
+    lims = grid_bbox(grid, dim)
 
 Min/max node coordinate of the mesh along `dim` (1 = x, 2 = y, 3 = z).
 """
-function _grid_bbox(grid, dim::Int)
+function grid_bbox(grid, dim::Int)
     lo, hi = Inf, -Inf
     for node in grid.nodes
         c  = node.x[dim]
@@ -14,12 +14,12 @@ function _grid_bbox(grid, dim::Int)
 end
 
 """
-    x_in, x_out = _x_line_interval(c0, c1)
+    x_in, x_out = x_line_interval(c0, c1)
 
 Interval of `x` over which a line in `x` lies inside a tetrahedron, given the
 reference coordinates `ξ(x) = c0 + c1 x` along it. Empty if `x_out ≤ x_in`.
 """
-@inline function _x_line_interval(c0::Vec{3}, c1::Vec{3})
+@inline function x_line_interval(c0::Vec{3}, c1::Vec{3})
     x_in, x_out = -Inf, Inf
     # each barycentric coordinate a + b x must be nonnegative
     for (a, b) in ((c0[1], c1[1]), (c0[2], c1[2]), (c0[3], c1[3]),
@@ -60,8 +60,8 @@ function zonal_integral(fe_data::FEData, state::State, field::Symbol;
         throw(ArgumentError("field must be one of :u, :v, :w, :p, :b, got :$field"))
 
     grid   = fe_data.mesh.grid
-    y_lims = something(y_lims, _grid_bbox(grid, 2))
-    z_lims = something(z_lims, _grid_bbox(grid, 3))
+    y_lims = something(y_lims, grid_bbox(grid, 2))
+    z_lims = something(z_lims, grid_bbox(grid, 3))
     if ny === nothing || nz === nothing
         h  = median_edge_length(fe_data.mesh)
         ny = something(ny, max(2, round(Int, 8*(y_lims[2] - y_lims[1])/h) + 1))
@@ -99,11 +99,11 @@ function zonal_integral(fe_data::FEData, state::State, field::Symbol;
 
     Q     = zeros(ny, nz)
     width = zeros(ny, nz)
-    @ctime "  line integrals" _zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
+    @ctime "  line integrals" zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
     return (; y, z, Q, width, y_lims, z_lims)
 end
 
-function _zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
+function zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
     nφ  = getnbasefunctions(ip)
     qe  = zeros(nφ)
     φ   = zeros(nφ)
@@ -127,7 +127,7 @@ function _zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
         k1, k2 = searchsortedfirst(z, zlo), searchsortedlast(z, zhi)
         for k in k1:k2, j in j1:j2
             c0 = Jinv ⋅ (Vec{3}((0.0, y[j], z[k])) - X[1])
-            x_in, x_out = _x_line_interval(c0, c1)
+            x_in, x_out = x_line_interval(c0, c1)
             x_out > x_in || continue
             half = (x_out - x_in)/2
             mid  = (x_out + x_in)/2

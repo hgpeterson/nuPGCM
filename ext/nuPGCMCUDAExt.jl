@@ -36,7 +36,7 @@ nuPGCM.print_memory_status(::GPU) = CUDA.pool_status()
 # the permuted values.
 function nuPGCM.update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, gpu_perm::Ref)
     if gpu_perm[] === nothing
-        gpu_perm[] = (_csc_to_csr_perm(A_new, solver_A), similar(A_new.nzval))
+        gpu_perm[] = (csc_to_csr_perm(A_new, solver_A), similar(A_new.nzval))
     end
     perm, staging = gpu_perm[]::Tuple{Vector{Int}, Vector{Float64}}
     staging .= @view A_new.nzval[perm]
@@ -45,12 +45,12 @@ function nuPGCM.update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, g
 end
 
 """
-    perm = _csc_to_csr_perm(A_csc, A_csr)
+    perm = csc_to_csr_perm(A_csc, A_csr)
 
 Permutation such that `A_csc.nzval[perm] == Array(A_csr.nzVal)` for two matrices
 with the same sparsity pattern.
 """
-function _csc_to_csr_perm(A_csc::SparseMatrixCSC, A_csr::CuSparseMatrixCSR)
+function csc_to_csr_perm(A_csc::SparseMatrixCSC, A_csr::CuSparseMatrixCSR)
     rowPtr = Array(A_csr.rowPtr)
     colVal = Array(A_csr.colVal)
     n = size(A_csc, 1)

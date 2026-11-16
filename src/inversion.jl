@@ -29,20 +29,20 @@ function Base.summary(lhs::InversionLHSCache)
 end
 
 function InversionLHSCache(A⁰::SparseMatrixCSC, fe_data::FEData)
-    sources, destinations, coefficients, A_cond = _condensation_map(A⁰, fe_data.C_up)
+    sources, destinations, coefficients, A_cond = condensation_map(A⁰, fe_data.C_up)
     nzidx_up = build_nzidx_map(A⁰, fe_data.cache.dofs_u)
     return InversionLHSCache(A⁰, copy(A⁰), A_cond, nzidx_up,
                              sources, destinations, coefficients, Ref{Any}(nothing))
 end
 
 """
-    sources, destinations, coefficients, A_cond = _condensation_map(A, C)
+    sources, destinations, coefficients, A_cond = condensation_map(A, C)
 
 Map from the nonzeros of `A` to those of `CᵀAC`: entry `A[p, q]` contributes
 `C[p, i] C[q, j]` times its value to entry `(i, j)`. `A_cond` is a zero matrix
 with the sparsity pattern of `CᵀAC` for any values of `A`.
 """
-function _condensation_map(A::SparseMatrixCSC, C::SparseMatrixCSC)
+function condensation_map(A::SparseMatrixCSC, C::SparseMatrixCSC)
     Cᵀ = sparse(C')   # column p of Cᵀ is row p of C
     rows_C, vals_C = rowvals(Cᵀ), nonzeros(Cᵀ)
 
