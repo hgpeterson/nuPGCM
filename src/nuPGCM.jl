@@ -36,7 +36,7 @@ function set_out_dir!(dir)
 
     if !isdir(out_dir)
         @info "Creating directory '$out_dir'"
-        mkdir(out_dir)
+        mkpath(out_dir)
     end
     if !isdir("$out_dir/images")
         @info "Creating subdirectory '$out_dir/images'"

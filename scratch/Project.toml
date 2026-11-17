@@ -10,5 +10,9 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 nuPGCM = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 
+[extras]
+CUDA_Compiler_jll = "d1e2174e-dfdc-576e-b43e-73b79eb1aca8"
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
+
 [sources.nuPGCM]
 path = ".."

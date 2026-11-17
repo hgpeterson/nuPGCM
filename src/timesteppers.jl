@@ -111,26 +111,19 @@ quadrature points of each cell. `u_vec` is the reduced velocity DOF vector (in
 `fe_data.u_dof_indices` ordering, as stored in `State.u`).
 """
 function max_cell_speeds(fe_data::FEData, u_vec::AbstractVector)
-    dh_up   = fe_data.dh_up
-    u_range = dof_range(dh_up, :u)
-    ip_u    = Lagrange{RefTetrahedron, fe_data.u_order}()^3
-    qr      = QuadratureRule{RefTetrahedron}(2 * fe_data.u_order)
-    cv_u    = CellValues(qr, ip_u, IP_GEO)
-    nq      = getnquadpoints(cv_u)
-
-    # scatter the reduced velocity vector back into the combined (u, p) ordering
-    x_up = zeros(ndofs(dh_up))
-    x_up[fe_data.u_dof_indices] .= u_vec
-
-    u_cells = zeros(getncells(Ferrite.get_grid(dh_up)))
-    for cc in CellIterator(dh_up)
-        reinit!(cv_u, cc)
-        ue = x_up[celldofs(cc)[u_range]]
-        u_max = 0.0
-        for q in 1:nq
-            u_max = max(u_max, norm(function_value(cv_u, q, ue)))
+    cache = fe_data.cache
+    nq, n_nodes = size(cache.phi_u)
+    x_up = to_up_vec(fe_data, u_vec)
+    u_cells = zeros(size(cache.dofs_u, 2))
+    @inbounds for c in eachindex(u_cells), q in 1:nq
+        u1 = 0.0; u2 = 0.0; u3 = 0.0
+        for j in 1:n_nodes
+            φ = cache.phi_u[q, j]
+            u1 += φ * x_up[cache.dofs_u[3j - 2, c]]
+            u2 += φ * x_up[cache.dofs_u[3j - 1, c]]
+            u3 += φ * x_up[cache.dofs_u[3j, c]]
         end
-        u_cells[cellid(cc)] = u_max
+        u_cells[c] = max(u_cells[c], sqrt(u1^2 + u2^2 + u3^2))
     end
     return u_cells
 end

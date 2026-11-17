@@ -178,17 +178,18 @@ end
 
 """
     run!(model; i_start=0, n_info=10, n_save=Inf, advection=true,
-         n_precond=50, precond_growth=1.4)
+         n_eddy=1, n_precond=50, precond_growth=1.4)
 
 Integrate `model` to `t_stop`, printing a status every `n_info` steps and saving
 the state every `n_save` steps.
 
-With the eddy parameterization on, the inversion preconditioner is rebuilt every
+With the eddy parameterization on, the inversion matrix is updated for the eddy
+viscosity every `n_eddy` steps, and the inversion preconditioner is rebuilt every
 `n_precond` steps, and whenever a solve fails or takes `precond_growth` times the
 iterations of the first solve after the last rebuild.
 """
 function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
-              n_precond=50, precond_growth=1.4)
+              n_eddy=1, n_precond=50, precond_growth=1.4)
     u = model.state.u
     b = model.state.b
     timestepper = model.timestepper
@@ -248,7 +249,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
         b_prev .= b_curr
 
         if eddy_on && advection
-            update_eddy_A!(model)
+            mod(i, n_eddy) == 0 && update_eddy_A!(model)
             if iterative
                 stats = model.inversion.solver.workspace.stats
                 grown = niter_ref > 0 && stats.niter > precond_growth * niter_ref
