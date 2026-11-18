@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Moved CUDA-specific code to `ext/nuPGCMCUDAExt.jl` so that it only gets loaded after `using CUDA`
+- Moved CUDA-specific code to `ext/nuPGCMCUDAExt.jl` so that it only gets loaded after `using CUDA, CUDSS`
 
 ## [0.6.2] - 2026-04-09
 

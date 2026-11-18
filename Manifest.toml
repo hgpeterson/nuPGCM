@@ -2,7 +2,7 @@
 
 julia_version = "1.13.4"
 manifest_format = "2.1"
-project_hash = "5d5ee862793abe782ab9be1d62f5041effa4edac"
+project_hash = "cfc23f1c5862c235c3bd6a853fbef7aa1bbb1e5a"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -1290,10 +1290,11 @@ uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.6.2"
 
     [deps.nuPGCM.extensions]
-    nuPGCMCUDAExt = "CUDA"
+    nuPGCMCUDAExt = ["CUDA", "CUDSS"]
 
     [deps.nuPGCM.weakdeps]
     CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+    CUDSS = "45b445bb-4962-46a0-9369-b4df9d0f772e"
 
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]

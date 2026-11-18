@@ -2,7 +2,7 @@
 
 julia_version = "1.13.4"
 manifest_format = "2.1"
-project_hash = "21f5576f5709f59d8cbd9489e0051125c5eb15bd"
+project_hash = "b8962b2a780b892532c04afae50c773303c3d51d"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -153,6 +153,20 @@ git-tree-sha1 = "6269b71d191c0081b8fb3ff5945c2a57f16231d4"
 registries = "General"
 uuid = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 version = "0.25.0+3"
+
+[[deps.CUDSS]]
+deps = ["CEnum", "CUDACore", "CUDA_Runtime_Discovery", "CUDSS_jll", "GPUToolbox", "LinearAlgebra", "SparseArrays", "cuSPARSE"]
+git-tree-sha1 = "c725884bb41f184cb7038951b47364312c11e92a"
+registries = "General"
+uuid = "45b445bb-4962-46a0-9369-b4df9d0f772e"
+version = "1.0.0"
+
+[[deps.CUDSS_jll]]
+deps = ["Artifacts", "CUDA_Runtime_jll", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
+git-tree-sha1 = "aa389c47e432980f27fb0e90cac5e9c7ed4e2ac5"
+registries = "General"
+uuid = "4889d778-9329-5762-9fec-0578a5d30366"
+version = "1.0.0+0"
 
 [[deps.CUPTI]]
 deps = ["CEnum", "CUDACore", "CUDA_Runtime_Discovery", "CUDA_Runtime_jll", "GPUToolbox"]
@@ -1663,10 +1677,10 @@ deps = ["CuthillMcKee", "Ferrite", "FerriteGmsh", "Gmsh", "JLD2", "KernelAbstrac
 path = ".."
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.6.2"
-weakdeps = ["CUDA"]
+weakdeps = ["CUDA", "CUDSS"]
 
     [deps.nuPGCM.extensions]
-    nuPGCMCUDAExt = "CUDA"
+    nuPGCMCUDAExt = ["CUDA", "CUDSS"]
 
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]

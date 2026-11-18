@@ -18,13 +18,12 @@ Cahouet–Chabard approximation of the inverse Schur complement,
     S̃⁻¹ = Mν⁻¹ + Kf⁻¹,    Mν = ∫ p q / (2α²ε²ν) dΩ,    Kf = ∫ ∇p·∇q / |f| dΩ.
 
 `Mν⁻¹` is the inverse Schur complement where viscosity dominates; `Kf⁻¹` stands in
-for it where rotation does. `Mν` is lumped, and `Kf` is factorized on the CPU.
+for it where rotation does. `Mν` is lumped, and `Kf` is Cholesky factorized on `arch`.
 """
 struct CahouetChabardInverse{V, F}
     Mν::V                    # lumped
     Kf::F                    # Cholesky factorization
-    x_cpu::Vector{Float64}
-    Kf_solution::V
+    rhs::V
 end
 
 function CahouetChabardInverse(arch::AbstractArchitecture, fe_data::FEData,
@@ -32,16 +31,14 @@ function CahouetChabardInverse(arch::AbstractArchitecture, fe_data::FEData,
     M, Kf = build_pressure_matrices(fe_data, params)
     # Kf is singular for constant pressure; a small multiple of M makes it positive definite
     Kf += 1e-8 * tr(Kf) / tr(M) * M
-    n = size(M, 1)
     return CahouetChabardInverse(on_architecture(arch, viscous_schur_complement(fe_data, params, forcings, b)),
-                                 cholesky(Symmetric(Kf)),
-                                 zeros(n), on_architecture(arch, zeros(n)))
+                                 cholesky(Symmetric(on_architecture(arch, Kf))),
+                                 on_architecture(arch, zeros(size(M, 1))))
 end
 
 function LinearAlgebra.mul!(y, S::CahouetChabardInverse, x)
-    copyto!(S.x_cpu, x)
-    copyto!(S.Kf_solution, S.Kf \ S.x_cpu)
-    y .= x ./ S.Mν .+ S.Kf_solution
+    S.rhs .= x
+    y .= x ./ S.Mν .+ S.Kf \ S.rhs
     return y
 end
 

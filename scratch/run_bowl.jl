@@ -3,7 +3,7 @@
 #
 # NUPGCM_NSTEPS=<n> stops after n timesteps (setup check before a long job).
 using nuPGCM
-using CUDA
+using CUDA, CUDSS
 using Printf
 
 ENV["JULIA_DEBUG"] = nuPGCM

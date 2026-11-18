@@ -24,7 +24,7 @@ set_out_dir!(joinpath(@__DIR__, ""))
 
 arch = CPU()
 
-# If you want to run on a GPU, first do `using CUDA` to load the `nuPGCMCUDAExt` extension.
+# If you want to run on a GPU, first do `using CUDA, CUDSS` to load the `nuPGCMCUDAExt` extension.
 
 # ## Setting `Parameters` and `Forcings`
 
