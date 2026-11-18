@@ -1,26 +1,22 @@
 """
-    InversionLHSCache(A⁰, fe_data)
+    InversionLHSCache(fe_data, A)
 
-Buffers for rebuilding the condensed inversion matrix in place when only the
-viscosity changes.
+Buffers for adding the eddy-viscous term to the condensed inversion matrix `A` in
+place, on the architecture of `A`. Each velocity row of `fe_data.C_up` has at most
+one entry, equal to 1.
 
-- `A⁰`: uncondensed matrix without the viscous term
-- `A`: `A⁰` plus the current viscous term
-- `A_cond`: condensed matrix `CᵀAC`
-- `nzidx_up`: index into `A.nzval` of every entry of each cell's velocity block
-- `sources`, `destinations`, `coefficients`: `A.nzval[sources[t]]` contributes
-  `coefficients[t]` times its value to `A_cond.nzval[destinations[t]]`
-- `gpu_perm`: cache for [`update_A!`](@ref) on the GPU
+- `nzval⁰`: `nonzeros(A)` without the viscous term
+- `nzidx`: position in `nonzeros(A)` of entry `(i, j)` of the velocity block of cell
+  `c` at `nzidx[n*(j-1)+i, c]`, with `n` velocity DOFs per cell, or 0 if the entry
+  is eliminated
+- `νdΩ`: `2α²ε² ν w |det J|` at each quadrature point of each cell
+- `cache`: the geometry and reference basis gradients of `fe_data.cache`
 """
-struct InversionLHSCache
-    A⁰::SparseMatrixCSC{Float64, Int}
-    A::SparseMatrixCSC{Float64, Int}
-    A_cond::SparseMatrixCSC{Float64, Int}
-    nzidx_up::Matrix{Int}
-    sources::Vector{Int}
-    destinations::Vector{Int}
-    coefficients::Vector{Float64}
-    gpu_perm::Ref{Any}
+struct InversionLHSCache{V, I, M, C}
+    nzval⁰::V
+    nzidx::I
+    νdΩ::M
+    cache::C
 end
 
 function Base.summary(lhs::InversionLHSCache)
@@ -28,55 +24,20 @@ function Base.summary(lhs::InversionLHSCache)
     return "$(parentmodule(t)).$(nameof(t))"
 end
 
-function InversionLHSCache(A⁰::SparseMatrixCSC, fe_data::FEData)
-    sources, destinations, coefficients, A_cond = condensation_map(A⁰, fe_data.C_up)
-    nzidx_up = build_nzidx_map(A⁰, fe_data.cache.dofs_u)
-    return InversionLHSCache(A⁰, copy(A⁰), A_cond, nzidx_up,
-                             sources, destinations, coefficients, Ref{Any}(nothing))
-end
-
-"""
-    sources, destinations, coefficients, A_cond = condensation_map(A, C)
-
-Map from the nonzeros of `A` to those of `CᵀAC`: entry `A[p, q]` contributes
-`C[p, i] C[q, j]` times its value to entry `(i, j)`. `A_cond` is a zero matrix
-with the sparsity pattern of `CᵀAC` for any values of `A`.
-"""
-function condensation_map(A::SparseMatrixCSC, C::SparseMatrixCSC)
-    Cᵀ = sparse(C')   # column p of Cᵀ is row p of C
-    rows_C, vals_C = rowvals(Cᵀ), nonzeros(Cᵀ)
-
-    Is = Int[]; Js = Int[]; sources = Int[]; coefficients = Float64[]
-    for q in 1:size(A, 2), k in nzrange(A, q)
-        p = rowvals(A)[k]
-        for a in nzrange(Cᵀ, p), b in nzrange(Cᵀ, q)
-            push!(Is, rows_C[a]); push!(Js, rows_C[b])
-            push!(sources, k)
-            push!(coefficients, vals_C[a] * vals_C[b])
-        end
-    end
-
-    N_free = size(C, 2)
-    A_cond = sparse(Is, Js, zeros(length(Is)), N_free, N_free)
-    destinations = map(Is, Js) do i, j
-        column = nzrange(A_cond, j)
-        searchsortedfirst(rowvals(A_cond), i, first(column), last(column), Base.Order.Forward)
-    end
-    return sources, destinations, coefficients, A_cond
-end
-
-"""
-    refresh_A_cond!(lhs)
-
-Recompute `lhs.A_cond` from the current `lhs.A`.
-"""
-function refresh_A_cond!(lhs::InversionLHSCache)
-    A, A_cond = lhs.A, lhs.A_cond
-    fill!(A_cond.nzval, 0.0)
-    @inbounds for t in eachindex(lhs.sources)
-        A_cond.nzval[lhs.destinations[t]] += lhs.coefficients[t] * A.nzval[lhs.sources[t]]
-    end
-    return A_cond
+function InversionLHSCache(fe_data::FEData, A)
+    arch  = architecture(A)
+    cache = fe_data.cache
+    rows, columns, _ = findnz(fe_data.C_up)
+    free_dof = zeros(Int, size(fe_data.C_up, 1))
+    free_dof[rows] .= columns
+    position = nonzero_positions(A)
+    nzidx = [k == 0 ? Int32(0) : Int32(position[k])
+             for k in build_nzidx_map(on_architecture(CPU(), A), free_dof[cache.dofs_u])]
+    arrays = (; cache.dofs_b, cache.dphi_b, cache.dphi_u, cache.Jinv_t, cache.J,
+                cache.x0, cache.x_ref, cache.w, cache.detJ)
+    return InversionLHSCache(copy(nonzeros(A)), on_architecture(arch, nzidx),
+                             on_architecture(arch, zeros(length(cache.w), size(cache.dofs_u, 2))),
+                             map(a -> on_architecture(arch, a), arrays))
 end
 
 struct InversionToolkit{B, V, S<:IterativeSolverToolkit, L}
@@ -124,25 +85,23 @@ function InversionToolkit(arch::AbstractArchitecture,
     B      = C' * build_B_inversion(fe_data, params)
     f_wind = C' * build_f_wind(fe_data, params, forcings)
 
-    if forcings.eddy_param.is_on
-        lhs_cache = InversionLHSCache(build_A_inversion(fe_data, params, 0.0), fe_data)
-        build_A_visc!(lhs_cache.A, lhs_cache.A⁰, fe_data, params,
-                      forcings.eddy_param, zeros(fe_data.nb), lhs_cache.nzidx_up)
-        A = refresh_A_cond!(lhs_cache)
-    else
-        lhs_cache = nothing
-        # unlike Ferrite's `apply!`, this eliminates the constrained DOFs
-        A = C' * build_A_inversion(fe_data, params, forcings.ν) * C
+    eddy_on = forcings.eddy_param.is_on
+    A = on_architecture(arch, C' * build_A_inversion(fe_data, params, eddy_on ? 0.0 : forcings.ν) * C)
+    lhs_cache = nothing
+    if eddy_on
+        lhs_cache = InversionLHSCache(fe_data, A)
+        build_A_visc!(A, lhs_cache, params, forcings.eddy_param, on_architecture(arch, zeros(fe_data.nb)))
     end
 
+    A_cpu = on_architecture(CPU(), A)
     if arch isa GPU
-        P = BlockTriangularPreconditioner(arch, fe_data, params, forcings, A, zeros(fe_data.nb))
+        P = BlockTriangularPreconditioner(arch, fe_data, A_cpu,
+                CahouetChabardInverse(arch, fe_data, params, forcings, zeros(fe_data.nb)))
     else
         @warn "LU-factoring inversion matrix with $(size(A,1)) DOFs..."
-        @time "lu(A_inversion)" P = lu(A)
+        @time "lu(A_inversion)" P = lu(A_cpu)
     end
 
-    A      = on_architecture(arch, A)
     B      = on_architecture(arch, B)
     f_wind = on_architecture(arch, f_wind)
     print_memory_status(arch)
@@ -250,74 +209,59 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν)
 end
 
 """
-    build_A_visc!(A, A⁰, fe_data, params, eddy_param, b, nzidx_up)
+    build_A_visc!(A, lhs, params, eddy_param, b)
 
-Set `A = A⁰ + ∫ 2α²ε² ν ε(u):ε(v) dΩ`, with the eddy viscosity `ν` evaluated from
-`α(N² + ∂z b)`. `nzidx_up` is `build_nzidx_map(A, fe_data.cache.dofs_u)`.
+Set `A = A⁰ + ∫ 2α²ε² ν ε(u):ε(v) dΩ` in place, with the eddy viscosity `ν` evaluated
+from `α(N² + ∂z b)`. `A`, `lhs` and `b` are on the same architecture, and `eddy_param.f`
+must be callable there.
 """
-function build_A_visc!(A::SparseMatrixCSC, A⁰::SparseMatrixCSC,
-                       fe_data::FEData, params::Parameters,
-                       eddy_param::EddyParameterization, b::AbstractVector,
-                       nzidx_up::Matrix{Int})
-    cache = fe_data.cache
-    nq   = length(cache.w)
-    n_nodes = size(cache.dphi_u, 2)   # velocity nodes per cell
-    n_u  = 3 * n_nodes
-    n_b  = size(cache.phi_b, 2)
-    ncells = length(cache.detJ)
-    α²ε² = params.α^2 * params.ε^2
-    α    = params.α
-    N²   = params.N²
+function build_A_visc!(A, lhs::InversionLHSCache, params::Parameters,
+                       eddy_param::EddyParameterization, b::AbstractVector)
+    backend = get_backend(lhs.νdΩ)
+    nq, ncells = size(lhs.νdΩ)
+    n_nodes = size(lhs.cache.dphi_u, 2)
+    eddy_viscosity_kernel!(backend)(lhs.νdΩ, b, lhs.cache, eddy_param, params.α, params.ε, params.N²;
+                                    ndrange=(nq, ncells))
+    copyto!(nonzeros(A), lhs.nzval⁰)
+    viscous_matrix_kernel!(backend)(nonzeros(A), lhs.nzidx, lhs.νdΩ, lhs.cache;
+                                    ndrange=(n_nodes, n_nodes, ncells))
+    synchronize(backend)
+    return A
+end
 
-    A.nzval .= A⁰.nzval
+@kernel function eddy_viscosity_kernel!(νdΩ, b, cache, eddy_param, α, ε, N²)
+    q, c = @index(Global, NTuple)
+    # reference-space gradient of b
+    g1 = 0.0; g2 = 0.0; g3 = 0.0
+    for i in axes(cache.dofs_b, 1)
+        bᵢ = b[cache.dofs_b[i, c]]
+        g1 += cache.dphi_b[1, i, q] * bᵢ
+        g2 += cache.dphi_b[2, i, q] * bᵢ
+        g3 += cache.dphi_b[3, i, q] * bᵢ
+    end
+    ∂z_b = _∂ᵣ(cache.Jinv_t[c], 3, g1, g2, g3)
+    x = cache.x0[c] + cache.J[c] ⋅ cache.x_ref[q]
+    ν = ν_eddy(eddy_param, eddy_param.f(x), α * (N² + ∂z_b))
+    νdΩ[q, c] = 2α^2 * ε^2 * ν * cache.w[q] * cache.detJ[c]
+end
 
-    b_cell = zeros(n_b)
-    ∇φ = zeros(3, n_nodes)
-    Ke = zeros(n_u, n_u)
-
-    @inbounds for c in 1:ncells
-        for i in 1:n_b
-            b_cell[i] = b[cache.dofs_b[i, c]]
-        end
-        J⁻ᵀ = cache.Jinv_t[c]
-        dJ = cache.detJ[c]
-        x0 = cache.x0[c]
-        J  = cache.J[c]
-        fill!(Ke, 0.0)
-
-        for q in 1:nq
-            # reference-space gradient of b
-            g1 = 0.0; g2 = 0.0; g3 = 0.0
-            for i in 1:n_b
-                g1 += cache.dphi_b[1, i, q] * b_cell[i]
-                g2 += cache.dphi_b[2, i, q] * b_cell[i]
-                g3 += cache.dphi_b[3, i, q] * b_cell[i]
-            end
-            ∂z_b = _∂ᵣ(J⁻ᵀ, 3, g1, g2, g3)
-            x    = x0 + J ⋅ cache.x_ref[q]
-            ν    = ν_eddy(eddy_param, eddy_param.f(x), α * (N² + ∂z_b))
-            νdΩ  = 2α²ε² * ν * cache.w[q] * dJ
-
-            for m in 1:n_nodes, r in 1:3
-                ∇φ[r, m] = _∂ᵣ(J⁻ᵀ, r, cache.dphi_u[1, m, q], cache.dphi_u[2, m, q], cache.dphi_u[3, m, q])
-            end
-
-            # for basis functions φₘ êᵣ and φₙ êₛ:  ε:ε = (δᵣₛ ∇φₘ·∇φₙ + ∂ₛφₘ ∂ᵣφₙ) / 2
-            for n in 1:n_nodes, m in 1:n_nodes
-                ∇φₘ∇φₙ = ∇φ[1, m]*∇φ[1, n] + ∇φ[2, m]*∇φ[2, n] + ∇φ[3, m]*∇φ[3, n]
-                for s in 1:3, r in 1:3
-                    i = 3*(m - 1) + r
-                    j = 3*(n - 1) + s
-                    Ke[i, j] += νdΩ * ((r == s ? ∇φₘ∇φₙ : 0.0) + ∇φ[s, m] * ∇φ[r, n]) / 2
-                end
-            end
-        end
-
-        for j in 1:n_u, i in 1:n_u
-            A.nzval[nzidx_up[n_u*(j - 1) + i, c]] += Ke[i, j]
+@kernel function viscous_matrix_kernel!(nzval, nzidx, νdΩ, cache)
+    m, n, c = @index(Global, NTuple)
+    J⁻ᵀ = cache.Jinv_t[c]
+    K = zero(Tensor{2, 3, Float64})
+    for q in axes(νdΩ, 1)
+        ∇φₘ = J⁻ᵀ ⋅ Vec{3}((cache.dphi_u[1, m, q], cache.dphi_u[2, m, q], cache.dphi_u[3, m, q]))
+        ∇φₙ = J⁻ᵀ ⋅ Vec{3}((cache.dphi_u[1, n, q], cache.dphi_u[2, n, q], cache.dphi_u[3, n, q]))
+        # for basis functions φₘ êᵣ and φₙ êₛ:  ε:ε = (δᵣₛ ∇φₘ·∇φₙ + ∂ₛφₘ ∂ᵣφₙ) / 2
+        K += νdΩ[q, c] / 2 * ((∇φₘ ⋅ ∇φₙ) * one(K) + ∇φₙ ⊗ ∇φₘ)
+    end
+    n_u = 3 * size(cache.dphi_u, 2)
+    for s in 1:3, r in 1:3
+        k = nzidx[n_u*(3(n - 1) + s - 1) + 3(m - 1) + r, c]
+        if k > 0
+            @atomic nzval[k] += K[r, s]
         end
     end
-    return A
 end
 
 """

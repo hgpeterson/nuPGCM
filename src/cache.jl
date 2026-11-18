@@ -100,7 +100,8 @@ end
     nzidx = build_nzidx_map(K, dofs)
 
 Index into `K.nzval` of each cell's local block: `nzidx[n*(j-1)+i, c]` is the
-index of entry `(dofs[i, c], dofs[j, c])`, with `n = size(dofs, 1)`.
+index of entry `(dofs[i, c], dofs[j, c])`, with `n = size(dofs, 1)`, or 0 if either
+DOF is 0.
 """
 function build_nzidx_map(K::SparseMatrixCSC, dofs::Matrix{Int})
     n, ncells = size(dofs)
@@ -110,9 +111,11 @@ function build_nzidx_map(K::SparseMatrixCSC, dofs::Matrix{Int})
     for c in 1:ncells
         for j in 1:n
             gj  = dofs[j, c]
+            gj == 0 && continue
             rng = colptr[gj]:(colptr[gj + 1] - 1)
             for i in 1:n
                 gi = dofs[i, c]
+                gi == 0 && continue
                 nzidx[n*(j - 1) + i, c] = searchsortedfirst(rowval, gi, first(rng), last(rng),
                                                             Base.Order.Forward)
             end

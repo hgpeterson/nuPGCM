@@ -79,37 +79,29 @@
         invert!(inv_tk, randn(nb))
         A, y, x_direct = inv_tk.solver.A, inv_tk.solver.y, inv_tk.solver.x
 
-        P = BlockTriangularPreconditioner(CPU(), fe_data, params, forcings, A, zeros(nb))
+        P = BlockTriangularPreconditioner(CPU(), fe_data, A,
+                CahouetChabardInverse(CPU(), fe_data, params, forcings, zeros(nb)))
         x, stats = Krylov.fgmres(A, y; N=P, memory=100, atol=0.0, rtol=1e-10, itmax=500)
         @test stats.solved
         @test norm(x - x_direct) / norm(x_direct) < 1e-6
     end
 
     @testset "eddy viscosity cache" begin
-        # build_A_visc! and InversionLHSCache against full assembly and CᵀAC, for
-        # quadratic b, whose ∂z b is known at every quadrature point
+        # build_A_visc! against full assembly and CᵀAC, for quadratic b, whose ∂z b
+        # is known at every quadrature point
         eddy_param = EddyParameterization(f=x->1.0, N²min=1e-3, ν_min=0.1)
         C   = fe_data.C_up
-        lhs = InversionLHSCache(build_A_inversion(fe_data, params, 0.0), fe_data)
+        A   = C' * build_A_inversion(fe_data, params, 0.0) * C
+        lhs = InversionLHSCache(fe_data, A)
 
         for c in (0.0, 1.0, -10.0)
             b_vec = fill_b(fe_data, x -> c * (x[3]^2 + x[1]*x[2]))
             ν = x -> ν_eddy(eddy_param, eddy_param.f(x), params.α * (params.N² + 2c*x[3]))
             A_ref = C' * build_A_inversion(fe_data, params, ν) * C
 
-            build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b_vec, lhs.nzidx_up)
-            @test norm(refresh_A_cond!(lhs) - A_ref) / norm(A_ref) < 1e-9
+            build_A_visc!(A, lhs, params, eddy_param, b_vec)
+            @test norm(A - A_ref) / norm(A_ref) < 1e-9
         end
-
-        # update_A! refreshes a same-pattern buffer in place (CPU: exact nzval copy)
-        b1, b2 = randn(nb), randn(nb)
-        build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b1, lhs.nzidx_up)
-        solver_A = copy(refresh_A_cond!(lhs))
-
-        build_A_visc!(lhs.A, lhs.A⁰, fe_data, params, eddy_param, b2, lhs.nzidx_up)
-        A_cond2 = refresh_A_cond!(lhs)
-        update_A!(solver_A, A_cond2, Ref{Any}(nothing))
-        @test solver_A.nzval == A_cond2.nzval
     end
 
     @testset "InversionToolkit with eddy parameterization" begin

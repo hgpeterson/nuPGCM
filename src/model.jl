@@ -306,9 +306,12 @@ Rebuild the inversion preconditioner for the current eddy viscosity `ν(b)`.
 """
 function rebuild_preconditioner!(model::Model)
     inversion = model.inversion
-    inversion.solver.P = BlockTriangularPreconditioner(model.arch, model.fe_data, model.params,
-                                                       model.forcings, inversion.lhs_cache.A_cond,
-                                                       model.state.b)
+    schur_inverse = inversion.solver.P.schur_inverse
+    copyto!(schur_inverse.Mν, viscous_schur_complement(model.fe_data, model.params, model.forcings,
+                                                       model.state.b))
+    inversion.solver.P = BlockTriangularPreconditioner(model.arch, model.fe_data,
+                                                       on_architecture(CPU(), inversion.solver.A),
+                                                       schur_inverse)
     return model
 end
 
@@ -318,12 +321,11 @@ end
 Update the inversion matrix in place for the current eddy viscosity `ν(b)`.
 """
 function update_eddy_A!(model::Model)
-    lhs = model.inversion.lhs_cache
-    @ctime "  build A_visc" build_A_visc!(lhs.A, lhs.A⁰, model.fe_data, model.params,
-                                          model.forcings.eddy_param, model.state.b, lhs.nzidx_up)
-    @ctime "  condense A" refresh_A_cond!(lhs)
-    solver = model.inversion.solver
-    @ctime "  update solver.A" update_A!(solver.A, lhs.A_cond, lhs.gpu_perm)
-    solver.P isa Factorization && lu!(solver.P, lhs.A_cond)
+    inversion = model.inversion
+    solver = inversion.solver
+    copyto!(inversion.b_arch, model.state.b)
+    @ctime "  build A_visc" build_A_visc!(solver.A, inversion.lhs_cache, model.params,
+                                          model.forcings.eddy_param, inversion.b_arch)
+    solver.P isa Factorization && lu!(solver.P, solver.A)
     return model
 end

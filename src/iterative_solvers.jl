@@ -41,6 +41,13 @@ function update_A!(solver_A::SparseMatrixCSC, A_new::SparseMatrixCSC, gpu_perm)
 end
 
 """
+    position = nonzero_positions(A)
+
+Position in `nonzeros(A)` of each entry of `nonzeros(on_architecture(CPU(), A))`.
+"""
+nonzero_positions(A::SparseMatrixCSC) = eachindex(nonzeros(A))
+
+"""
     update_P!(P, A_cpu, arch)
 
 Recompute the preconditioner `P` in place for the matrix `A_cpu`: the Jacobi

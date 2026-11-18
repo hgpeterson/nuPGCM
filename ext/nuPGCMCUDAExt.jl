@@ -44,6 +44,8 @@ function nuPGCM.update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, g
     return solver_A
 end
 
+nuPGCM.nonzero_positions(A::CuSparseMatrixCSR) = invperm(csc_to_csr_perm(SparseMatrixCSC(A), A))
+
 """
     perm = csc_to_csr_perm(A_csc, A_csr)
 

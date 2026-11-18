@@ -9,6 +9,7 @@ using LinearAlgebra
 using SparseArrays
 using Krylov
 using KrylovPreconditioners
+using KernelAbstractions: @kernel, @index, @atomic, get_backend, synchronize
 using PyPlot
 using Printf
 
