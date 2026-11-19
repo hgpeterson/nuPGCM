@@ -147,7 +147,7 @@ function zonal_sweep!(Q, width, dh, ip, x_full, ldofs, y, z)
 end
 
 zonal_integral(m::Model, field::Symbol; kwargs...) =
-    zonal_integral(m.fe_data, m.state, field; N² = m.params.N², kwargs...)
+    zonal_integral(m.fe_data, on_architecture(CPU(), m.state), field; N² = m.params.N², kwargs...)
 
 """
     res_ψ = overturning_streamfunction(res_v, α)

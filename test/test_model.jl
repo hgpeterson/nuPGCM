@@ -50,24 +50,24 @@
 
         # at rest the CFL limit is infinite, so the timestep is the maximum one
         u_zero = zeros(nu)
-        @test all(iszero, nuPGCM.max_cell_speeds(fe_data, u_zero))
+        @test all(iszero, nuPGCM.max_cell_speeds(fe_data.cache, u_zero))
         ts_a = BDF2(; t_start=0.0, t_stop=1.0, Δt=1.0, adaptive=true, CFL_factor=0.5)
-        nuPGCM.update_Δt!(ts_a, fe_data, u_zero, h_min)
+        nuPGCM.update_Δt!(ts_a, fe_data.cache, u_zero, h_min)
         @test ts_a.Δt[] == 1.0
 
         # uniform velocity field
         x_up = nuPGCM.to_up_vec(fe_data, zeros(nu))
         apply_analytical!(x_up, fe_data.dh_up, :u, x -> Vec{3}((3.0, 4.0, 0.0)))
         u_uniform = x_up[fe_data.u_dof_indices]
-        speeds = nuPGCM.max_cell_speeds(fe_data, u_uniform)
+        speeds = nuPGCM.max_cell_speeds(fe_data.cache, u_uniform)
         @test length(speeds) == getncells(fe_data.mesh.grid)
         @test all(s -> isapprox(s, 5.0; atol=1e-8), speeds)   # |(3,4,0)| = 5
-        nuPGCM.update_Δt!(ts_a, fe_data, u_uniform, h_min)
-        @test ts_a.Δt[] ≈ 0.5 / fe_data.b_order * h_min / 5.0
+        nuPGCM.update_Δt!(ts_a, fe_data.cache, u_uniform, h_min)
+        @test ts_a.Δt[] ≈ 0.5 * h_min / 5.0
 
         # non-adaptive timestepper leaves Δt untouched
         ts_fixed = BDF1(; t_start=0.0, t_stop=1.0, Δt=0.123, adaptive=false)
-        nuPGCM.update_Δt!(ts_fixed, fe_data, u_uniform, h_min)
+        nuPGCM.update_Δt!(ts_fixed, fe_data.cache, u_uniform, h_min)
         @test ts_fixed.Δt[] == 0.123
     end
 

@@ -63,26 +63,35 @@
         @test iszero(build_rhs_flux(params, fe_data, SurfaceDirichletBC(x->0.0)))
     end
 
-    @testset "EvolutionToolkit" begin
+    @testset "convection" begin
+        # update_evolution_LHS! against full assembly and CᵀAC, for quadratic b, whose
+        # ∂z b is known at every quadrature point, and nonzero Dirichlet values g
+        fe_g = FEData(fe_data.mesh;
+            u_diri_tags  = ["bottom", "surface"],
+            u_diri_masks = [(true,true,true), (false,false,true)],
+            b_diri_tags  = ["surface"],
+            b_diri_vals  = [x -> x[1] - 0.5*x[2]])
+        conv_param = ConvectionParameterization(κᶜ=1.0, N²min=1e-1)
+        forcings_conv = Forcings(1.0, κₕ, κᵥ, x -> 0.0, x -> 0.0, SurfaceDirichletBC(x -> 0.0);
+                                 conv_param)
         ts  = BDF1(; t_start=0.0, t_stop=1e-2, Δt=1e-3)
-        evo = EvolutionToolkit(CPU(), fe_data, params, forcings, ts)
+        evo = EvolutionToolkit(CPU(), fe_g, params, forcings_conv, ts)
+        θ   = nuPGCM.evolution_parameter(params, ts)
+        C, g = evo.C, evo.g
+        @test norm(g) > 0
+        M  = build_M(fe_g)
+        Kₕ = build_Kₕ(fe_g, κₕ)
 
-        @test size(evo.Kᵥ) == (nb, nb)
-        @test size(evo.Kᵥ⁰) == (nb, nb)
-        @test length(evo.rhs_diff) == nb
-        @test length(evo.rhs_flux) == nb
-        @test length(evo.f_bc)     == nb
-        @test norm(evo.f_bc) == 0     # homogeneous BCs
-        @test size(evo.solver.A) == (nb, nb)
-        @test evo.solver.P isa Factorization
+        for c in (0.0, 1.0, -10.0)
+            b_vec = fill_b(fe_g, x -> c * x[3]^2)
+            κ(x) = κᵥ(x) + nuPGCM.κ_conv_extra(conv_param, params.α * (params.N² + 2c*x[3]))
+            nuPGCM.update_evolution_LHS!(evo, params, forcings_conv, ts, b_vec)
 
-        # Kᵥ rebuild changes A
-        κᵥ_new(x) = 2 * κᵥ(x)
-        evo.Kᵥ.nzval .= build_Kᵥ(fe_data, κᵥ_new).nzval
-        collect_evolution_LHS!(evo, params, forcings, ts, fe_data.ch_b)
-        A_new = on_architecture(CPU(), evo.solver.A)
-
-        evo2 = EvolutionToolkit(CPU(), fe_data, params, forcings, ts)
-        @test !(A_new ≈ on_architecture(CPU(), evo2.solver.A))
+            Kᵥ    = build_Kᵥ(fe_g, κ)
+            A_ref = C' * (M + θ * (Kₕ + Kᵥ)) * C
+            @test norm(evo.solver.A - A_ref) / norm(A_ref) < 1e-9
+            rhs_ref = build_rhs_diff(params, fe_g, κ) - (Kₕ + Kᵥ) * g
+            @test norm(evo.rhs_diff - rhs_ref) / norm(rhs_ref) < 1e-9
+        end
     end
 end

@@ -11,7 +11,7 @@ ENABLE_TIMING[] = true
 
 PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM-ferrite"
 SIMS_PATH = "/home/hppeters/scratch"
-set_out_dir!(joinpath(SIMS_PATH, "channel_basin_013"))
+set_out_dir!(joinpath(SIMS_PATH, "channel_basin_014"))
 
 include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))
 

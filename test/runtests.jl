@@ -9,7 +9,6 @@ using Krylov
 
 # internal assembly functions not part of the public API
 using nuPGCM: build_M, build_Kₕ, build_Kᵥ, build_rhs_diff, build_rhs_flux, build_rhs_adv,
-              collect_evolution_LHS!,
               build_A_inversion, build_A_visc!,
               build_B_inversion, build_f_wind,
               InversionLHSCache,

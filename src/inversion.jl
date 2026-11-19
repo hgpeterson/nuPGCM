@@ -10,13 +10,11 @@ one entry, equal to 1.
   `c` at `nzidx[n*(j-1)+i, c]`, with `n` velocity DOFs per cell, or 0 if the entry
   is eliminated
 - `νdΩ`: `2α²ε² ν w |det J|` at each quadrature point of each cell
-- `cache`: the geometry and reference basis gradients of `fe_data.cache`
 """
-struct InversionLHSCache{V, I, M, C}
+struct InversionLHSCache{V, I, M}
     nzval⁰::V
     nzidx::I
     νdΩ::M
-    cache::C
 end
 
 function Base.summary(lhs::InversionLHSCache)
@@ -27,26 +25,22 @@ end
 function InversionLHSCache(fe_data::FEData, A)
     arch  = architecture(A)
     cache = fe_data.cache
-    rows, columns, _ = findnz(fe_data.C_up)
-    free_dof = zeros(Int, size(fe_data.C_up, 1))
-    free_dof[rows] .= columns
+    free_u = free_index(fe_data.C_up)[fe_data.u_dof_indices]
     position = nonzero_positions(A)
     nzidx = [k == 0 ? Int32(0) : Int32(position[k])
-             for k in build_nzidx_map(on_architecture(CPU(), A), free_dof[cache.dofs_u])]
-    arrays = (; cache.dofs_b, cache.dphi_b, cache.dphi_u, cache.Jinv_t, cache.J,
-                cache.x0, cache.x_ref, cache.w, cache.detJ)
+             for k in build_nzidx_map(on_architecture(CPU(), A), free_u[cache.dofs_u])]
     return InversionLHSCache(copy(nonzeros(A)), on_architecture(arch, nzidx),
-                             on_architecture(arch, zeros(length(cache.w), size(cache.dofs_u, 2))),
-                             map(a -> on_architecture(arch, a), arrays))
+                             on_architecture(arch, zeros(length(cache.w), size(cache.dofs_u, 2))))
 end
 
-struct InversionToolkit{B, V, S<:IterativeSolverToolkit, L}
+struct InversionToolkit{B, V, S<:IterativeSolverToolkit, AC, L, C}
     B::B        # maps the buoyancy DOFs to the right-hand side
     f_wind::V   # right-hand side from the wind stress
-    b_arch::V   # buoyancy on the solver's architecture
     solver::S
-    lhs_cache::L              # InversionLHSCache if the eddy parameterization is on
-    x_full::Vector{Float64}   # solution on all DOFs of dh_up
+    cache::AC   # fe_data.cache on the solver's architecture
+    lhs_cache::L   # InversionLHSCache if the eddy parameterization is on
+    C_u::C      # maps the solution to the velocity DOFs
+    C_p::C      # maps the solution to the pressure DOFs
 end
 
 function Base.summary(inversion::InversionToolkit)
@@ -86,20 +80,21 @@ function InversionToolkit(arch::AbstractArchitecture,
     f_wind = C' * build_f_wind(fe_data, params, forcings)
 
     eddy_on = forcings.eddy_param.is_on
+    cache   = on_architecture(arch, fe_data.cache)
+    b⁰      = on_architecture(arch, zeros(fe_data.nb))
     A = on_architecture(arch, C' * build_A_inversion(fe_data, params, eddy_on ? 0.0 : forcings.ν) * C)
     lhs_cache = nothing
     if eddy_on
         lhs_cache = InversionLHSCache(fe_data, A)
-        build_A_visc!(A, lhs_cache, params, forcings.eddy_param, on_architecture(arch, zeros(fe_data.nb)))
+        build_A_visc!(A, lhs_cache, cache, params, forcings.eddy_param, b⁰)
     end
 
-    A_cpu = on_architecture(CPU(), A)
     if arch isa GPU
-        P = BlockTriangularPreconditioner(arch, fe_data, A_cpu,
-                CahouetChabardInverse(arch, fe_data, params, forcings, zeros(fe_data.nb)))
+        P = BlockTriangularPreconditioner(arch, fe_data, A,
+                CahouetChabardInverse(arch, fe_data, params, forcings, cache, b⁰))
     else
         @warn "LU-factoring inversion matrix with $(size(A,1)) DOFs..."
-        @time "lu(A_inversion)" P = lu(A_cpu)
+        @time "lu(A_inversion)" P = lu(A)
     end
 
     B      = on_architecture(arch, B)
@@ -116,21 +111,21 @@ function InversionToolkit(arch::AbstractArchitecture,
                        :verbose=>Int(verbose), :restart=>restart)
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Inversion")
 
-    return InversionToolkit(B, f_wind, on_architecture(arch, zeros(fe_data.nb)), solver,
-                            lhs_cache, zeros(ndofs(fe_data.dh_up)))
+    return InversionToolkit(B, f_wind, solver, cache, lhs_cache,
+                            on_architecture(arch, C[fe_data.u_dof_indices, :]),
+                            on_architecture(arch, C[fe_data.p_dof_indices, :]))
 end
 
 """
     invert!(inversion, b)
 
-Solve the inversion for the buoyancy DOF vector `b`, leaving the solution on the
-free DOFs in `inversion.solver.x`.
+Solve the inversion for the buoyancy DOF vector `b` on the architecture of the
+solver, leaving the solution on the free DOFs in `inversion.solver.x`.
 """
 function invert!(inversion::InversionToolkit, b::AbstractVector)
     y = inversion.solver.y
-    copyto!(inversion.b_arch, b)
     y .= inversion.f_wind
-    mul!(y, inversion.B, inversion.b_arch, 1.0, 1.0)
+    mul!(y, inversion.B, b, 1.0, 1.0)
     iterative_solve!(inversion.solver)
     return inversion
 end
@@ -209,21 +204,21 @@ function build_A_inversion(fe_data::FEData, params::Parameters, ν)
 end
 
 """
-    build_A_visc!(A, lhs, params, eddy_param, b)
+    build_A_visc!(A, lhs, cache, params, eddy_param, b)
 
 Set `A = A⁰ + ∫ 2α²ε² ν ε(u):ε(v) dΩ` in place, with the eddy viscosity `ν` evaluated
-from `α(N² + ∂z b)`. `A`, `lhs` and `b` are on the same architecture, and `eddy_param.f`
-must be callable there.
+from `α(N² + ∂z b)`. `A`, `lhs`, `cache` and `b` are on the same architecture, and
+`eddy_param.f` must be callable there.
 """
-function build_A_visc!(A, lhs::InversionLHSCache, params::Parameters,
+function build_A_visc!(A, lhs::InversionLHSCache, cache::AssemblyCache, params::Parameters,
                        eddy_param::EddyParameterization, b::AbstractVector)
     backend = get_backend(lhs.νdΩ)
     nq, ncells = size(lhs.νdΩ)
-    n_nodes = size(lhs.cache.dphi_u, 2)
-    eddy_viscosity_kernel!(backend)(lhs.νdΩ, b, lhs.cache, eddy_param, params.α, params.ε, params.N²;
+    n_nodes = size(cache.dphi_u, 2)
+    eddy_viscosity_kernel!(backend)(lhs.νdΩ, b, cache, eddy_param, params.α, params.ε, params.N²;
                                     ndrange=(nq, ncells))
     copyto!(nonzeros(A), lhs.nzval⁰)
-    viscous_matrix_kernel!(backend)(nonzeros(A), lhs.nzidx, lhs.νdΩ, lhs.cache;
+    viscous_matrix_kernel!(backend)(nonzeros(A), lhs.nzidx, lhs.νdΩ, cache;
                                     ndrange=(n_nodes, n_nodes, ncells))
     synchronize(backend)
     return A
@@ -231,15 +226,7 @@ end
 
 @kernel function eddy_viscosity_kernel!(νdΩ, b, cache, eddy_param, α, ε, N²)
     q, c = @index(Global, NTuple)
-    # reference-space gradient of b
-    g1 = 0.0; g2 = 0.0; g3 = 0.0
-    for i in axes(cache.dofs_b, 1)
-        bᵢ = b[cache.dofs_b[i, c]]
-        g1 += cache.dphi_b[1, i, q] * bᵢ
-        g2 += cache.dphi_b[2, i, q] * bᵢ
-        g3 += cache.dphi_b[3, i, q] * bᵢ
-    end
-    ∂z_b = _∂ᵣ(cache.Jinv_t[c], 3, g1, g2, g3)
+    ∂z_b = vertical_derivative(b, cache, q, c)
     x = cache.x0[c] + cache.J[c] ⋅ cache.x_ref[q]
     ν = ν_eddy(eddy_param, eddy_param.f(x), α * (N² + ∂z_b))
     νdΩ[q, c] = 2α^2 * ε^2 * ν * cache.w[q] * cache.detJ[c]

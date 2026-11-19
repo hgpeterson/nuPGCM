@@ -29,18 +29,6 @@ function IterativeSolverToolkit(A, P, y, workspace, kwargs, label)
 end
 
 """
-    update_A!(solver_A, A_new::SparseMatrixCSC, gpu_perm)
-
-Overwrite the values of `solver_A` with those of `A_new`, which has the same
-sparsity pattern. `gpu_perm` caches the CSC → CSR permutation of the nonzeros on
-the GPU and is unused on the CPU.
-"""
-function update_A!(solver_A::SparseMatrixCSC, A_new::SparseMatrixCSC, gpu_perm)
-    solver_A.nzval .= A_new.nzval
-    return solver_A
-end
-
-"""
     position = nonzero_positions(A)
 
 Position in `nonzeros(A)` of each entry of `nonzeros(on_architecture(CPU(), A))`.
@@ -48,17 +36,23 @@ Position in `nonzeros(A)` of each entry of `nonzeros(on_architecture(CPU(), A))`
 nonzero_positions(A::SparseMatrixCSC) = eachindex(nonzeros(A))
 
 """
-    update_P!(P, A_cpu, arch)
+    update_P!(P, A, diagonal=nothing)
 
-Recompute the preconditioner `P` in place for the matrix `A_cpu`: the Jacobi
-diagonal `1 ./ diag(A_cpu)` for a `Diagonal`, the LU factors for a `Factorization`.
+Recompute the preconditioner `P` in place for the matrix `A`: the Jacobi diagonal
+`1 ./ nonzeros(A)[diagonal]` for a `Diagonal`, where `diagonal` holds the positions of
+the diagonal entries, the LU factors for a `Factorization`, and the ILU(0) factors for
+a GPU preconditioner from KrylovPreconditioners.
 """
-function update_P!(P::Diagonal, A_cpu::SparseMatrixCSC, arch)
-    P.diag .= on_architecture(arch, Vector(1 ./ diag(A_cpu)))
+function update_P!(P::Diagonal, A, diagonal)
+    P.diag .= 1 ./ nonzeros(A)[diagonal]
     return P
 end
-function update_P!(P::Factorization, A_cpu::SparseMatrixCSC, arch)
-    lu!(P, A_cpu)
+function update_P!(P::Factorization, A, diagonal=nothing)
+    lu!(P, A)
+    return P
+end
+function update_P!(P::KrylovPreconditioners.AbstractKrylovPreconditioner, A, diagonal=nothing)
+    KrylovPreconditioners.update!(P, A)
     return P
 end
 

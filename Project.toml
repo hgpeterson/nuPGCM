@@ -4,6 +4,7 @@ authors = ["hgpeterson <hgpeterson@caltech.edu>"]
 version = "0.6.2"
 
 [deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CuthillMcKee = "17f17636-5e38-52e3-a803-7ae3aaaf3da9"
 Ferrite = "c061ca5d-56c9-439f-9c0e-210fe06d3992"
 FerriteGmsh = "4f95f4f8-b27c-4ae5-9a39-ea55e634e36b"
@@ -28,6 +29,7 @@ CUDSS = "45b445bb-4962-46a0-9369-b4df9d0f772e"
 nuPGCMCUDAExt = ["CUDA", "CUDSS"]
 
 [compat]
+Adapt = "4"
 CUDA = "6.4"
 CUDSS = "1"
 CuthillMcKee = "0.1.0"

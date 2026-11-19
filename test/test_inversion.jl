@@ -80,7 +80,7 @@
         A, y, x_direct = inv_tk.solver.A, inv_tk.solver.y, inv_tk.solver.x
 
         P = BlockTriangularPreconditioner(CPU(), fe_data, A,
-                CahouetChabardInverse(CPU(), fe_data, params, forcings, zeros(nb)))
+                CahouetChabardInverse(CPU(), fe_data, params, forcings, fe_data.cache, zeros(nb)))
         x, stats = Krylov.fgmres(A, y; N=P, memory=100, atol=0.0, rtol=1e-10, itmax=500)
         @test stats.solved
         @test norm(x - x_direct) / norm(x_direct) < 1e-6
@@ -99,7 +99,7 @@
             ν = x -> ν_eddy(eddy_param, eddy_param.f(x), params.α * (params.N² + 2c*x[3]))
             A_ref = C' * build_A_inversion(fe_data, params, ν) * C
 
-            build_A_visc!(A, lhs, params, eddy_param, b_vec)
+            build_A_visc!(A, lhs, fe_data.cache, params, eddy_param, b_vec)
             @test norm(A - A_ref) / norm(A_ref) < 1e-9
         end
     end

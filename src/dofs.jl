@@ -1,4 +1,4 @@
-struct FEData{M<:Mesh, DUP, DB, CUP, CB}
+struct FEData{M<:Mesh, DUP, DB, CUP, CB, AC}
     mesh::M
     dh_up::DUP    # combined DofHandler for (u, p)
     dh_b::DB      # DofHandler for buoyancy b
@@ -14,7 +14,7 @@ struct FEData{M<:Mesh, DUP, DB, CUP, CB}
     nb::Int
     u_order::Int
     b_order::Int
-    cache::AssemblyCache
+    cache::AC
     C_up::SparseMatrixCSC{Float64, Int}   # constraint map, x_full = C_up * x_free
 end
 
@@ -141,7 +141,7 @@ function FEData(mesh::Mesh;
 
     @info "Building assembly cache..."
     @time begin
-    cache = AssemblyCache(dh_up, dh_b, u_order, b_order)
+    cache = AssemblyCache(dh_up, dh_b, u_dof_indices, p_dof_indices, u_order, b_order)
     C_up  = constraint_matrix(ch_up, N_up, free_dofs)
     end
 
@@ -164,26 +164,6 @@ function mask_to_components(masks, i)
     comps = [j for j in 1:3 if mask[j]]
     length(comps) == 3 && return nothing   # all components: omit keyword
     return comps
-end
-
-"""
-    condense_rhs!(y, ch)
-
-Fold the entries of the right-hand side `y` at constrained DOFs into the entries of
-the DOFs they depend on, then zero them. This is what `apply!(K, f, ch)` does to
-`f`, for a matrix that has already been condensed.
-"""
-function condense_rhs!(y::AbstractVector, ch::ConstraintHandler)
-    for i in eachindex(ch.prescribed_dofs, ch.dofcoefficients)
-        dofcoef = ch.dofcoefficients[i]
-        dofcoef === nothing && continue
-        cdof = ch.prescribed_dofs[i]
-        for (fdof, c) in dofcoef
-            y[fdof] += c * y[cdof]
-        end
-    end
-    y[ch.prescribed_dofs] .= 0.0
-    return y
 end
 
 """
@@ -212,6 +192,19 @@ function constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int}
         end
     end
     return sparse(rows, cols, vals, N, length(free_dofs))
+end
+
+"""
+    free = free_index(C)
+
+For a constraint map `C` whose rows have at most one entry, equal to 1: the free DOF
+that each DOF takes the value of, or 0 if it is eliminated.
+"""
+function free_index(C::SparseMatrixCSC)
+    rows, columns, _ = findnz(C)
+    free = zeros(Int, size(C, 1))
+    free[rows] .= columns
+    return free
 end
 
 function to_dirichlet_fn(val)

@@ -10,6 +10,7 @@ using SparseArrays
 using Krylov
 using KrylovPreconditioners
 using KernelAbstractions: @kernel, @index, @atomic, get_backend, synchronize
+import Adapt
 using PyPlot
 using Printf
 

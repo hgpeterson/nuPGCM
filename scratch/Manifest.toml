@@ -1673,7 +1673,7 @@ uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.70.0+0"
 
 [[deps.nuPGCM]]
-deps = ["CuthillMcKee", "Ferrite", "FerriteGmsh", "Gmsh", "JLD2", "KernelAbstractions", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "SparseArrays", "WriteVTK"]
+deps = ["Adapt", "CuthillMcKee", "Ferrite", "FerriteGmsh", "Gmsh", "JLD2", "KernelAbstractions", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "SparseArrays", "WriteVTK"]
 path = ".."
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.6.2"

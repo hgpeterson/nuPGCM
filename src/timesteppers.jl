@@ -90,40 +90,42 @@ function status(ts::AbstractTimestepper)
 end
 
 """
-    update_Δt!(ts, fe_data, u_vec, h_min)
+    update_Δt!(ts, cache, u, h)
 
-Set the timestep of an adaptive timestepper to
-`min(maximum_timestep, CFL_factor / q × h_min / |u|ₘₐₓ)`, where `q` is the order of the buoyancy
-elements and `|u|ₘₐₓ` is the maximum speed over the quadrature points.
+Set the timestep of an adaptive timestepper to `min(maximum_timestep, CFL_factor h / |u|ₘₐₓ)`,
+where `h` is the grid spacing and `|u|ₘₐₓ` the maximum of `max_cell_speeds(cache, u)`.
 """
-function update_Δt!(ts::BDF, fe_data::FEData, u_vec::AbstractVector, h_min)
+function update_Δt!(ts::BDF, cache::AssemblyCache, u::AbstractVector, h)
     ts.adaptive || return ts
-    u_max = maximum(max_cell_speeds(fe_data, u_vec))
-    ts.Δt[] = min(ts.maximum_timestep, ts.CFL_factor / fe_data.b_order * h_min / u_max)
+    u_max = maximum(max_cell_speeds(cache, u))
+    ts.Δt[] = min(ts.maximum_timestep, ts.CFL_factor * h / u_max)
     return ts
 end
 
 """
-    max_cell_speeds(fe_data::FEData, u_vec) -> Vector
+    max_cell_speeds(cache, u) -> AbstractVector
 
-Return the maximum velocity magnitude ``|u|`` per cell, evaluated over the
-quadrature points of each cell. `u_vec` is the reduced velocity DOF vector (in
-`fe_data.u_dof_indices` ordering, as stored in `State.u`).
+Maximum speed `|u|` over the quadrature points of each cell, on the architecture of
+`cache`. `u` is the velocity DOF vector, as stored in `State.u`.
 """
-function max_cell_speeds(fe_data::FEData, u_vec::AbstractVector)
-    cache = fe_data.cache
-    nq, n_nodes = size(cache.phi_u)
-    x_up = to_up_vec(fe_data, u_vec)
-    u_cells = zeros(size(cache.dofs_u, 2))
-    @inbounds for c in eachindex(u_cells), q in 1:nq
+function max_cell_speeds(cache::AssemblyCache, u::AbstractVector)
+    speeds = similar(cache.detJ)
+    cell_speed_kernel!(get_backend(speeds))(speeds, cache, u; ndrange=length(speeds))
+    return speeds
+end
+
+@kernel function cell_speed_kernel!(speeds, cache, u)
+    c = @index(Global)
+    s = 0.0
+    for q in axes(cache.phi_u, 1)
         u1 = 0.0; u2 = 0.0; u3 = 0.0
-        for j in 1:n_nodes
+        for j in axes(cache.phi_u, 2)
             φ = cache.phi_u[q, j]
-            u1 += φ * x_up[cache.dofs_u[3j - 2, c]]
-            u2 += φ * x_up[cache.dofs_u[3j - 1, c]]
-            u3 += φ * x_up[cache.dofs_u[3j, c]]
+            u1 += φ * u[cache.dofs_u[3j - 2, c]]
+            u2 += φ * u[cache.dofs_u[3j - 1, c]]
+            u3 += φ * u[cache.dofs_u[3j, c]]
         end
-        u_cells[c] = max(u_cells[c], sqrt(u1^2 + u2^2 + u3^2))
+        s = max(s, sqrt(u1^2 + u2^2 + u3^2))
     end
-    return u_cells
+    speeds[c] = s
 end

@@ -1,5 +1,5 @@
 function save_state(model::Model, ofile)
-    s = model.state
+    s = on_architecture(CPU(), model.state)
     t = isnothing(model.timestepper) ? 0.0 : model.timestepper.t[]
     jldsave(ofile; u=s.u, p=s.p, b=s.b, t=t)
     @info "Model state saved to '$ofile'"
@@ -7,9 +7,9 @@ end
 
 function set_state_from_file!(m::Model, ifile)
     d = jldopen(ifile, "r")
-    m.state.u .= d["u"]
-    m.state.p .= d["p"]
-    m.state.b .= d["b"]
+    copyto!(m.state.u, d["u"])
+    copyto!(m.state.p, d["p"])
+    copyto!(m.state.b, d["b"])
     if !isnothing(m.timestepper)
         m.timestepper.t[] = d["t"]
     end
@@ -26,7 +26,7 @@ P2 fields exactly. `kwargs` are passed to `WriteVTK.vtk_grid`.
 """
 function save_vtk_p2(m::Model; ofile="$out_dir/data/state", vtk_kwargs...)
     fe_data  = m.fe_data
-    state    = m.state
+    state    = on_architecture(CPU(), m.state)
     dh_up    = fe_data.dh_up
     dh_b     = fe_data.dh_b
     nb       = fe_data.nb
@@ -96,7 +96,7 @@ sampled at the cell vertices. `kwargs` are passed to `VTKGridFile`.
 function save_vtk(m::Model; ofile="$out_dir/data/state", vtk_kwargs...)
     fe_data = m.fe_data
     grid    = fe_data.mesh.grid
-    state   = m.state
+    state   = on_architecture(CPU(), m.state)
 
     x_up = zeros(ndofs(fe_data.dh_up))
     x_up[fe_data.u_dof_indices] .= state.u

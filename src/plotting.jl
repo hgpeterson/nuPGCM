@@ -37,7 +37,7 @@ function find_H(model::Model, x::Real, y::Real; tol=1e-8)
     z_out = -1.0
     while abs(z_in - z_out) > tol
         z = (z_in + z_out) / 2
-        if isnan(eval_at_point(model, model.fe_data.dh_b, model.state.b,
+        if isnan(eval_at_point(model, model.fe_data.dh_b, on_architecture(CPU(), model.state.b),
                                 :b, Vec{3}((Float64(x), Float64(y), z))))
             z_out = z
         else

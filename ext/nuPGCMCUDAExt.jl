@@ -33,18 +33,6 @@ nuPGCM.architecture(::CuSparseMatrixCSR) = GPU()
 nuPGCM.vector_type(::GPU, T) = CuVector{T}
 nuPGCM.print_memory_status(::GPU) = CUDA.pool_status()
 
-# `gpu_perm` holds the CSC → CSR permutation of the nonzeros and a CPU buffer for
-# the permuted values.
-function nuPGCM.update_A!(solver_A::CuSparseMatrixCSR, A_new::SparseMatrixCSC, gpu_perm::Ref)
-    if gpu_perm[] === nothing
-        gpu_perm[] = (csc_to_csr_perm(A_new, solver_A), similar(A_new.nzval))
-    end
-    perm, staging = gpu_perm[]::Tuple{Vector{Int}, Vector{Float64}}
-    staging .= @view A_new.nzval[perm]
-    copyto!(solver_A.nzVal, staging)
-    return solver_A
-end
-
 nuPGCM.nonzero_positions(A::CuSparseMatrixCSR) = invperm(csc_to_csr_perm(SparseMatrixCSC(A), A))
 
 """

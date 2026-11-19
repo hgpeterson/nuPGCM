@@ -76,20 +76,21 @@
 
         x_up  = fill_u(fe_free, u_fn);  b_vec  = fill_b(fe_free, b_fn)
         x_upp = fill_u(fe_free, up_fn); b_prev = fill_b(fe_free, bp_fn)
+        u_vec, u_prev = x_up[fe_free.u_dof_indices], x_upp[fe_free.u_dof_indices]
 
         ts1 = BDF1(; t_start=0.0, t_stop=1.0, Δt)
-        f1  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts1)
+        f1  = nuPGCM.build_rhs_adv(fe_free.cache, params, u_vec, b_vec, u_prev, b_prev, ts1)
         r1  = ref_rhs_adv(fe_free, N², Δt, x_up, b_vec, x_upp, b_prev; ω=0)
         @test norm(f1 - r1) < 1e-12 * norm(r1)
 
         # the first BDF2 step is a BDF1 step
         ts2 = BDF2(; t_start=0.0, t_stop=1.0, Δt)
-        f2  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts2)
+        f2  = nuPGCM.build_rhs_adv(fe_free.cache, params, u_vec, b_vec, u_prev, b_prev, ts2)
         @test f2 == f1
 
         update_t!(ts2)
         ts2.Δt[] = 0.7Δt
-        f2  = nuPGCM.build_rhs_adv(fe_free, params, x_up, b_vec, x_upp, b_prev, ts2)
+        f2  = nuPGCM.build_rhs_adv(fe_free.cache, params, u_vec, b_vec, u_prev, b_prev, ts2)
         r2  = ref_rhs_adv(fe_free, N², 0.7Δt, x_up, b_vec, x_upp, b_prev; ω=0.7)
         @test norm(f2 - r2) < 1e-12 * norm(r2)
     end
@@ -138,7 +139,8 @@
 
         M  = build_M(fe_free)
         ts = BDF1(; t_start=0.0, t_stop=1.0, Δt=1.0)
-        adv(x) = M*b_vec - nuPGCM.build_rhs_adv(fe_free, params0, x, b_vec, x, b_vec, ts)
+        adv(x_up) = M*b_vec - nuPGCM.build_rhs_adv(fe_free.cache, params0, x_up[fe_free.u_dof_indices],
+                                                   b_vec, x_up[fe_free.u_dof_indices], b_vec, ts)
 
         a = adv(x_up)
         scale = dot(abs.(b_vec), abs.(a))

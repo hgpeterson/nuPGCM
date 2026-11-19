@@ -2,7 +2,7 @@
 
 julia_version = "1.13.4"
 manifest_format = "2.1"
-project_hash = "cfc23f1c5862c235c3bd6a853fbef7aa1bbb1e5a"
+project_hash = "f61824d5488fc7a6c5bf669cec241bc31a525ca5"
 
 [[deps.AbstractTrees]]
 git-tree-sha1 = "2d9c9a55f9c93e8887ad391fbae72f8ef55e1177"
@@ -1284,7 +1284,7 @@ uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
 version = "1.70.0+0"
 
 [[deps.nuPGCM]]
-deps = ["CuthillMcKee", "Ferrite", "FerriteGmsh", "Gmsh", "JLD2", "KernelAbstractions", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "SparseArrays", "WriteVTK"]
+deps = ["Adapt", "CuthillMcKee", "Ferrite", "FerriteGmsh", "Gmsh", "JLD2", "KernelAbstractions", "Krylov", "KrylovPreconditioners", "LinearAlgebra", "Printf", "ProgressMeter", "PyCall", "PyPlot", "SparseArrays", "WriteVTK"]
 path = "."
 uuid = "08a8b7da-7d42-4dc6-938c-f48ac28f05ff"
 version = "0.6.2"

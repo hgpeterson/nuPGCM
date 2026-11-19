@@ -1,8 +1,11 @@
-struct State
-    u::Vector{Float64}   # velocity DOFs (length nu)
-    p::Vector{Float64}   # pressure DOFs (length np)
-    b::Vector{Float64}   # buoyancy DOFs (length nb)
+struct State{V}
+    u::V   # velocity DOFs (length nu)
+    p::V   # pressure DOFs (length np)
+    b::V   # buoyancy DOFs (length nb)
 end
+
+on_architecture(arch::AbstractArchitecture, s::State) =
+    State(on_architecture(arch, s.u), on_architecture(arch, s.p), on_architecture(arch, s.b))
 
 function Base.summary(state::State)
     t = typeof(state)
@@ -16,7 +19,7 @@ function Base.show(io::IO, state::State)
 end
 
 struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData,
-             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing},
+             I<:InversionToolkit, E<:Union{EvolutionToolkit,Nothing}, S<:State,
              T<:Union{AbstractTimestepper,Nothing}}
     arch::A
     params::P
@@ -24,7 +27,7 @@ struct Model{A<:AbstractArchitecture, P<:Parameters, F<:Forcings, D<:FEData,
     fe_data::D
     inversion::I
     evolution::E
-    state::State
+    state::S     # on arch
     timestepper::T
 end
 
@@ -47,7 +50,7 @@ end
 # inversion-only model (no time integration)
 function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings,
                fe_data::FEData, inversion::InversionToolkit)
-    state = rest_state(fe_data)
+    state = rest_state(arch, fe_data)
     return Model(arch, params, forcings, fe_data, inversion, nothing, state, nothing)
 end
 
@@ -55,13 +58,13 @@ end
 function Model(arch::AbstractArchitecture, params::Parameters, forcings::Forcings,
                fe_data::FEData, inversion::InversionToolkit, evolution::EvolutionToolkit,
                timestepper::AbstractTimestepper)
-    state = rest_state(fe_data)
+    state = rest_state(arch, fe_data)
     return Model(arch, params, forcings, fe_data, inversion, evolution, state, timestepper)
 end
 
-function rest_state(fe_data::FEData)
+function rest_state(arch::AbstractArchitecture, fe_data::FEData)
     nu, np, nb = get_n_dofs(fe_data)
-    return State(zeros(nu), zeros(np), zeros(nb))
+    return on_architecture(arch, State(zeros(nu), zeros(np), zeros(nb)))
 end
 
 """
@@ -100,11 +103,11 @@ function set_b!(model::Model, b_fn::Function)
     apply!(M, rhs, fe_data.ch_b)
     b_sol = M \ rhs
     apply!(b_sol, fe_data.ch_b)  # set the constrained DOFs
-    model.state.b .= b_sol
+    copyto!(model.state.b, b_sol)
     return model
 end
 function set_b!(model::Model, b::AbstractVector)
-    model.state.b .= b
+    copyto!(model.state.b, b)
     return model
 end
 
@@ -128,51 +131,32 @@ Copy the inversion solution on the free DOFs into `model.state.u` and
 `model.state.p`, filling in the constrained DOFs.
 """
 function sync_flow!(model::Model)
-    fe_data = model.fe_data
-    x_full  = model.inversion.x_full
-    fill!(x_full, 0.0)
-    x_full[fe_data.free_dofs] .= on_architecture(CPU(), model.inversion.solver.x)
-    apply!(x_full, fe_data.ch_up)
-    model.state.u .= x_full[fe_data.u_dof_indices]
-    model.state.p .= x_full[fe_data.p_dof_indices]
+    inversion = model.inversion
+    mul!(model.state.u, inversion.C_u, inversion.solver.x)
+    mul!(model.state.p, inversion.C_p, inversion.solver.x)
     return model
 end
 
 function evolve!(model::Model, u_prev::AbstractVector, b_prev::AbstractVector)
-    fe_data    = model.fe_data
-    params     = model.params
-    forcings   = model.forcings
+    params      = model.params
     timestepper = model.timestepper
-    evolution  = model.evolution
-    arch       = evolution.arch
-    ch_b       = fe_data.ch_b
+    evolution   = model.evolution
+    solver      = evolution.solver
+    b           = model.state.b
 
-    b_cpu = on_architecture(CPU(), model.state.b)
-    update_evolution_LHS!(evolution, fe_data, params, forcings, timestepper, b_cpu)
+    update_evolution_LHS!(evolution, params, model.forcings, timestepper, b)
 
-    # the advection RHS is assembled on the CPU, from velocities in dh_up ordering
-    b_prev_cpu = on_architecture(CPU(), b_prev)
-    x_up      = to_up_vec(fe_data, on_architecture(CPU(), model.state.u))
-    x_up_prev = to_up_vec(fe_data, on_architecture(CPU(), u_prev))
-
-    @ctime "  build rhs_adv" rhs_adv = build_rhs_adv(fe_data, params,
-                                                        x_up, b_cpu,
-                                                        x_up_prev, b_prev_cpu,
-                                                        timestepper)
-
+    @ctime "  build rhs_adv" y = build_rhs_adv(evolution.cache, params, model.state.u, b,
+                                                 u_prev, b_prev, timestepper)
     θ  = evolution_parameter(params, timestepper)
     Δt = effective_timestep(timestepper)
-    y  = rhs_adv .+ θ .* on_architecture(CPU(), evolution.rhs_diff) .+
-         Δt .* on_architecture(CPU(), evolution.rhs_flux) .+
-         on_architecture(CPU(), evolution.f_bc)
-    condense_rhs!(y, ch_b)
-    evolution.solver.y .= on_architecture(arch, y)
+    @. y += evolution.f_bc_M + θ * evolution.rhs_diff + Δt * evolution.rhs_flux
+    mul!(solver.y, evolution.Cᵀ, y)
 
-    @ctime "  solve evol sys" iterative_solve!(evolution.solver)
+    @ctime "  solve evol sys" iterative_solve!(solver)
 
-    b_cpu = on_architecture(CPU(), evolution.solver.x)
-    apply!(b_cpu, ch_b)      # set the constrained DOFs
-    model.state.b .= b_cpu
+    mul!(b, evolution.C, solver.x)
+    b .+= evolution.g
     return model
 end
 
@@ -198,9 +182,10 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     status(timestepper)
 
     h_min = minimum(compute_h_cells(model.fe_data.mesh))
+    node_spacing = h_min / model.fe_data.b_order
 
     # for reporting the range of the total buoyancy b + N²z
-    z_b    = b_dof_z(model.fe_data)
+    z_b    = on_architecture(model.arch, b_dof_z(model.fe_data))
     b_full = similar(b)
 
     eddy_on   = model.forcings.eddy_param.is_on
@@ -229,7 +214,7 @@ function run!(model::Model; i_start=0, n_info=10, n_save=Inf, advection=true,
     while timestepper.t[] < timestepper.t_stop
         @ctime "full step:" begin
 
-        update_Δt!(timestepper, model.fe_data, u, h_min)
+        update_Δt!(timestepper, model.evolution.cache, u, node_spacing)
         Δt = timestepper.Δt[]
 
         u_curr .= u
@@ -306,12 +291,12 @@ Rebuild the inversion preconditioner for the current eddy viscosity `ν(b)`.
 """
 function rebuild_preconditioner!(model::Model)
     inversion = model.inversion
-    schur_inverse = inversion.solver.P.schur_inverse
-    copyto!(schur_inverse.Mν, viscous_schur_complement(model.fe_data, model.params, model.forcings,
-                                                       model.state.b))
-    inversion.solver.P = BlockTriangularPreconditioner(model.arch, model.fe_data,
-                                                       on_architecture(CPU(), inversion.solver.A),
-                                                       schur_inverse)
+    P = inversion.solver.P
+    nonzeros(P.A_uu) .= nonzeros(inversion.solver.A)[P.nzidx]
+    update_P!(P.Ã_uu, P.A_uu)
+    copyto!(P.schur_inverse.Mν, viscous_schur_complement(inversion.cache, P.schur_inverse.Cᵀ,
+                                                          model.params, model.forcings, model.state.b))
+    synchronize(get_backend(P.schur_inverse.Mν))
     return model
 end
 
@@ -323,9 +308,8 @@ Update the inversion matrix in place for the current eddy viscosity `ν(b)`.
 function update_eddy_A!(model::Model)
     inversion = model.inversion
     solver = inversion.solver
-    copyto!(inversion.b_arch, model.state.b)
-    @ctime "  build A_visc" build_A_visc!(solver.A, inversion.lhs_cache, model.params,
-                                          model.forcings.eddy_param, inversion.b_arch)
+    @ctime "  build A_visc" build_A_visc!(solver.A, inversion.lhs_cache, inversion.cache, model.params,
+                                          model.forcings.eddy_param, model.state.b)
     solver.P isa Factorization && lu!(solver.P, solver.A)
     return model
 end
