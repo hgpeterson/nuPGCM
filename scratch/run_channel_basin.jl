@@ -2,6 +2,8 @@
 # convection and eddy parameterizations on. GPU.
 #
 # NUPGCM_NSTEPS=<n> stops after n timesteps (setup check before a long job).
+# MESH_H, RUN_NAME and N_SAVE set the resolution, the output directory and the steps
+# between saves (defaults 4e-2, channel_basin_014, 100).
 using nuPGCM
 using CUDA, CUDSS
 using Printf
@@ -11,7 +13,7 @@ ENABLE_TIMING[] = true
 
 PROJ_PATH = "/resnick/groups/oceanphysics/henry/nuPGCM-ferrite"
 SIMS_PATH = "/home/hppeters/scratch"
-set_out_dir!(joinpath(SIMS_PATH, "channel_basin_014"))
+set_out_dir!(joinpath(SIMS_PATH, get(ENV, "RUN_NAME", "channel_basin_014")))
 
 include(joinpath(PROJ_PATH, "meshes/channel_basin_flat.jl"))
 
@@ -47,7 +49,7 @@ params = Parameters(; ε, α, μϱ, N², f, H)
 display(params)
 
 # resolution
-h = 4e-2
+h = parse(Float64, get(ENV, "MESH_H", "4e-2"))
 
 # forcings
 κ_I = 5.706e+00
@@ -102,4 +104,4 @@ set_b!(model, x -> -b₀ + (b_surface(x) + b₀)*exp(x[3]/(α/4)))
 invert!(model)
 
 @info @sprintf("Diffusion timescales: %.2e (κ_B), %.2e (κ_I)", μϱ/ε^2/κ_B, μϱ/ε^2/κ_I)
-run!(model; n_save=100)
+run!(model; n_save=parse(Int, get(ENV, "N_SAVE", "100")))

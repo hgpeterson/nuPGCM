@@ -41,7 +41,7 @@ nonzero_positions(A::SparseMatrixCSC) = eachindex(nonzeros(A))
 Recompute the preconditioner `P` in place for the matrix `A`: the Jacobi diagonal
 `1 ./ nonzeros(A)[diagonal]` for a `Diagonal`, where `diagonal` holds the positions of
 the diagonal entries, the LU factors for a `Factorization`, and the ILU(0) factors for
-a GPU preconditioner from KrylovPreconditioners.
+an `ILU0`.
 """
 function update_P!(P::Diagonal, A, diagonal)
     P.diag .= 1 ./ nonzeros(A)[diagonal]
@@ -49,10 +49,6 @@ function update_P!(P::Diagonal, A, diagonal)
 end
 function update_P!(P::Factorization, A, diagonal=nothing)
     lu!(P, A)
-    return P
-end
-function update_P!(P::KrylovPreconditioners.AbstractKrylovPreconditioner, A, diagonal=nothing)
-    KrylovPreconditioners.update!(P, A)
     return P
 end
 

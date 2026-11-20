@@ -138,6 +138,9 @@ save_vtk_p2,
 # diagnostics.jl
 zonal_integral,
 overturning_streamfunction,
+drift_diagnostics,
+plot_drift,
+plot_state_change,
 # plotting.jl
 plot_zonal_integral,
 eval_at_points,

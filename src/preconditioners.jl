@@ -130,6 +130,39 @@ end
 end
 
 """
+    Ã = ILU0(A)
+
+ILU(0) factorization of the sparse GPU matrix `A`, applied as `ldiv!(y, Ã, x)` by two
+triangular solves whose analysis is done here, once.
+"""
+struct ILU0{F, T, V}
+    factors::F               # L (unit diagonal) and U in one matrix
+    L::T
+    U::T
+    z::V
+end
+
+function ILU0(A)
+    factors = KrylovPreconditioners.kp_ilu0(A)
+    return ILU0(factors, KrylovPreconditioners.TriangularOperator(factors.P, 'L', 'U'),
+                KrylovPreconditioners.TriangularOperator(factors.P, 'U', 'N'),
+                similar(nonzeros(A), size(A, 1)))
+end
+
+function LinearAlgebra.ldiv!(y, Ã::ILU0, x)
+    ldiv!(Ã.z, Ã.L, x)
+    ldiv!(y, Ã.U, Ã.z)
+    return y
+end
+
+function update_P!(P::ILU0, A, diagonal=nothing)
+    KrylovPreconditioners.update!(P.factors, A)
+    KrylovPreconditioners.update!(P.L, P.factors.P)
+    KrylovPreconditioners.update!(P.U, P.factors.P)
+    return P
+end
+
+"""
     P = BlockTriangularPreconditioner(arch, fe_data, A, schur_inverse)
 
 Block-triangular preconditioner for the condensed inversion matrix `A`, applied as
@@ -159,7 +192,7 @@ function BlockTriangularPreconditioner(arch::AbstractArchitecture, fe_data::FEDa
                  for j in axes(A_uu, 2) for i in view(rowvals(A_uu), nzrange(A_uu, j))]
     A_uu  = on_architecture(arch, A_uu)
     nzidx = nonzero_positions(A)[csc_index][invperm(nonzero_positions(A_uu))]
-    Ã_uu  = arch isa GPU ? KrylovPreconditioners.kp_ilu0(A_uu) : lu(A_uu)
+    Ã_uu  = arch isa GPU ? ILU0(A_uu) : lu(A_uu)
     return BlockTriangularPreconditioner(A_uu, Ã_uu, on_architecture(arch, Int32.(nzidx)),
                                          schur_inverse, on_architecture(arch, A_cpu[free_u, free_p]),
                                          free_u, free_p, on_architecture(arch, zeros(length(free_u))))
