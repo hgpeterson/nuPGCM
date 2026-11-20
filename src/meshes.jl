@@ -29,30 +29,52 @@ function Mesh(ifile; surface_tag="surface")
     should_finalize = FerriteGmsh.Gmsh.initialize()
     @time begin
     gmsh.open(ifile)
-    grid = FerriteGmsh.togrid()
-    periodic_facets = read_periodic_facets(grid)
+    grid, lookup = read_grid()
+    periodic_facets = read_periodic_facets(grid, lookup)
     end
     should_finalize && FerriteGmsh.Gmsh.finalize()
     return Mesh(grid, surface_tag, periodic_facets)
 end
 
 """
-    pairs = read_periodic_facets(grid)
+    grid, lookup = read_grid()
 
-Periodic facet pairs of `grid`, built by `FerriteGmsh.togrid()` from the model open
-in Gmsh.
+The `Ferrite.Grid` of the model open in Gmsh, with a facet set for each physical group of
+facets, and `lookup`, the `FacetIndex` of each grid facet by its sorted vertices.
 """
-function read_periodic_facets(grid)
+function read_grid()
+    dim = Int(gmsh.model.getDimension())
+    gmsh.model.mesh.renumberNodes()
+    gmsh.model.mesh.renumberElements()
+    nodes = FerriteGmsh.tonodes()
+    cells, gmsh_cells = FerriteGmsh.toelements(dim)
+    FerriteGmsh.reorient!(cells, nodes)
+
+    lookup = Dict{NTuple{dim, Int}, FacetIndex}()
+    for (ci, cell) in enumerate(cells), (fi, fnodes) in enumerate(Ferrite.facets(cell))
+        lookup[facet_key(Val(dim), fnodes)] = FacetIndex(ci, fi)
+    end
+    facetsets = Dict{String, Set{FacetIndex}}()
+    for (_, group) in gmsh.model.getPhysicalGroups(dim - 1)
+        entities = gmsh.model.getEntitiesForPhysicalGroup(dim - 1, group)
+        facetsets[gmsh.model.getPhysicalName(dim - 1, group)] =
+            mapreduce(entity -> entity_facets(dim - 1, entity, lookup), union, entities; init=Set{FacetIndex}())
+    end
+    grid = Grid(cells, nodes; facetsets, cellsets=FerriteGmsh.tocellsets(dim, gmsh_cells))
+    return grid, lookup
+end
+
+"""
+    pairs = read_periodic_facets(grid, lookup)
+
+Periodic facet pairs of `grid`, built by `read_grid()` from the model open in Gmsh.
+"""
+function read_periodic_facets(grid, lookup)
     dim  = Int(gmsh.model.getDimension())
     tags = [tag for (_, tag) in gmsh.model.getEntities(dim - 1)]
     masters = gmsh.model.mesh.getPeriodic(dim - 1, tags)
     pairs = PeriodicFacetPair[]
     any(masters .!= tags) || return pairs
-
-    lookup = Dict{NTuple{dim, Int}, FacetIndex}()
-    for (ci, cell) in enumerate(grid.cells), (fi, fnodes) in enumerate(Ferrite.facets(cell))
-        lookup[facet_key(Val(dim), fnodes)] = FacetIndex(ci, fi)
-    end
 
     for (tag, master) in zip(tags, masters)
         master == tag && continue

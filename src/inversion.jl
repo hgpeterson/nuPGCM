@@ -112,8 +112,8 @@ function InversionToolkit(arch::AbstractArchitecture,
     solver = IterativeSolverToolkit(A, P, y, workspace, kwargs_dict, "Inversion")
 
     return InversionToolkit(B, f_wind, solver, cache, lhs_cache,
-                            on_architecture(arch, C[fe_data.u_dof_indices, :]),
-                            on_architecture(arch, C[fe_data.p_dof_indices, :]))
+                            on_architecture(arch, select_rows(C, fe_data.u_dof_indices)),
+                            on_architecture(arch, select_rows(C, fe_data.p_dof_indices)))
 end
 
 """
@@ -145,62 +145,71 @@ Assemble the LHS matrix for the inversion problem:
              + ∫ q (∇·u) dΩ              (divergence-free)
 """
 function build_A_inversion(fe_data::FEData, params::Parameters, ν)
-    dh_up = fe_data.dh_up
-    cv_u, cv_p, _ = make_cell_values(fe_data)
-    n_u   = getnbasefunctions(cv_u)
-    n_p   = getnbasefunctions(cv_p)
-    n_loc = n_u + n_p
-    α²ε²  = params.α^2 * params.ε^2
-    f_cor = params.f   # Coriolis parameter (function of x)
-
-    A   = allocate_inversion_matrix(fe_data)
-    asm = start_assemble(A)
-    Ae  = zeros(n_loc, n_loc)
-
-    for cc in CellIterator(dh_up)
-        reinit!(cv_u, cc)
-        reinit!(cv_p, cc)
-        coords = getcoordinates(cc)
-        fill!(Ae, 0.0)
-
-        for q in 1:getnquadpoints(cv_u)
-            x  = spatial_coordinate(cv_u, q, coords)
-            ν_q = ν isa Function ? ν(x) : ν
-            f_q = f_cor(x)
-            dΩ  = getdetJdV(cv_u, q)
-
-            for i in 1:n_u
-                ε_i    = symmetric(shape_gradient(cv_u, q, i))
-                φᵤ_i   = shape_value(cv_u, q, i)
-                div_i  = tr(shape_gradient(cv_u, q, i))
-
-                for j in 1:n_u
-                    φⱼ = shape_value(cv_u, q, j)
-                    # viscous: 2α²ε² ν ε(u):ε(v)
-                    visc = 2α²ε² * ν_q * dcontract(ε_i, symmetric(shape_gradient(cv_u, q, j)))
-                    # Coriolis: f (ẑ×u)·v,  ẑ×u = (-u₂, u₁, 0)
-                    cori = f_q * (-φⱼ[2] * φᵤ_i[1] + φⱼ[1] * φᵤ_i[2])
-                    Ae[i, j] += (visc + cori) * dΩ
-                end
-
-                for j in 1:n_p
-                    # pressure gradient: -(∇·v) p
-                    Ae[i, n_u + j] -= div_i * shape_value(cv_p, q, j) * dΩ
-                end
-            end
-
-            for i in 1:n_p
-                φ_p_i = shape_value(cv_p, q, i)
-                for j in 1:n_u
-                    # divergence-free: q (∇·u)
-                    Ae[n_u + i, j] += φ_p_i * tr(shape_gradient(cv_u, q, j)) * dΩ
-                end
-            end
-        end
-
-        assemble!(asm, celldofs(cc), Ae)
-    end
+    A      = allocate_inversion_matrix(fe_data)
+    cache  = fe_data.cache
+    dofs_u = fe_data.u_dof_indices[cache.dofs_u]
+    dofs_p = fe_data.p_dof_indices[cache.dofs_p]
+    n_nodes, n_p = size(cache.phi_u, 2), size(cache.phi_p, 2)
+    inversion_matrix_kernel!(get_backend(nonzeros(A)))(nonzeros(A), rowvals(A), SparseArrays.getcolptr(A),
+                                                       dofs_u, dofs_p, cache, ν, params.f, params.α^2*params.ε^2;
+                                                       ndrange=(n_nodes, n_nodes + n_p, size(dofs_u, 2)))
     return A
+end
+
+# Entries of cell c between velocity node a and velocity node b ≤ n_nodes, or pressure DOF b - n_nodes
+@kernel function inversion_matrix_kernel!(nzval, rowval, colptr, dofs_u, dofs_p, cache, ν, f, α²ε²)
+    a, b, c = @index(Global, NTuple)
+    n_nodes = size(cache.phi_u, 2)
+    J⁻ᵀ = cache.Jinv_t[c]
+    if b ≤ n_nodes
+        # viscous and Coriolis, for u = φ_b êₛ and v = φ_a êᵣ; (ẑ × u)·v = u₁v₂ - u₂v₁
+        K = zero(Tensor{2, 3, Float64})
+        for q in axes(cache.phi_u, 1)
+            x   = cache.x0[c] + cache.J[c] ⋅ cache.x_ref[q]
+            dΩ  = cache.w[q] * cache.detJ[c]
+            ν_x = ν isa Function ? ν(x) : ν
+            K  += 2α²ε² * ν_x * dΩ * strain_product(J⁻ᵀ, cache.dphi_u, a, b, q) +
+                  f(x) * cache.phi_u[q, a] * cache.phi_u[q, b] * dΩ *
+                  Tensor{2, 3, Float64}((r, s) -> (r == 2 && s == 1) - (r == 1 && s == 2))
+        end
+        for s in 1:3, r in 1:3
+            add_entry!(nzval, rowval, colptr, dofs_u[3(a - 1) + r, c], dofs_u[3(b - 1) + s, c], K[r, s])
+        end
+    else
+        # pressure gradient -(∇·v) p and divergence q (∇·u), for v = φ_a êᵣ and p = ψ_(b - n_nodes)
+        for r in 1:3
+            G = 0.0
+            for q in axes(cache.phi_u, 1)
+                G += _∂ᵣ(J⁻ᵀ, r, cache.dphi_u[1, a, q], cache.dphi_u[2, a, q], cache.dphi_u[3, a, q]) *
+                     cache.phi_p[q, b - n_nodes] * cache.w[q] * cache.detJ[c]
+            end
+            add_entry!(nzval, rowval, colptr, dofs_u[3(a - 1) + r, c], dofs_p[b - n_nodes, c], -G)
+            add_entry!(nzval, rowval, colptr, dofs_p[b - n_nodes, c], dofs_u[3(a - 1) + r, c], G)
+        end
+    end
+end
+
+"""
+    S = strain_product(J⁻ᵀ, dphi_u, m, n, q)
+
+`ε(φₙ êₛ):ε(φₘ êᵣ)` as `S[r, s]`, at quadrature point `q` of a cell with inverse
+transposed Jacobian `J⁻ᵀ`.
+"""
+@inline function strain_product(J⁻ᵀ, dphi_u, m, n, q)
+    ∇φₘ = J⁻ᵀ ⋅ Vec{3}((dphi_u[1, m, q], dphi_u[2, m, q], dphi_u[3, m, q]))
+    ∇φₙ = J⁻ᵀ ⋅ Vec{3}((dphi_u[1, n, q], dphi_u[2, n, q], dphi_u[3, n, q]))
+    return ((∇φₘ ⋅ ∇φₙ) * one(Tensor{2, 3, Float64}) + ∇φₙ ⊗ ∇φₘ) / 2
+end
+
+"""
+    add_entry!(nzval, rowval, colptr, row, col, v)
+
+Add `v` to entry `(row, col)` of the CSC matrix with the given arrays, which stores it.
+"""
+@inline function add_entry!(nzval, rowval, colptr, row, col, v)
+    k = searchsortedfirst(rowval, row, colptr[col], colptr[col + 1] - 1, Base.Order.Forward)
+    @atomic nzval[k] += v
+    return nothing
 end
 
 """
@@ -237,10 +246,7 @@ end
     J⁻ᵀ = cache.Jinv_t[c]
     K = zero(Tensor{2, 3, Float64})
     for q in axes(νdΩ, 1)
-        ∇φₘ = J⁻ᵀ ⋅ Vec{3}((cache.dphi_u[1, m, q], cache.dphi_u[2, m, q], cache.dphi_u[3, m, q]))
-        ∇φₙ = J⁻ᵀ ⋅ Vec{3}((cache.dphi_u[1, n, q], cache.dphi_u[2, n, q], cache.dphi_u[3, n, q]))
-        # for basis functions φₘ êᵣ and φₙ êₛ:  ε:ε = (δᵣₛ ∇φₘ·∇φₙ + ∂ₛφₘ ∂ᵣφₙ) / 2
-        K += νdΩ[q, c] / 2 * ((∇φₘ ⋅ ∇φₙ) * one(K) + ∇φₙ ⊗ ∇φₘ)
+        K += νdΩ[q, c] * strain_product(J⁻ᵀ, cache.dphi_u, m, n, q)
     end
     n_u = 3 * size(cache.dphi_u, 2)
     for s in 1:3, r in 1:3

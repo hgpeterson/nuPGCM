@@ -33,7 +33,7 @@ function CahouetChabardInverse(arch::AbstractArchitecture, fe_data::FEData,
     M, Kf = build_pressure_matrices(fe_data, params)
     # Kf is singular for constant pressure; a small multiple of M makes it positive definite
     Kf += 1e-8 * tr(Kf) / tr(M) * M
-    Cᵀ = on_architecture(arch, sparse(fe_data.C_up[fe_data.p_dof_indices, fe_data.free_p]'))
+    Cᵀ = on_architecture(arch, permutedims(fe_data.C_up[:, fe_data.free_p])[:, fe_data.p_dof_indices])
     return CahouetChabardInverse(viscous_schur_complement(cache, Cᵀ, params, forcings, b),
                                  cholesky(Symmetric(on_architecture(arch, Kf))),
                                  on_architecture(arch, zeros(size(M, 1))), Cᵀ)

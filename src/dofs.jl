@@ -195,6 +195,14 @@ function constraint_matrix(ch::ConstraintHandler, N::Int, free_dofs::Vector{Int}
 end
 
 """
+    S = select_rows(A, I)
+
+`A[I, :]` for a sparse `A`, through the columns of its transpose, in time linear in
+`nnz(A)` and `length(I)`.
+"""
+select_rows(A::SparseMatrixCSC, I) = permutedims(permutedims(A)[:, I])
+
+"""
     free = free_index(C)
 
 For a constraint map `C` whose rows have at most one entry, equal to 1: the free DOF
